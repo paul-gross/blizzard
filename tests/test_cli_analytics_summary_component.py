@@ -14,7 +14,7 @@ from pathlib import Path
 import click
 import httpx
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import _DATASETS
@@ -23,6 +23,7 @@ from tests.support import HubHarness
 from tests.test_analytics_events_api import _cookie, _seeded_hub
 from tests.test_analytics_spend_api import _mint_chunk, _push_usage
 from tests.test_analytics_spend_api import _seeded_hub as _seeded_spend_hub
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -44,7 +45,7 @@ _ROLLUP_PARAMS = {"by_name"}
 _LENS_PARAMS = {"project"}
 
 
-def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def _relay(hub: HubHarness, token: str) -> Bound:
     headers = _cookie(token)
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx.Response:
@@ -54,15 +55,14 @@ def _relay(hub: HubHarness, token: str, monkeypatch: pytest.MonkeyPatch) -> None
     def fake_stream(
         method: str, url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object
     ) -> Iterator[httpx.Response]:
-        with hub.client.stream(method, url, params=params, headers=headers) as resp:
+        with hub.client.stream(method.upper(), url, params=params, headers=headers) as resp:
             yield resp
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    monkeypatch.setattr(httpx, "stream", fake_stream)
+    return bind_stubs(get=fake_get, stream=fake_stream)
 
 
-def _invoke(*args: str) -> Result:
-    return CliRunner().invoke(hub_group, ["analytics", "summary", *args], env={"BZ_HUB_URL": _HUB_URL})
+def _invoke(bound: Bound, *args: str) -> Result:
+    return bound.runner.invoke(hub_group, ["analytics", "summary", *args], env={"BZ_HUB_URL": _HUB_URL})
 
 
 # --- the applicability table matches each route's own declared query params -------
@@ -90,12 +90,12 @@ def test_the_dataset_choice_list_matches_the_table() -> None:
 # --- every dataset choice is reachable at the route the table names -------------------
 
 
-def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path) -> None:
     hub, token, _graph_id, _nodes = _seeded_spend_hub(tmp_path)
-    _relay(hub, token, monkeypatch)
+    bound = _relay(hub, token)
 
     for dataset, spec in _DATASETS.items():
-        result = _invoke(dataset, "--json")
+        result = _invoke(bound, dataset, "--json")
         assert result.exit_code == 0, (dataset, result.output)
         assert spec.response_key in json.loads(result.stdout)
 
@@ -103,75 +103,75 @@ def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path, mo
 # --- filter round-trips: the events-derived counts datasets ---------------------------
 
 
-def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_each_counts_datasets_applicable_filters_round_trip(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
-    _relay(hub, token, monkeypatch)
+    bound = _relay(hub, token)
 
-    by_kind = _invoke("counts-nodes", "--kind", "file_read", "--json")
+    by_kind = _invoke(bound, "counts-nodes", "--kind", "file_read", "--json")
     assert json.loads(by_kind.stdout)["counts"] == [
         {"key": "nd_build", "count": 1, "graph_name": None, "node_name": None}
     ]
 
-    by_tool = _invoke("counts-agent-types", "--tool", "Agent", "--json")
+    by_tool = _invoke(bound, "counts-agent-types", "--tool", "Agent", "--json")
     assert json.loads(by_tool.stdout)["counts"] == []  # main-lane spawn: agent_type unset
 
-    by_node = _invoke("counts-skills", "--node", "nd_build", "--json")
+    by_node = _invoke(bound, "counts-skills", "--node", "nd_build", "--json")
     assert json.loads(by_node.stdout)["counts"] == [
         {"key": "wf-commit", "count": 1, "graph_name": None, "node_name": None}
     ]
 
-    by_prefix = _invoke("counts-files", "--subject-prefix", "src/", "--json")
+    by_prefix = _invoke(bound, "counts-files", "--subject-prefix", "src/", "--json")
     assert json.loads(by_prefix.stdout)["counts"] == [
         {"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}
     ]
 
-    by_stale_version = _invoke("counts-files", "--extractor-version", "stale-version", "--json")
+    by_stale_version = _invoke(bound, "counts-files", "--extractor-version", "stale-version", "--json")
     assert json.loads(by_stale_version.stdout)["counts"] == []
 
 
 # --- filter round-trip: the operational datasets' provenance filters, and spend-models ----
 
 
-def test_spend_models_and_the_provenance_filters_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spend_models_and_the_provenance_filters_round_trip(tmp_path: Path) -> None:
     hub, token, _graph_id, nodes = _seeded_spend_hub(tmp_path)
-    _relay(hub, token, monkeypatch)
+    bound = _relay(hub, token)
     chunk_id = _mint_chunk(hub, token)
     _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
 
-    by_model = _invoke("spend-models", "--json")
+    by_model = _invoke(bound, "spend-models", "--json")
     assert [r["key"] for r in json.loads(by_model.stdout)["spend"]] == ["claude-opus-4-8"]
 
-    kept = _invoke("spend-nodes", "--model", "claude-opus-4-8", "--json")
+    kept = _invoke(bound, "spend-nodes", "--model", "claude-opus-4-8", "--json")
     assert [r["input_tokens"] for r in json.loads(kept.stdout)["spend"]] == [100]
 
-    dropped = _invoke("spend-nodes", "--model", "other", "--json")
+    dropped = _invoke(bound, "spend-nodes", "--model", "other", "--json")
     assert json.loads(dropped.stdout)["spend"] == []
     for dataset in ("durations-nodes", "outcomes-nodes"):
-        assert _invoke(dataset, "--harness-id", "claude_code", "--json").exit_code == 0
+        assert _invoke(bound, dataset, "--harness-id", "claude_code", "--json").exit_code == 0
 
 
 # --- filter round-trip + --ndjson: spend-chunks, the one paginated/streamable dataset --
 
 
 def test_spend_chunks_filters_round_trip_and_ndjson_streams_the_real_rollup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     hub, token, _graph_id, nodes = _seeded_spend_hub(tmp_path)
-    _relay(hub, token, monkeypatch)
+    bound = _relay(hub, token)
     chunk_a = _mint_chunk(hub, token, ref="1")
     chunk_b = _mint_chunk(hub, token, ref="2")
     _push_usage(hub, chunk_id=chunk_a, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
     _push_usage(hub, chunk_id=chunk_b, node_id=nodes["build"], epoch=1, seq=2, cost_usd=0.2)
 
-    paged = _invoke("spend-chunks", "--json")
+    paged = _invoke(bound, "spend-chunks", "--json")
     assert paged.exit_code == 0, paged.output
     paged_rows = json.loads(paged.stdout)["spend"]
     assert {r["chunk_id"] for r in paged_rows} == {chunk_a, chunk_b}
 
-    limited = _invoke("spend-chunks", "--limit", "1", "--json")
+    limited = _invoke(bound, "spend-chunks", "--limit", "1", "--json")
     assert len(json.loads(limited.stdout)["spend"]) == 1
 
-    streamed = _invoke("spend-chunks", "--ndjson")
+    streamed = _invoke(bound, "spend-chunks", "--ndjson")
     assert streamed.exit_code == 0, streamed.output
     lines = [json.loads(line) for line in streamed.stdout.strip().splitlines()]
     assert [r["chunk_id"] for r in lines] == [r["chunk_id"] for r in paged_rows]

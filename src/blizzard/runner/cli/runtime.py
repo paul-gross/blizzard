@@ -9,14 +9,14 @@ import types
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import click
-import httpx
 
+from blizzard.cli.collaborators import CliCollaborators, ClientFactory
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
-from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
@@ -33,7 +33,7 @@ from blizzard.foundation.store.migrations import (
 )
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
-from blizzard.runner.cli.daemon import daemon_holding, runner_option
+from blizzard.runner.cli.daemon import Door, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
@@ -137,20 +137,22 @@ type HostClients = Callable[[str], IHostHubClient]
 
 
 @contextmanager
-def _http_hub_clients(hub_url: str, runner_token: str, operator_token: str | None) -> Iterator[InitHubClients]:
+def _http_hub_clients(
+    client_factory: ClientFactory, hub_url: str, runner_token: str, operator_token: str | None
+) -> Iterator[InitHubClients]:
     """The identity read under the runner's own token, and the add under the operator's session."""
     runner_headers = {"Authorization": f"Bearer {runner_token}"} if runner_token else {}
     with (
-        httpx.Client(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS, headers=runner_headers) as runner_http,
-        httpx.Client(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as operator_http,
+        client_factory(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS, headers=runner_headers) as runner_http,
+        client_factory(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as operator_http,
     ):
         yield HttpHubClient(runner_http), HttpHubRunnerAdmin(operator_http, operator_token=operator_token)
 
 
 @contextmanager
-def _http_host_clients(hub_url: str) -> Iterator[HostClients]:
+def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Iterator[HostClients]:
     """The host's own hub calls, each under the host token it is made with."""
-    with httpx.Client(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as http:
+    with client_factory(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as http:
         yield lambda token: HttpHostHubClient(http, token=token)
 
 
@@ -164,11 +166,17 @@ class InitCollaborators:
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
     #: The runner store's migrations at a URL — what ``runner ingest`` migrates a source copy through.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
+    build_host_process: Callable[..., HostProcess] = build_host_process
+    publish_harness_bundle: Callable[..., BundleSnapshot] = publish_harness_bundle
 
     @classmethod
     def of(cls, ctx: click.Context) -> InitCollaborators:
         """The invoker's collaborators, or the HTTP ones."""
-        return ctx.find_object(InitCollaborators) or cls(_http_hub_clients, _http_host_clients)
+        return ctx.find_object(InitCollaborators) or cls.http(CliCollaborators.of(ctx).client_factory)
+
+    @classmethod
+    def http(cls, client_factory: ClientFactory) -> InitCollaborators:
+        return cls(partial(_http_hub_clients, client_factory), partial(_http_host_clients, client_factory))
 
     def join_with(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:
         """The identity read and the add for ``hub_url``, under the held ``token`` and the operator's session."""
@@ -225,11 +233,11 @@ def init(
     directory a pre-host runner left behind is refused, naming graduation, unless --allow-readd sets its store
     aside. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     named = projects or None
-    trace = OperatorTrace.source(ctx)
+    door = Door.of(ctx)
     initialized: list[HostConfig] = []
 
     def initialize(root: Path) -> HostConfig:
-        runtime = runtime_of(root, trace, hub_url=hub_url, projects=named)
+        runtime = runtime_of(root, door, hub_url=hub_url, projects=named)
         if allow_readd and (aside := runtime.set_aside_pre_host_store(now=SystemClock().now())) is not None:
             for path in aside.moved:
                 click.echo(f"set the pre-host store aside as {path}")
@@ -246,7 +254,7 @@ def init(
     (config,) = initialized
     collaborators = InitCollaborators.of(ctx)
     rerun = _Rerun(config.root, tenant_id=tenant_id, allow_readd=allow_readd, projects=named)
-    store = _RuntimeStore(config, trace)
+    store = _RuntimeStore(config, door)
     for entry in config.runners:
         _refuse_tokenless(config, entry, store, rerun)
     with collaborators.host_clients(config.hub_url) as host_clients:
@@ -531,9 +539,9 @@ class _RuntimeStore:
     """The host's own store, as ``init`` sees it while the host is down. It is set aside at most once per init:
     the host added again and each runner added again share the one fresh store."""
 
-    def __init__(self, config: HostConfig, trace: ITraceHeaders) -> None:
+    def __init__(self, config: HostConfig, door: Door) -> None:
         self.config = config
-        self.trace = trace
+        self.door = door
         self._set_aside = False
 
     def stored_runner_id(self, *, sibling_of: RunnerEntry | None = None) -> str | None:
@@ -549,7 +557,7 @@ class _RuntimeStore:
     def set_aside(self) -> None:
         if self._set_aside:
             return
-        aside = runtime_of(self.config.root, self.trace).reset_store(now=SystemClock().now())
+        aside = runtime_of(self.config.root, self.door).reset_store(now=SystemClock().now())
         self._set_aside = True
         for path in aside.moved:
             click.echo(f"set the old store aside as {path}")
@@ -840,14 +848,14 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
     A directory that has not graduated to a host is refused and left as it is. A graduated one holding a pre-host
     `data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are
     refused while a host is running; a plain upgrade is refused only while a pre-host daemon answers."""
-    trace = OperatorTrace.source(ctx)
+    door = Door.of(ctx)
     run_migrate(
         Path(directory),
         down,
         head=head,
         knows=knows,
         script_location=MIGRATIONS_DIR,
-        migrate=lambda root, down: runtime_of(root, trace).migrate(down=down),
+        migrate=lambda root, down: runtime_of(root, door).migrate(down=down),
         config_error=ConfigError,
     )
 
@@ -892,7 +900,7 @@ def host(
     with store_write_guard(
         config,
         action="start the host",
-        trace=OperatorTrace.source(ctx),
+        door=Door.of(ctx),
         runners={built.id: built.config.name for built in runners},
         configured=ours,
         refuse_foreign=False,
@@ -903,14 +911,16 @@ def host(
             for built in runners
             if built.id in foreign
         ]
-        _start(config, kept, halted)
+        _start(config, kept, halted, InitCollaborators.of(ctx))
 
 
-def _start(config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[HaltedRunner]) -> None:
+def _start(
+    config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[HaltedRunner], collaborators: InitCollaborators
+) -> None:
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped."""
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
-    bundles = {built.id: _publish_harness_bundle(built.config) for built in runners}
+    bundles = {built.id: _publish_harness_bundle(built.config, collaborators) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
@@ -924,7 +934,9 @@ def _start(config: HostConfig, runners: Sequence[BuiltRunner], halted: Sequence[
     # One broker for the process: `host` is the one composer building both the
     # served app and the ticked loops, so every writer and the stream route share it.
     broker = EventBroker()
-    process = build_host_process(config, runners, halted=halted, events=broker, bundles=bundles, trace_platform=True)
+    process = collaborators.build_host_process(
+        config, runners, halted=halted, events=broker, bundles=bundles, trace_platform=True
+    )
     try:
         shared = runners[0].config if runners else config.host_view()
         hosted = build_hosted_app(shared, process)
@@ -950,7 +962,7 @@ def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None
         click.echo(f"warning: {warning}")
     problems: list[str] = []
     named_socket = named_store_socket(config)
-    if named_socket is not None and (held := daemon_holding(named_socket, OperatorTrace.source(ctx))) is not None:
+    if named_socket is not None and (held := daemon_holding(named_socket, Door.of(ctx))) is not None:
         problems.append(
             f"store: {held}, and it holds the store {config.db_url} the host file names; "
             "stop it, or drop the `db_url` so the host's own store applies"
@@ -999,14 +1011,14 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
     return None
 
 
-def _publish_harness_bundle(config: RunnerConfig) -> BundleSnapshot | None:
+def _publish_harness_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
     accepted, returning it for the process graph to deliver; a runtime with no
     `[harness] config_dir` is left untouched."""
     if config.harness_config_dir is None:
         return None
     with click_exception_on(ConfigError):
-        snapshot = publish_harness_bundle(
+        snapshot = collaborators.publish_harness_bundle(
             config.harness_config_dir,
             config.root,
             autonomy=config.autonomy,
@@ -1168,12 +1180,12 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
     with store_write_guard(
         config,
         action="run a tick",
-        trace=OperatorTrace.source(ctx),
+        door=Door.of(ctx),
         runners={runner_built.id: runner_built.config.name},
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        bundle = _publish_harness_bundle(runner_built.config)
+        bundle = _publish_harness_bundle(runner_built.config, InitCollaborators.of(ctx))
         graph = build_runner_process(
             runner_built.config,
             bundle=bundle,

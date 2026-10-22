@@ -18,6 +18,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -31,20 +32,16 @@ def _said(result: Result) -> list[str]:
     return [line for line in result.output.splitlines() if '"event": ' not in line]
 
 
-def _cli_as(hub: HubHarness, user: User, monkeypatch: pytest.MonkeyPatch) -> Cli:
+def _cli_as(hub: HubHarness, user: User) -> Cli:
     """Route every call the CLI makes to ``hub``, signed in as ``user``, and hand back an invoker."""
     session = seed_session(hub, user)
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
-            signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
-            return hub.client.request(method, url, headers=signed_in, **kwargs)
+    def forward(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
+        return hub.client.request(method, url, headers=signed_in, **kwargs)
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
-    return lambda *argv: CliRunner().invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
+    bound = bind_stubs(request=forward)
+    return lambda *argv: bound.runner.invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
 
 
 @pytest.fixture
@@ -66,10 +63,8 @@ def _link_token(result: Result) -> str:
     return links[0].removeprefix(f"{_HUB_URL}/invite/")
 
 
-def test_create_prints_the_link_once_and_list_never_shows_it(
-    hub: HubHarness, ada: User, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    cli = _cli_as(hub, ada, monkeypatch)
+def test_create_prints_the_link_once_and_list_never_shows_it(hub: HubHarness, ada: User) -> None:
+    cli = _cli_as(hub, ada)
 
     token = _link_token(cli("invite", "create", "--email", "New@Example.com", "--role", "contributor"))
     listed = cli("invite", "list")
@@ -86,8 +81,8 @@ def test_create_prints_the_link_once_and_list_never_shows_it(
     assert [i["state"] for i in json.loads(_said(listed_json)[0])["invitations"]] == ["live"]
 
 
-def test_revoke_revokes_once_and_refuses_again(hub: HubHarness, ada: User, monkeypatch: pytest.MonkeyPatch) -> None:
-    cli = _cli_as(hub, ada, monkeypatch)
+def test_revoke_revokes_once_and_refuses_again(hub: HubHarness, ada: User) -> None:
+    cli = _cli_as(hub, ada)
     cli("invite", "create", "--email", "new@example.com", "--role", "guest")
     [invitation_id] = [line.split()[0] for line in _said(cli("invite", "list"))]
 
@@ -102,11 +97,11 @@ def test_revoke_revokes_once_and_refuses_again(hub: HubHarness, ada: User, monke
     assert unknown.exit_code != 0
 
 
-def test_the_hub_administrator_invites_into_the_tenant_named(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_hub_administrator_invites_into_the_tenant_named(hub: HubHarness) -> None:
     bravo = hub.add_tenant("bravo")
     hal = seed_user(hub, username="hal", role=Role.PENDING)
     seed_hub_admin(hub.engine, hal.user_id)
-    cli = _cli_as(hub, hal, monkeypatch)
+    cli = _cli_as(hub, hal)
 
     _link_token(cli("invite", "create", "--email", "first@example.com", "--role", "admin", "--tenant", bravo.tenant))
 
@@ -128,7 +123,7 @@ def test_create_refuses_a_role_or_lifetime_the_hub_would(argv: list[str]) -> Non
     assert result.exit_code == 2, result.output
 
 
-def test_list_names_who_accepted_an_invitation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_names_who_accepted_an_invitation() -> None:
     row = {
         "invitation_id": "inv_a",
         "email": "a@example.com",
@@ -143,9 +138,9 @@ def test_list_names_who_accepted_an_invitation(monkeypatch: pytest.MonkeyPatch) 
     def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
         return httpx.Response(200, json={"invitations": [row]}, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(httpx, "get", get)
+    bound = bind_stubs(get=get)
 
-    result = CliRunner().invoke(hub_group, ["invite", "list", "--hub-url", _HUB_URL])
+    result = bound.runner.invoke(hub_group, ["invite", "list", "--hub-url", _HUB_URL])
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [

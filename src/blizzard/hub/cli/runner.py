@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
@@ -16,7 +16,7 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing, RunnerLine
 
 #: How a hub from before ``hub runner add`` answers ``POST /api/runners`` — with no detail worth showing.
-_PREDATES_ADD = frozenset({httpx.codes.NOT_FOUND, httpx.codes.METHOD_NOT_ALLOWED})
+_PREDATES_ADD = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED})
 
 
 class RunnerListing(Listing):

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
+
 import click
-import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -69,7 +70,7 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         json_body={"title": title, "body": body, "stated_priority": priority},
         params=project_query(project) or None,
     )
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         conflict = resp.json()
         if "existing_chunk_id" in conflict:
             raise click.ClickException(

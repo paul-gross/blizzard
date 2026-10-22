@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
@@ -172,7 +172,7 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     if project is not None:
         request["project"] = project
     resp = cli.send("post", "/api/chunks", json_body=request)
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         conflict = resp.json()
         raise click.ClickException(
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
@@ -373,7 +373,7 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
         f"/api/chunks/{chunk_id}/dependencies",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         body = resp.json()
         if "status" in body:
             raise click.ClickException(
@@ -407,7 +407,7 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
         f"/api/chunks/{chunk_id}/dependencies/release",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         body = resp.json()
         raise click.ClickException(
             f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"

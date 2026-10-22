@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.window import refuse_future_until, replay_windows, resume_since, since_option, until_option
@@ -85,7 +85,7 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
             resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
         except click.ClickException as exc:
             raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
-        if resp.status_code == httpx.codes.BAD_GATEWAY:
+        if resp.status_code == HTTPStatus.BAD_GATEWAY:
             failure = resp.json()
             raise click.ClickException(
                 f"{failure['detail']} (told {failure['steps']} steps, {failure.get('chunks', 0)} chunks, "

@@ -5,19 +5,18 @@ and fails, and a listing names a project to narrow to it or none to read the who
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import click
-import httpx
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
 from tests.support import HubHarness, build_hub, default_project, ingest, link_project, seed_project
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -48,27 +47,27 @@ def tenant(tmp_path: Path) -> Tenant:
     return Tenant(hub, default, seed_project(hub.engine, "gears"))
 
 
+_bound: dict[str, Bound] = {}
+"""The collaborators the routing fixture bound over the in-process hub, for the invokers below."""
+
+
 @pytest.fixture
-def calls(tenant: Tenant, monkeypatch: pytest.MonkeyPatch) -> list[Call]:
+def calls(tenant: Tenant) -> list[Call]:
     """Route every call the CLI makes to the tenant's hub, and hand back each one's method, path and query."""
     made: list[Call] = []
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, **kwargs: Any) -> Any:
-            response = tenant.hub.client.request(method, url, **kwargs)
-            sent = urlsplit(str(response.request.url))
-            made.append(Call(method, sent.path, parse_qs(sent.query)))
-            return response
+    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> Any:
+        response = tenant.hub.client.request(method, url, **kwargs)
+        sent = urlsplit(str(response.request.url))
+        made.append(Call(method, sent.path, parse_qs(sent.query)))
+        return response
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
+    _bound["hub"] = bind_stubs(request=forward)
     return made
 
 
 def _cli(*argv: str, stdin: str | None = None) -> Result:
-    return CliRunner().invoke(hub_group, [*argv, "--hub-url", _HUB_URL], input=stdin)
+    return _bound["hub"].runner.invoke(hub_group, [*argv, "--hub-url", _HUB_URL], input=stdin)
 
 
 def _said(result: Result) -> list[str]:

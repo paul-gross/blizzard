@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
@@ -77,7 +77,7 @@ def tenant_delete(cli: CliContext, tenant_id: str, yes: bool) -> None:
     if not yes and not click.confirm(f"delete tenant {tenant_id} and every row it holds? this cannot be undone"):
         raise click.Abort()
     resp = cli.send("delete", f"/api/admin/tenants/{tenant_id}")
-    if resp.status_code == httpx.codes.GONE:
+    if resp.status_code == HTTPStatus.GONE:
         cli.show_lines(
             {"tenant_id": tenant_id, "state": "deleted", "rows_removed": None},
             f"tenant {tenant_id} was already deleted",
@@ -92,7 +92,7 @@ def tenant_delete(cli: CliContext, tenant_id: str, yes: bool) -> None:
         },
     )
     body = resp.json()
-    if resp.status_code == httpx.codes.ACCEPTED:
+    if resp.status_code == HTTPStatus.ACCEPTED:
         cli.show_lines(
             body,
             f"tenant {tenant_id} is closed and its deletion is underway; the hub finishes it in the background — "

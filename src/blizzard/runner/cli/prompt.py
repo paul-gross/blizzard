@@ -5,10 +5,9 @@ from urllib.parse import quote
 
 import click
 
-from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.runtime import click_exception_on
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
-from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import read_host_stores
@@ -156,7 +155,7 @@ def prompt_clear(ctx: click.Context, directory: str, runner_url: str | None, run
 
     The one `prompt` verb that needs a running runner. Takes effect on subsequent spawns."""
     workspace_id = load_runner(directory, runner=runner).home_workspace.id
-    with RunnerDaemon.reach("prompt clear", directory, runner_url, OperatorTrace.source(ctx)) as daemon:
+    with RunnerDaemon.reach("prompt clear", directory, runner_url, Door.of(ctx)) as daemon:
         daemon.send_to_host("delete", f"/api/host/workspaces/{quote(workspace_id, safe='')}/prompt").raise_for_status()
     click.echo("workspace-prompt override cleared — the configured prompt applies on subsequent spawns")
 

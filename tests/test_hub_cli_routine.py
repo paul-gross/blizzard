@@ -1,5 +1,5 @@
 """``blizzard hub routine create|list|show|edit|trend|proposal-counts`` (unit tier) — pure
-clients of the routine routes, driven here with ``httpx`` stubbed, the
+clients of the routine routes, driven here with the client factory stubbed, the
 ``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 @contextlib.contextmanager
@@ -59,7 +60,7 @@ def _in_one_project(fake_get: Callable[..., _FakeResponse]) -> Callable[..., _Fa
 
 
 @pytest.mark.unit
-def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_create_posts_name_graph_and_scope() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
@@ -76,8 +77,8 @@ def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPat
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["routine", "create", "nightly", "alpha", "blizzard"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -101,15 +102,15 @@ def test_routine_create_posts_name_graph_and_scope(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
-def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_create_collects_repeated_model_options() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    bound.runner.invoke(
         hub_group,
         ["routine", "create", "nightly", "alpha", "blizzard", "--model", "a", "--model", "b", "--effort", "high"],
     )
@@ -119,15 +120,15 @@ def test_routine_create_collects_repeated_model_options(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_routine_create_collects_repeated_harnesses_options(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_create_collects_repeated_harnesses_options() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"routine_id": "rtn_1", "name": "nightly"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -146,27 +147,27 @@ def test_routine_create_collects_repeated_harnesses_options(monkeypatch: pytest.
 
 
 @pytest.mark.unit
-def test_routine_create_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_create_maps_a_422_to_a_click_exception() -> None:
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "no enabled graph named 'ghost' exists"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "create", "nightly", "ghost", "blizzard"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "create", "nightly", "ghost", "blizzard"])
 
     assert result.exit_code != 0
     assert "ghost" in result.output
 
 
 @pytest.mark.unit
-def test_routine_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_list_prints_each_row() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
             [{"routine_id": "rtn_1", "name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"}],
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "list"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "list"])
 
     assert result.exit_code == 0, result.output
     assert "rtn_1" in result.output
@@ -174,19 +175,19 @@ def test_routine_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_routine_list_on_no_routines_prints_a_friendly_message(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_list_on_no_routines_prints_a_friendly_message() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "list"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "list"])
 
     assert result.exit_code == 0, result.output
     assert "no routines yet" in result.output
 
 
 @pytest.mark.unit
-def test_routine_list_marks_a_retired_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_list_marks_a_retired_row() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -201,30 +202,30 @@ def test_routine_list_marks_a_retired_row(monkeypatch: pytest.MonkeyPatch) -> No
             ],
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "list"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "list"])
 
     assert result.exit_code == 0, result.output
     assert "retired" in result.output
 
 
 @pytest.mark.unit
-def test_routine_list_include_retired_passes_the_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_list_include_retired_passes_the_query_param() -> None:
     calls: list[dict[str, str] | None] = []
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "list", "--include-retired"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "list", "--include-retired"])
 
     assert result.exit_code == 0, result.output
     assert calls == [{"include_retired": "true"}]
 
 
 @pytest.mark.unit
-def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_retire_posts_to_the_retire_endpoint() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
@@ -237,9 +238,8 @@ def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyP
         doors.append((headers or {}).get("X-Blizzard-Door"))
         return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": True})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["routine", "retire", "nightly", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -250,7 +250,7 @@ def test_routine_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_routine_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_enable_posts_to_the_enable_endpoint() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
@@ -260,9 +260,8 @@ def test_routine_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyP
         post_calls.append((url, json))
         return _FakeResponse(202, {"routine_id": "rtn_1", "name": "nightly", "retired": False})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["routine", "enable", "nightly"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -272,7 +271,7 @@ def test_routine_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_routine_retire_unknown_name_raises_without_a_retire_request(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_retire_unknown_name_raises_without_a_retire_request() -> None:
     post_calls: list[str] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
@@ -282,9 +281,8 @@ def test_routine_retire_unknown_name_raises_without_a_retire_request(monkeypatch
         post_calls.append(url)
         return _FakeResponse(202, {})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "retire", "ghost"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "retire", "ghost"])
 
     assert result.exit_code != 0
     assert "ghost" in result.output
@@ -292,7 +290,7 @@ def test_routine_retire_unknown_name_raises_without_a_retire_request(monkeypatch
 
 
 @pytest.mark.unit
-def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_show_prints_the_whole_record() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         if url.endswith("/scopes"):
             return _FakeResponse(200, ["blizzard"])
@@ -308,8 +306,8 @@ def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "nightly" in result.output
@@ -318,7 +316,7 @@ def test_routine_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
-def test_routine_show_prints_the_harnesses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_show_prints_the_harnesses_default() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         if url.endswith("/scopes"):
             return _FakeResponse(200, ["blizzard"])
@@ -335,15 +333,15 @@ def test_routine_show_prints_the_harnesses_default(monkeypatch: pytest.MonkeyPat
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "default harnesses: claude_code, codex" in result.output
 
 
 @pytest.mark.unit
-def test_routine_show_lists_the_routines_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_show_lists_the_routines_scopes() -> None:
     """``routine show`` also reads ``GET /routines/{id}/scopes``
     and appends a ``scopes:`` line naming every linked scope."""
 
@@ -362,26 +360,26 @@ def test_routine_show_lists_the_routines_scopes(monkeypatch: pytest.MonkeyPatch)
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_1"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "scopes: blizzard, cold" in result.output
 
 
 @pytest.mark.unit
-def test_routine_show_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_show_maps_an_unknown_routine() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(hub_group, ["routine", "show", "rtn_ghost"])
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_ghost"])
 
     assert result.exit_code != 0
     assert "rtn_ghost" in result.output
 
 
-def _invoke_routine_edit(monkeypatch: pytest.MonkeyPatch, *args: str, status: int = 200) -> tuple[object, list[object]]:
+def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[object, list[object]]:
     patch_calls: list[object] = []
 
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
@@ -391,35 +389,32 @@ def _invoke_routine_edit(monkeypatch: pytest.MonkeyPatch, *args: str, status: in
         patch_calls.append(json)
         return _FakeResponse(status, {"routine_id": "rtn_1", "name": "nightly", "graph_name": "beta"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get), patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group, ["routine", "edit", "rtn_1", *args], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
     return result, patch_calls
 
 
 @pytest.mark.unit
-def test_routine_edit_patches_without_reading_or_restating_the_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    result, patch_calls = _invoke_routine_edit(monkeypatch, "--graph", "beta", "--scope", "blizzard")
+def test_routine_edit_patches_without_reading_or_restating_the_name() -> None:
+    result, patch_calls = _invoke_routine_edit("--graph", "beta", "--scope", "blizzard")
 
     assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
     assert patch_calls == [{"graph_name": "beta", "default_scope_slug": "blizzard"}]
 
 
 @pytest.mark.unit
-def test_routine_edit_sends_only_the_options_given(monkeypatch: pytest.MonkeyPatch) -> None:
-    result, patch_calls = _invoke_routine_edit(monkeypatch, "--effort", "high", "--model", "a", "--model", "b")
+def test_routine_edit_sends_only_the_options_given() -> None:
+    result, patch_calls = _invoke_routine_edit("--effort", "high", "--model", "a", "--model", "b")
 
     assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
     assert patch_calls == [{"default_model": ["a", "b"], "default_effort": "high"}]
 
 
 @pytest.mark.unit
-def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
-    result, patch_calls = _invoke_routine_edit(
-        monkeypatch, "--clear", "effort", "--clear", "model", "--clear", "harnesses"
-    )
+def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest() -> None:
+    result, patch_calls = _invoke_routine_edit("--clear", "effort", "--clear", "model", "--clear", "harnesses")
 
     assert result.exit_code == 0, result.output  # type: ignore[attr-defined]
     assert patch_calls == [{"default_effort": None, "default_model": [], "default_harnesses": []}]
@@ -431,18 +426,16 @@ def test_routine_edit_clear_sends_null_for_effort_and_empty_lists_for_the_rest(m
     [["--effort", "low", "--clear", "effort"], ["--model", "m", "--clear", "model"], []],
     ids=["effort-contradiction", "model-contradiction", "nothing-to-change"],
 )
-def test_routine_edit_refuses_a_usage_error_before_any_request(
-    monkeypatch: pytest.MonkeyPatch, args: list[str]
-) -> None:
-    result, patch_calls = _invoke_routine_edit(monkeypatch, *args)
+def test_routine_edit_refuses_a_usage_error_before_any_request(args: list[str]) -> None:
+    result, patch_calls = _invoke_routine_edit(*args)
 
     assert result.exit_code == 2  # type: ignore[attr-defined]
     assert patch_calls == []
 
 
 @pytest.mark.unit
-def test_routine_edit_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
-    result, _ = _invoke_routine_edit(monkeypatch, "--graph", "beta", status=404)
+def test_routine_edit_maps_an_unknown_routine() -> None:
+    result, _ = _invoke_routine_edit("--graph", "beta", status=404)
 
     assert result.exit_code != 0  # type: ignore[attr-defined]
     assert "unknown routine rtn_1" in result.output  # type: ignore[attr-defined]
@@ -450,15 +443,15 @@ def test_routine_edit_maps_an_unknown_routine(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.unit
 @pytest.mark.parametrize("kind", ["scope", "routine"])
-def test_config_changes_accepts_the_scope_and_routine_kinds(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+def test_config_changes_accepts_the_scope_and_routine_kinds(kind: str) -> None:
     params_seen: list[object] = []
 
     def fake_get(url: str, *, timeout: float, params: object = None, **_: object) -> _FakeResponse:
         params_seen.append(params)
         return _FakeResponse(200, {"changes": [], "next_before": None})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group, ["config", "changes", "--json", "--kind", kind], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -471,15 +464,15 @@ def test_config_changes_accepts_the_scope_and_routine_kinds(monkeypatch: pytest.
 
 
 @pytest.mark.unit
-def test_routine_scope_add_links_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_add_links_the_scope() -> None:
     calls: list[str] = []
 
     def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
-    monkeypatch.setattr(httpx, "put", fake_put)
-    result = CliRunner().invoke(
+    bound = bind_stubs(put=fake_put)
+    result = bound.runner.invoke(
         hub_group, ["routine", "scope", "add", "rtn_1", "cold"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -490,15 +483,15 @@ def test_routine_scope_add_links_the_scope(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
-def test_routine_scope_add_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_add_is_idempotent() -> None:
     calls: list[str] = []
 
     def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
-    monkeypatch.setattr(httpx, "put", fake_put)
-    runner = CliRunner()
+    bound = bind_stubs(put=fake_put)
+    runner = bound.runner
     first = runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "cold"])
     second = runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "cold"])
 
@@ -508,51 +501,51 @@ def test_routine_scope_add_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.unit
-def test_routine_scope_add_on_unknown_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_add_on_unknown_routine() -> None:
     def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown routine rtn_ghost"})
 
-    monkeypatch.setattr(httpx, "put", fake_put)
-    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_ghost", "cold"])
+    bound = bind_stubs(put=fake_put)
+    result = bound.runner.invoke(hub_group, ["routine", "scope", "add", "rtn_ghost", "cold"])
 
     assert result.exit_code != 0
     assert "unknown routine rtn_ghost" in result.output
 
 
 @pytest.mark.unit
-def test_routine_scope_add_on_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_add_on_unknown_scope() -> None:
     def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown scope ghost"})
 
-    monkeypatch.setattr(httpx, "put", fake_put)
-    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_1", "ghost"])
+    bound = bind_stubs(put=fake_put)
+    result = bound.runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "ghost"])
 
     assert result.exit_code != 0
     assert "unknown scope ghost" in result.output
 
 
 @pytest.mark.unit
-def test_routine_scope_add_on_malformed_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_add_on_malformed_slug() -> None:
     def fake_put(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
 
-    monkeypatch.setattr(httpx, "put", fake_put)
-    result = CliRunner().invoke(hub_group, ["routine", "scope", "add", "rtn_1", "Not A Slug"])
+    bound = bind_stubs(put=fake_put)
+    result = bound.runner.invoke(hub_group, ["routine", "scope", "add", "rtn_1", "Not A Slug"])
 
     assert result.exit_code != 0
     assert "Not A Slug" in result.output
 
 
 @pytest.mark.unit
-def test_routine_scope_remove_unlinks_the_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_remove_unlinks_the_scope() -> None:
     calls: list[str] = []
 
     def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
-    monkeypatch.setattr(httpx, "delete", fake_delete)
-    result = CliRunner().invoke(
+    bound = bind_stubs(delete=fake_delete)
+    result = bound.runner.invoke(
         hub_group, ["routine", "scope", "remove", "rtn_1", "cold"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -563,15 +556,15 @@ def test_routine_scope_remove_unlinks_the_scope(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_routine_scope_remove_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_remove_is_idempotent() -> None:
     calls: list[str] = []
 
     def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse(204)
 
-    monkeypatch.setattr(httpx, "delete", fake_delete)
-    runner = CliRunner()
+    bound = bind_stubs(delete=fake_delete)
+    runner = bound.runner
     first = runner.invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "cold"])
     second = runner.invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "cold"])
 
@@ -581,19 +574,19 @@ def test_routine_scope_remove_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_routine_scope_remove_refuses_the_default_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_scope_remove_refuses_the_default_scope() -> None:
     def fake_delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "routine 'rtn_1's default scope 'blizzard' cannot be unlinked"})
 
-    monkeypatch.setattr(httpx, "delete", fake_delete)
-    result = CliRunner().invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "blizzard"])
+    bound = bind_stubs(delete=fake_delete)
+    result = bound.runner.invoke(hub_group, ["routine", "scope", "remove", "rtn_1", "blizzard"])
 
     assert result.exit_code != 0
     assert "cannot be unlinked" in result.output
 
 
 @pytest.mark.unit
-def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_resolves_name_then_posts() -> None:
     post_calls: list[tuple[str, object]] = []
     get_calls: list[dict[str, str]] = []
 
@@ -621,9 +614,10 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(
+        hub_group, ["routine", "run", "gardening"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
 
     assert result.exit_code == 0, result.output
     assert get_calls == [{"include_retired": "true"}]
@@ -636,7 +630,7 @@ def test_routine_run_resolves_name_then_posts(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
-def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_threads_scope_mode_and_note() -> None:
     post_calls: list[tuple[str, object]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
@@ -662,9 +656,8 @@ def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    bound.runner.invoke(
         hub_group,
         ["routine", "run", "gardening", "--scope", "cold", "--mode", "delta", "--note", "focus on auth"],
     )
@@ -673,7 +666,7 @@ def test_routine_run_threads_scope_mode_and_note(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_names_a_downgrade_in_its_output() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
@@ -696,16 +689,15 @@ def test_routine_run_names_a_downgrade_in_its_output(monkeypatch: pytest.MonkeyP
             },
         )
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--mode", "delta"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "gardening", "--mode", "delta"])
 
     assert result.exit_code == 0, result.output
     assert "downgraded" in result.output.lower()
 
 
 @pytest.mark.unit
-def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_unknown_name_raises_without_a_run_request() -> None:
     post_calls: list[str] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
@@ -715,9 +707,8 @@ def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pyte
         post_calls.append(url)
         return _FakeResponse(201, {})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "ghost"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "ghost"])
 
     assert result.exit_code != 0
     assert "ghost" in result.output
@@ -725,23 +716,22 @@ def test_routine_run_unknown_name_raises_without_a_run_request(monkeypatch: pyte
 
 
 @pytest.mark.unit
-def test_routine_run_maps_a_409_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_maps_a_409_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
     assert "conflict" in result.output
 
 
 @pytest.mark.unit
-def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_maps_a_503_to_a_click_exception() -> None:
     """A retired routine, a retired effective scope, or an unresolvable graph refuses at
     503 — surfaced as the body's own reason, so the operator reads what refused."""
 
@@ -751,16 +741,15 @@ def test_routine_run_maps_a_503_to_a_click_exception(monkeypatch: pytest.MonkeyP
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(503, {"detail": "scope 'blizzard' is retired"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
     assert "scope 'blizzard' is retired" in result.output
 
 
 @pytest.mark.unit
-def test_routine_run_mode_option_is_choice_restricted(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_mode_option_is_choice_restricted() -> None:
     """``--mode`` never reaches the server with an unknown value — click's own
     ``Choice`` validation refuses it first, before any HTTP call."""
     result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--mode", "sideways"])
@@ -770,16 +759,15 @@ def test_routine_run_mode_option_is_choice_restricted(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_routine_run_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_run_maps_a_422_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "scope slug must match [a-z0-9-]+, got 'Not A Slug'"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["routine", "run", "gardening", "--scope", "Not A Slug"])
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "gardening", "--scope", "Not A Slug"])
 
     assert result.exit_code != 0
     assert "Not A Slug" in result.output
@@ -806,17 +794,17 @@ _TREND_BODY = {
 
 
 @pytest.mark.unit
-def test_routine_trend_converts_local_since_until_and_boundary_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_trend_converts_local_since_until_and_boundary_to_utc() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, _TREND_BODY)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
+    bound = bind_stubs(get=_in_one_project(fake_get))
 
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group,
             [
                 "routine",
@@ -844,15 +832,15 @@ def test_routine_trend_converts_local_since_until_and_boundary_to_utc(monkeypatc
 
 
 @pytest.mark.unit
-def test_routine_trend_period_days_defaults_to_seven(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_trend_period_days_defaults_to_seven() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, _TREND_BODY)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -872,12 +860,12 @@ def test_routine_trend_period_days_defaults_to_seven(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_routine_trend_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_trend_maps_a_422_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "since 'garbage' is not a valid ISO-8601 instant"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -897,12 +885,12 @@ def test_routine_trend_maps_a_422_to_a_click_exception(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_routine_trend_renders_periods_and_age(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_trend_renders_periods_and_age() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, _TREND_BODY)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -944,17 +932,17 @@ _PROPOSAL_COUNTS_BODY = {
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_converts_local_since_until_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_proposal_counts_converts_local_since_until_to_utc() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, _PROPOSAL_COUNTS_BODY)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
+    bound = bind_stubs(get=_in_one_project(fake_get))
 
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group,
             [
                 "routine",
@@ -978,16 +966,16 @@ def test_routine_proposal_counts_converts_local_since_until_to_utc(monkeypatch: 
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_omits_routine_param_when_name_not_given(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_proposal_counts_omits_routine_param_when_name_not_given() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, {**_PROPOSAL_COUNTS_BODY, "routine": None})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
+    bound = bind_stubs(get=_in_one_project(fake_get))
     with _local_timezone("UTC"):
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group,
             [
                 "routine",
@@ -1009,12 +997,12 @@ def test_routine_proposal_counts_omits_routine_param_when_name_not_given(monkeyp
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_proposal_counts_maps_a_422_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "since 'garbage' is not a valid ISO-8601 instant"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -1032,14 +1020,12 @@ def test_routine_proposal_counts_maps_a_422_to_a_click_exception(monkeypatch: py
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_maps_an_unknown_routine_404_to_a_click_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_routine_proposal_counts_maps_an_unknown_routine_404_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown routine 'ghost'"})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -1057,12 +1043,12 @@ def test_routine_proposal_counts_maps_an_unknown_routine_404_to_a_click_exceptio
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_renders_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_proposal_counts_renders_rows() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, _PROPOSAL_COUNTS_BODY)
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -1086,12 +1072,12 @@ def test_routine_proposal_counts_renders_rows(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.unit
-def test_routine_proposal_counts_renders_empty_rows_distinctly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_routine_proposal_counts_renders_empty_rows_distinctly() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, {**_PROPOSAL_COUNTS_BODY, "rows": []})
 
-    monkeypatch.setattr(httpx, "get", _in_one_project(fake_get))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=_in_one_project(fake_get))
+    result = bound.runner.invoke(
         hub_group,
         [
             "routine",
@@ -1118,12 +1104,12 @@ def test_routine_proposal_counts_renders_empty_rows_distinctly(monkeypatch: pyte
     ],
 )
 def test_routine_proposal_counts_renders_the_origin_tokens_and_never_none(
-    monkeypatch: pytest.MonkeyPatch, origin: str, routine_name: str | None, expected: str
+    origin: str, routine_name: str | None, expected: str
 ) -> None:
     row = {"origin": origin, "routine_name": routine_name, "class": "lint"}
     body = {**_PROPOSAL_COUNTS_BODY, "rows": [{**_PROPOSAL_COUNTS_BODY["rows"][0], **row}]}
-    monkeypatch.setattr(httpx, "get", lambda url, *, params, timeout: _FakeResponse(200, body))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=lambda url, *, params, timeout: _FakeResponse(200, body))
+    result = bound.runner.invoke(
         hub_group,
         ["routine", "proposal-counts", "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],
     )
@@ -1144,11 +1130,11 @@ def test_routine_proposal_counts_renders_the_origin_tokens_and_never_none(
     ],
 )
 def test_routine_proposal_counts_header_names_the_routine_scope_only_when_there_is_one(
-    monkeypatch: pytest.MonkeyPatch, argv: list[str], routine: str | None, header: str
+    argv: list[str], routine: str | None, header: str
 ) -> None:
     body = {**_PROPOSAL_COUNTS_BODY, "routine": routine}
-    monkeypatch.setattr(httpx, "get", lambda url, *, params, timeout: _FakeResponse(200, body))
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=lambda url, *, params, timeout: _FakeResponse(200, body))
+    result = bound.runner.invoke(
         hub_group,
         ["routine", "proposal-counts", *argv, "--since", "2026-01-01T00:00:00", "--until", "2026-01-15T00:00:00"],
     )

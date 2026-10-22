@@ -14,18 +14,15 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from blizzard import __version__
 from blizzard.auth_core import Role
-from blizzard.cli.collaborators import CliCollaborators
-from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.platform_tracing.attributes import TENANT, TENANT_NAME
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
-from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub import app as hub_app
 from blizzard.hub.cli import hub as hub_group
@@ -37,6 +34,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 )
 from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
+from tests.worker_http import bind_transport
 
 pytestmark = pytest.mark.component
 
@@ -404,9 +402,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     assert not [s for s in spans if "exec" in s.name and s.name != RUN_STEP_SPAN]
 
 
-def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authenticated_operator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authenticated_operator(tmp_path: Path) -> None:
     """The CLI's root span and the hub's server span share one trace, the hub's the child — through
     ``CliContext`` over the app's own transport, with an operator session under a real auth mode."""
     exporter = InMemorySpanExporter()
@@ -414,25 +410,32 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
     posted: list[httpx.Request] = []
-    cli_exporter = httpx.Client(transport=httpx.MockTransport(lambda r: posted.append(r) or httpx.Response(200)))
     with TestClient(app) as client:
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "collector.local":
+                posted.append(request)
+                return httpx.Response(200)
+            relayed = client.request(
+                request.method,
+                request.url.raw_path.decode(),
+                headers=dict(request.headers),
+                content=request.content,
+            )
+            return httpx.Response(
+                relayed.status_code, headers={"content-type": relayed.headers["content-type"]}, content=relayed.content
+            )
+
+        bound = bind_transport(answer)
         harness = SimpleNamespace(engine=app.state.engine, clock=FixedClock(datetime(2026, 7, 13, tzinfo=UTC)))
         session = app.state.services.auth.mint_session(
             seed_user(harness, username="op", role=Role.CONTRIBUTOR, email="op@example.com")  # type: ignore[arg-type]
         )[0]
         SessionFile.of().save("http://testserver", session)
-        monkeypatch.setattr(
-            httpx,
-            "get",
-            lambda url, *, headers=None, params=None, timeout=None: client.get(
-                url.removeprefix("http://testserver"), headers=headers, params=params
-            ),
-        )
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group,
             ["chunk", "list"],
             env={"BZ_HUB_URL": "http://testserver", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.local:4318"},
-            obj=CliCollaborators(client_factory=lambda: cli_exporter, clock=Clock(), wall_clock=SystemClock()),
         )
     assert result.exit_code == 0, result.output
     [post] = posted

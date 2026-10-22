@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -52,7 +52,7 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
     if note is not None:
         request["note"] = note
     resp = cli.send("post", f"/api/decisions/{decision_id}/resolutions", json_body=request)
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         body = resp.json()
         if "already_resolved_by" in body:
             raise click.ClickException(f"already resolved by {body['already_resolved_by']}")

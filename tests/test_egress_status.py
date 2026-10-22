@@ -6,15 +6,14 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.egress.factory import EgressUnavailable
 from tests.support import HubHarness
 from tests.test_egress_sweep import _closed_step, _hub
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -106,19 +105,21 @@ def test_the_last_error_is_ongoing_until_a_write_recovers(tmp_path: Path) -> Non
     assert recovered["last_error_at"] == failed["last_error_at"]
 
 
-def test_the_cli_renders_the_status_and_its_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_cli_renders_the_status_and_its_json(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path, _on(tmp_path))
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
-    monkeypatch.setattr(httpx, "get", lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
+    bound = bind_stubs(get=lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
 
-    text = CliRunner().invoke(hub_group, ["egress", "status"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    text = bound.runner.invoke(hub_group, ["egress", "status"], env={"BZ_HUB_URL": "http://hub.local:8421"})
     assert text.exit_code == 0, text.output
     assert "egress: on, writing ndjson to" in text.output
     assert "steps: cursor" in text.output
     assert "free space:" in text.output
 
-    as_json = CliRunner().invoke(hub_group, ["egress", "status", "--json"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    as_json = bound.runner.invoke(
+        hub_group, ["egress", "status", "--json"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
     assert as_json.exit_code == 0, as_json.output
     assert '"state": "on"' in as_json.output

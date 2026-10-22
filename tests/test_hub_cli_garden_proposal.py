@@ -1,14 +1,14 @@
 """``blizzard hub garden-proposal pass/accept`` (unit tier) — pure clients of the two
-closing routes, driven here with ``httpx`` stubbed (the
+closing routes, driven here with the client stubbed (the
 ``tests/test_hub_cli_item.py`` shape)."""
 
 from __future__ import annotations
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -61,15 +61,15 @@ def _closure(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.unit
-def test_pass_posts_the_reason_and_shows_the_recorded_closure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pass_posts_the_reason_and_shows_the_recorded_closure() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, _proposal_view(closure=_closure()))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "pass", "gprop_1", "--reason", "not worth it"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -84,12 +84,12 @@ def test_pass_posts_the_reason_and_shows_the_recorded_closure(monkeypatch: pytes
 
 
 @pytest.mark.unit
-def test_pass_unknown_proposal_is_reported_as_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pass_unknown_proposal_is_reported_as_404() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "pass", "gprop_ghost", "--reason", "r"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -100,12 +100,12 @@ def test_pass_unknown_proposal_is_reported_as_404(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_pass_a_settled_proposal_surfaces_the_servers_409_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pass_a_settled_proposal_surfaces_the_servers_409_detail() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "garden proposal gprop_1 is already passed"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "pass", "gprop_1", "--reason", "reconsidered"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -120,7 +120,7 @@ def test_pass_a_settled_proposal_surfaces_the_servers_409_detail(monkeypatch: py
 
 
 @pytest.mark.unit
-def test_accept_defaults_to_minting_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_accept_defaults_to_minting_and_reports_the_chunk() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -135,8 +135,8 @@ def test_accept_defaults_to_minting_and_reports_the_chunk(monkeypatch: pytest.Mo
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["garden-proposal", "accept", "gprop_1"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -149,7 +149,7 @@ def test_accept_defaults_to_minting_and_reports_the_chunk(monkeypatch: pytest.Mo
 
 
 @pytest.mark.unit
-def test_accept_no_work_item_flag_posts_mint_work_item_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_accept_no_work_item_flag_posts_mint_work_item_false() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -164,8 +164,8 @@ def test_accept_no_work_item_flag_posts_mint_work_item_false(monkeypatch: pytest
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "accept", "gprop_1", "--no-work-item", "--reason", "handled by hand"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -178,15 +178,15 @@ def test_accept_no_work_item_flag_posts_mint_work_item_false(monkeypatch: pytest
 
 
 @pytest.mark.unit
-def test_accept_body_file_dash_reads_stdin_and_posts_it(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_accept_body_file_dash_reads_stdin_and_posts_it() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, {**_proposal_view(), "chunk_id": "ch_new"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "accept", "gprop_1", "--body-file", "-"],
         input="a hand-drafted body",
@@ -199,12 +199,12 @@ def test_accept_body_file_dash_reads_stdin_and_posts_it(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_accept_a_settled_proposal_surfaces_the_servers_409_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_accept_a_settled_proposal_surfaces_the_servers_409_detail() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "garden proposal gprop_1 is already accepted"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["garden-proposal", "accept", "gprop_1"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -217,7 +217,7 @@ def test_accept_a_settled_proposal_surfaces_the_servers_409_detail(monkeypatch: 
 
 
 @pytest.mark.unit
-def test_create_posts_the_given_fields_and_shows_the_minted_proposal(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_posts_the_given_fields_and_shows_the_minted_proposal() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -226,8 +226,8 @@ def test_create_posts_the_given_fields_and_shows_the_minted_proposal(monkeypatch
             201, _proposal_view(origin="operator", routine_name=None, created_by="operator", findings=["fin_1"])
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "create", "--title", "t", "--class", "c", "--body-file", "-", "--finding", "fin_1"],
         input="the body",
@@ -242,15 +242,15 @@ def test_create_posts_the_given_fields_and_shows_the_minted_proposal(monkeypatch
 
 
 @pytest.mark.unit
-def test_create_with_routine_includes_it_in_the_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_with_routine_includes_it_in_the_body() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, _proposal_view(origin="operator", created_by="operator"))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "create", "--title", "t", "--class", "c", "--body-file", "-", "--routine", "nightly"],
         input="b",
@@ -263,12 +263,12 @@ def test_create_with_routine_includes_it_in_the_body(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_create_a_refused_call_is_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_a_refused_call_is_a_nonzero_exit() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "unknown finding id(s): fin_ghost"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "create", "--title", "t", "--class", "c", "--body-file", "-", "--finding", "fin_ghost"],
         input="b",
@@ -283,15 +283,15 @@ def test_create_a_refused_call_is_a_nonzero_exit(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_edit_patches_only_the_given_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_edit_patches_only_the_given_fields() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, _proposal_view(title="new title"))
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "edit", "gprop_1", "--title", "new title"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -304,12 +304,12 @@ def test_edit_patches_only_the_given_fields(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_edit_a_closed_proposal_surfaces_the_servers_409_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_edit_a_closed_proposal_surfaces_the_servers_409_detail() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "garden proposal gprop_1 already carries a closure"})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "edit", "gprop_1", "--title", "new title"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -324,15 +324,15 @@ def test_edit_a_closed_proposal_surfaces_the_servers_409_detail(monkeypatch: pyt
 
 
 @pytest.mark.unit
-def test_attach_posts_the_given_finding_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_attach_posts_the_given_finding_ids() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, _proposal_view(findings=["fin_1", "fin_2"]))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "attach", "gprop_1", "fin_1", "fin_2"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -345,15 +345,15 @@ def test_attach_posts_the_given_finding_ids(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_detach_posts_the_given_finding_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detach_posts_the_given_finding_ids() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, _proposal_view(findings=[]))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "detach", "gprop_1", "fin_1"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -366,12 +366,12 @@ def test_detach_posts_the_given_finding_ids(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_attach_an_unknown_proposal_is_reported_as_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_attach_an_unknown_proposal_is_reported_as_404() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["garden-proposal", "attach", "gprop_ghost", "fin_1"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},

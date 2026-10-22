@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Literal
 
 import click
-import httpx
 
-from blizzard.cli.operator_trace import ITraceHeaders
+from blizzard.cli.collaborators import CliCollaborators, Client, ClientFactory, ConnectError, HTTPError, Response
+from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.param_rank import ParamSource
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
 
@@ -19,16 +21,22 @@ from blizzard.runner.route_paths import runner_prefix
 LOCAL_CLIENT_TIMEOUT = 5.0
 
 
-def uds_client(sock: Path, trace: ITraceHeaders) -> httpx.Client:
-    """A client whose transport reaches the runner over ``sock`` — the base_url host is a
-    placeholder, since the UDS transport decides where the bytes go."""
-    transport = httpx.HTTPTransport(uds=str(sock))
-    return httpx.Client(
-        transport=transport,
-        base_url="http://runner",
-        timeout=LOCAL_CLIENT_TIMEOUT,
-        headers=trace.headers(),
-    )
+@dataclass(frozen=True)
+class Door:
+    """What a verb reaches the runner with: the trace its requests carry and the factory its clients come from."""
+
+    trace: ITraceHeaders
+    client_factory: ClientFactory
+
+    @classmethod
+    def of(cls, ctx: click.Context) -> Door:
+        return cls(OperatorTrace.source(ctx), CliCollaborators.of(ctx).client_factory)
+
+    def uds_client(self, sock: Path) -> Client:
+        """A client reaching the runner over ``sock``; the base_url host is a placeholder."""
+        return self.client_factory(
+            base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT, headers=self.trace.headers(), uds=str(sock)
+        )
 
 
 def runner_option(command: Any) -> Any:
@@ -41,6 +49,7 @@ def runner_option(command: Any) -> Any:
     )(command)
 
 
+@collaborator
 @dataclass(frozen=True)
 class RunnerDaemon:
     """One operator verb's door onto the runner's local API — its UDS socket, or TCP when
@@ -50,7 +59,7 @@ class RunnerDaemon:
     into one ``verb: could not reach the runner at <where>``."""
 
     verb: str
-    client: httpx.Client
+    client: Client
     where: str
     #: The runner the operator named with ``--runner``, by name or id; ``None`` lets a host of one answer.
     selector: str | None = None
@@ -63,7 +72,7 @@ class RunnerDaemon:
         verb: str,
         directory: str,
         runner_url: str | None,
-        trace: ITraceHeaders,
+        door: Door,
         runner: str | None = None,
     ) -> RunnerDaemon:
         """Ranked by where each value came from, see ``src/blizzard/cli/param_rank.py`` —
@@ -76,7 +85,9 @@ class RunnerDaemon:
                 "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
             )
         if url_source is not None and url_source > dir_source and runner_url is not None:
-            client = httpx.Client(base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=trace.headers())
+            client = door.client_factory(
+                base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=door.trace.headers()
+            )
             return cls(verb, client, runner_url, runner)
 
         sock = HostLayout(Path(directory)).socket_path
@@ -86,7 +97,7 @@ class RunnerDaemon:
             raise click.ClickException(
                 f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
             )
-        return cls(verb, uds_client(sock, trace), str(sock), runner)
+        return cls(verb, door.uds_client(sock), str(sock), runner)
 
     def __enter__(self) -> RunnerDaemon:
         return self
@@ -96,32 +107,32 @@ class RunnerDaemon:
     ) -> Literal[False]:
         """``Literal[False]``, not ``bool``: never swallowing is what keeps names bound after the block."""
         self.client.close()
-        if isinstance(exc, httpx.HTTPError):
+        if isinstance(exc, HTTPError):
             raise self.unreachable(exc) from exc
         return False
 
-    def get(self, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
+    def get(self, path: str, *, params: dict[str, str] | None = None) -> Response:
         """``GET`` the runner's own ``path``, raising on a non-2xx answer."""
         return self._call("get", self.runner_path(path), params=params)
 
-    def post(self, path: str, *, json_body: object | None = None) -> httpx.Response:
+    def post(self, path: str, *, json_body: object | None = None) -> Response:
         return self._call("post", self.runner_path(path), json_body=json_body)
 
-    def patch(self, path: str, *, json_body: object | None = None) -> httpx.Response:
+    def patch(self, path: str, *, json_body: object | None = None) -> Response:
         return self._call("patch", self.runner_path(path), json_body=json_body)
 
-    def send(self, method: str, path: str, *, json_body: object | None = None) -> httpx.Response:
+    def send(self, method: str, path: str, *, json_body: object | None = None) -> Response:
         """``method`` on the runner's own ``path``, whatever it answers."""
         return self.send_to_host(method, self.runner_path(path), json_body=json_body)
 
-    def send_to_host(self, method: str, path: str, *, json_body: object | None = None) -> httpx.Response:
+    def send_to_host(self, method: str, path: str, *, json_body: object | None = None) -> Response:
         """``method`` on the host's own ``path``, at its root, whatever it answers."""
         kwargs: dict[str, object] = {}
         if json_body is not None:
             kwargs["json"] = json_body
         return getattr(self.client, method)(path, **kwargs)
 
-    def get_from_host(self, path: str) -> httpx.Response:
+    def get_from_host(self, path: str) -> Response:
         """``GET`` the host's own ``path``, at its root, raising on a non-2xx answer."""
         return self._call("get", path)
 
@@ -175,20 +186,20 @@ class RunnerDaemon:
 
     def _call(
         self, method: str, path: str, *, json_body: object | None = None, params: dict[str, str] | None = None
-    ) -> httpx.Response:
+    ) -> Response:
         kwargs: dict[str, object] = {}
         if json_body is not None:
             kwargs["json"] = json_body
         if params is not None:
             kwargs["params"] = params
         resp = getattr(self.client, method)(path, **kwargs)
-        if resp.status_code == httpx.codes.NOT_FOUND and _flag_off(resp):
+        if resp.status_code == HTTPStatus.NOT_FOUND and _flag_off(resp):
             raise click.ClickException(resp.json()["detail"]["message"])
         resp.raise_for_status()
         return resp
 
 
-def _flag_off(resp: httpx.Response) -> bool:
+def _flag_off(resp: Response) -> bool:
     """Whether a ``404`` is the host's ``flag_off`` refusal: the route is held behind a flag that is off."""
     try:
         detail = resp.json().get("detail")
@@ -201,18 +212,18 @@ def _named(items: list[dict[str, Any]]) -> str:
     return ", ".join(f"{item['name']} ({item['runner_id'] or 'no id'}, {item['state']})" for item in items) or "none"
 
 
-def daemon_holding(sock: Path, trace: ITraceHeaders) -> str | None:
+def daemon_holding(sock: Path, door: Door) -> str | None:
     """What is holding the socket ``sock``, or ``None`` when nothing is — the single-owner guard's
     probe for a verb that writes or moves the store. Fail-closed: a socket that does not answer
     its health probe cleanly is still held."""
     if not sock.exists():
         return None
     try:
-        with uds_client(sock, trace) as client:
+        with door.uds_client(sock) as client:
             response = client.get("/api/health")
-    except httpx.ConnectError:
+    except ConnectError:
         return None  # a socket file an ungraceful exit left behind — nothing is listening on the corpse
-    except httpx.HTTPError as exc:
+    except HTTPError as exc:
         return f"something holds {sock} but did not answer its health probe ({exc})"
     if response.status_code != 200:
         return f"something holds {sock} and answered its health probe {response.status_code}"

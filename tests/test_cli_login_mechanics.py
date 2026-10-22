@@ -1,6 +1,6 @@
 """``blizzard.hub.cli_login`` — the loopback listener + paste-code mechanics (#96).
 
-No real hub: ``webbrowser.open``/``httpx.post`` are stubbed.
+No real hub: ``webbrowser.open`` and the exchange's client are stubbed.
 The loopback case drives a real HTTP GET at the ephemeral port ``Loopback`` binds, proving the listener itself, not just the seam around it.
 """
 
@@ -13,6 +13,9 @@ import httpx
 import pytest
 
 from blizzard.hub.cli import login as cli_login
+from tests.worker_http import bind_stubs
+
+_NO_HTTP = bind_stubs().collaborators.client_factory
 
 pytestmark = pytest.mark.unit
 
@@ -55,9 +58,9 @@ def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch)
         return _FakeTokenResponse(200, {"token": "the-session-token"})
 
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
-    monkeypatch.setattr(cli_login.httpx, "post", fake_post)
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
 
-    token = cli_login.Login.loopback("http://hub.example").token()
+    token = cli_login.Login.loopback("http://hub.example", client_factory=factory).token()
 
     assert token == "the-session-token"
     assert captured_exchange["code"] == "the-code"
@@ -75,7 +78,7 @@ def test_loopback_login_rejects_a_state_mismatch(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
 
     with pytest.raises(cli_login.LoginError):
-        cli_login.Login.loopback("http://hub.example").token()
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP).token()
 
 
 def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,14 +90,14 @@ def test_loopback_login_surfaces_a_provider_error(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
 
     with pytest.raises(cli_login.LoginError, match="access_denied"):
-        cli_login.Login.loopback("http://hub.example").token()
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP).token()
 
 
 def test_loopback_login_times_out_when_no_browser_shows_up(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_login.webbrowser, "open", lambda url: True)
 
     with pytest.raises(cli_login.LoginError, match="timed out"):
-        cli_login.Login.loopback("http://hub.example", timeout=0.2).token()
+        cli_login.Login.loopback("http://hub.example", client_factory=_NO_HTTP, timeout=0.2).token()
 
 
 def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,22 +110,24 @@ def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) ->
         return _FakeTokenResponse(400, {"detail": "invalid or expired code"})
 
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
-    monkeypatch.setattr(cli_login.httpx, "post", fake_post)
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
 
     with pytest.raises(cli_login.LoginError, match="rejected the login exchange"):
-        cli_login.Login.loopback("http://hub.example").token()
+        cli_login.Login.loopback("http://hub.example", client_factory=factory).token()
 
 
-def test_paste_code_login_exchanges_the_pasted_code(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_paste_code_login_exchanges_the_pasted_code() -> None:
     captured_exchange = {}
 
     def fake_post(url: str, *, json: dict, timeout: float) -> _FakeTokenResponse:
         captured_exchange.update(json)
         return _FakeTokenResponse(200, {"token": "the-session-token"})
 
-    monkeypatch.setattr(cli_login.httpx, "post", fake_post)
+    factory = bind_stubs(post=fake_post).collaborators.client_factory
 
-    token = cli_login.Login.paste_code("http://hub.example", prompt_for_code=lambda: "pasted-code").token()
+    token = cli_login.Login.paste_code(
+        "http://hub.example", client_factory=factory, prompt_for_code=lambda: "pasted-code"
+    ).token()
 
     assert token == "the-session-token"
     assert captured_exchange["code"] == "pasted-code"

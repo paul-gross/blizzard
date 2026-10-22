@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import click
-import httpx
 
+from blizzard.cli.collaborators import Response
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
@@ -46,7 +46,7 @@ class ApplyListing(Listing):
 _REFUSED = (409, 415, 422)
 
 
-def _refusal(cli: CliContext, resp: httpx.Response) -> str:
+def _refusal(cli: CliContext, resp: Response) -> str:
     """The hub's refusal, each validation entry located by its path inside the document
     (``work_sources.1.provider: …``)."""
     try:

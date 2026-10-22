@@ -8,7 +8,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 from click.testing import CliRunner, Result
 
@@ -17,6 +16,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -30,20 +30,16 @@ def _said(result: Result) -> list[str]:
     return [line for line in result.output.splitlines() if '"event": ' not in line]
 
 
-def _cli_as(hub: HubHarness, user: User, monkeypatch: pytest.MonkeyPatch) -> Cli:
+def _cli_as(hub: HubHarness, user: User) -> Cli:
     """Route every call the CLI makes to ``hub``, signed in as ``user``, and hand back an invoker."""
     session = seed_session(hub, user)
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
-            signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
-            return hub.client.request(method, url, headers=signed_in, **kwargs)
+    def forward(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
+        return hub.client.request(method, url, headers=signed_in, **kwargs)
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
-    return lambda *argv: CliRunner().invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
+    bound = bind_stubs(request=forward)
+    return lambda *argv: bound.runner.invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
 
 
 @pytest.fixture
@@ -53,13 +49,11 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
-def test_a_tenant_admin_lists_grants_and_revokes_their_tenants_members(
-    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_tenant_admin_lists_grants_and_revokes_their_tenants_members(hub: HubHarness) -> None:
     hub.add_tenant("bravo")
     ada = seed_user(hub, username="ada", role=Role.ADMIN)
     cara = seed_user(hub, username="cara", role=Role.GUEST, email="cara@example.com")
-    cli = _cli_as(hub, ada, monkeypatch)
+    cli = _cli_as(hub, ada)
 
     granted = cli("member", "grant", cara.user_id, "contributor")
     listed = cli("member", "list")
@@ -74,10 +68,10 @@ def test_a_tenant_admin_lists_grants_and_revokes_their_tenants_members(
     assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), cara.user_id) is None
 
 
-def test_a_user_who_is_no_member_answers_like_an_unknown_one(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_user_who_is_no_member_answers_like_an_unknown_one(hub: HubHarness) -> None:
     ada = seed_user(hub, username="ada", role=Role.ADMIN)
     outsider = seed_user(hub, username="otto", role=Role.PENDING)
-    cli = _cli_as(hub, ada, monkeypatch)
+    cli = _cli_as(hub, ada)
 
     outside = cli("member", "grant", outsider.user_id, "guest")
     unknown = cli("member", "grant", "usr_nobody", "guest")
@@ -89,14 +83,12 @@ def test_a_user_who_is_no_member_answers_like_an_unknown_one(hub: HubHarness, mo
     assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), outsider.user_id) is None
 
 
-def test_a_hub_administrator_grants_anyone_into_the_tenant_named(
-    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_hub_administrator_grants_anyone_into_the_tenant_named(hub: HubHarness) -> None:
     bravo = hub.add_tenant("bravo")
     hal = seed_user(hub, username="hal", role=Role.PENDING)
     seed_hub_admin(hub.engine, hal.user_id)
     otto = seed_user(hub, username="otto", role=Role.PENDING)
-    cli = _cli_as(hub, hal, monkeypatch)
+    cli = _cli_as(hub, hal)
 
     granted = cli("member", "grant", otto.user_id, "admin", "--tenant", bravo.tenant)
 
@@ -105,9 +97,9 @@ def test_a_hub_administrator_grants_anyone_into_the_tenant_named(
     assert hub.hub_services.memberships.role_in(default_tenant(hub.engine), otto.user_id) is None
 
 
-def test_the_hubs_refusals_reach_the_operator(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_hubs_refusals_reach_the_operator(hub: HubHarness) -> None:
     ada = seed_user(hub, username="ada", role=Role.ADMIN)
-    cli = _cli_as(hub, ada, monkeypatch)
+    cli = _cli_as(hub, ada)
 
     own = cli("member", "revoke", ada.user_id)
 

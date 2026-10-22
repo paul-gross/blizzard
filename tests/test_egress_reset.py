@@ -10,7 +10,6 @@ from pathlib import Path
 import httpx
 import pytest
 import sqlalchemy as sa
-from click.testing import CliRunner
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
@@ -20,6 +19,7 @@ from blizzard.hub.domain.observability.egress.reset import EgressReset
 from tests.hub_event_rows import hub_event_log_of, hub_event_rows
 from tests.support import HubHarness, InMemoryEgressWriter
 from tests.test_egress_sweep import _SETTLED, _closed_step, _cursor_rows, _hub, _rows, _store, _sweep
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -142,26 +142,22 @@ def test_an_unconfigured_dataset_and_a_future_instant_are_422(tmp_path: Path) ->
     assert _cursor_rows(hub) == 0
 
 
-def test_the_cli_moves_the_cursor_and_renders_a_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_cli_moves_the_cursor_and_renders_a_refusal(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path, _SETTLED)
     _sweep(hub, InMemoryEgressWriter()).sweep()
-    monkeypatch.setattr(
-        httpx,
-        "request",
-        lambda method, url, *, json=None, params=None, timeout, **_: hub.client.request(method, url, json=json),
-    )
-    monkeypatch.setattr(
-        httpx, "post", lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json)
+    bound = bind_stubs(
+        request=lambda method, url, *, json=None, params=None, timeout, **_: hub.client.request(method, url, json=json),
+        post=lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json),
     )
 
-    moved = CliRunner().invoke(
+    moved = bound.runner.invoke(
         hub_group, ["egress", "reset", "--dataset", "invocations", "--to", "2026-07-12T00:00:00"], env=_ENV
     )
     assert moved.exit_code == 0, moved.output
     assert "invocations cursor moved from" in moved.output
     assert "repeated" in moved.output
 
-    refused = CliRunner().invoke(
+    refused = bound.runner.invoke(
         hub_group, ["egress", "reset", "--dataset", "nope", "--to", "2026-07-12T00:00:00"], env=_ENV
     )
     assert refused.exit_code != 0

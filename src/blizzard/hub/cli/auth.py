@@ -42,9 +42,11 @@ def login(cli: CliContext, session_service: SessionService, paste: bool, no_brow
     flow, printing the URL."""
     try:
         flow = (
-            cli_login.Login.paste_code(cli.hub_url, prompt_for_code=lambda: click.prompt("Paste the code"))
+            cli_login.Login.paste_code(
+                cli.hub_url, client_factory=cli.client_factory, prompt_for_code=lambda: click.prompt("Paste the code")
+            )
             if paste
-            else cli_login.Login.loopback(cli.hub_url, open_browser=not no_browser)
+            else cli_login.Login.loopback(cli.hub_url, client_factory=cli.client_factory, open_browser=not no_browser)
         )
         token = flow.token()
     except cli_login.LoginError as exc:

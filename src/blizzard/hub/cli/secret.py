@@ -6,11 +6,11 @@ the process list; no verb prints a value."""
 from __future__ import annotations
 
 import os
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
@@ -47,7 +47,7 @@ def secret_create(cli: CliContext, name: str) -> None:
     stripped; an empty value is refused."""
     value = _stdin_value()
     resp = cli.send("post", "/api/secrets", json_body={"name": name, "value": value}, door=True)
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         raise click.ClickException(
             f"{cli.detail(resp, f'secret {name} already exists')} — replace it with `secret set`"
         )
@@ -65,7 +65,7 @@ def secret_set(cli: CliContext, name: str) -> None:
     stripped; an empty value is refused."""
     value = _stdin_value()
     resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value}, door=True)
-    if resp.status_code == httpx.codes.NOT_FOUND:
+    if resp.status_code == HTTPStatus.NOT_FOUND:
         raise click.ClickException(f"unknown secret {name} — create it with `secret create`")
     cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
     body = resp.json()

@@ -1,5 +1,5 @@
 """``blizzard hub source`` and ``blizzard hub config changes`` (component tier) — a real
-``build_hosted_app`` the CLI's ``httpx`` verbs are routed into, headers included, so the
+``build_hosted_app`` the commands' requests are routed into, headers included, so the
 recorded door is the CLI's own."""
 
 from __future__ import annotations
@@ -9,13 +9,12 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import httpx
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.hub.cli import hub as hub_group
 from tests.config_inputs import build_hosted_hub_app, init_hub
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -23,26 +22,26 @@ _HUB = "http://hub.local:8421"
 _SENTINEL = "tok-planted-840"
 
 
+_bound: dict[str, Bound] = {}
+"""The collaborators the ``client`` fixture bound over its in-process app, for the invokers below."""
+
+
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def client(tmp_path: Path) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
     with TestClient(build_hosted_hub_app(config)) as c:
 
-        def route(method: str):  # type: ignore[no-untyped-def]
-            def call(url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
-                return c.request(method.upper(), urlsplit(url).path, **kwargs)
+        def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+            return c.request(method.upper(), urlsplit(url).path, **kwargs)
 
-            return call
-
-        for method in ("get", "post", "put", "patch"):
-            monkeypatch.setattr(httpx, method, route(method))
+        _bound["hub"] = bind_stubs(request=forward)
         yield c
 
 
 def _cli(group: str, args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
     """Run one ``hub`` verb. Its ``output`` interleaves stdout with stderr, where the hosted app's sweeps log
     while the verb runs, so a ``--json`` payload is parsed from ``stdout`` alone."""
-    return CliRunner().invoke(hub_group, [group, *args], input=stdin, env={"BZ_HUB_URL": _HUB})
+    return _bound["hub"].runner.invoke(hub_group, [group, *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 
 def _source(args: list[str]):  # type: ignore[no-untyped-def]

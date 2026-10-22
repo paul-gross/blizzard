@@ -1,14 +1,14 @@
 """``blizzard hub scope create|list|edit|retire|enable`` (unit tier) — pure clients of
-the scope routes, driven here with ``httpx`` stubbed, the
+the scope routes, driven here with the client factory stubbed, the
 ``tests/test_hub_cli_graph.py`` shape."""
 
 from __future__ import annotations
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -27,15 +27,15 @@ class _FakeResponse:
 
 
 @pytest.mark.unit
-def test_scope_create_posts_slug_and_description(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_create_posts_slug_and_description() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(201, {"slug": "blizzard", "description": "the repo", "retired": False})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["scope", "create", "blizzard", "--description", "the repo"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -47,7 +47,7 @@ def test_scope_create_posts_slug_and_description(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_scope_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_list_prints_each_row() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -57,8 +57,8 @@ def test_scope_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
             ],
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["scope", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["scope", "list"])
 
     assert result.exit_code == 0, result.output
     assert "alpha" in result.output
@@ -67,27 +67,27 @@ def test_scope_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_scope_list_on_no_scopes_prints_a_friendly_message(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_list_on_no_scopes_prints_a_friendly_message() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["scope", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["scope", "list"])
 
     assert result.exit_code == 0, result.output
     assert "no scopes yet" in result.output
 
 
 @pytest.mark.unit
-def test_scope_edit_patches_the_description(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_edit_patches_the_description() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, {"slug": "blizzard", "description": "new", "retired": False})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         ["scope", "edit", "blizzard", "--description", "new"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -98,15 +98,15 @@ def test_scope_edit_patches_the_description(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_scope_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_retire_posts_to_the_retire_endpoint() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"slug": "blizzard", "retired": True})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["scope", "retire", "blizzard", "--by", "paul"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -116,15 +116,17 @@ def test_scope_retire_posts_to_the_retire_endpoint(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
-def test_scope_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_enable_posts_to_the_enable_endpoint() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"slug": "blizzard", "retired": False})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["scope", "enable", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        hub_group, ["scope", "enable", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://hub.local:8421/api/scopes/blizzard/enable", {"by": "operator"})]
@@ -132,19 +134,19 @@ def test_scope_enable_posts_to_the_enable_endpoint(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
-def test_scope_retire_maps_an_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_retire_maps_an_unknown_scope() -> None:
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["scope", "retire", "ghost"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["scope", "retire", "ghost"])
 
     assert result.exit_code != 0
     assert "ghost" in result.output
 
 
 @pytest.mark.unit
-def test_scope_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_show_prints_the_whole_record() -> None:
     urls: list[str] = []
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
@@ -154,8 +156,8 @@ def test_scope_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> 
             {"slug": "blizzard", "description": "the repo", "created_at": "t0", "retired": False, "revision": 3},
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["scope", "show", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["scope", "show", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert urls == ["http://hub.local:8421/api/scopes/blizzard"]
@@ -166,12 +168,12 @@ def test_scope_show_prints_the_whole_record(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_scope_show_maps_an_unknown_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scope_show_maps_an_unknown_scope() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["scope", "show", "no-such"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["scope", "show", "no-such"])
 
     assert result.exit_code != 0
     assert "unknown scope no-such" in result.output

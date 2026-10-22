@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
@@ -20,6 +20,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from tests.support import HubHarness, build_hub, default_tenant, seed_membership, seed_runner, seed_session, seed_user
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -28,25 +29,29 @@ _LOOPBACK_REDIRECT = "http://127.0.0.1:54321/callback"
 _VERIFIER = "a-fixed-test-verifier-with-enough-entropy-1234567890"
 
 
-def _cli_against(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
-    """Route the CLI's ``GET``s to ``hub`` and hand back the headers each one sent, in order."""
+def _cli_against(hub: HubHarness) -> list[dict[str, str]]:
+    """Route the CLI's ``GET``s to ``hub``; returns the headers each request sent, in order."""
     sent: list[dict[str, str]] = []
 
     def get(url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:
         sent.append(dict(kwargs.get("headers") or {}))
         return hub.client.get(url, **kwargs)
 
-    monkeypatch.setattr(httpx, "get", get)
+    _bound["cli"] = bind_stubs(get=get)
     return sent
 
 
+_bound: dict[str, Bound] = {}
+"""The collaborators the routing helpers bound, for the invokers below."""
+
+
 def _runner_list(*args: str) -> Result:
-    return CliRunner().invoke(hub_group, ["runner", "list", "--json", "--hub-url", _HUB_URL, *args])
+    return _bound["cli"].runner.invoke(hub_group, ["runner", "list", "--json", "--hub-url", _HUB_URL, *args])
 
 
-def test_a_verb_naming_no_tenant_sends_no_tenant_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_verb_naming_no_tenant_sends_no_tenant_header(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    sent = _cli_against(hub, monkeypatch)
+    sent = _cli_against(hub)
 
     result = _runner_list()
 
@@ -54,11 +59,11 @@ def test_a_verb_naming_no_tenant_sends_no_tenant_header(tmp_path: Path, monkeypa
     assert sent and all(TENANT_HEADER not in headers for headers in sent)
 
 
-def test_tenant_names_the_tenant_the_verb_acts_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tenant_names_the_tenant_the_verb_acts_in(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = hub.add_tenant("bravo")
     seed_runner(bravo.services, "bravo-r1")
-    sent = _cli_against(hub, monkeypatch)
+    sent = _cli_against(hub)
 
     in_bravo = _runner_list("--tenant", bravo.tenant)
     in_default = _runner_list("--tenant", default_tenant(hub.engine))
@@ -70,12 +75,10 @@ def test_tenant_names_the_tenant_the_verb_acts_in(tmp_path: Path, monkeypatch: p
     assert {headers[TENANT_HEADER] for headers in sent} == {bravo.tenant, default_tenant(hub.engine)}
 
 
-def test_naming_no_tenant_among_several_lists_the_callers_tenants(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_naming_no_tenant_among_several_lists_the_callers_tenants(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = hub.add_tenant("bravo")
-    _cli_against(hub, monkeypatch)
+    _cli_against(hub)
 
     result = _runner_list()
 
@@ -85,14 +88,13 @@ def test_naming_no_tenant_among_several_lists_the_callers_tenants(
     assert default_tenant(hub.engine) in result.output
 
 
-def _cli_routed(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Route every CLI verb function to ``hub``."""
-    for method in ("get", "post", "put"):
+def _cli_routed(hub: HubHarness) -> Bound:
+    """Route every CLI request to ``hub``."""
 
-        def call(url: str, *, timeout: float, _method: str = method, **kwargs: Any) -> httpx.Response:
-            return hub.client.request(_method.upper(), url, **kwargs)
+    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:
+        return hub.client.request(method.upper(), url, **kwargs)
 
-        monkeypatch.setattr(httpx, method, call)
+    return bind_stubs(request=forward)
 
 
 @pytest.mark.parametrize(
@@ -100,14 +102,12 @@ def _cli_routed(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
     [(["runner", "add", "r9"], None), (["secret", "set", "gh-foo"], "v"), (["runner", "list"], None)],
     ids=["runner-add", "secret-set", "runner-list"],
 )
-def test_a_tenant_the_caller_cannot_enter_is_named_as_such(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str], stdin: str | None
-) -> None:
+def test_a_tenant_the_caller_cannot_enter_is_named_as_such(tmp_path: Path, args: list[str], stdin: str | None) -> None:
     hub = build_hub(tmp_path)
     bravo = hub.add_tenant("bravo")
-    _cli_routed(hub, monkeypatch)
+    bound = _cli_routed(hub)
 
-    result = CliRunner().invoke(hub_group, [*args, "--tenant", "ten_01BOGUS", "--hub-url", _HUB_URL], input=stdin)
+    result = bound.runner.invoke(hub_group, [*args, "--tenant", "ten_01BOGUS", "--hub-url", _HUB_URL], input=stdin)
 
     assert result.exit_code != 0
     assert "no tenant ten_01BOGUS you can enter" in result.output
@@ -115,12 +115,12 @@ def test_a_tenant_the_caller_cannot_enter_is_named_as_such(
     assert "predates" not in result.output and "unknown secret" not in result.output
 
 
-def test_a_verbs_own_404_keeps_its_own_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_verbs_own_404_keeps_its_own_message(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     bravo = hub.add_tenant("bravo")
-    _cli_routed(hub, monkeypatch)
+    bound = _cli_routed(hub)
 
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         hub_group, ["secret", "set", "gh-foo", "--tenant", bravo.tenant, "--hub-url", _HUB_URL], input="v"
     )
 

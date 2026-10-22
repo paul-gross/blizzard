@@ -1,21 +1,23 @@
-"""``blizzard hub runner add|list|show`` — the rendering half with ``httpx`` stubbed (unit
+"""``blizzard hub runner add|list|show`` — the rendering half with the client stubbed (unit
 tier), and the CLI driven against a real hub app (component tier), every by-id verb included."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 _ENV = {"BZ_HUB_URL": _HUB_URL}
@@ -26,15 +28,17 @@ def _respond(status_code: int, payload: object) -> httpx.Response:
     return httpx.Response(status_code, json=payload, request=httpx.Request("GET", _HUB_URL))
 
 
-def _stub(monkeypatch: pytest.MonkeyPatch, verb: str, response: httpx.Response) -> list[dict[str, Any]]:
-    calls: list[dict[str, Any]] = []
-
+def _recording(calls: list[dict[str, Any]], response: httpx.Response) -> Callable[..., httpx.Response]:
     def fake(url: str, **kwargs: Any) -> httpx.Response:
         calls.append({"url": url, **kwargs})
         return response
 
-    monkeypatch.setattr(httpx, verb, fake)
-    return calls
+    return fake
+
+
+def _stub(verb: str, response: httpx.Response) -> tuple[Bound, list[dict[str, Any]]]:
+    calls: list[dict[str, Any]] = []
+    return bind_stubs(**{verb: _recording(calls, response)}), calls
 
 
 def _row(runner_id: str, name: str, **fields: Any) -> dict[str, Any]:
@@ -56,10 +60,10 @@ _NEVER_CONNECTED = {"connection": "never_connected", "online": False, "workspace
 
 
 @pytest.mark.unit
-def test_add_posts_the_name_and_prints_the_id_and_the_token_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _stub(monkeypatch, "post", _respond(201, _ADDED))
+def test_add_posts_the_name_and_prints_the_id_and_the_token_once() -> None:
+    bound, calls = _stub("post", _respond(201, _ADDED))
 
-    result = CliRunner().invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert calls[0]["url"] == f"{_HUB_URL}/api/runners"
@@ -74,24 +78,26 @@ def test_add_posts_the_name_and_prints_the_id_and_the_token_once(monkeypatch: py
     ("name", "variable"),
     [("r-chatgpt", "BZ_HUB_TOKEN_R_CHATGPT"), ("Mixed.Case 9", "BZ_HUB_TOKEN_MIXED_CASE_9")],
 )
-def test_add_prints_the_variable_its_runners_name_derives(
-    monkeypatch: pytest.MonkeyPatch, name: str, variable: str
-) -> None:
-    _stub(monkeypatch, "post", _respond(201, {**_ADDED, "runner_name": name}))
+def test_add_prints_the_variable_its_runners_name_derives(name: str, variable: str) -> None:
+    bound, _ = _stub("post", _respond(201, {**_ADDED, "runner_name": name}))
 
-    result = CliRunner().invoke(hub_group, ["runner", "add", name], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "add", name], env=_ENV)
 
     assert f"{variable}=sekrit-token" in result.output.splitlines()
 
 
 @pytest.mark.unit
-def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds() -> None:
     """The enrollment answers no name, so the line's variable comes from the registry entry the verb reads beside it."""
     runner_id = str(_ADDED["runner_id"])
-    posted = _stub(monkeypatch, "post", _respond(201, {"runner_id": runner_id, "token": "rotated"}))
-    read = _stub(monkeypatch, "get", _respond(200, _row(runner_id, "r-chatgpt")))
+    posted: list[dict[str, Any]] = []
+    read: list[dict[str, Any]] = []
+    bound = bind_stubs(
+        post=_recording(posted, _respond(201, {"runner_id": runner_id, "token": "rotated"})),
+        get=_recording(read, _respond(200, _row(runner_id, "r-chatgpt"))),
+    )
 
-    result = CliRunner().invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert posted[0]["url"] == f"{_HUB_URL}/api/runners/{runner_id}/enrollments"
@@ -101,13 +107,16 @@ def test_enroll_prints_the_variable_of_the_name_the_registry_entry_holds(monkeyp
 
 
 @pytest.mark.unit
-def test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read() -> None:
     """The name is read before the token is rotated, so a token is never minted that no line shows."""
     runner_id = str(_ADDED["runner_id"])
-    posted = _stub(monkeypatch, "post", _respond(201, {"runner_id": runner_id, "token": "rotated"}))
-    _stub(monkeypatch, "get", _respond(503, {"detail": "unavailable"}))
+    posted: list[dict[str, Any]] = []
+    bound = bind_stubs(
+        post=_recording(posted, _respond(201, {"runner_id": runner_id, "token": "rotated"})),
+        get=_recording([], _respond(503, {"detail": "unavailable"})),
+    )
 
-    result = CliRunner().invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "enroll", runner_id], env=_ENV)
 
     assert result.exit_code != 0
     assert posted == []
@@ -115,10 +124,10 @@ def test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read(monkeypat
 
 
 @pytest.mark.unit
-def test_add_under_json_prints_the_raw_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stub(monkeypatch, "post", _respond(201, _ADDED))
+def test_add_under_json_prints_the_raw_body() -> None:
+    bound, _ = _stub("post", _respond(201, _ADDED))
 
-    result = CliRunner().invoke(hub_group, ["runner", "add", "r-claude", "--json"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude", "--json"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == _ADDED
@@ -126,28 +135,24 @@ def test_add_under_json_prints_the_raw_body(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("status_code", "detail"), [(404, "Not Found"), (405, "Method Not Allowed")])
-def test_add_against_a_hub_without_the_add_route_says_the_hub_predates_it(
-    monkeypatch: pytest.MonkeyPatch, status_code: int, detail: str
-) -> None:
-    _stub(monkeypatch, "post", _respond(status_code, {"detail": detail}))
+def test_add_against_a_hub_without_the_add_route_says_the_hub_predates_it(status_code: int, detail: str) -> None:
+    bound, _ = _stub("post", _respond(status_code, {"detail": detail}))
 
-    result = CliRunner().invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
 
     assert result.exit_code != 0
     assert f"this hub ({_HUB_URL}) predates `hub runner add`" in result.output
 
 
 @pytest.mark.unit
-def test_list_shows_each_runner_s_id_beside_its_name_and_a_never_connected_one_as_such(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_list_shows_each_runner_s_id_beside_its_name_and_a_never_connected_one_as_such() -> None:
     rows = [
         _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A", "twin"),
         _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B", "twin", **_NEVER_CONNECTED),
     ]
-    _stub(monkeypatch, "get", _respond(200, {"runners": rows}))
+    bound, _ = _stub("get", _respond(200, {"runners": rows}))
 
-    result = CliRunner().invoke(hub_group, ["runner", "list"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [
@@ -157,16 +162,14 @@ def test_list_shows_each_runner_s_id_beside_its_name_and_a_never_connected_one_a
 
 
 @pytest.mark.unit
-def test_list_widens_the_name_column_to_the_longest_name_so_the_state_column_lines_up(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_list_widens_the_name_column_to_the_longest_name_so_the_state_column_lines_up() -> None:
     rows = [
         _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A", "a-name-past-sixteen-chars"),
         _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B", "twin", **_NEVER_CONNECTED),
     ]
-    _stub(monkeypatch, "get", _respond(200, {"runners": rows}))
+    bound, _ = _stub("get", _respond(200, {"runners": rows}))
 
-    result = CliRunner().invoke(hub_group, ["runner", "list"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "list"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [
@@ -176,10 +179,10 @@ def test_list_widens_the_name_column_to_the_longest_name_so_the_state_column_lin
 
 
 @pytest.mark.unit
-def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    _stub(monkeypatch, "get", _respond(200, _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B", "r-claude", **_NEVER_CONNECTED)))
+def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none() -> None:
+    bound, _ = _stub("get", _respond(200, _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B", "r-claude", **_NEVER_CONNECTED)))
 
-    result = CliRunner().invoke(hub_group, ["runner", "show", "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "show", "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[:2] == [
@@ -189,26 +192,23 @@ def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none(monke
     assert "None" not in result.output
 
 
-def _against(monkeypatch: pytest.MonkeyPatch, hub: HubHarness) -> None:
-    """Route the CLI's module-level ``httpx`` calls into ``hub``'s app."""
-    for verb in ("get", "post"):
+def _against(hub: HubHarness) -> Bound:
+    """Bind the CLI's requests to ``hub``'s app."""
 
-        def call(url: str, *, _verb: str = verb, **kwargs: Any) -> httpx.Response:
-            kwargs.pop("timeout", None)
-            return getattr(hub.client, _verb)(url.removeprefix(_HUB_URL), **kwargs)
+    def forward(method: str, url: str, **kwargs: Any) -> httpx.Response:
+        kwargs.pop("timeout", None)
+        return hub.client.request(method, url.removeprefix(_HUB_URL), **kwargs)
 
-        monkeypatch.setattr(httpx, verb, call)
+    return bind_stubs(request=forward)
 
 
 @pytest.mark.component
-def test_runners_added_under_one_name_both_list_never_connected_under_their_own_ids(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runners_added_under_one_name_both_list_never_connected_under_their_own_ids(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    _against(monkeypatch, hub)
+    bound = _against(hub)
 
-    added = [CliRunner().invoke(hub_group, ["runner", "add", "twin"], env=_ENV) for _ in range(2)]
-    listed = CliRunner().invoke(hub_group, ["runner", "list"], env=_ENV)
+    added = [bound.runner.invoke(hub_group, ["runner", "add", "twin"], env=_ENV) for _ in range(2)]
+    listed = bound.runner.invoke(hub_group, ["runner", "list"], env=_ENV)
 
     assert [a.exit_code for a in added] == [0, 0], [a.output for a in added]
     # The in-process hub logs to the same captured stdout, so pick out the verbs' own lines.
@@ -221,14 +221,12 @@ def test_runners_added_under_one_name_both_list_never_connected_under_their_own_
 
 
 @pytest.mark.component
-def test_add_is_refused_to_a_signed_in_contributor_and_adds_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_add_is_refused_to_a_signed_in_contributor_and_adds_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     SessionFile.of().save(_HUB_URL, seed_session(hub, seed_user(hub, username="cora", role=Role.CONTRIBUTOR)))
-    _against(monkeypatch, hub)
+    bound = _against(hub)
 
-    result = CliRunner().invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "add", "r-claude"], env=_ENV)
 
     assert result.exit_code != 0
     assert "missing permission" in result.output
@@ -248,8 +246,8 @@ _BY_ID_VERBS = (
 )
 
 
-def _runner_verb(verb: str, runner_id: str) -> Result:
-    return CliRunner().invoke(hub_group, ["runner", verb, runner_id], env=_ENV)
+def _runner_verb(bound: Bound, verb: str, runner_id: str) -> Result:
+    return bound.runner.invoke(hub_group, ["runner", verb, runner_id], env=_ENV)
 
 
 def _states(hub: HubHarness, runner_ids: list[str]) -> dict[str, RunnerRegistration | None]:
@@ -259,24 +257,24 @@ def _states(hub: HubHarness, runner_ids: list[str]) -> dict[str, RunnerRegistrat
 @pytest.mark.component
 @pytest.mark.parametrize(("verb", "first"), _BY_ID_VERBS)
 def test_a_by_id_verb_given_a_shared_name_exits_unknown_and_given_an_id_acts_on_that_runner_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verb: str, first: str | None
+    tmp_path: Path, verb: str, first: str | None
 ) -> None:
     """A name two runners share resolves to neither — the verb exits unknown and changes nothing —
     while each runner's id reaches that runner alone."""
     hub = build_hub(tmp_path)
-    _against(monkeypatch, hub)
+    bound = _against(hub)
     twins = [str(hub.client.post("/api/runners", json={"name": "twin"}).json()["runner_id"]) for _ in range(2)]
     for runner_id in twins if first else ():
-        assert _runner_verb(first or "", runner_id).exit_code == 0
+        assert _runner_verb(bound, first or "", runner_id).exit_code == 0
     before = _states(hub, twins)
 
-    missed = _runner_verb(verb, "twin")
+    missed = _runner_verb(bound, verb, "twin")
 
     assert missed.exit_code == 1 and "unknown runner twin" in missed.output, missed.output
     assert _states(hub, twins) == before
     for target, other in (twins, twins[::-1]):
         prior = _states(hub, twins)
-        hit = _runner_verb(verb, target)
+        hit = _runner_verb(bound, verb, target)
         assert hit.exit_code == 0, hit.output
         assert target in hit.output and other not in hit.output
         after = _states(hub, twins)

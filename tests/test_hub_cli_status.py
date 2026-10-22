@@ -1,6 +1,6 @@
 """``blizzard hub status`` — the per-chunk cost column and fleet total.
 
-Stubs ``httpx.get`` with canned responses keyed by URL, proving the CLI's own
+Stubs the client's GET with canned responses keyed by URL, proving the CLI's own
 rendering — the per-chunk cost column, the fleet total, and the ``~``-estimated/
 ``+``-partial markers — without a running hub.
 """
@@ -9,12 +9,11 @@ from __future__ import annotations
 
 from typing import cast
 
-import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.context import DEFAULT_HUB_URL
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -33,14 +32,14 @@ class _FakeResponse:
         return self._payload
 
 
-def _install(monkeypatch: pytest.MonkeyPatch, responses: dict[str, object]) -> None:
+def _install(responses: dict[str, object]) -> Bound:
     """Key ``responses`` by full URL (``DEFAULT_HUB_URL`` + path) — what ``_request``
-    actually calls ``httpx.get`` with."""
+    actually requests."""
 
     def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
         return _FakeResponse(responses[url])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    return bind_stubs(get=fake_get)
 
 
 def _cost(cost_usd: float, *, partial: bool) -> dict:
@@ -86,11 +85,11 @@ def _runner(
     }
 
 
-def test_status_renders_a_per_chunk_cost_column_and_the_fleet_total(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_renders_a_per_chunk_cost_column_and_the_fleet_total() -> None:
     cost = _cost(0.42, partial=False)
-    _install(monkeypatch, _responses(cost, cost))
+    bound = _install(_responses(cost, cost))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
@@ -101,26 +100,22 @@ def test_status_renders_a_per_chunk_cost_column_and_the_fleet_total(monkeypatch:
     assert "$0.42+" not in result.output
 
 
-def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_status_marks_a_partial_total_on_both_the_chunk_row_and_the_fleet_total() -> None:
     cost = _cost(0.10, partial=True)
-    _install(monkeypatch, _responses(cost, cost))
+    bound = _install(_responses(cost, cost))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     # The chunk row and the fleet total both carry the lower-bound marker.
     assert result.output.count("$0.10+") == 2
 
 
-def test_status_folds_the_estimate_into_the_chunk_row_and_the_fleet_total(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_status_folds_the_estimate_into_the_chunk_row_and_the_fleet_total() -> None:
     cost = {**_cost(0.0, partial=False), "estimated_cost_usd": 0.31}
-    _install(monkeypatch, _responses(cost, cost))
+    bound = _install(_responses(cost, cost))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     # A subscription-only chunk folds its estimate into one `~`-marked figure, never a bare $0.00.
@@ -128,60 +123,60 @@ def test_status_folds_the_estimate_into_the_chunk_row_and_the_fleet_total(
     assert "est." not in result.output
 
 
-def test_status_renders_no_estimate_where_none_was_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_renders_no_estimate_where_none_was_reported() -> None:
     cost = {**_cost(0.42, partial=False), "estimated_cost_usd": None}
-    _install(monkeypatch, _responses(cost, cost))
+    bound = _install(_responses(cost, cost))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert result.output.count("$0.42") == 2
     assert "~$" not in result.output
 
 
-def test_status_names_a_ceiling_pause_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_names_a_ceiling_pause_reason_inline() -> None:
     """A runner-ceiling escalation is distinguishable from a manual pause on
     ``blizzard hub status`` — the composed ceiling+spend reason rides inline rather than
     the bare ``[paused: local]`` a manual pause renders."""
     cost = _cost(0.0, partial=False)
     reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
     runners = [_runner(locally_paused=True, locally_paused_by="runner-ceiling", locally_paused_reason=reason)]
-    _install(monkeypatch, _responses(cost, cost, runners))
+    bound = _install(_responses(cost, cost, runners))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert f"[paused: local — {reason}]" in result.output
 
 
-def test_status_renders_a_manual_pause_bare_with_no_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_renders_a_manual_pause_bare_with_no_reason() -> None:
     """A manual `blizzard runner pause` carries no reason — the status line stays bare
     rather than showing a stale or fabricated cause."""
     cost = _cost(0.0, partial=False)
     runners = [_runner(locally_paused=True, locally_paused_by="operator", locally_paused_reason=None)]
-    _install(monkeypatch, _responses(cost, cost, runners))
+    bound = _install(_responses(cost, cost, runners))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert "[paused: local]" in result.output
     assert "—" not in result.output
 
 
-def test_status_names_a_hub_pause_with_no_local_brake(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_names_a_hub_pause_with_no_local_brake() -> None:
     """A fleet-side pause names itself ``hub``, distinct from a local one — collapsing both to
     a bare ``paused`` would hide which verb clears it."""
     cost = _cost(0.0, partial=False)
     runners = [_runner(hub_paused=True)]
-    _install(monkeypatch, _responses(cost, cost, runners))
+    bound = _install(_responses(cost, cost, runners))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert "[paused: hub]" in result.output
 
 
-def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_names_both_brakes_with_the_local_reason_inline() -> None:
     """Both brakes on at once still name which is which, and the local one's reason still
     rides alongside it."""
     cost = _cost(0.0, partial=False)
@@ -189,15 +184,15 @@ def test_status_names_both_brakes_with_the_local_reason_inline(monkeypatch: pyte
     runners = [
         _runner(hub_paused=True, locally_paused=True, locally_paused_by="runner-ceiling", locally_paused_reason=reason)
     ]
-    _install(monkeypatch, _responses(cost, cost, runners))
+    bound = _install(_responses(cost, cost, runners))
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert f"[paused: hub+local — {reason}]" in result.output
 
 
-def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_drains_every_page_of_chunks() -> None:
     cost = _cost(0.0, partial=False)
     page_1 = {
         "chunks": [
@@ -220,24 +215,24 @@ def test_status_drains_every_page_of_chunks(monkeypatch: pytest.MonkeyPatch) -> 
             return _FakeResponse(page_2)
         return _FakeResponse(responses[url])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["status"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
     assert "ch_2" in result.output
 
 
-def test_status_marks_a_blocked_chunk_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_marks_a_blocked_chunk_naming_the_prerequisite() -> None:
     """`hub status` shares `ChunkLine` with `hub chunk list`, so the blocked marking
     is proven once here to cover both."""
     cost = _cost(0.0, partial=False)
     responses = _responses(cost, cost)
     envelope = cast("dict", responses[f"{DEFAULT_HUB_URL}/api/chunks"])
     envelope["chunks"][0]["blocked"] = {"prerequisite_chunk_id": "ch_prereq"}
-    _install(monkeypatch, responses)
+    bound = _install(responses)
 
-    result = CliRunner().invoke(hub_group, ["status"])
+    result = bound.runner.invoke(hub_group, ["status"])
 
     assert result.exit_code == 0, result.output
     assert "[blocked on ch_prereq]" in result.output

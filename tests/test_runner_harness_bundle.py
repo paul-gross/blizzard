@@ -7,12 +7,16 @@ import hashlib
 import json
 import os
 import shutil
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.runner.cli import runner as runner_group
+from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, companion_path
@@ -31,6 +35,10 @@ from tests.runner_init_fakes import FakeInitHub, init_runner
 pytestmark = pytest.mark.component
 
 _SECRET = "sentinel-secret-value"
+
+
+def _http_collaborators(**overrides: Any) -> InitCollaborators:
+    return replace(InitCollaborators.http(CliCollaborators.production().client_factory), **overrides)
 
 
 def test_composed_opencode_config_preserves_settings_and_denials(tmp_path: Path) -> None:
@@ -448,21 +456,21 @@ def test_tick_with_a_malformed_bundle_exits_naming_the_path(tmp_path: Path) -> N
     assert "tick complete" not in result.output
 
 
-def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_host_with_a_malformed_bundle_fails_before_serving(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
     (bundle / "claude-code" / "stray").write_text("x")
     runtime = _runtime(tmp_path, bundle)
     started: list[str] = []
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", lambda *a, **k: started.append("built"))
+    collaborators = _http_collaborators(build_host_process=lambda *a, **k: started.append("built"))
 
-    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)])
+    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)], obj=collaborators)
 
     assert result.exit_code != 0
     assert str(bundle / "claude-code" / "stray") in result.output
     assert started == []
 
 
-def test_host_publishes_before_building_the_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_host_publishes_before_building_the_process(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
     runtime = _runtime(tmp_path, bundle)
     seen: list[Path | None] = []
@@ -471,8 +479,9 @@ def test_host_publishes_before_building_the_process(tmp_path: Path, monkeypatch:
         seen.append(published_snapshot(runtime))
         raise RuntimeError("stop here")
 
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
-    result = CliRunner().invoke(runner_group, ["host", "--dir", str(runtime)])
+    result = CliRunner().invoke(
+        runner_group, ["host", "--dir", str(runtime)], obj=_http_collaborators(build_host_process=stop)
+    )
 
     assert isinstance(result.exception, RuntimeError)
     assert seen[0] is not None

@@ -8,14 +8,13 @@ from datetime import datetime
 
 import click
 
-from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.cli.children import command_children
-from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.hub.identity import IdentityVerdict
@@ -37,10 +36,10 @@ _SELFTEST_POLL_TIMEOUT = 600.0
 
 
 def _set_local_paused(
-    *, paused: bool, by: str, directory: str, runner_url: str | None, runner: str | None, trace: ITraceHeaders
+    *, paused: bool, by: str, directory: str, runner_url: str | None, runner: str | None, door: Door
 ) -> None:
     """PATCH the runner singleton's own pause brake — the declarative pattern applied locally."""
-    with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url, trace, runner) as daemon:
+    with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url, door, runner) as daemon:
         view = daemon.patch("/api/runner", json_body={"paused": paused, "by": by}).json()
     if paused:
         click.echo(f"runner {view['runner_name']} is now locally paused — it starts no new workers")
@@ -130,7 +129,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     """The machine-local view: capacities, held environments, open asks, escalations, open takeovers.
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
-    with RunnerDaemon.reach("status", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("status", directory, runner_url, Door.of(ctx), runner) as daemon:
         # A host serving no runner fails here, naming why each one is halted.
         runner_id = daemon.runner_id()
         view = daemon.get("/api/runner").json()
@@ -284,9 +283,7 @@ def pause(ctx: click.Context, directory: str, runner_url: str | None, runner: st
     worker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No
     retry is consumed, and a live worker is left alone — this is not a drain. Distinct from the hub's
     brake, and each is cleared where it was set."""
-    _set_local_paused(
-        paused=True, by=by, directory=directory, runner_url=runner_url, runner=runner, trace=OperatorTrace.source(ctx)
-    )
+    _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url, runner=runner, door=Door.of(ctx))
 
 
 @click.command()
@@ -313,9 +310,7 @@ def start(ctx: click.Context, directory: str, runner_url: str | None, runner: st
     The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub
     runner resume <runner_id>`` clears that one too."""
-    _set_local_paused(
-        paused=False, by=by, directory=directory, runner_url=runner_url, runner=runner, trace=OperatorTrace.source(ctx)
-    )
+    _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url, runner=runner, door=Door.of(ctx))
 
 
 @click.command()
@@ -363,9 +358,9 @@ def takeover(
     if end and force:
         raise click.UsageError("--end and --force are mutually exclusive: --end starts no session")
     if end:
-        _end_open_takeover(chunk_id, directory, runner_url, runner, OperatorTrace.source(ctx))
+        _end_open_takeover(chunk_id, directory, runner_url, runner, Door.of(ctx))
         return
-    with RunnerDaemon.reach("takeover", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("takeover", directory, runner_url, Door.of(ctx), runner) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/takeovers", json_body={"force": force})
         if resp.status_code == 409:
             raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
@@ -386,11 +381,9 @@ def takeover(
         raise SystemExit(exit_code)
 
 
-def _end_open_takeover(
-    chunk_id: str, directory: str, runner_url: str | None, runner: str | None, trace: ITraceHeaders
-) -> None:
+def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None, runner: str | None, door: Door) -> None:
     """Close the chunk's open takeover through the runner's own API; idempotent when none is open."""
-    with RunnerDaemon.reach("takeover", directory, runner_url, trace, runner) as daemon:
+    with RunnerDaemon.reach("takeover", directory, runner_url, door, runner) as daemon:
         open_for_chunk = [t for t in daemon.get("/api/takeovers").json().get("items", []) if t["chunk_id"] == chunk_id]
         if not open_for_chunk:
             click.echo(f"no open takeover for chunk {chunk_id}")
@@ -427,7 +420,7 @@ def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str |
     Clears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the
     fleet's next pass. The route is never released and the chunk never re-enters the hub's queue.
     Refused ``409`` while its takeover is still open, or while it is not parked needs_human."""
-    with RunnerDaemon.reach("requeue", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("requeue", directory, runner_url, Door.of(ctx), runner) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/requeues")
         if resp.status_code == 409:
             raise click.ClickException(f"requeue: {resp.json().get('detail', 'chunk is not requeueable')}")
@@ -460,7 +453,7 @@ def selftest(
     throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
     elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
     lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""
-    with RunnerDaemon.reach("selftest", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("selftest", directory, runner_url, Door.of(ctx), runner) as daemon:
         resp = daemon.send("post", "/api/selftests", json_body={"harness": coding_harness})
         if resp.status_code == 422:
             raise click.ClickException(resp.json().get("detail", "unknown coding harness"))

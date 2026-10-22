@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import click
-import httpx
 
-from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.collaborators import CliCollaborators, Client, HTTPError, HTTPStatusError, Response
 from blizzard.cli.operator_trace import exit_code_of
+from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -37,11 +37,12 @@ READ_TIMEOUT = 30.0
 WRITE_TIMEOUT = 5.0
 
 
+@dto
 @dataclass(frozen=True)
 class Problem:
     """A rejected call's response — the ``detail`` string its JSON body carries, or ``""``."""
 
-    response: httpx.Response
+    response: Response
 
     @property
     def detail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -63,7 +64,7 @@ class WorkerSession:
         self._collaborators = collaborators
         self._environ = os.environ if environ is None else environ
         self._group_path = group_path
-        self._client: httpx.Client | None = None
+        self._client: Client | None = None
         self._span: CliSpan | None = None
         self._parent = self._traced_parent()
 
@@ -94,7 +95,7 @@ class WorkerSession:
             return None
         return parent
 
-    def client(self) -> httpx.Client:
+    def client(self) -> Client:
         if self._client is None:
             self._client = self._collaborators.client_factory()
         return self._client
@@ -210,12 +211,12 @@ class WorkerCall:
 
     def get(
         self, path: str, *, failure: str, rejected: str | None = None, params: dict[str, str] | None = None
-    ) -> httpx.Response:
+    ) -> Response:
         return self._call("get", path, failure=failure, rejected=rejected, params=params, timeout=READ_TIMEOUT)
 
     def post(
         self, path: str, *, failure: str, rejected: str | None = None, json_body: object | None = None
-    ) -> httpx.Response:
+    ) -> Response:
         return self._call("post", path, failure=failure, rejected=rejected, json_body=json_body, timeout=WRITE_TIMEOUT)
 
     def soft_post(self, path: str, *, failure: str, json_body: object | None = None) -> None:
@@ -234,7 +235,7 @@ class WorkerCall:
         rejected: str | None = None,
         json_body: object | None = None,
         params: dict[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         """One call, with this lease's token attached and a failure named as ``verb: failure``.
 
         A rejection the worker can act on carries its guidance in the body, so that is preferred
@@ -248,10 +249,10 @@ class WorkerCall:
             resp = getattr(client, method)(f"{self.runner_url.rstrip('/')}{path}", **kwargs)
             resp.raise_for_status()
             return resp
-        except httpx.HTTPStatusError as exc:
+        except HTTPStatusError as exc:
             named = rejected or failure
             raise click.ClickException(f"{self.verb}: {named} ({Problem(exc.response).detail or exc})") from exc
-        except httpx.HTTPError as exc:
+        except HTTPError as exc:
             raise click.ClickException(f"{self.verb}: {failure} ({exc})") from exc
 
     def _headers(self) -> dict[str, str]:

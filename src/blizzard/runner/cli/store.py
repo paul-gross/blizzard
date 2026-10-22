@@ -8,10 +8,9 @@ from pathlib import Path
 import click
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
-from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.clock import SystemClock
-from blizzard.runner.cli.daemon import daemon_holding
+from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.composition import build_runner_store_files
 from blizzard.runner.config_table import ConfigError
@@ -19,14 +18,14 @@ from blizzard.runner.runtime import Runtime, StoreResetRefused
 
 
 def runtime_of(
-    root: Path, trace: ITraceHeaders, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
+    root: Path, door: Door, *, hub_url: str | None = None, projects: tuple[str, ...] | None = None
 ) -> Runtime:
     """The host directory ``root`` administered with the CLI's probe for a pre-host daemon on its ``runner.sock``."""
     return Runtime(
         root,
         hub_url=hub_url,
         projects=projects,
-        holder=lambda sock: daemon_holding(sock, trace),
+        holder=lambda sock: daemon_holding(sock, door),
         flag_registry=packaged_flag_registry(),
         strict=strict_config(),
     )
@@ -53,7 +52,7 @@ def reset(ctx: click.Context, directory: str, runner: str | None) -> None:
     and its outbox counters stay. Refused while the host holds the directory or a pre-host daemon answers on its
     socket, and for a store that is not a SQLite file. DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     root = Path(directory)
-    runtime = runtime_of(root, OperatorTrace.source(ctx))
+    runtime = runtime_of(root, Door.of(ctx))
     if runner is not None:
         with click_exception_on(ConfigError, StoreResetRefused):
             archived = runtime.reset_runner(runner, now=SystemClock().now(), rows=build_runner_store_files())

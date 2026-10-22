@@ -1,7 +1,7 @@
 """The client verbs that wrap the hub's ingest + the runner's own declarative pause.
 
 Hub verbs (``ingest``/``promote``/``detach``/``stop``) are unit tier: pure clients driven
-with ``httpx.post`` stubbed. ``runner pause``/``start`` are the runner's own local API;
+with the client stubbed. ``runner pause``/``start`` are the runner's own local API;
 tests driving them against a live daemon on a real socket are component tier.
 """
 
@@ -30,6 +30,7 @@ from blizzard.runner.listeners import Listeners, Uds
 from tests.host_files import load_runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
+from tests.worker_http import Bound, bind_local_only, bind_stubs
 
 
 class _FakeResponse:
@@ -54,7 +55,7 @@ class _FakeResponse:
 
 
 @pytest.mark.unit
-def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk() -> None:
     """The verb carries no token grammar: it POSTs every token through
     unchanged and echoes the minted id."""
     calls: list[tuple[str, object]] = []
@@ -63,8 +64,8 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
         calls.append((url, json))
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["chunk", "ingest", "blizzard:8", "widget:1"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -78,7 +79,7 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
 
 
 @pytest.mark.unit
-def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_passes_a_source_hash_ref_token_through() -> None:
     """``source#ref`` travels through exactly like ``source:ref`` — the hub, not the
     CLI, tells them apart."""
     calls: list[object] = []
@@ -87,15 +88,15 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard#8"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "ingest", "blizzard#8"])
 
     assert result.exit_code == 0, result.output
     assert calls[0] == {"tokens": ["blizzard#8"]}
 
 
 @pytest.mark.unit
-def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve() -> None:
     """A pasted work item URL travels through byte-for-byte, with no local resolution
     or repo-tail guess — only the hub can say which source it names."""
     calls: list[object] = []
@@ -104,17 +105,15 @@ def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeyp
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "https://github.com/paul-gross/blizzard/issues/26"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "ingest", "https://github.com/paul-gross/blizzard/issues/26"])
 
     assert result.exit_code == 0, result.output
     assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
 
 
 @pytest.mark.unit
-def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_through(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_through() -> None:
     """The ``github:<rest>`` provider-tagged form passes ``rest`` through on its own
     merits, but warns on stderr rather than silently accepting the provider tag."""
     calls: list[object] = []
@@ -123,8 +122,8 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_
         calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "ingest", "github:https://github.com/paul-gross/blizzard/issues/26"]
     )
 
@@ -134,21 +133,21 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_
 
 
 @pytest.mark.unit
-def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_maps_a_pointer_conflict() -> None:
     """A 409 (pointer already held by a live chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard:8"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "ingest", "blizzard:8"])
 
     assert result.exit_code != 0
     assert "ch_old" in result.output
 
 
 @pytest.mark.unit
-def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_maps_a_422_naming_the_unclaimed_token() -> None:
     """The hub resolves tokens, not the CLI: a token no configured source claims is a
     422 whose detail — naming the token and the configured sources — is the *only*
     feedback a user gets, so it must surface verbatim rather than a generic error."""
@@ -159,8 +158,8 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
             {"detail": "token 'no-separator-here' is not claimed by any configured work source (configured: blizzard)"},
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "no-separator-here"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "ingest", "no-separator-here"])
 
     assert result.exit_code != 0
     assert "no-separator-here" in result.output
@@ -168,7 +167,7 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject() -> None:
     """A pasted non-issue URL is not rejected locally — with the CLI carrying no
     grammar at all, it travels to the hub exactly as pasted, and the hub's 422
     (naming the token and the configured sources) is what the user sees."""
@@ -181,10 +180,10 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
             {"detail": "token '...' is not claimed by any configured work source (configured: blizzard)"},
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    bound = bind_stubs(post=fake_post)
     tokens = ("https://github.com/paul-gross/blizzard/pull/5", "https://example.com/nothing/here")
     for token in tokens:
-        result = CliRunner().invoke(hub_group, ["chunk", "ingest", token])
+        result = bound.runner.invoke(hub_group, ["chunk", "ingest", token])
         assert result.exit_code != 0, f"{token!r} should have been rejected by the hub: {result.output}"
         assert "not claimed by any configured work source" in result.output, result.output
     # The scheme colon was never split on locally — each token traveled through whole.
@@ -196,7 +195,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
 
 
 @pytest.mark.unit
-def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_promote_posts_to_the_chunk_and_reports_ready() -> None:
     """The verb POSTs to the chunk's promote sub-resource and echoes the ready line."""
     calls: list[str] = []
 
@@ -204,8 +203,8 @@ def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.Monkey
         calls.append(url)
         return _FakeResponse(202)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://hub.local:8421/api/chunks/ch_42/promote"]
@@ -213,14 +212,14 @@ def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_promote_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "promote", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -231,7 +230,7 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detach_posts_to_the_chunk_and_reports_released() -> None:
     """The verb POSTs to the chunk's detach sub-resource and echoes the release line."""
     calls: list[str] = []
 
@@ -239,8 +238,8 @@ def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.Monk
         calls.append(url)
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://hub.local:8421/api/chunks/ch_42/detach"]
@@ -248,28 +247,28 @@ def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detach_maps_a_conflict_with_the_servers_detail() -> None:
     """A 409 (no live route) surfaces the server's own detail text, not a hardcoded fallback."""
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 has no live route"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "detach", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 has no live route" in result.output
 
 
 @pytest.mark.unit
-def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detach_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "detach", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -280,7 +279,7 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_posts_to_the_chunk_and_reports_stopped() -> None:
     """The verb POSTs to the chunk's stop sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
@@ -288,8 +287,8 @@ def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyP
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -301,43 +300,43 @@ def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_stop_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_maps_a_conflict_with_the_servers_detail() -> None:
     """A 409 (already done/stopped) surfaces the server's own detail text as a ClickException."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is stopped, not stoppable"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 is stopped, not stoppable" in result.output
 
 
 @pytest.mark.unit
-def test_stop_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
 
 
 @pytest.mark.unit
-def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_defaults_by_to_operator() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code == 0, result.output
     _, body = calls[0]
@@ -349,7 +348,7 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_done_posts_to_the_chunk_and_reports_completed() -> None:
     """The verb POSTs to the chunk's complete sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
@@ -357,8 +356,8 @@ def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.Monke
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "done", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -370,29 +369,29 @@ def test_done_posts_to_the_chunk_and_reports_completed(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_done_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_done_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "done", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
 
 
 @pytest.mark.unit
-def test_done_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_done_defaults_by_to_operator() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "done", "ch_42"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "done", "ch_42"])
 
     assert result.exit_code == 0, result.output
     _, body = calls[0]
@@ -404,7 +403,7 @@ def test_done_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_chunk_posts_to_the_chunk_and_reports_paused() -> None:
     """The verb POSTs to the chunk's pause sub-resource, carrying ``--by``."""
     calls: list[tuple[str, object]] = []
 
@@ -412,8 +411,8 @@ def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.M
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "pause", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -425,35 +424,35 @@ def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.M
 
 
 @pytest.mark.unit
-def test_pause_chunk_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_chunk_maps_a_conflict_with_the_servers_detail() -> None:
     """A 409 (done/stopped/delivering) surfaces the server's own detail text as a ClickException."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is delivering, not pausable"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_42"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "pause", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 is delivering, not pausable" in result.output
 
 
 @pytest.mark.unit
-def test_pause_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_chunk_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "pause", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
 
 
 @pytest.mark.unit
-def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resume_chunk_posts_to_the_chunk_and_reports_resumed() -> None:
     """The verb POSTs to the chunk's resume sub-resource — never refused."""
     calls: list[tuple[str, object]] = []
 
@@ -461,8 +460,8 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "resume", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -474,14 +473,14 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest
 
 
 @pytest.mark.unit
-def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resume_chunk_maps_an_unknown_chunk() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "resume", "ch_nope"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "resume", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -492,15 +491,15 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_delete_confirms_and_sends_the_delete_with_by() -> None:
     calls: list[tuple[str, str, object]] = []
 
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "request", fake_request)
-    result = CliRunner().invoke(
+    bound = bind_stubs(request=fake_request)
+    result = bound.runner.invoke(
         hub_group,
         ["chunk", "delete", "ch_42", "--by", "alice"],
         input="y\n",
@@ -516,26 +515,26 @@ def test_chunk_delete_confirms_and_sends_the_delete_with_by(monkeypatch: pytest.
 
 
 @pytest.mark.unit
-def test_chunk_delete_aborts_when_confirmation_is_declined(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_delete_aborts_when_confirmation_is_declined() -> None:
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the user declines")
 
-    monkeypatch.setattr(httpx, "request", fake_request)
-    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42"], input="n\n")
+    bound = bind_stubs(request=fake_request)
+    result = bound.runner.invoke(hub_group, ["chunk", "delete", "ch_42"], input="n\n")
 
     assert result.exit_code != 0
 
 
 @pytest.mark.unit
-def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator() -> None:
     calls: list[tuple[str, str, object]] = []
 
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((method, url, json))
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
-    monkeypatch.setattr(httpx, "request", fake_request)
-    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
+    bound = bind_stubs(request=fake_request)
+    result = bound.runner.invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code == 0, result.output
     method, url, json_body = calls[0]
@@ -545,24 +544,24 @@ def test_chunk_delete_yes_skips_the_prompt_and_defaults_by_to_operator(monkeypat
 
 
 @pytest.mark.unit
-def test_chunk_delete_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_delete_maps_a_conflict_with_the_servers_detail() -> None:
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk ch_42 is running — deletion needs an unacquired chunk"})
 
-    monkeypatch.setattr(httpx, "request", fake_request)
-    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
+    bound = bind_stubs(request=fake_request)
+    result = bound.runner.invoke(hub_group, ["chunk", "delete", "ch_42", "--yes"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 is running — deletion needs an unacquired chunk" in result.output
 
 
 @pytest.mark.unit
-def test_chunk_delete_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_delete_maps_an_unknown_chunk() -> None:
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "request", fake_request)
-    result = CliRunner().invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])
+    bound = bind_stubs(request=fake_request)
+    result = bound.runner.invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -629,22 +628,18 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
     raise AssertionError(f"runner local API never came up on {path}")
 
 
-def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_hub(*allow_base_urls: str) -> Bound:
     """Fail loudly if a local verb reaches for the hub — it must never."""
-
-    def explode(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("a local verb contacted the hub; it must be a pure client of the local API")
-
-    monkeypatch.setattr(httpx, "post", explode)
+    return bind_local_only(allow_base_urls=allow_base_urls)
 
 
 @pytest.mark.component
-def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_patches_the_runners_own_local_api(tmp_path: Path) -> None:
     """`runner pause` sets this runner's own brake through its local API, over the socket."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--by", "alice"])
+        result = bound.runner.invoke(runner_group, ["pause", "--dir", str(root), "--by", "alice"])
 
     assert result.exit_code == 0, result.output
     assert "locally paused" in result.output
@@ -654,26 +649,26 @@ def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: py
 
 
 @pytest.mark.component
-def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path) -> None:
     """The whole point: the local brake does not depend on the hub. `_no_hub` makes any
     hub call an error, so this passing is the assertion itself."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["pause", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert _store(root).local_paused() is True
 
 
 @pytest.mark.component
-def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_clears_the_local_brake(tmp_path: Path) -> None:
     """`runner start` is the counterpart; facts append and the flag derives from the newest."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        assert CliRunner().invoke(runner_group, ["pause", "--dir", str(root)]).exit_code == 0
-        result = CliRunner().invoke(runner_group, ["start", "--dir", str(root)])
+        assert bound.runner.invoke(runner_group, ["pause", "--dir", str(root)]).exit_code == 0
+        result = bound.runner.invoke(runner_group, ["start", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "no longer locally paused" in result.output
@@ -681,13 +676,13 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
 
 
 @pytest.mark.component
-def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_reports_itself_upward_atomically(tmp_path: Path) -> None:
     """The brake and the fact reporting it upward are one write; asserting
     the buffered fact, not just the flag, is the point."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        assert CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--by", "alice"]).exit_code == 0
+        assert bound.runner.invoke(runner_group, ["pause", "--dir", str(root), "--by", "alice"]).exit_code == 0
 
     store = _store(root)
     assert store.local_paused() is True
@@ -699,13 +694,13 @@ def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pyt
 
 
 @pytest.mark.component
-def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_reports_the_resume_upward(tmp_path: Path) -> None:
     """Clearing the brake is reported too, FIFO behind the pause fact."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        assert CliRunner().invoke(runner_group, ["pause", "--dir", str(root)]).exit_code == 0
-        assert CliRunner().invoke(runner_group, ["start", "--dir", str(root)]).exit_code == 0
+        assert bound.runner.invoke(runner_group, ["pause", "--dir", str(root)]).exit_code == 0
+        assert bound.runner.invoke(runner_group, ["start", "--dir", str(root)]).exit_code == 0
 
     kinds = [f.kind for f in _store(root).pending_outbound()]
     assert kinds == ["runner.locally_paused", "runner.locally_resumed"]
@@ -779,12 +774,12 @@ def test_pause_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path) -> None:
     """--runner-url addresses the same API through its TCP door — same route, same effect."""
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
     with _serve_local_api(root) as (_sock, tcp_url):
-        result = CliRunner().invoke(runner_group, ["pause", "--runner-url", tcp_url])
+        bound = _no_hub(tcp_url)
+        result = bound.runner.invoke(runner_group, ["pause", "--runner-url", tcp_url])
 
     assert result.exit_code == 0, result.output
     assert _store(root).local_paused() is True

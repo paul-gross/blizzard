@@ -1,5 +1,5 @@
 """``blizzard hub analytics summary`` — a pure client of the eleven
-read rollup routes driven with ``httpx`` stubbed (unit tier): each response shape's
+read rollup routes driven with the client factory stubbed (unit tier): each response shape's
 rendering, ``--json``, the per-dataset filter-applicability guards, and
 ``--ndjson``'s spend-chunks-only guard plus its incompatible-flag guards (mirroring
 ``events``)."""
@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import named_key
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.unit
 
@@ -68,23 +69,23 @@ def _get_returning(body: object):
 # --- one Listing per distinct response shape ------------------------------------------
 
 
-def test_counts_dataset_renders_the_counts_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_counts_dataset_renders_the_counts_shape() -> None:
     fake_get, _ = _get_returning({"counts": [{"key": "src/a.py", "count": 3}]})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-files"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files"])
 
     assert result.exit_code == 0, result.output
     assert "src/a.py: 3" in result.output
 
 
-def test_durations_dataset_renders_the_durations_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_durations_dataset_renders_the_durations_shape() -> None:
     fake_get, _ = _get_returning(
         {"durations": [{"key": "nd_build", "completed_steps": 2, "total_seconds": 90.0, "avg_seconds": 45.0}]}
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "durations-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "durations-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "nd_build" in result.output
@@ -92,7 +93,7 @@ def test_durations_dataset_renders_the_durations_shape(monkeypatch: pytest.Monke
     assert "avg=45.0s" in result.output
 
 
-def test_spend_dataset_renders_the_spend_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spend_dataset_renders_the_spend_shape() -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -108,16 +109,16 @@ def test_spend_dataset_renders_the_spend_shape(monkeypatch: pytest.MonkeyPatch) 
             ]
         }
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "nd_build" in result.output
     assert "$1.50" in result.output
 
 
-def test_spend_chunks_dataset_renders_the_chunk_spend_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spend_chunks_dataset_renders_the_chunk_spend_shape() -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -134,16 +135,16 @@ def test_spend_chunks_dataset_renders_the_chunk_spend_shape(monkeypatch: pytest.
             "next_cursor": None,
         }
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
     assert "$0.02+" in result.output
 
 
-def test_a_spend_row_carrying_an_estimate_folds_it_into_the_one_cost_figure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_spend_row_carrying_an_estimate_folds_it_into_the_one_cost_figure() -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -160,15 +161,15 @@ def test_a_spend_row_carrying_an_estimate_folds_it_into_the_one_cost_figure(monk
             ]
         }
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "nd_build  ~$0.75  in=100" in result.output
 
 
-def test_a_spend_row_with_no_estimate_carries_no_tilde(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_spend_row_with_no_estimate_carries_no_tilde() -> None:
     fake_get, _ = _get_returning(
         {
             "spend": [
@@ -185,22 +186,22 @@ def test_a_spend_row_with_no_estimate_carries_no_tilde(monkeypatch: pytest.Monke
             ]
         }
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "$1.50" in result.output
     assert "~$" not in result.output
 
 
-def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_outcomes_dataset_renders_the_outcomes_shape() -> None:
     fake_get, _ = _get_returning(
         {"outcomes": [{"node_id": "nd_build", "choice_counts": {"pass": 3, "fail": 1}, "attempt_failures": 2}]}
     )
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "nd_build" in result.output
@@ -208,12 +209,12 @@ def test_outcomes_dataset_renders_the_outcomes_shape(monkeypatch: pytest.MonkeyP
     assert "attempt_failures=2" in result.output
 
 
-def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_json_prints_the_raw_envelope() -> None:
     body = {"counts": [{"key": "wf-commit", "count": 1}]}
     fake_get, _ = _get_returning(body)
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-skills", "--json"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-skills", "--json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == body
@@ -222,44 +223,44 @@ def test_json_prints_the_raw_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- the per-dataset filter-applicability table -----------------------------------
 
 
-def test_a_filter_the_dataset_does_not_expose_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_a_filter_the_dataset_does_not_expose_is_refused() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
 
     # counts-nodes does not offer --node (it would select a single group).
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-nodes", "--node", "nd_build"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-nodes", "--node", "nd_build"])
 
     assert result.exit_code != 0
     assert "--node does not apply to dataset 'counts-nodes'" in result.output
 
 
-def test_kind_is_refused_for_a_fixed_kind_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_kind_is_refused_for_a_fixed_kind_dataset() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "counts-files", "--kind", "file_read"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files", "--kind", "file_read"])
 
     assert result.exit_code != 0
     assert "--kind does not apply to dataset 'counts-files'" in result.output
 
 
-def test_extractor_version_is_refused_for_an_operational_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_extractor_version_is_refused_for_an_operational_dataset() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "durations-nodes", "--extractor-version", "v2"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "durations-nodes", "--extractor-version", "v2"])
 
     assert result.exit_code != 0
     assert "--extractor-version does not apply to dataset 'durations-nodes'" in result.output
 
 
-def test_effort_is_refused_for_every_operational_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_effort_is_refused_for_every_operational_dataset() -> None:
     """Effort lives on transcript events alone, so no usage-backed dataset can filter by it."""
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
 
     for dataset in ["durations-nodes", "durations-graphs", "spend-nodes", "spend-graphs", "spend-chunks"]:
-        result = CliRunner().invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
+        result = bound.runner.invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
         assert result.exit_code != 0, dataset
         assert f"--effort does not apply to dataset {dataset!r}" in result.output
     for dataset in ["spend-models", "outcomes-nodes"]:
-        result = CliRunner().invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
+        result = bound.runner.invoke(hub_group, ["analytics", "summary", dataset, "--effort", "high"])
         assert f"--effort does not apply to dataset {dataset!r}" in result.output
 
 
@@ -275,13 +276,11 @@ def test_effort_is_refused_for_every_operational_dataset(monkeypatch: pytest.Mon
         "outcomes-nodes",
     ],
 )
-def test_the_usage_provenance_filters_apply_to_every_operational_dataset(
-    monkeypatch: pytest.MonkeyPatch, dataset: str
-) -> None:
+def test_the_usage_provenance_filters_apply_to_every_operational_dataset(dataset: str) -> None:
     fake_get, calls = _get_returning({"spend": [], "durations": [], "outcomes": [], "next_cursor": None})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         hub_group,
         ["analytics", "summary", dataset, "--model", "m-a", "--harness-id", "claude_code", "--harness-version", "1.0"],
     )
@@ -290,7 +289,7 @@ def test_the_usage_provenance_filters_apply_to_every_operational_dataset(
     assert (calls[0]["model"], calls[0]["harness_id"], calls[0]["harness_version"]) == ("m-a", "claude_code", "1.0")
 
 
-def test_spend_models_renders_a_model_row_and_takes_no_paging_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_spend_models_renders_a_model_row_and_takes_no_paging_flags() -> None:
     row = {
         "key": "m-a",
         "input_tokens": 3,
@@ -304,52 +303,52 @@ def test_spend_models_renders_a_model_row_and_takes_no_paging_flags(monkeypatch:
         "node_name": None,
     }
     fake_get, calls = _get_returning({"spend": [row]})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-models"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-models"])
 
     assert result.exit_code == 0, result.output
     assert result.output.startswith("m-a  ") and "in=3 out=2" in result.output
     assert "limit" not in calls[0]
     for flag in (["--cursor", "c"], ["--limit", "5"], ["--ndjson"]):
-        refused = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-models", *flag])
+        refused = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-models", *flag])
         assert f"{flag[0]} does not apply to dataset 'spend-models'" in refused.output
 
 
-def test_cursor_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_cursor_is_refused_outside_spend_chunks() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes", "--cursor", "cur_1"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-nodes", "--cursor", "cur_1"])
 
     assert result.exit_code != 0
     assert "--cursor does not apply to dataset 'spend-nodes'" in result.output
 
 
-def test_a_scope_filter_applies_to_every_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_scope_filter_applies_to_every_dataset() -> None:
     fake_get, calls = _get_returning({"outcomes": []})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes", "--graph", "gr_1"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "outcomes-nodes", "--graph", "gr_1"])
 
     assert result.exit_code == 0, result.output
     assert calls[0]["graph_id"] == "gr_1"
 
 
-def test_the_default_limit_is_200_for_spend_chunks_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_default_limit_is_200_for_spend_chunks_only() -> None:
     fake_get, calls = _get_returning({"spend": [], "next_cursor": None})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks"])
 
     assert result.exit_code == 0, result.output
     assert calls[0]["limit"] == "200"
 
 
-def test_non_paginated_datasets_get_no_limit_param(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_non_paginated_datasets_get_no_limit_param() -> None:
     fake_get, calls = _get_returning({"outcomes": []})
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "outcomes-nodes"])
 
     assert result.exit_code == 0, result.output
     assert "limit" not in calls[0]
@@ -358,49 +357,52 @@ def test_non_paginated_datasets_get_no_limit_param(monkeypatch: pytest.MonkeyPat
 # --- --ndjson: spend-chunks only, and the same incompatible-flag guards ----------------
 
 
-def test_ndjson_streams_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ndjson_streams_spend_chunks() -> None:
     resp = _FakeStreamResponse(200, lines=['{"chunk_id": "ch_1"}'])
-    monkeypatch.setattr(httpx, "stream", _stream_returning(resp))
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
+    bound = bind_stubs(
+        stream=_stream_returning(resp), get=lambda *a, **k: pytest.fail("--ndjson must not hit the paged route")
+    )
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson"])
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == ['{"chunk_id": "ch_1"}']
 
 
-def test_ndjson_is_refused_outside_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_is_refused_outside_spend_chunks() -> None:
+    bound = bind_stubs(
+        stream=lambda *a, **k: pytest.fail("must not reach the hub"),
+        get=lambda *a, **k: pytest.fail("must not reach the hub"),
+    )
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-nodes", "--ndjson"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-nodes", "--ndjson"])
 
     assert result.exit_code != 0
     assert "--ndjson does not apply to dataset 'spend-nodes'" in result.output
 
 
-def test_ndjson_rejects_json_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_json_on_spend_chunks() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--json"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--json"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --json" in result.output
 
 
-def test_ndjson_rejects_cursor_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_cursor_on_spend_chunks() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--cursor", "cur_1"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--cursor", "cur_1"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --cursor" in result.output
 
 
-def test_ndjson_rejects_limit_on_spend_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_limit_on_spend_chunks() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--limit", "10"])
+    result = bound.runner.invoke(hub_group, ["analytics", "summary", "spend-chunks", "--ndjson", "--limit", "10"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --limit" in result.output

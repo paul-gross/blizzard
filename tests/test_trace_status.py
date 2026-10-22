@@ -6,9 +6,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -17,6 +15,7 @@ from blizzard.wire.traces import TraceStatusResponse
 from tests.support import HubHarness, InMemoryTraceExporter
 from tests.test_trace_export_sweep import _closed_pair, _sweep
 from tests.trace_hub import trace_hub
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -62,16 +61,16 @@ def test_a_rejected_setting_is_named(tmp_path: Path) -> None:
     assert body["lag_seconds"] is None
 
 
-def test_status_shows_only_the_origin_in_the_api_and_the_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_shows_only_the_origin_in_the_api_and_the_cli(tmp_path: Path) -> None:
     settings = TracingSettings.of(_ENV)
     hub, _ = _hub(tmp_path, settings)
     _sweep(hub).sweep()
     assert _status(hub)["endpoint"] == "http://collector:4318"
     assert not any(secret in hub.client.get("/api/traces/status").text for secret in _CREDENTIALS)
 
-    monkeypatch.setattr(httpx, "get", lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
+    bound = bind_stubs(get=lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
     for args in (["traces", "status"], ["traces", "status", "--json"]):
-        result = CliRunner().invoke(hub_group, args, env={"BZ_HUB_URL": "http://hub.local:8421"})
+        result = bound.runner.invoke(hub_group, args, env={"BZ_HUB_URL": "http://hub.local:8421"})
         assert result.exit_code == 0, result.output
         assert "http://collector:4318" in result.output
         assert not any(secret in result.output for secret in _CREDENTIALS)

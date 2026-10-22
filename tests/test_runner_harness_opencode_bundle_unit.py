@@ -11,7 +11,8 @@ from types import SimpleNamespace
 import click
 import pytest
 
-from blizzard.runner.cli.runtime import _publish_harness_bundle
+from blizzard.cli.collaborators import CliCollaborators
+from blizzard.runner.cli.runtime import InitCollaborators, _publish_harness_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition
@@ -36,6 +37,9 @@ from tests.runner_fakes import NO_TRACING, FakeProbe
 from tests.support_child_launch import CHILDREN
 
 pytestmark = pytest.mark.unit
+
+
+_COLLABORATORS = InitCollaborators.http(CliCollaborators.production().client_factory)
 
 
 def test_explicit_plugins_reject_duplicate_identities_with_both_sources(tmp_path: Path) -> None:
@@ -125,7 +129,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert "OPENCODE_CONFIG_DIR" not in plain_env
 
 
-def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     worker = tmp_path / "custom" / "worker.json"
     observed: list[tuple[Path, Path, str | None]] = []
@@ -136,14 +140,16 @@ def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path, mo
         observed.append((source, root, section.worker_config_path))
         return SimpleNamespace(summary=lambda: "published")
 
-    monkeypatch.setattr("blizzard.runner.cli.runtime.publish_harness_bundle", publish)
     config = RunnerConfig(
         root=tmp_path,
         db_url="sqlite://",
         harness_config_dir=bundle,
         harness_sections=sections(OpenCodeSection(worker_config_path=str(worker))),
     )
-    _publish_harness_bundle(config)
+    _publish_harness_bundle(
+        config,
+        replace(InitCollaborators.http(CliCollaborators.production().client_factory), publish_harness_bundle=publish),
+    )
     assert observed == [(bundle, tmp_path, str(worker))]
 
 
@@ -372,7 +378,7 @@ def test_runner_publication_composes_under_the_configured_root_autonomy_and_perm
     root.mkdir()
     config = RunnerConfig(root=root, db_url="sqlite://", harness_config_dir=bundle, autonomy=Autonomy.Normal)
 
-    snapshot = _publish_harness_bundle(config)
+    snapshot = _publish_harness_bundle(config, _COLLABORATORS)
 
     assert snapshot is not None
     assert snapshot.path.parent == root / "harness-config" / "snapshots"
@@ -380,4 +386,4 @@ def test_runner_publication_composes_under_the_configured_root_autonomy_and_perm
     composed = json.loads((snapshot.path / "claude-code" / "settings.json").read_text())
     assert composed["permissions"]["disableBypassPermissionsMode"] is True
     with pytest.raises(click.ClickException, match="disableBypassPermissionsMode"):
-        _publish_harness_bundle(with_claude_code(config, permission_mode="bypassPermissions"))
+        _publish_harness_bundle(with_claude_code(config, permission_mode="bypassPermissions"), _COLLABORATORS)
