@@ -14,7 +14,7 @@ import weakref
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import structlog
@@ -149,6 +149,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
     SampleMissReason,
 )
 from blizzard.runner.throttle.pause import SpendingRunner
+from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
@@ -463,6 +464,30 @@ REGISTERED_AT = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 def matched_verdict() -> IdentityVerdictHolder:
     """A verdict already matched — the state a hosted runner's check reaches against its own hub."""
     return IdentityVerdictHolder("blizzard runner store reset /runner", state=IdentityState.MATCHED)
+
+
+def usage_limit_mark(
+    marked_at: datetime,
+    *,
+    resets_in: timedelta | None = timedelta(hours=1),
+    window: str | None = None,
+    generation: int = 1,
+) -> UsageLimitMark:
+    """A worker's usage-limit mark at ``marked_at``, naming a reset ``resets_in`` later (none when ``None``) and, with
+    ``window``, holding that window under the same reset."""
+    resets_at = marked_at + resets_in if resets_in is not None else None
+    return UsageLimitMark(
+        marked_at=marked_at,
+        resets_at=resets_at,
+        window=window,
+        window_resets_at=resets_at if window is not None else None,
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        detail="usage limit reached",
+        lease_id="lease_limited",
+        epoch=1,
+        generation=generation,
+        invocation_kind="worker",
+    )
 
 
 def fixed_hub_token(token: str = FAKE_RUNNER_TOKEN) -> HubTokenHolder:

@@ -268,6 +268,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
+    from blizzard.runner.throttle.gate import GateContext
     from blizzard.runner.throttle.overload import OverloadContext
     from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfillContext
     from blizzard.runner.transcripts.transcript_drain import TranscriptDrainContext
@@ -289,6 +290,9 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_overload(ctx: LoopContext) -> OverloadContext:
+        return ctx
+
+    def _conforms_to_gate(ctx: LoopContext) -> GateContext:
         return ctx
 
     def _conforms_to_spawn(ctx: LoopContext) -> SpawnContext:

@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
@@ -62,6 +63,15 @@ from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, S
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
+from blizzard.runner.throttle.gate import (
+    GateConfig,
+    GateContext,
+    GateHostStores,
+    GateStores,
+    GateVerdict,
+    StartKind,
+    ThrottleGate,
+)
 from blizzard.runner.throttle.pause import IWritePauseRepository, RunnerBrakes
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository, spawn_boundary_kind
 from blizzard.runner.transcripts.transcript_pump import (
@@ -116,7 +126,7 @@ class MintedLease:
     compaction_window: str | None
 
 
-class SpawnStores(TranscriptPumpStores, Protocol):
+class SpawnStores(TranscriptPumpStores, GateStores, Protocol):
     @property
     def lease_record(self) -> IWriteLeaseRecordRepository: ...
     @property
@@ -139,7 +149,7 @@ class SpawnStores(TranscriptPumpStores, Protocol):
     def tokens(self) -> IWriteTokenRepository: ...
 
 
-class SpawnHostStores(Protocol):
+class SpawnHostStores(GateHostStores, Protocol):
     """The host-scoped stores a spawn reads and writes."""
 
     @property
@@ -148,7 +158,7 @@ class SpawnHostStores(Protocol):
     def workspace_prompt(self) -> IReadWorkspacePromptRepository: ...
 
 
-class SpawnConfig(TranscriptPumpConfig, Protocol):
+class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
     @property
     def default_retries_max(self) -> int: ...
     @property
@@ -165,7 +175,7 @@ class SpawnConfig(TranscriptPumpConfig, Protocol):
     def worker_program_tracing(self) -> bool: ...
 
 
-class SpawnContext(TranscriptPumpContext, Protocol):
+class SpawnContext(TranscriptPumpContext, GateContext, Protocol):
     """What a spawn and an attempt read."""
 
     @property
@@ -205,12 +215,29 @@ class SpawnContext(TranscriptPumpContext, Protocol):
     ) -> tuple[str | None, bool]: ...
 
 
+class SuppressionCause(StrEnum):
+    """Why a start was suppressed."""
+
+    BRAKED = "braked"
+    CHUNK_PAUSED = "chunk-paused"
+    DECLINED = "declined"
+
+
+@domain_model
+@dataclass(frozen=True)
+class Suppression:
+    """A suppressed start's cause, and the gate's verdict when the gate declined it."""
+
+    cause: SuppressionCause
+    verdict: GateVerdict | None = None
+
+
 @dataclass(frozen=True)
 class Spawner:
     """Every path that puts a worker process behind a lease: the fresh, fresh-epoch spawn, and
     the per-lease identity a resume or a judgement re-supplies.
 
-    The runner's brakes, the chunk's own pause, and its unreadable status are checked here, before any mutation — so a
+    The runner's brakes, the chunk's own pause, its unreadable status and the throttle gate are checked here, before any mutation — so a
     suppressed start writes no fact, kills no pid and mints no lease."""
 
     ctx: SpawnContext
@@ -221,26 +248,44 @@ class Spawner:
         return RunnerBrakes(local=pause.local_paused(), hub=pause.hub_paused())
 
     def suppressed(
-        self, *, via: str, chunk_id: str, lease_id: str | None = None, brakes: RunnerBrakes | None = None
+        self,
+        *,
+        start: StartKind,
+        via: str,
+        chunk_id: str,
+        lease_id: str | None = None,
+        brakes: RunnerBrakes | None = None,
     ) -> bool:
-        """True — and logged once — when the runner's brakes (``brakes``, if
-        already read), the chunk's own pause, or its unreadable status block this start.
+        """True — and logged once — when :meth:`suppression` finds a cause.
 
-        Which call sites must consult it is held mechanically by
+        Which call sites must consult it, each naming its ``start``, is held mechanically by
         ``tests/test_spawn_suppressed_registry.py``, not by an enumeration to recount by hand."""
+        return self.suppression(start=start, via=via, chunk_id=chunk_id, lease_id=lease_id, brakes=brakes) is not None
+
+    def suppression(
+        self,
+        *,
+        start: StartKind,
+        via: str,
+        chunk_id: str,
+        lease_id: str | None = None,
+        brakes: RunnerBrakes | None = None,
+    ) -> Suppression | None:
+        """Why this start may not run — logged once — or ``None``: the runner's brakes (``brakes``, if already read),
+        then the chunk's own pause, then the throttle gate, which an escalation never asks."""
         if not (brakes if brakes is not None else self.brakes()).starts_processes:
             self._log_suppressed("spawn suppressed — locally paused", via, chunk_id, lease_id)
-            return True
+            return Suppression(SuppressionCause.BRAKED)
         try:
             view = self.ctx.chunk_views.get(chunk_id)
         except HubClientError:
             # Unreadable reads as not held — PULL parks the lease on the next tick that reads the pause.
-            return False
-        hold = spawn_hold(view)
-        if hold is SpawnHold.PAUSED:
+            view = None
+        hold = spawn_hold(view) if view is not None else None
+        if view is not None and hold is SpawnHold.PAUSED:
             self._log_suppressed("spawn suppressed — chunk paused", via, chunk_id, lease_id)
-            return True
-        if hold is SpawnHold.STATUS_UNRECOGNIZED:
+            return Suppression(SuppressionCause.CHUNK_PAUSED)
+        if view is not None and hold is SpawnHold.STATUS_UNRECOGNIZED:
             _log.warning(
                 "spawn suppressed — chunk status not recognized",
                 runner_name=self.ctx.config.runner_name,
@@ -249,8 +294,14 @@ class Spawner:
                 lease_id=lease_id,
                 status=str(view.status),
             )
-            return True
-        return False
+            return Suppression(SuppressionCause.CHUNK_PAUSED)
+        if start is StartKind.ESCALATION:
+            return None
+        verdict = ThrottleGate(self.ctx).verdict()
+        if verdict.admits(start):
+            return None
+        self._log_suppressed("spawn suppressed — throttle declining", via, chunk_id, lease_id)
+        return Suppression(SuppressionCause.DECLINED, verdict)
 
     def _log_suppressed(self, event: str, via: str, chunk_id: str, lease_id: str | None) -> None:
         _log.info(
@@ -276,7 +327,7 @@ class Spawner:
         Always its caller's final statement, with no post-spawn logic after it — that is what
         lets the brake stay a silent ``None`` return no caller can misread as "spawn failed".
         The sole funnel into the resolved owner's ``.spawn``, so a re-spawn joins its pool."""
-        if self.suppressed(via=via, chunk_id=chunk_id):
+        if self.suppressed(start=StartKind.STEP, via=via, chunk_id=chunk_id):
             return
         # A retry (`Attempt.requeue`) or a recovery mints under its own prior owner — not a selection
         # candidate. Every other fresh mint, a rotated pool's replacement included, reaches the selector
@@ -458,7 +509,7 @@ class Spawner:
         session — cannot be dispatched to right now. Mints a zero-budget, never-spawned lease
         purely to give ``Attempt.escalate_owner_unresolvable`` an existing lease to close; see
         `blizzard-context:/architecture/crash-correctness/runner.md`."""
-        if self.suppressed(via=via, chunk_id=chunk_id):
+        if self.suppressed(start=StartKind.ESCALATION, via=via, chunk_id=chunk_id):
             return
         if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it
@@ -488,7 +539,7 @@ class Spawner:
         Mints an owner-less, never-spawned lease purely to give
         ``Attempt.escalate_no_acceptable_harness`` an existing lease to close — reached alike
         from a fresh mint's exhausted selection and a retry whose recorded owner fell out of the set."""
-        if self.suppressed(via=via, chunk_id=chunk_id):
+        if self.suppressed(start=StartKind.ESCALATION, via=via, chunk_id=chunk_id):
             return
         if not escalation_mint_admitted(self.ctx.stores.escalations.open_escalation_for_chunk(chunk_id)):
             return  # already escalated — nothing here supersedes it

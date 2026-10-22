@@ -42,6 +42,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store import schema as runner_schema
+from blizzard.runner.throttle.gate import StartKind
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -53,6 +54,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
     serving,
+    usage_limit_mark,
 )
 
 pytestmark = pytest.mark.component
@@ -405,6 +407,37 @@ def test_resuming_the_chunk_restarts_the_same_session_under_the_same_lease(tmp_p
     assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
     assert store.latest_epoch("ch_1") == 1
     assert _closure_reasons(store) == []
+
+
+def test_a_lifted_chunk_pause_waits_while_the_runners_floor_holds_then_resumes_once_it_opens(tmp_path):  # type: ignore[no-untyped-def]
+    """The unpause wake is a continuation: a standing floor keeps the park asleep, and the first tick it opens
+    wakes the same session with nobody acting."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    probe = _ExitingProbe(alive={(100, "start-100")}, groups_alive={100})
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _paused_chunk()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    clock = FixedClock(_NOW)
+    ctx = _make_ctx(store, hub, harness, probe, clock=clock)
+
+    tick(ctx)
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    ctx.stores.usage_limits.record_usage_limit_mark(usage_limit_mark(_NOW, resets_in=timedelta(hours=1)))
+    hub.chunks["ch_1"] = _running_chunk()  # the operator resumes it, but the floor holds
+    tick(ctx)
+    assert harness.resumed == []
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    clock.advance(timedelta(hours=1))  # the runner names no subscription: its hold opens at the reset
+    tick(ctx)
+
+    assert harness.resumed == [
+        ("/ws/e1", "sess-a", "# The operator resumed this chunk; continue your task where you left off.")
+    ]
+    assert store.pause_parked_lease_ids() == set()
 
 
 # --------------------------------------------------------------------------- #
@@ -895,4 +928,4 @@ def test_an_unreadable_chunk_view_does_not_suppress_a_spawn(tmp_path):  # type: 
     hub.down = True
     ctx = _make_ctx(store, hub, FakeHarness(handle=_HANDLE, verdict="pass"), FakeProbe())
 
-    assert Spawner(ctx).suppressed(via="requeue", chunk_id="ch_1") is False
+    assert Spawner(ctx).suppressed(start=StartKind.STEP, via="requeue", chunk_id="ch_1") is False

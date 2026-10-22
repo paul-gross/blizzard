@@ -40,6 +40,7 @@ from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
+from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
 from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
@@ -200,7 +201,9 @@ class DormantSession:
         Crash-safe and re-runnable: an unanswered question polls as a no-op and the reap clock
         stays stopped. Once answered the agent is reconstituted under the same session and step."""
         lease = self.lease
-        if Spawner(self.ctx).suppressed(via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        if Spawner(self.ctx).suppressed(
+            start=StartKind.CONTINUATION, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+        ):
             return
         park = self.ctx.stores.asks.open_park(lease.lease_id)
         if park is None:
@@ -278,7 +281,11 @@ class DormantSession:
             view,
             runner_id,
             braked=Spawner(self.ctx).suppressed(
-                via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id, brakes=brakes
+                start=StartKind.CONTINUATION,
+                via="pause-resume",
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                brakes=brakes,
             ),
             ask_parked=ask_parked,
             judge_parked=standing is not None,
@@ -393,7 +400,10 @@ class DormantSession:
         if not fact.due(now):
             return
         suppressed = Spawner(self.ctx).suppressed(
-            via="overload-backoff-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+            start=StartKind.CONTINUATION,
+            via="overload-backoff-resume",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
         )
         if suppressed:
             return
@@ -511,7 +521,9 @@ class DormantSession:
         checked **before the kill**: gating after would kill the survivor and leave it
         un-re-attached."""
         lease = self.lease
-        if Spawner(self.ctx).suppressed(via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        if Spawner(self.ctx).suppressed(
+            start=StartKind.CONTINUATION, via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+        ):
             return
         harness: IHarnessWorkerLifecycle | None = None
         if lease.session is not None:

@@ -316,8 +316,8 @@ class InterruptedClaims:
     ctx: ClaimContext
 
     def reconcile(self, *, braked: bool = False) -> None:
-        """Reconcile every held binding with no active lease. ``braked`` — either pause brake is
-        engaged."""
+        """Reconcile every held binding with no active lease. ``braked`` — the runner is held back from new claims, by
+        a brake or by the throttle gate declining one."""
         runner_id = registered_runner_id(self.ctx.identity)
         if runner_id is None:
             return

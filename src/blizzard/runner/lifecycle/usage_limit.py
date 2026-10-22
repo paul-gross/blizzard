@@ -23,6 +23,7 @@ from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
 from blizzard.runner.lifecycle.spawn import SpawnHostStores, SpawnStores
+from blizzard.runner.throttle.gate import GateSubscription
 from blizzard.runner.throttle.pause import SpendingRunner, UsageLimitBrakes, usage_limit_reason
 from blizzard.runner.usage.repository import IReadExternalUsageRepository, soonest_exhausted_reset
 
@@ -42,9 +43,7 @@ _CP_JUDGE_AFTER_BRAKE = crashpoint(
 )
 
 
-class DeclaredSubscription(Protocol):
-    @property
-    def slug(self) -> str: ...
+class DeclaredSubscription(GateSubscription, Protocol): ...
 
 
 class UsageLimitStores(SpawnStores, Protocol): ...

@@ -69,6 +69,7 @@ from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, e
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
+from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
@@ -432,17 +433,30 @@ class Fill(Step):
 
         Each binding's open slots are its ``agents`` less the open leases counted against it; for each,
         peek the binding's project, acquire the chunk's environments all-or-nothing from the binding's
-        workspace, and claim the route. Either brake stops *new* claims.
+        workspace, and claim the route. Either brake, or the throttle gate declining, stops *new* claims.
         """
         ctx = self.ctx
         brakes = Spawner(ctx).brakes()
-        InterruptedClaims(ctx).reconcile(braked=brakes.blocks_claims)
-        if brakes.blocks_claims:
+        claims = ThrottleGate(ctx).claims(brakes)
+        InterruptedClaims(ctx).reconcile(braked=claims.held_back)
+        if claims.braked:
             _log.info(
                 "paused — no new claims this tick",
                 runner_name=ctx.config.runner_name,
                 hub_paused=brakes.hub,
                 local_paused=brakes.local,
+            )
+            return
+        declining = claims.declining
+        if declining is not None:
+            hold = declining.floor.hold
+            _log.info(
+                "declining — no new claims this tick",
+                runner_name=ctx.config.runner_name,
+                declining=["floor"],
+                subscription=declining.floor.slug,
+                hold=hold.kind if hold is not None else None,
+                expected_reset=iso_utc(hold.expected_reset) if hold is not None else None,
             )
             return
         BindingFill(ctx).fill()
