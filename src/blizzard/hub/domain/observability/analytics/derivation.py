@@ -126,6 +126,8 @@ def stamp_events(
 
 
 #: A tenant's candidacy when it has no visible segment.
+#: The signature of a tenant holding no segment and no chunk.
+_GONE = DerivationSignature(segment_count=0, max_segment_id=None, max_received_at=None, chunk_count=0)
 _NOTHING_VISIBLE = CandidacyRead(visible_segment_ids=frozenset(), candidate_segment_ids=[])
 
 #: The change probe's forced floor — bounds how stale a missed signature can leave reality.
@@ -320,6 +322,7 @@ class EventDerivationReconciler:
         self._clock = clock
         self._extractor_version = extractor_version
         self._converged: dict[TenantId, tuple[DerivationSignature, datetime]] = {}
+        self._swept = False
 
     def sweep(self) -> None:
         """One convergence pass over every due tenant (never converged, floor elapsed, or signature
@@ -329,17 +332,25 @@ class EventDerivationReconciler:
         raises is left unconverged and retried alone next tick."""
         signatures = self._corpus.derivation_signature()
         now = self._clock.now()
-        self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in signatures}
-        due = [tenant for tenant in sorted(signatures) if self._is_due(tenant, signatures[tenant], now)]
+        self._converged = {
+            tenant: state for tenant, state in self._converged.items() if tenant in signatures or state[0] != _GONE
+        }
+        derived: Mapping[TenantId, frozenset[str]] | None = None
+        known = set(signatures) | set(self._converged)
+        if not self._swept:  # a fresh process also finds tenants whose every segment and chunk is gone
+            derived = self._corpus.derived_segment_ids()
+            known |= set(derived)
+        due = [tenant for tenant in sorted(known) if self._is_due(tenant, signatures.get(tenant, _GONE), now)]
         if not due:
             _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
             return
+        self._swept = True
 
         reads = self._corpus.candidacy(self._extractor_version)
         visible = {(tenant, segment) for tenant, read in reads.items() for segment in read.visible_segment_ids}
-        derived_pairs = {
-            (tenant, segment) for tenant, segments in self._corpus.derived_segment_ids().items() for segment in segments
-        }
+        if derived is None:
+            derived = self._corpus.derived_segment_ids()
+        derived_pairs = {(tenant, segment) for tenant, segments in derived.items() for segment in segments}
         stale: dict[TenantId, set[str]] = {}
         for tenant, segment in derived_pairs - visible:
             stale.setdefault(tenant, set()).add(segment)
@@ -363,7 +374,7 @@ class EventDerivationReconciler:
             (converged if ok else unconverged).append(tenant)
 
         for tenant in converged:
-            self._converged[tenant] = (signatures[tenant], now)
+            self._converged[tenant] = (signatures.get(tenant, _GONE), now)
 
         _log.info(
             "transcript event derivation sweep completed",
@@ -371,7 +382,7 @@ class EventDerivationReconciler:
             dropped=tally.dropped,
             failed=tally.failed,
             tenants_converged=len(converged),
-            tenants_skipped=len(signatures) - len(due),
+            tenants_skipped=len(known) - len(due),
             tenants_unconverged=unconverged,
         )
 

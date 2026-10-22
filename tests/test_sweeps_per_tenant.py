@@ -498,3 +498,25 @@ def test_the_fair_share_never_exceeds_the_limit_and_takes_everything_below_it() 
     assert sum(map(len, fair_share(due, 5, start=0).values())) == 5
     assert sum(map(len, fair_share(due, 50, start=0).values())) == 8
     assert fair_share({}, 5, start=3) == {}
+
+
+class _VanishedTenant(_Segments):
+    """``_B`` holds derived rows but no segment or chunk, so the grouped probe has no entry for it."""
+
+    def derivation_signature(self) -> dict[TenantId, DerivationSignature]:
+        return {_A: super().derivation_signature()[_A]}
+
+
+@pytest.mark.unit
+def test_a_derivation_pass_still_drops_a_tenant_whose_every_segment_and_chunk_is_gone() -> None:
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    units = {_A: _TenantDerivation(), _B: _TenantDerivation()}
+    reconciler = EventDerivationReconciler(
+        corpus=_VanishedTenant({_A: read}, {_A: frozenset({"sg_1"}), _B: frozenset({"sg_9"})}),
+        tenant=lambda tenant: cast(TenantEventDerivation, units[tenant]),
+        clock=FixedClock(_NOW),
+    )
+
+    reconciler.sweep()
+
+    assert units[_B].handed == [([], frozenset({"sg_9"}))]
