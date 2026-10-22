@@ -75,12 +75,17 @@ class OidcEntry(ProviderEntry):
             client_id=self.config.client_id,
             client_secret=secret,
             http_client=client,
-            emails_authoritative=self.config.emails_authoritative,
+            emails_authoritative=bool(self.config.emails_authoritative),
         )
 
 
 class GithubEntry(ProviderEntry):
     def provider(self, client: httpx.Client) -> IOAuthProvider:
+        if self.config.emails_authoritative is not None:
+            raise ConfigError(
+                f"[[auth.oauth.provider]] {self.config.name!r} is type 'github', whose verified emails are always "
+                "authoritative; emails_authoritative is an oidc key"
+            )
         bases: dict[str, str] = {}
         if self.config.api_base:
             bases = {"web_base": self.config.api_base, "api_base": self.config.api_base}

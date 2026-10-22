@@ -129,3 +129,20 @@ def test_an_oidc_provider_is_not_authoritative_for_its_emails_by_default(monkeyp
 
     assert isinstance(oidc, OidcProvider)
     assert oidc.emails_authoritative is False
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_a_github_provider_refuses_emails_authoritative(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
+    monkeypatch.setenv("BZ_SECRET", "s")
+    providers = (
+        OAuthProviderConfig(
+            name="github",
+            type="github",
+            display_name="GitHub",
+            client_id="c",
+            client_secret_env="BZ_SECRET",
+            emails_authoritative=value,
+        ),
+    )
+    with pytest.raises(ConfigError, match=r"'github' is type 'github'.*emails_authoritative is an oidc key"):
+        ProviderEntry.registry(providers, http_client=_client())

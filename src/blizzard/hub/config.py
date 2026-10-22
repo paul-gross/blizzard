@@ -251,8 +251,8 @@ class OAuthProviderConfig:
     ``oidc`` provider's ``issuer`` already naming its own. ``emails_authoritative`` lets an
     ``oidc`` provider's verified email accept an invitation, claim ``auth.superuser`` and link
     a first sign-in to the user holding that address; without it the provider signs in only
-    identities already linked to a user. A ``github`` provider is always authoritative, so
-    the key is refused on one."""
+    identities already linked to a user. ``None`` means the entry did not set it; a ``github``
+    provider is always authoritative, so its binding refuses the key when it is set."""
 
     name: str
     type: str
@@ -261,13 +261,13 @@ class OAuthProviderConfig:
     client_secret_env: str
     issuer: str | None = None
     api_base: str | None = None
-    emails_authoritative: bool = False
+    emails_authoritative: bool | None = None
 
     @classmethod
     def providers(cls, oauth: ConfigView) -> tuple[OAuthProviderConfig, ...]:
         """Structurally validate and project ``[[auth.oauth.provider]]`` entries — the required
-        keys, and ``emails_authoritative`` as a boolean no ``github`` entry carries;
-        ``type``/``issuer`` semantic validation belongs to whichever consumer first uses a
+        keys, and ``emails_authoritative`` as a boolean when set;
+        ``type``/``issuer`` and the keys only one type takes belongs to whichever consumer first uses a
         provider."""
         raw_providers = oauth.get("provider", [])
         if not isinstance(raw_providers, list):
@@ -287,16 +287,11 @@ class OAuthProviderConfig:
             seen_names.add(name)
             issuer_raw = entry.get("issuer")
             api_base_raw = entry.get("api_base")
-            emails_authoritative = entry.get("emails_authoritative", False)
-            if not isinstance(emails_authoritative, bool):
+            emails_authoritative = entry.get("emails_authoritative")
+            if emails_authoritative is not None and not isinstance(emails_authoritative, bool):
                 raise ConfigError(
                     f"[[auth.oauth.provider]] {name!r} has emails_authoritative={emails_authoritative!r}, "
                     "must be a boolean"
-                )
-            if "emails_authoritative" in entry and entry.get("type") == "github":
-                raise ConfigError(
-                    f"[[auth.oauth.provider]] {name!r} is type 'github', whose verified emails are always "
-                    "authoritative; emails_authoritative is an oidc key"
                 )
             providers.append(
                 cls(
