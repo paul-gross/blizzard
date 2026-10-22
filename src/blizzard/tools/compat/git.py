@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -17,7 +18,11 @@ class Repository:
         self._root = root
 
     def _git(self, *args: str) -> str:
-        result = subprocess.run(["git", "-C", str(self._root), *args], capture_output=True, text=True, timeout=30)
+        # The C locale pins git's messages to English, which ``previous_tag`` reads to tell "no earlier tag" apart.
+        env = {**os.environ, "LC_ALL": "C"}
+        result = subprocess.run(
+            ["git", "-C", str(self._root), *args], capture_output=True, text=True, timeout=30, env=env
+        )
         if result.returncode != 0:
             raise GitError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
         return result.stdout
