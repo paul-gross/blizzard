@@ -3,7 +3,7 @@
 #
 # Runs exactly the checks the `pr` GitHub Actions workflow runs, in one command,
 # so an agent or human can reproduce the gate before pushing:
-#   ruff format --check · ruff check · pyright · Vale prose lint ·
+#   ruff format --check · ruff check · pyright · dprint check · Vale prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
 #   spec drift · compatibility against supported releases · change notes · flag lifecycle · eslint · vitest · web
 #   structural gate · bundle composition · story render · generated-client drift
@@ -27,6 +27,10 @@ uv run ruff check .
 
 step "pyright"
 uv run pyright
+
+# --- Markdown format (blizzard:markdown-format) -------------------------------
+step "markdown format: dprint check"
+mise x dprint@0.55.2 -- dprint check
 
 # --- Vale prose lint (bzh:comment-locality) -----------------------------------
 step "process-reference and change-history prose lint: vale --output=line ."

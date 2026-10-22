@@ -35,6 +35,18 @@ jobs:
       - name: structural gate (blizzard:structural-gate)
         run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
 
+  markdown-format:
+    name: dprint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: false
+      - name: dprint check (blizzard:markdown-format)
+        run: mise x dprint@0.55.2 -- dprint check
+
   # The tier is the gate's longest job, so it runs as parallel shards — each a disjoint,
   # stable slice of the collected suite (`BLIZZARD_TEST_SHARD`, tests/suite_plugin.py) — and
   # `python-tests-result` reports them under the single check name a required-check list
