@@ -6,13 +6,15 @@ restarting it."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel
 
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
 from blizzard.wire.question import QuestionView
+from blizzard.wire.vocabulary import OPEN
 
 
 class ChunkAskView(WireModel):
@@ -48,7 +50,7 @@ class ChunkNoteView(WireModel):
     """One note a person left on a chunk. ``node`` and ``choice`` are the resolved gate's for a
     resolution and the landing node for a restart; a requeue has neither."""
 
-    kind: Literal["resolution", "requeue", "restart"]
+    kind: Annotated[Literal["resolution", "requeue", "restart"] | Unrecognized, OPEN]
     note: str
     by: str | None = None
     node: str | None = None

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.unrecognized import Unrecognized
 
 
 @domain_model
@@ -66,7 +67,8 @@ class ChunkState:
     operator restarts' epochs (oldest first), its spend, its gate decision, and its project."""
 
     chunk_id: str
-    status: ChunkStatus
+    #: ``Unrecognized`` for a status this build does not know, which satisfies no status test.
+    status: ChunkStatus | Unrecognized
     route_runner_id: str | None = None
     pause: ChunkPause | None = None
     latest_epoch: int | None = None

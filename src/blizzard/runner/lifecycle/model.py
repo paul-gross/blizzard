@@ -20,6 +20,7 @@ from blizzard.foundation.leases import LeaseClosureReason, LeaseState
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_event_types import LeaseChangeCause
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.environments.repository import OpenLeaseHold
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.closure import ESCALATION_MINT
@@ -235,7 +236,7 @@ def claim_denial_fields(outcome: RouteClaimOutcome) -> dict[str, str]:
     if outcome.denied_terminal is not None:
         return {"status": outcome.denied_terminal.status, "detail": outcome.denied_terminal.detail}
     if outcome.denied_incompatible is not None:
-        return {"reason": outcome.denied_incompatible.reason, "detail": outcome.denied_incompatible.detail}
+        return {"reason": str(outcome.denied_incompatible.reason), "detail": outcome.denied_incompatible.detail}
     return {}
 
 
@@ -299,6 +300,8 @@ class InterruptedClaimMove(StrEnum):
     RELEASE_NO_ROUTE = "release-no-route"
     #: Keep the binding and look again next tick.
     HOLD = "hold"
+    #: Keep the binding — a requeue waits on a chunk status this build cannot read.
+    HOLD_STATUS_UNRECOGNIZED = "hold-status-unrecognized"
     #: Keep the binding — an adopt a person's open takeover holds the workdir against.
     HOLD_TAKEN_OVER = "hold-taken-over"
 
@@ -311,18 +314,20 @@ def interrupted_claim_move(
     braked: bool,
     takeover: OpenTakeover | None = None,
 ) -> InterruptedClaimMove:
-    """A pending requeue outranks everything; it resumes only once the chunk is neither paused nor
-    ended, the mark left pending meanwhile. A resolved gate keeps its route live and is left to
-    ADVANCE. A running chunk routed here is adopted — when FILL owns its node entry, a check
-    against local epochs made only for this arm; a ready one is claimed again unless a brake
-    holds new claims. An adopt holds while ``takeover`` holds the chunk at the hub's latest epoch —
-    it would spawn into the person's workdir; no other arm reads the takeover."""
+    """A pending requeue outranks everything; it resumes only once the chunk is neither paused, nor
+    ended, nor in a status this build cannot read, the mark left pending meanwhile. A resolved gate
+    keeps its route live and is left to ADVANCE. A running chunk routed here is adopted — when FILL
+    owns its node entry, a check against local epochs made only for this arm; a ready one is claimed
+    again unless a brake holds new claims. An adopt holds while ``takeover`` holds the chunk at the
+    hub's latest epoch — it would spawn into the person's workdir; no other arm reads the takeover."""
     ours = view.route_runner_id == runner_id
     if requeued:
         if not ours:
             return InterruptedClaimMove.RELEASE_REQUEUED_ELSEWHERE
         if view.pause is not None or view.status in TERMINAL_STATUSES or view.status == ChunkStatus.PAUSED:
             return InterruptedClaimMove.HOLD
+        if isinstance(view.status, Unrecognized):
+            return InterruptedClaimMove.HOLD_STATUS_UNRECOGNIZED
         return InterruptedClaimMove.RESUME_REQUEUED
     if view.decision is not None:
         return InterruptedClaimMove.HOLD
@@ -480,17 +485,22 @@ class RestartDisposition(StrEnum):
     PREEMPT = "preempt"
     RESTART = "restart"
     ABANDON = "abandon"
+    #: The chunk's status is one this build cannot read: the restart mark stays for the next tick.
+    HOLD = "hold"
 
 
 def restart_disposition(view: ChunkState, runner_id: str, *, fenced: bool) -> RestartDisposition:
     """A restart-marked lease on a chunk still routed here parks under a pause (the pause outranks a
     move), is preempted when a restart fenced it out while the runner was down, and otherwise
-    resumes in place while the chunk runs. Anything else — routed away, ended — is abandoned."""
+    resumes in place while the chunk runs. A status this build cannot read holds the mark rather than
+    abandon a chunk that may still run. Anything else — routed away, ended — is abandoned."""
     ours = not routed_away(view, runner_id)
     if ours and view.pause is not None:
         return RestartDisposition.PARK
     if ours and fenced:
         return RestartDisposition.PREEMPT
+    if ours and isinstance(view.status, Unrecognized):
+        return RestartDisposition.HOLD
     if ours and view.status == ChunkStatus.RUNNING:
         return RestartDisposition.RESTART
     return RestartDisposition.ABANDON
@@ -558,10 +568,31 @@ def answer_ready(question: HubQuestion) -> bool:
 # --------------------------------------------------------------------------------------------- #
 
 
+def chunk_paused(view: ChunkState) -> bool:
+    """A per-chunk pause stands — the fact, or the status it derives."""
+    return view.pause is not None or view.status == ChunkStatus.PAUSED
+
+
+class SpawnHold(StrEnum):
+    PAUSED = "paused"
+    STATUS_UNRECOGNIZED = "status-unrecognized"
+
+
+def spawn_hold(view: ChunkState) -> SpawnHold | None:
+    """What holds a spawn into this chunk: its pause, else an unreadable status."""
+    if chunk_paused(view):
+        return SpawnHold.PAUSED
+    if isinstance(view.status, Unrecognized):
+        return SpawnHold.STATUS_UNRECOGNIZED
+    return None
+
+
 class ApplyMove(StrEnum):
     ENTER_NEXT = "enter-next"
     #: The next node waits out a per-chunk pause — the binding is held, nothing spawns.
     HOLD_PAUSED = "hold-paused"
+    #: The next node waits on a chunk status this build cannot read — the binding is held, nothing spawns.
+    HOLD_STATUS_UNRECOGNIZED = "hold-status-unrecognized"
     HOLD_FOR_HUB_NODE = "hold-for-hub-node"
     RELEASE_MIGRATED = "release-migrated"
     RELEASE_DONE = "release-done"
@@ -569,11 +600,22 @@ class ApplyMove(StrEnum):
     NONE = "none"
 
 
-def apply_move(outcome: ApplyOutcome, next_envelope: Envelope | None, *, chunk_paused: bool) -> ApplyMove:
-    """What the hub's answer to an applied step means here. A paused chunk starts no worker: the
-    binding is held, and the node is entered once the pause lifts."""
+def apply_move(
+    outcome: ApplyOutcome | Unrecognized,
+    next_envelope: Envelope | None,
+    *,
+    hold: SpawnHold | None,
+) -> ApplyMove:
+    """What the hub's answer to an applied step means here. A ``hold`` holds the binding and spawns no
+    worker until it clears; an unreadable outcome moves nothing — the held-chunk pass reads the hub."""
+    if isinstance(outcome, Unrecognized):
+        return ApplyMove.NONE
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
-        return ApplyMove.HOLD_PAUSED if chunk_paused else ApplyMove.ENTER_NEXT
+        if hold is SpawnHold.PAUSED:
+            return ApplyMove.HOLD_PAUSED
+        if hold is SpawnHold.STATUS_UNRECOGNIZED:
+            return ApplyMove.HOLD_STATUS_UNRECOGNIZED
+        return ApplyMove.ENTER_NEXT
     if outcome == ApplyOutcome.HUB_NODE_TAKEN:
         return ApplyMove.HOLD_FOR_HUB_NODE
     if outcome == ApplyOutcome.MIGRATED:
@@ -583,11 +625,6 @@ def apply_move(outcome: ApplyOutcome, next_envelope: Envelope | None, *, chunk_p
     if outcome == ApplyOutcome.PARKED_AT_GATE:
         return ApplyMove.HOLD_AT_GATE
     return ApplyMove.NONE
-
-
-def chunk_paused(view: ChunkState) -> bool:
-    """A per-chunk pause stands — the fact, or the status it derives."""
-    return view.pause is not None or view.status == ChunkStatus.PAUSED
 
 
 class HeldChunkMove(StrEnum):
@@ -689,10 +726,13 @@ class CompletionMove(StrEnum):
     CLOSE_AND_APPLY = "close-and-apply"
 
 
-def completion_move(outcome: ApplyOutcome, *, capped: bool) -> CompletionMove:
+def completion_move(outcome: ApplyOutcome | Unrecognized, *, capped: bool) -> CompletionMove:
     """A rejected completion fails the attempt. A completion that advanced the chunk while its
     spend reached the cap closes the lease escalated — so the escalation reads open here, like any
-    other — instead of entering the next node. Anything else closes and applies."""
+    other — instead of entering the next node. An outcome this build cannot read may have advanced
+    the chunk, so the cap holds it the same way; uncapped, it closes and applies like anything else."""
+    if isinstance(outcome, Unrecognized):
+        return CompletionMove.ESCALATE_SPEND_CAP if capped else CompletionMove.CLOSE_AND_APPLY
     if outcome == ApplyOutcome.FAILURE:
         return CompletionMove.FAIL
     if outcome == ApplyOutcome.NEXT and capped:
@@ -723,8 +763,11 @@ class DecisionMove(StrEnum):
     CLOSE_PARKED = "close-parked"
 
 
-def decision_move(outcome: ApplyOutcome) -> DecisionMove:
-    """A rejected gate decision fails the attempt; an applied one parks the chunk on the decision."""
+def decision_move(outcome: ApplyOutcome | Unrecognized) -> DecisionMove:
+    """A rejected gate decision fails the attempt; an applied one parks the chunk on the decision, as
+    does an outcome this build cannot read — the hub consumed the decision and did not refuse it."""
+    if isinstance(outcome, Unrecognized):
+        return DecisionMove.CLOSE_PARKED
     return DecisionMove.FAIL if outcome == ApplyOutcome.FAILURE else DecisionMove.CLOSE_PARKED
 
 

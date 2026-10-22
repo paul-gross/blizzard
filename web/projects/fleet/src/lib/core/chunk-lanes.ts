@@ -1,5 +1,6 @@
 import type { ChunkCountsView, ChunkStatus, ChunkSummary } from '../api/hub';
 import type { Tone } from '../kit/tone';
+import { openLookup } from './open-lookup';
 
 /** The board's lanes, left → right: the backlog, the ready queue, then dispatch → done. */
 export interface Lane {
@@ -22,34 +23,54 @@ export const LANES: readonly Lane[] = [
 /** The DONE lane's key — where every chunk the hub flags `terminal` sits. */
 export const DONE_LANE = 'done';
 
+/** The key of the lane a chunk sits in when this build does not know its status. */
+export const UNKNOWN_LANE = 'unknown';
+
+/**
+ * The lane for chunks whose status this build does not know, or `null` when none does. It sits
+ * beside {@link LANES} rather than in it: the board shows it only while such a chunk is on it,
+ * headed with the raw statuses, and the titlebar gives it no stat cell — `ChunkCountsView`
+ * carries no count for a status this build cannot name.
+ */
+export function unknownLane(chunks: readonly Pick<ChunkSummary, 'status' | 'terminal'>[]): Lane | null {
+  const raw = [...new Set(chunks.filter((chunk) => chunkLane(chunk) === UNKNOWN_LANE).map((chunk) => chunk.status))];
+  if (raw.length === 0) return null;
+  const label = raw.join(' · ');
+  return { key: UNKNOWN_LANE, label, headerLabel: label };
+}
+
 /**
  * Every chunk status folded onto its board lane. DONE membership is the hub's `terminal`
  * flag, read by {@link chunkLane} and {@link laneCounts}; the `stopped` and `done` entries
- * only place a summary that omits the optional `terminal` wire field. The map stays total
- * over the generated `ChunkStatus` so a new status fails to compile here until it is placed.
+ * only place a summary that omits the optional `terminal` wire field. The table stays total
+ * over the generated `ChunkStatus` so a new status fails to compile here until it is placed;
+ * a status a newer hub sends before then lands in {@link UNKNOWN_LANE}.
  *
  * The transient `delivering` shows under RUNNING. `paused` shares WAIT/HUMAN with
  * `waiting_on_human`: that is the lane for work stopped pending a human, which is what
  * an operator's pause is. The BACKLOG lane's key is `notready`, independent of its
  * rendered labels.
  */
-export const STATUS_LANE: Record<ChunkStatus, string> = {
-  not_ready: 'notready',
-  ready: 'ready',
-  running: 'running',
-  delivering: 'running',
-  waiting_on_human: 'waiting',
-  needs_human: 'needs',
-  paused: 'waiting',
-  stopped: DONE_LANE,
-  done: DONE_LANE,
-};
+export const STATUS_LANE = openLookup<ChunkStatus, string>(
+  {
+    not_ready: 'notready',
+    ready: 'ready',
+    running: 'running',
+    delivering: 'running',
+    waiting_on_human: 'waiting',
+    needs_human: 'needs',
+    paused: 'waiting',
+    stopped: DONE_LANE,
+    done: DONE_LANE,
+  },
+  () => UNKNOWN_LANE,
+);
 
 /** The board lane a chunk sits in: DONE when the hub flags it `terminal`, else its
  * status's {@link STATUS_LANE} placement — which is how a summary that omits `terminal`
  * still lands a `stopped` or `done` chunk in DONE. */
 export function chunkLane(chunk: Pick<ChunkSummary, 'status' | 'terminal'>): string {
-  return chunk.terminal === true ? DONE_LANE : STATUS_LANE[chunk.status];
+  return chunk.terminal === true ? DONE_LANE : STATUS_LANE(chunk.status);
 }
 
 /**
@@ -59,8 +80,8 @@ export function chunkLane(chunk: Pick<ChunkSummary, 'status' | 'terminal'>): str
  */
 export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number> {
   const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
-  for (const status of Object.keys(STATUS_LANE) as ChunkStatus[]) {
-    const lane = STATUS_LANE[status];
+  for (const status of STATUS_LANE.keys) {
+    const lane = STATUS_LANE(status);
     if (lane === DONE_LANE) continue;
     perLane.set(lane, (perLane.get(lane) ?? 0) + counts[status]);
   }
@@ -70,16 +91,20 @@ export function laneCounts(counts: ChunkCountsView): ReadonlyMap<string, number>
 
 /**
  * Every chunk status folded onto the shared {@link Tone} vocabulary — the fleet-side
- * half of the status-to-tone mapping (the other half is `deriveMachineChunkStatus`).
+ * half of the status-to-tone mapping (the other half is `deriveMachineChunkStatus`). A status
+ * this build does not know reads `idle`.
  */
-export const STATUS_TONE: Record<ChunkStatus, Tone> = {
-  not_ready: 'idle',
-  ready: 'idle',
-  running: 'running',
-  delivering: 'running',
-  waiting_on_human: 'waiting',
-  needs_human: 'needs',
-  paused: 'waiting',
-  stopped: 'done',
-  done: 'done',
-};
+export const STATUS_TONE = openLookup<ChunkStatus, Tone>(
+  {
+    not_ready: 'idle',
+    ready: 'idle',
+    running: 'running',
+    delivering: 'running',
+    waiting_on_human: 'waiting',
+    needs_human: 'needs',
+    paused: 'waiting',
+    stopped: 'done',
+    done: 'done',
+  },
+  () => 'idle',
+);

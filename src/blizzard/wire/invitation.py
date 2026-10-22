@@ -16,7 +16,9 @@ from blizzard.foundation.invitations import (
     MIN_LIFETIME_DAYS,
     InvitationState,
 )
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class InvitationCreateRequest(BaseModel):
@@ -35,12 +37,12 @@ class InvitationView(WireModel):
 
     invitation_id: str
     email: str
-    role: Role
+    role: Annotated[Role | Unrecognized, OPEN]
     #: The issuing user's id.
     created_by: str
     created_at: str
     expires_at: str
-    state: InvitationState
+    state: Annotated[InvitationState | Unrecognized, OPEN]
     #: The accepting user's id — set only when ``state`` is ``accepted``.
     accepted_by: str | None = None
 

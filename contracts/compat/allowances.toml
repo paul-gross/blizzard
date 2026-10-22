@@ -1,0 +1,22 @@
+# Recorded allowances for blizzard-compat, each keyed on a release line. README.md beside this file owns the format.
+
+[[allowance]]
+line = "0.2"
+surface = "http-api"
+where = "HostRegistrationState"
+reason = "response enum gained value(s) ['version_refused']"
+because = "0.2's only consumer of HostRegistrationState is the runner panel, served by that same runner: a panel tab loaded before its runner host upgraded and left open throws on the new value, in the LABEL[view.state] destructure of v0.2.0:web/projects/runner/src/app/host/host-registration.model.ts:26, so it survives only after a reload, which loads the new panel. 0.2's runner CLI never reads GET /api/host/registration."
+
+[[allowance]]
+line = "0.2"
+surface = "http-api"
+where = "IdentityState"
+reason = "response enum gained value(s) ['version_refused']"
+because = "Both of 0.2's consumers of IdentityState tolerate the new value without failing, though neither names it: the runner CLI's status compares the state as a string and prints no identity line for an unmatched one (v0.2.0:src/blizzard/runner/cli/control.py:151-162), and the runner panel's @switch on verdict.state falls to its @default, which shows the runner's identity as unchecked (v0.2.0:web/projects/runner/src/app/machine/app-info-view.html:16-41)."
+
+[[allowance]]
+line = "0.2"
+surface = "http-api"
+where = "HistoryRowView.kind"
+reason = "response enum gained value(s) ['requeue', 'resolution', 'restart']"
+because = "0.2's only consumer of GET /leases/{lease_id}/history is the worker CLI's chunk history, which echoes the response body unparsed (v0.2.0:src/blizzard/runner/cli/worker.py:64-65), so a row of a new kind reaches the worker as text; no 0.2 web code calls the route."

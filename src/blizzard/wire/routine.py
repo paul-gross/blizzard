@@ -6,10 +6,14 @@ hub work item from the routine in one act; its chunk rests ``not_ready`` until p
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class RoutineCreateRequest(BaseModel):
@@ -123,7 +127,7 @@ class RoutineRunResponse(WireModel):
     body: str
     routine_name: str
     scope_slug: str
-    effective_mode: RunMode
+    effective_mode: Annotated[RunMode | Unrecognized, OPEN]
     downgraded: bool
     baseline_finding_set_id: str | None = None
     baseline_revisions: dict[str, str] | None = None

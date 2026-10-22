@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel
 
 from blizzard.foundation.trace_export.settings import TracingState
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class ReceiverStatus(BaseModel):
@@ -24,7 +27,7 @@ class TraceStatusResponse(WireModel):
     ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
     widest window one replay request may cover."""
 
-    state: TracingState
+    state: Annotated[TracingState | Unrecognized, OPEN]
     endpoint: str | None
     rejected_setting: str | None
     rejected_value: str | None

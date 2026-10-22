@@ -8,10 +8,14 @@ grant and revoke the hub administrator role (``src/blizzard/hub/api/hub_admins.p
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class UserIdentityView(BaseModel):
@@ -29,13 +33,13 @@ class MemberView(WireModel):
     display_name: str
     email: str | None
     #: The membership's role in the tenant — ``guest``, ``contributor`` or ``admin``.
-    role: Role
+    role: Annotated[Role | Unrecognized, OPEN]
     #: Whether the member also holds the hub administrator role, which grants nothing inside the tenant by itself.
     hub_admin: bool
     created_at: str
     identities: list[UserIdentityView] = []
     #: The membership roles the requesting actor may give this member — empty when the rules admit no change.
-    assignable_roles: list[Role] = []
+    assignable_roles: list[Annotated[Role | Unrecognized, OPEN]] = []
     #: Whether the requesting actor may revoke this membership.
     revocable: bool = False
 
@@ -63,11 +67,11 @@ class UserView(WireModel):
     username: str
     display_name: str
     email: str | None
-    role: Role
+    role: Annotated[Role | Unrecognized, OPEN]
     created_at: str
     identities: list[UserIdentityView] = []
     #: The roles the requesting actor may assign this user — ``pending`` revokes; empty when the rules admit none.
-    assignable_roles: list[Role] = []
+    assignable_roles: list[Annotated[Role | Unrecognized, OPEN]] = []
 
 
 class RoleAssignmentRequest(BaseModel):

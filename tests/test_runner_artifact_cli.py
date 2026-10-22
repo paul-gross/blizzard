@@ -413,6 +413,30 @@ def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
+def test_get_content_prints_an_unknown_kind_that_carries_content() -> None:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": "the plan text"})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert result.output == "the plan text"
+
+
+@pytest.mark.unit
+def test_get_content_refuses_an_unknown_kind_without_content_naming_it() -> None:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": None})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
+
+    assert result.exit_code != 0
+    assert "'gained' artifact" in result.output
+
+
+@pytest.mark.unit
 def test_get_surfaces_a_404_as_a_nonzero_exit() -> None:
     bound = bind_stubs(get=lambda *a, **k: _RejectingResponse())
     result = bound.runner.invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)

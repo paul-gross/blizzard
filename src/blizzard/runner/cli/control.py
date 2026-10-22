@@ -13,6 +13,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -154,7 +155,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     )
     identity = view.get("identity")
     if identity is not None:
-        _echo_identity(_verdict(IdentityVerdictView.model_validate(identity)))
+        _echo_identity(IdentityVerdictView.model_validate(identity))
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
@@ -495,9 +496,9 @@ def renewal_text(sub: dict[str, object]) -> str | None:
     return f"attempted at {attempted_at}, outcome not recorded"
 
 
-def _verdict(view: IdentityVerdictView) -> IdentityVerdict:
+def _verdict(view: IdentityVerdictView, state: IdentityState) -> IdentityVerdict:
     return IdentityVerdict(
-        state=view.state,
+        state=state,
         store_runner_id=view.store_runner_id,
         token_runner_id=view.token_runner_id,
         checked_at=datetime.fromisoformat(view.checked_at) if view.checked_at is not None else None,
@@ -506,7 +507,12 @@ def _verdict(view: IdentityVerdictView) -> IdentityVerdict:
     )
 
 
-def _echo_identity(verdict: IdentityVerdict) -> None:
+def _echo_identity(view: IdentityVerdictView) -> None:
+    if isinstance(view.state, Unrecognized):
+        # A state a newer runner reports: show it, and claim no refusal or remedy for it.
+        click.echo(f"  identity: unknown identity state {view.state.raw!r}")
+        return
+    verdict = _verdict(view, view.state)
     if verdict.state is IdentityState.UNCHECKED:
         click.echo("  identity: unchecked — waiting for the hub to answer which runner the token belongs to")
         return

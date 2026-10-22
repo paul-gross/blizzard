@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner, Result
 
-from blizzard.tools.compat import gate
+from blizzard.tools.compat import allowances, gate
 from blizzard.tools.compat.cli import main
 from blizzard.tools.compat.releases import Window
 from blizzard.tools.compat.violation import Violation
@@ -443,6 +443,7 @@ def test_a_candidate_above_every_stable_major_admits_a_declared_break_and_names_
             "surface": "wire",
             "where": _ROUTE,
             "reason": "surface path removed",
+            "allowance": None,
         }
     ]
 
@@ -559,9 +560,11 @@ def test_json_emits_every_finding_with_its_verdict(tmp_path: Path, monkeypatch: 
                 "deprecated": True,
                 "inherited": False,
                 "passes": False,
+                "allowance": None,
             }
         ],
         "window": [],
+        "allowances": [],
     }
 
 
@@ -594,3 +597,222 @@ def test_a_new_kind_of_break_on_an_inherited_name_is_not_inherited() -> None:
         0
     ]
     assert not verdict.passes and not verdict.inherited
+
+
+# --- the open mark and recorded allowances ---------------------------------------------------------
+
+_STATE_GAIN = ("wire", "State", "response enum gained value(s) ['paused']")
+_ALLOWANCES = "contracts/compat/allowances.toml"
+
+
+def _enum_spec(values: list[str], *, marked: bool = False) -> dict:
+    """A wire route answering a ``Widget`` whose ``state`` is the ``State`` enum, open-marked or not."""
+    document = json.loads(json.dumps(_EMPTY["openapi/hub.openapi.json"]))
+    position: dict = {"$ref": "#/components/schemas/State", **({"x-blizzard-open": True} if marked else {})}
+    document["paths"][_ROUTE] = {
+        "get": {
+            "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Widget"}}}}}
+        }
+    }
+    document["components"]["schemas"] = {
+        "Widget": {"type": "object", "properties": {"state": position}},
+        "State": {"type": "string", "enum": values},
+    }
+    return document
+
+
+def _allowance(line: str = "0.2", *, where: str = "State") -> str:
+    surface, _where, reason = _STATE_GAIN
+    return (
+        f'[[allowance]]\nline = "{line}"\nsurface = "{surface}"\nwhere = "{where}"\nreason = "{reason}"\n'
+        'because = "its one consumer shows an unknown state raw"\n'
+    )
+
+
+def _cut(repo: _Repo, *tags: str, marked: bool = False) -> None:
+    for tag in tags:
+        repo.commit(f"chore: cut {tag}", hub=_enum_spec(["ready"], marked=marked))
+        repo.git("tag", tag)
+
+
+def _gain(repo: _Repo, *, allowances: str | None = None, floor: str = "0.2") -> None:
+    notes = {_ALLOWANCES: allowances} if allowances is not None else None
+    repo.commit(
+        "feat: a widget can be paused", hub=_enum_spec(["ready", "paused"], marked=True), notes=notes, floor=floor
+    )
+
+
+def test_a_gain_against_a_release_that_marked_its_position_open_is_additive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0", marked=True)
+    _gain(repo)
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "openapi/hub.openapi.json (wire, http-api): additive" in result.output
+
+
+def test_the_same_gain_against_a_release_that_did_not_mark_it_is_a_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo)
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 1
+    assert "[BREAK] wire State: response enum gained value(s) ['paused']" in result.output
+
+
+def test_an_allowance_passes_its_finding_under_its_own_state_with_its_because(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "[allowance] wire State: response enum gained value(s) ['paused']" in result.output
+    assert "because (line 0.2): its one consumer shows an unknown state raw" in result.output
+
+
+def test_a_tag_on_a_later_line_admits_the_allowance_and_keeps_it_in_both_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    result = _run(repo, monkeypatch, "--tag", "0.3.0", "--json")
+    assert result.exit_code == 0, result.output
+    allowance = {"line": "0.2", "because": "its one consumer shows an unknown state raw"}
+    surface, where, reason = _STATE_GAIN
+    assert _breaks_file(repo)["breaks"] == [
+        {"release": "v0.2.0", "surface": surface, "where": where, "reason": reason, "allowance": allowance}
+    ]
+    [finding] = json.loads(result.stdout)["findings"]
+    assert finding["passes"] and not finding["inherited"] and finding["allowance"] == allowance
+
+
+def test_a_patch_of_a_later_line_admits_the_allowance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    assert _run(repo, monkeypatch, "--tag", "0.3.1").exit_code == 0
+
+
+def test_a_candidate_on_the_allowances_own_line_admits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    result = _run(repo, monkeypatch, "--tag", "0.2.1")
+    assert result.exit_code == 1
+    assert "[BREAK] wire State" in result.output
+    assert _breaks_file(repo)["breaks"] == []
+
+
+def test_an_allowance_admits_its_finding_against_no_other_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0", "v0.3.0")
+    _gain(repo, allowances=_allowance())
+    result = _run(repo, monkeypatch, "--tag", "0.4.0", "--json")
+    assert result.exit_code == 1
+    verdicts = {f["release"]: (f["passes"], f["allowance"] is not None) for f in json.loads(result.stdout)["findings"]}
+    assert verdicts == {"v0.2.0": (True, True), "v0.3.0": (False, False)}
+
+
+def test_an_allowance_for_a_line_outside_the_window_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.1.0", "v0.2.0", marked=True)
+    _gain(repo, allowances=_allowance("0.1"))
+    result = _run(repo, monkeypatch, "--json")
+    assert result.exit_code == 1
+    [stale] = json.loads(result.stdout)["allowances"]
+    assert stale["line"] == "0.1" and stale["problem"] == "line 0.1 is outside the window"
+
+
+def test_an_allowance_matching_no_finding_of_its_lines_judged_release_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance(where="Other"))
+    result = _run(repo, monkeypatch, "--tag", "0.3.0")
+    assert result.exit_code == 1
+    assert "allowance: [BREAK] line 0.2 wire Other:" in result.output
+    assert "matches no finding against v0.2.0" in result.output
+
+
+def test_a_line_run_leaves_an_in_window_allowance_for_another_line_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0", "v0.3.0", marked=True)
+    _gain(repo, allowances=_allowance())
+    assert _run(repo, monkeypatch, "--line", "release/0.3").exit_code == 0
+    assert _run(repo, monkeypatch).exit_code == 1
+
+
+def test_a_line_run_admits_no_allowance_for_its_own_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    result = _run(repo, monkeypatch, "--line", "release/0.2")
+    assert result.exit_code == 1
+    assert "[BREAK] wire State" in result.output
+
+
+def test_a_malformed_allowance_file_is_an_error_naming_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances='[[allowance]]\nline = "0.2"\n')
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 1
+    assert "allowances.toml: allowance 1 needs exactly" in result.output
+
+
+def test_a_patch_cut_on_the_allowances_line_keeps_it_matching_with_no_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _Repo(tmp_path / "r")
+    _cut(repo, "v0.2.0")
+    _gain(repo, allowances=_allowance())
+    repo.git("tag", "v0.2.1", "HEAD~1")
+    result = _run(repo, monkeypatch, "--json")
+    assert result.exit_code == 0, result.output
+    document = json.loads(result.stdout)
+    assert document["releases"] == ["v0.2.1"] and document["allowances"] == []
+    [finding] = document["findings"]
+    assert finding["release"] == "v0.2.1" and finding["allowance"]["line"] == "0.2"
+    assert _run(repo, monkeypatch, "--tag", "0.3.0").exit_code == 0
+    assert _run(repo, monkeypatch, "--tag", "0.2.2").exit_code == 1
+
+
+def test_an_allowance_line_must_be_major_dot_minor() -> None:
+    for line in ("v0.2.0", "0.2.0", "0.02"):
+        with pytest.raises(allowances.AllowanceError, match="is not a release line"):
+            allowances.parse(_allowance(line), "allowances.toml")
+
+
+def test_an_allowed_finding_passes_even_on_a_line_and_carries_its_allowance() -> None:
+    entry = allowances.Allowance("0.2", "wire", _ROUTE, "surface path removed", "nothing reads it")
+    verdict = gate.judge(
+        {"v0.2.0": [_finding(deprecated=False)]},
+        acknowledged=False,
+        line=True,
+        allowed=allowances.admitting([entry], None, ["v0.2.0"]),
+    )[0]
+    assert verdict.passes and verdict.allowance == entry and not verdict.inherited
+
+
+def test_an_allowance_admits_only_for_a_candidate_above_its_line_against_that_lines_releases() -> None:
+    entry = allowances.Allowance("0.2", "wire", _ROUTE, "surface path removed", "nothing reads it")
+    judged = ["v0.2.1", "v0.3.0"]
+    admitted = {("v0.2.1", "wire", _ROUTE, "surface path removed"): entry}
+    assert allowances.admitting([entry], None, judged) == admitted
+    assert allowances.admitting([entry], (0, 3), judged) == admitted
+    assert allowances.admitting([entry], (0, 2), judged) == {}
+    assert allowances.admitting([entry], (0, 1), judged) == {}

@@ -9,6 +9,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.lifecycle.model import (
@@ -16,14 +17,14 @@ from blizzard.runner.lifecycle.model import (
     HeldChunkMove,
     TakeoverHolds,
     apply_move,
-    chunk_paused,
     gate_resolution_lease_id,
     held_chunk_move,
     held_chunk_reads_local_epoch,
+    spawn_hold,
 )
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
-from blizzard.runner.node_steps.chunk_state import ChunkGate
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import Completion
 
@@ -41,9 +42,13 @@ class HeldChunk:
     ctx: HeldChunkContext
     chunk_id: str
 
-    def apply(self, outcome: ApplyOutcome, next_envelope: Envelope | None, bindings: list[EnvBinding]) -> None:
+    def apply(
+        self, outcome: ApplyOutcome | Unrecognized, next_envelope: Envelope | None, bindings: list[EnvBinding]
+    ) -> None:
         # Only a next node can be spawned into a pause, so only then is the chunk's pause read.
-        move = apply_move(outcome, next_envelope, chunk_paused=next_envelope is not None and self._chunk_paused())
+        view = self._chunk_view() if next_envelope is not None else None
+        hold = spawn_hold(view) if view is not None else None
+        move = apply_move(outcome, next_envelope, hold=hold)
         if move is ApplyMove.ENTER_NEXT and next_envelope is not None:
             Spawner(self.ctx).enter_node(
                 self.chunk_id, next_envelope, Environments(bindings).acquired, via="apply-response"
@@ -51,6 +56,12 @@ class HeldChunk:
         elif move is ApplyMove.HOLD_PAUSED:
             # The binding is held; the node entry after the pause lifts is `adopt_enters_node`'s.
             _log.info("next node waits out the chunk's pause — holding envs", chunk_id=self.chunk_id)
+        elif move is ApplyMove.HOLD_STATUS_UNRECOGNIZED and view is not None:
+            _log.warning(
+                "next node waits — chunk status not recognized, holding envs",
+                chunk_id=self.chunk_id,
+                status=str(view.status),
+            )
         elif move is ApplyMove.HOLD_FOR_HUB_NODE:
             _log.info("hub node took over — holding envs until terminal", chunk_id=self.chunk_id)
         elif move is ApplyMove.RELEASE_MIGRATED:
@@ -62,6 +73,12 @@ class HeldChunk:
             self.ctx.env_release.release_chunk(self.chunk_id)
         elif move is ApplyMove.HOLD_AT_GATE:
             _log.info("chunk parked at human gate", chunk_id=self.chunk_id)  # waiting_on_human
+        elif isinstance(outcome, Unrecognized):
+            _log.warning(
+                "apply outcome not recognized — holding envs for the hub's chunk status",
+                chunk_id=self.chunk_id,
+                outcome=outcome.raw,
+            )
 
     def drive(self, takeovers: TakeoverHolds | None = None) -> None:
         """Drive a chunk the runner holds with no active lease (:func:`held_chunk_move`)."""
@@ -115,12 +132,12 @@ class HeldChunk:
             self._poll_hub_node(view.latest_epoch)
         # Every other shape keeps its binding and is polled again next tick.
 
-    def _chunk_paused(self) -> bool:
-        """A per-chunk pause stands at the hub. Unreadable reads as not paused."""
+    def _chunk_view(self) -> ChunkState | None:
+        """The chunk's hub view, or ``None`` when unreadable — read as nothing holding the next node."""
         try:
-            return chunk_paused(self.ctx.chunk_views.get(self.chunk_id))
+            return self.ctx.chunk_views.get(self.chunk_id)
         except HubClientError:
-            return False
+            return None
 
     def _poll_hub_node(self, latest_epoch: int | None) -> None:
         """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance`` — the

@@ -52,7 +52,7 @@ export function needsYouRows(
   }
   for (const chunk of chunks) {
     if (rows.has(chunk.chunk_id)) continue;
-    const tone = STATUS_TONE[chunk.status];
+    const tone = STATUS_TONE(chunk.status);
     if (tone !== 'needs' && tone !== 'waiting') continue;
     rows.set(chunk.chunk_id, {
       chunkId: chunk.chunk_id,
@@ -69,7 +69,7 @@ export function needsYouRows(
 /** Chunks in `STATUS_TONE`'s running lane (`running` + `delivering`) — the "In motion" rows. */
 export function inMotionRows(chunks: readonly ChunkSummary[], hostNames: ReadonlyMap<string, string>): readonly MotionRow[] {
   return chunks
-    .filter((chunk) => STATUS_TONE[chunk.status] === 'running')
+    .filter((chunk) => STATUS_TONE(chunk.status) === 'running')
     .map((chunk) => ({
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),

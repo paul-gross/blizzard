@@ -1,5 +1,6 @@
 import type * as runnerApi from '../api/runner';
 import { compactRef } from '../core/compact-ref';
+import { openLookup, unlisted } from '../core/open-lookup';
 import { SampleMissReason } from '../api/hub';
 import { ageMs, formatAge, formatHeldFor, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
@@ -68,21 +69,28 @@ export function runnerWorkspaceRows(
   ];
 }
 
-/** Operator-facing text per closed-set miss reason — what to do about it, not the machine word. */
-export const MISS_REASON_TEXT: Readonly<Record<runnerApi.SampleMissReason, string>> = {
-  credential_lapsed: 'credential lapsed: log in again',
-  credential_unreadable: 'credential unreadable',
-  endpoint_unreachable: 'endpoint unreachable',
-  response_unparseable: 'response unparseable',
-};
+/** Operator-facing text per miss reason — what to do about it, not the machine word. A reason
+ * this build does not know reads raw. */
+export const MISS_REASON_TEXT = openLookup<runnerApi.SampleMissReason, string>(
+  {
+    credential_lapsed: 'credential lapsed: log in again',
+    credential_unreadable: 'credential unreadable',
+    endpoint_unreachable: 'endpoint unreachable',
+    response_unparseable: 'response unparseable',
+  },
+  (raw) => raw,
+);
 
-/** Operator-facing text per closed-set renewal failure reason. */
-export const RENEWAL_FAILURE_TEXT: Readonly<Record<runnerApi.RenewalFailureReason, string>> = {
-  renewer_unavailable: 'vendor CLI unavailable',
-  timed_out: 'timed out',
-  vendor_refused: 'vendor refused',
-  protocol_error: 'unreadable vendor response',
-};
+/** Operator-facing text per renewal failure reason; a reason this build does not know reads raw. */
+export const RENEWAL_FAILURE_TEXT = openLookup<runnerApi.RenewalFailureReason, string>(
+  {
+    renewer_unavailable: 'vendor CLI unavailable',
+    timed_out: 'timed out',
+    vendor_refused: 'vendor refused',
+    protocol_error: 'unreadable vendor response',
+  },
+  (raw) => raw,
+);
 
 /** `-34s ago` since the newest sampling attempt, or `never` when there is none or it is skew-broken. */
 export function sampledAgoLabel(sampledAt: string | null, now: number): string {
@@ -95,7 +103,7 @@ export function sampledAgoLabel(sampledAt: string | null, now: number): string {
 export function conditionLabel(ok: boolean | null, missReason: runnerApi.SampleMissReason | null): string {
   if (ok === null) return 'never sampled';
   if (ok) return 'ok';
-  return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT[missReason]}`;
+  return `miss: ${missReason === null ? 'unknown' : MISS_REASON_TEXT(missReason)}`;
 }
 
 /** The newest credential renewal in operator words, aged against `now` — `null` when the
@@ -112,9 +120,11 @@ export function renewalLabel(
     case 'renewed':
       return `renewed ${ago}`;
     case 'failed':
-      return `failed (${failureReason === null ? 'unknown cause' : RENEWAL_FAILURE_TEXT[failureReason]}) ${ago}`;
+      return `failed (${failureReason === null ? 'unknown cause' : RENEWAL_FAILURE_TEXT(failureReason)}) ${ago}`;
     case 'unrecorded':
       return `attempted ${ago}, outcome not recorded`;
+    default:
+      return `${unlisted(result)} ${ago}`;
   }
 }
 

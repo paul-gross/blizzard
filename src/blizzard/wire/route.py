@@ -6,10 +6,14 @@ ids — and its bearer token names the runner. Exactly one claim per chunk is ac
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.envelope import NodeEnvelope
+from blizzard.wire.vocabulary import OPEN
 
 
 class RouteClaim(BaseModel):
@@ -73,7 +77,7 @@ class RouteClaimIncompatibleDenial(BaseModel):
     chunk_id: str
     incompatible_runner_id: str
     detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
-    reason: ClaimDenialReason = ClaimDenialReason.CAPABILITY
+    reason: Annotated[ClaimDenialReason | Unrecognized, OPEN] = ClaimDenialReason.CAPABILITY
 
 
 class RouteClaimPausedDenial(BaseModel):

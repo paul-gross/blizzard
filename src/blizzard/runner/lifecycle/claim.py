@@ -374,6 +374,11 @@ class InterruptedClaims:
                 takeover_id=takeover.takeover_id,
             )
             return
+        if move is InterruptedClaimMove.HOLD_STATUS_UNRECOGNIZED:
+            _log.warning(
+                "holding interrupted claim — chunk status not recognized", chunk_id=chunk_id, status=str(view.status)
+            )
+            return
         if move is InterruptedClaimMove.RESUME_REQUEUED:
             self._resume_requeued(chunk_id, view.latest_epoch)
         elif move is InterruptedClaimMove.ADOPT:

@@ -6,10 +6,14 @@ the hub tells steps."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.traces import ReceiverStatus, TraceReplayRequest, TraceStatusResponse
+from blizzard.wire.vocabulary import OPEN
 
 __all__ = [
     "HarnessSignalStatus",
@@ -27,7 +31,7 @@ class HarnessSignalStatus(BaseModel):
     """One signal of the harness bindings' telemetry: what the enabled bindings together do with its exporter, and
     what the runner's receiver for it has accepted and dropped since start, in that signal's own unit."""
 
-    outcome: HarnessTelemetryOutcome
+    outcome: Annotated[HarnessTelemetryOutcome | Unrecognized, OPEN]
     accepted: int
     dropped: int
 

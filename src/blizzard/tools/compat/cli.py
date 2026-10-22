@@ -5,7 +5,8 @@
     blizzard-compat --tag VERSION [--json]   HEAD judged as the tag v<VERSION>; writes compat-breaks.json
 
 HEAD's documents and window are read from the working tree; a release's documents, and the window at
-the range's base, only through ``git show``. Nothing at a tag is imported or run. This module is the
+the range's base, only through ``git show``; the allowances from the working tree's
+``contracts/compat/allowances.toml``. Nothing at a tag is imported or run. This module is the
 composition root: it alone reads the packaged window type and maps it to compat's own ``Window``."""
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.tree import CHANGES_DIR, README, read_tree
-from blizzard.tools.compat import gate
+from blizzard.tools.compat import allowances, gate
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import (
     Release,
@@ -32,6 +33,7 @@ from blizzard.tools.compat.releases import (
     newest_stable,
     on_line,
     parse_release,
+    parse_releases,
     releases_document,
     supported,
 )
@@ -105,6 +107,8 @@ def _findings(outcomes: Sequence[Outcome]) -> list[Violation]:
 
 
 def _state(verdict: gate.Verdict) -> str:
+    if verdict.allowance is not None:
+        return "allowance"
     if verdict.inherited:
         return "inherited"
     return "allowed" if verdict.passes else "BREAK"
@@ -113,6 +117,7 @@ def _state(verdict: gate.Verdict) -> str:
 def _print_release(release: str, outcomes: Sequence[Outcome], verdicts: Sequence[gate.Verdict]) -> None:
     click.echo(f"{release}:")
     states = {(v.release, v.violation): _state(v) for v in verdicts}
+    because = {(v.release, v.violation): v.allowance for v in verdicts if v.allowance is not None}
     for outcome in outcomes:
         if outcome.findings is None:
             click.echo(f"  {outcome.document} ({outcome.surface}): no baseline — {release} has no {outcome.document}")
@@ -123,6 +128,9 @@ def _print_release(release: str, outcomes: Sequence[Outcome], verdicts: Sequence
             for finding in outcome.findings:
                 mark = ", deprecated in baseline" if finding.deprecated else ""
                 click.echo(f"    - [{states[(release, finding)]}] {finding.surface} {finding}{mark}")
+                if (release, finding) in because:
+                    allowance = because[(release, finding)]
+                    click.echo(f"      because (line {allowance.line}): {allowance.because}")
 
 
 def _entry(verdict: gate.Verdict) -> dict[str, Any]:
@@ -136,6 +144,11 @@ def _entry(verdict: gate.Verdict) -> dict[str, Any]:
         "deprecated": violation.deprecated,
         "inherited": verdict.inherited,
         "passes": verdict.passes,
+        "allowance": (
+            None
+            if verdict.allowance is None
+            else {"line": verdict.allowance.line, "because": verdict.allowance.because}
+        ),
     }
 
 
@@ -163,6 +176,31 @@ def _read_base_window(repo: Repository, rev: str) -> Window | None:
         return _window(VersionWindow.parse(text, f"{rev}:{_WINDOW_PATH}"))
     except VersionWindowError as error:
         raise click.ClickException(str(error)) from error
+
+
+def _read_allowances(root: Path) -> list[allowances.Allowance]:
+    """The committed allowance entries; a tree without the file records none."""
+    source = root / allowances.ALLOWANCES_PATH
+    if not source.is_file():
+        return []
+    try:
+        return allowances.parse(source.read_text(), str(source))
+    except allowances.AllowanceError as error:
+        raise click.ClickException(str(error)) from error
+
+
+def _stale(
+    entries: Sequence[allowances.Allowance],
+    in_window: Sequence[Release],
+    outcomes: dict[str, list[Outcome]],
+) -> list[allowances.Stale]:
+    """The entries that fail this run: ``outcomes`` holds every release it judges."""
+    return allowances.stale(
+        entries,
+        in_window={r.tag for r in in_window},
+        judged=set(outcomes),
+        findings={(tag, f.surface, f.where, f.reason) for tag, o in outcomes.items() for f in _findings(o)},
+    )
 
 
 def _selected(tags: list[str], window: Window, line: str | None) -> list[Release]:
@@ -258,6 +296,7 @@ def _emit(
     outcomes: dict[str, list[Outcome]],
     verdicts: Sequence[gate.Verdict],
     window_findings: Sequence[Violation],
+    stale: Sequence[allowances.Stale],
 ) -> None:
     if as_json:
         click.echo(
@@ -266,6 +305,16 @@ def _emit(
                     "releases": [r.tag for r in releases],
                     "findings": _sorted_entries(verdicts),
                     "window": [{"where": f.where, "reason": f.reason} for f in window_findings],
+                    "allowances": [
+                        {
+                            "line": s.allowance.line,
+                            "surface": s.allowance.surface,
+                            "where": s.allowance.where,
+                            "reason": s.allowance.reason,
+                            "problem": s.problem,
+                        }
+                        for s in stale
+                    ],
                 },
                 indent=2,
             )
@@ -278,6 +327,12 @@ def _emit(
         click.echo("no release is supported yet; nothing has shipped that this change could break.")
     for finding in window_findings:
         click.echo(f"window: [BREAK] {finding.where}: {finding.reason}")
+    for entry in stale:
+        allowance = entry.allowance
+        click.echo(
+            f"allowance: [BREAK] line {allowance.line} {allowance.surface} {allowance.where}: {allowance.reason}"
+            f" — {entry.problem}"
+        )
 
 
 def _run(commits: str | None, line: str | None, as_json: bool) -> None:
@@ -294,6 +349,10 @@ def _run(commits: str | None, line: str | None, as_json: bool) -> None:
     if commits and not line:
         say(f"change acknowledges a break with `!`: {'yes' if acknowledged else 'no'}")
     declared = _declared(repo, root, base_rev) if base_rev else frozenset()
+    entries = _read_allowances(root)
+    allowed = allowances.admitting(
+        entries, _line_key(line_of(line)) if line else None, [r.tag for r in parse_releases(tags)]
+    )
     base_documents = _base_documents(repo, base_rev) if base_rev else {}
 
     def judged(selected: Sequence[Release], documents: dict[str, dict[str, Any]]) -> dict[str, list[Outcome]]:
@@ -307,6 +366,7 @@ def _run(commits: str | None, line: str | None, as_json: bool) -> None:
             declarable=window.opening is not None,
             declared=declared,
             inherited=_inherited(repo, base_rev, selected, base_documents) if base_rev else (),
+            allowed=allowed,
         )
 
     head_documents = _head_documents(root)
@@ -329,8 +389,14 @@ def _run(commits: str | None, line: str | None, as_json: bool) -> None:
             head_verdicts=verdicts,
             newest_stable_major=stable.major if stable else None,
         )
-    _emit(as_json, releases, outcomes, verdicts, window_findings)
-    raise SystemExit(1 if window_findings or any(not v.passes for v in verdicts) else 0)
+    stale = _stale(entries, supported(tags, window), outcomes)
+    _emit(as_json, releases, outcomes, verdicts, window_findings, stale)
+    raise SystemExit(1 if window_findings or stale or any(not v.passes for v in verdicts) else 0)
+
+
+def _line_key(line: str) -> tuple[int, int]:
+    major, minor = line.split(".")
+    return int(major), int(minor)
 
 
 def _candidate(version: str) -> Release:
@@ -349,7 +415,8 @@ def _run_tag(version: str, as_json: bool) -> None:
     """Judge HEAD as the tag ``v<version>`` against each supported release, each read over its own ``R..HEAD``.
 
     A candidate or release above every stable major admits what an open ``master`` admits; any other minor or
-    major admits deprecated breaks only; a patch admits nothing. Always writes ``compat-breaks.json``."""
+    major admits deprecated breaks only; a patch admits nothing. An allowance admits for a candidate on a later line
+    than its own, a patch included. Always writes ``compat-breaks.json``."""
     candidate = _candidate(version)
     repo = Repository(Path.cwd())
     root = repo.toplevel()
@@ -360,6 +427,8 @@ def _run_tag(version: str, as_json: bool) -> None:
     stable = newest_stable(tags)
     patch = candidate.patch >= 1
     declarable = not patch and (stable is None or candidate.major > stable.major)
+    entries = _read_allowances(root)
+    allowed = allowances.admitting(entries, (candidate.major, candidate.minor), [r.tag for r in releases])
     head_documents = _head_documents(root)
     outcomes = {r.tag: _check_release(repo, r.tag, head_documents) for r in releases}
     verdicts: list[gate.Verdict] = []
@@ -370,16 +439,18 @@ def _run_tag(version: str, as_json: bool) -> None:
             line=patch,
             declarable=declarable,
             declared=_declared(repo, root, release.tag),
+            allowed=allowed,
         )
     breaks = [
-        {key: entry[key] for key in ("release", "surface", "where", "reason")}
+        {key: entry[key] for key in ("release", "surface", "where", "reason", "allowance")}
         for entry in _sorted_entries([v for v in verdicts if v.passes])
     ]
     (root / BREAKS_FILE).write_text(json.dumps({"tag": candidate.tag, "breaks": breaks}, indent=2) + "\n")
     if not as_json:
         click.echo(f"judging {candidate.tag}; supported releases: " + (", ".join(r.tag for r in releases) or "none"))
-    _emit(as_json, releases, outcomes, verdicts, [])
-    raise SystemExit(1 if any(not v.passes for v in verdicts) else 0)
+    stale = _stale(entries, releases, outcomes)
+    _emit(as_json, releases, outcomes, verdicts, [], stale)
+    raise SystemExit(1 if stale or any(not v.passes for v in verdicts) else 0)
 
 
 @main.command()

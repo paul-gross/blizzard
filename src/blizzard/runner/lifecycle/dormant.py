@@ -189,6 +189,8 @@ class DormantSession:
             Attempt(self.ctx, lease).preempt(via="resume")
         elif disposition is RestartDisposition.RESTART:
             self._restart()
+        elif disposition is RestartDisposition.HOLD:
+            _log.warning("restart held — chunk status not recognized", chunk_id=lease.chunk_id, status=str(view.status))
         else:
             Attempt(self.ctx, lease).abandon(via="resume")
 

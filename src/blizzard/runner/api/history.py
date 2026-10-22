@@ -73,7 +73,7 @@ class _MigrationEntry(_HistoryEntry):
             to_node=to_label or None,
             choice=m.choice_name,
             graph_name=m.to_graph_name,
-            detail=m.source,
+            detail=None if m.source is None else str(m.source),
             recorded_at=m.recorded_at,
         )
 

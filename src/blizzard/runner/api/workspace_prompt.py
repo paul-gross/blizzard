@@ -6,13 +6,15 @@ A workspace the host does not declare answers ``404``."""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 router = APIRouter(prefix="/api/host/workspaces/{workspace_id}", tags=["host"])
 
@@ -26,7 +28,7 @@ class WorkspacePromptResponse(WireModel):
 
     prompt: str
     #: Which of the two lanes produced `prompt`: the runtime override, or the host's config.
-    source: WorkspacePromptSource = "config"
+    source: Annotated[WorkspacePromptSource | Unrecognized, OPEN] = "config"
 
 
 class WorkspacePromptReplacement(BaseModel):

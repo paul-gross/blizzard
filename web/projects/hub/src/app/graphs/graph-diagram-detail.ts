@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type GraphNodeView, type GraphView, hubApi, KitFactList, type KitFact, KitPanel, KitProseBlock } from 'fleet';
+import { type GraphNodeView, type GraphView, hubApi, KitFactList, type KitFact, KitPanel, KitProseBlock, unlisted } from 'fleet';
 import {
   type DiagramSelection,
   type ResolvedChoiceSelection,
@@ -52,13 +52,16 @@ export class GraphDiagramDetail {
   /** The selected edge's target, rendered for the "Target" row: a node's name, the
    * reserved `done` terminal, or the target graph's name for a migration edge. */
   protected targetLabel(target: EdgeTarget): string {
-    switch (target.kind) {
+    const kind = target.kind;
+    switch (kind) {
       case hubApi.ChoiceTargetKind.NODE:
         return this.nodeName(target.nodeId);
       case hubApi.ChoiceTargetKind.DONE:
         return 'done';
       case hubApi.ChoiceTargetKind.GRAPH:
         return target.targetGraph;
+      default:
+        return unlisted(kind);
     }
   }
 

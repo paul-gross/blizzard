@@ -44,7 +44,7 @@ def _user_view(member: Member, *, identities: list[Identity], actor: ResolvedIde
         role=wire_role(member.role, hub_admin=member.hub_admin),
         created_at=iso_utc(user.created_at),
         identities=identity_views(identities),
-        assignable_roles=revoke + assignable_roles(actor=actor, subject=member, admins=admins),
+        assignable_roles=[*revoke, *assignable_roles(actor=actor, subject=member, admins=admins)],
     )
 
 

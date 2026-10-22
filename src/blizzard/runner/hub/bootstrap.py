@@ -24,6 +24,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.hub.client import (
     IRunnerAdder,
     ITokenIdentityReader,
@@ -44,6 +45,8 @@ class BootstrapStop(StrEnum):
     RETIRED_RUNNER = "retired_runner"
     #: The hub received no token, though one was presented.
     TOKEN_NOT_RECEIVED = "token_not_received"
+    #: The hub refused the held token for a reason this build does not know; ``reason`` carries it raw.
+    TOKEN_REFUSED = "token_refused"
     #: A replacement token would go unread: the process environment supplies the held one.
     TOKEN_OVERRIDDEN = "token_overridden"
     #: No token is held, but the store belongs to runner ``runner_id``, and adding another was not allowed.
@@ -58,7 +61,8 @@ class BootstrapStop(StrEnum):
 class BootstrapStopped(Exception):
     """Joining stopped with nothing added; ``stop`` says why. ``runner_id`` names the runner a
     revoked token, a retired runner, or a store belongs to, or the one configured; ``held`` is the held token's
-    runner when it is another tenant's or not the configured one; ``sharing`` names a shared store's runners."""
+    runner when it is another tenant's or not the configured one; ``sharing`` names a shared store's runners;
+    ``reason`` is the raw refusal reason the hub gave."""
 
     def __init__(
         self,
@@ -67,12 +71,14 @@ class BootstrapStopped(Exception):
         runner_id: str | None = None,
         held: TokenIdentity | None = None,
         sharing: tuple[str, ...] = (),
+        reason: str | None = None,
     ) -> None:
         super().__init__(stop.value)
         self.stop = stop
         self.runner_id = runner_id
         self.held = held
         self.sharing = sharing
+        self.reason = reason
 
 
 class StoreShared(Exception):
@@ -147,6 +153,8 @@ def kept_identity(
         raise BootstrapStopped(BootstrapStop.REVOKED_TOKEN, runner_id=answer.runner_id)
     if answer.reason is RunnerTokenRefusalReason.RETIRED:
         raise BootstrapStopped(BootstrapStop.RETIRED_RUNNER, runner_id=answer.runner_id)
+    if isinstance(answer.reason, Unrecognized):
+        raise BootstrapStopped(BootstrapStop.TOKEN_REFUSED, runner_id=answer.runner_id, reason=answer.reason.raw)
     raise BootstrapStopped(BootstrapStop.TOKEN_NOT_RECEIVED)
 
 

@@ -387,7 +387,7 @@ class HttpHubClient:
         if resp.status_code == httpx.codes.UNAUTHORIZED:
             refusal = _identity_refusal(resp)
             if refusal is not None:
-                _log.info("hub call refused", operation=operation, status=resp.status_code, reason=refusal.reason)
+                _log.info("hub call refused", operation=operation, status=resp.status_code, reason=str(refusal.reason))
                 return refusal
         self._raise_for_status(resp, operation, not_found_as=IdentityRouteMissing)
         try:
@@ -631,7 +631,7 @@ class HttpHostHubClient:
             _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
             return HostRefused(reason=reason, status=resp.status_code, detail=_detail(resp))
         if version_checked and (version := _version_refusal(resp)) is not None:
-            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=version.reason)
+            _log.info("hub call refused", operation=operation, status=resp.status_code, reason=str(version.reason))
             return HostRefused(reason=HostRefusalReason.VERSION_REFUSED, status=resp.status_code, detail=version.detail)
         if refused is not None and (error := refused(operation, resp)) is not None:
             _log.info("hub call refused", operation=operation, status=resp.status_code)

@@ -54,6 +54,10 @@
  * into another project, a file in the root importing its own package entry (save a spec or a story taking
  * the spec-support entry), and a cycle in a table.
  *
+ * Also the open-vocabulary sweeps (`open-vocabulary-sweep.js`, `bzh:frontend-open-vocabulary`), with no
+ * exemption list: every template `@switch` carries an `@default`, and a full `Record` keyed by a generated
+ * vocabulary is built through `openLookup` instead.
+ *
  * Finally, the containers-compose sweep (`containers-compose-sweep.js`,
  * `bzh:frontend-containers-compose`), with no exemption list: in a `@Component` class that calls a
  * query-bearing `inject*` helper, a `computed()` callback — and every same-class member it reaches
@@ -79,6 +83,12 @@ const {
   assertContainersComposeDetectorWorks,
   containersComposeViolations,
 } = require('./containers-compose-sweep');
+const {
+  assertTemplateSwitchDetectorWorks,
+  templateSwitchViolations,
+  assertVocabularyRecordDetectorWorks,
+  vocabularyRecordViolations,
+} = require('./open-vocabulary-sweep');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROJECTS_DIR = path.join(ROOT, 'projects');
@@ -1266,6 +1276,8 @@ function main() {
   assertClientCallPlacementDetectorWorks();
   assertPackageLayersDetectorWorks();
   assertContainersComposeDetectorWorks();
+  assertTemplateSwitchDetectorWorks();
+  assertVocabularyRecordDetectorWorks();
 
   const specFiles = walk(PROJECTS_DIR, ['.ts']);
 
@@ -1351,6 +1363,8 @@ function main() {
   const packageLayerLines = packageLayerViolations(LAYERED_PROJECTS, layeredFiles);
   const containersComposeLines = containersComposeViolations();
   const kitStories = kitStoriesViolations(readKitSources());
+  const templateSwitchLines = templateSwitchViolations();
+  const vocabularyRecordLines = vocabularyRecordViolations();
 
   if (
     realTimerViolations.length > 0 ||
@@ -1366,7 +1380,9 @@ function main() {
     backendCitationLines.length > 0 ||
     clientCallLines.length > 0 ||
     packageLayerLines.length > 0 ||
-    containersComposeLines.length > 0
+    containersComposeLines.length > 0 ||
+    templateSwitchLines.length > 0 ||
+    vocabularyRecordLines.length > 0
   ) {
     if (realTimerViolations.length > 0) {
       console.error('structural-gate: real timers in merge-gating specs:\n');
@@ -1484,6 +1500,23 @@ function main() {
           'really a backend classification goes onto the wire instead.',
       );
     }
+    if (templateSwitchLines.length > 0) {
+      console.error('structural-gate: template @switch blocks with no @default:\n');
+      for (const line of templateSwitchLines) console.error(line);
+      console.error(
+        '\nA newer server may send a value this build does not list: give the @switch an @default that shows ' +
+          'the raw value, or renders nothing where skipping it is the right reading.',
+      );
+    }
+    if (vocabularyRecordLines.length > 0) {
+      console.error('structural-gate: tables keyed by a generated vocabulary outside openLookup:\n');
+      for (const line of vocabularyRecordLines) console.error(line);
+      console.error(
+        '\nA full-table lookup returns undefined for a value a newer server adds: build the table through ' +
+          "`openLookup` (fleet), which stays exhaustive over the vocabulary and resolves an unknown value " +
+          'through its fallback.',
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -1501,6 +1534,8 @@ function main() {
   console.log('structural-gate: client-call placement sweep clean.');
   console.log('structural-gate: package-layers sweep clean.');
   console.log('structural-gate: containers-compose sweep clean.');
+  console.log('structural-gate: template-switch sweep clean.');
+  console.log('structural-gate: vocabulary-record sweep clean.');
 }
 
 main();

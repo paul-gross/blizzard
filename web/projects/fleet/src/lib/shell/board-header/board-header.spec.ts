@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { hiddenAtContainerWidth } from 'fleet/testing';
 
-import type { ChunkCountsView, ChunkStatus, ChunkSummary } from '../../api/hub';
+import type { ChunkCountsView, ChunkSummary } from '../../api/hub';
 import { LANES, STATUS_LANE } from '../../core/chunk-lanes';
 import { chunkCountsView } from '../../testing/builders/board';
 import { chunkUsageTotalView } from '../../testing/builders/chunk';
@@ -145,7 +145,7 @@ describe('BoardHeader', () => {
     // The exhaustive Record in chunk-lanes makes a new status a compile error there;
     // this asserts the consequence — the lanes account for the whole fleet, so
     // total always equals the sum of the cells beside it.
-    const everyStatus = Object.keys(STATUS_LANE) as ChunkStatus[];
+    const everyStatus = STATUS_LANE.keys;
     const el = await render(everyStatus.map((s, i) => chunk(`ch_${i}`, s)));
 
     const value = (key: string) =>

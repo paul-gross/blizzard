@@ -1,3 +1,5 @@
+import type { runnerApi } from 'fleet';
+
 import { hostRegistrationSummary } from './host-registration.model';
 
 describe('hostRegistrationSummary', () => {
@@ -43,5 +45,24 @@ describe('hostRegistrationSummary', () => {
         host_name: null,
         tenant_id: null,
       })?.lines).toEqual(['1 fact buffered']);
+  });
+
+  it('reads a state this build does not know raw, in the idle tone, rather than throwing', () => {
+    const state = 'suspended' as runnerApi.HostRegistrationView['state'];
+    const summary = hostRegistrationSummary({
+      state,
+      buffered_facts: 0,
+      answered_at: null,
+      detail: 'held for review',
+      held_runner_ids: [],
+      host_id: 'hs_1',
+      host_name: null,
+      tenant_id: null,
+    });
+
+    expect(summary?.label).toBe('suspended');
+    expect(summary?.tone).toBe('idle');
+    expect(summary?.state).toBe('suspended');
+    expect(summary?.lines).toEqual(['host hs_1', 'held for review']);
   });
 });

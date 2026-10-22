@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { type ChunkStatus, LANES, STATUS_TONE, toneColor } from 'fleet';
+import { type ChunkStatus, LANES, STATUS_TONE, toneColor, UNKNOWN_LANE } from 'fleet';
 import { finishedWord } from '../board-card/board-card.model';
 
 /** The drawings the icon carries: one per board lane, plus the two statuses that read
@@ -33,7 +33,8 @@ export function laneIconGlyph(lane: string, status: ChunkStatus | null): LaneIco
  * shape names the lane and the color its status; the running arc honors `prefers-reduced-motion`.
  *
  * Sizes to `--lane-icon-size` (16px by default). Its tooltip and accessible name are the lane's
- * heading, or the status word where the status picks the drawing.
+ * heading, or the status word where the status picks the drawing — the raw status in the unknown
+ * lane, which draws BACKLOG's inert stack.
  *
  * Presentational, input-only.
  */
@@ -54,9 +55,10 @@ export class LaneIcon {
 
   protected readonly glyph = computed(() => laneIconGlyph(this.lane(), this.status()));
 
-  protected readonly color = computed(() => toneColor(STATUS_TONE[this.status()]));
+  protected readonly color = computed(() => toneColor(STATUS_TONE(this.status())));
 
   protected readonly label = computed(() => {
+    if (this.lane() === UNKNOWN_LANE) return this.status();
     const glyph = this.glyph();
     if (glyph === 'paused') return 'Paused';
     if (glyph === 'stopped') return finishedWord('stopped');

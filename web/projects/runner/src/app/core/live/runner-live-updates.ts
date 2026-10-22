@@ -4,6 +4,7 @@ import {
   backoffDelay,
   INVALIDATION_COALESCE_WINDOW_MS,
   LiveInvalidationSpine,
+  openLookup,
   RUNNER_EVENT_STREAM_URL,
   RUNNER_EVENT_TYPES,
   type RunnerEventPayload,
@@ -35,7 +36,7 @@ function runnerKeys(data: { readonly runner_id: string; readonly chunk_id?: stri
 /**
  * The event → query-key invalidation registry (`bzh:frontend-disjoint-diffs`),
  * exhaustive over {@link RUNNER_EVENT_TYPES}: a new event type is a compile error
- * here until it is given a row.
+ * here until it is given a row, and a type a newer host sends before then stales nothing.
  *
  * The host serves one stream for every runner it holds. A runner-scoped frame carries
  * its `runner_id` and stales only that runner's keys ({@link runnerKeys});
@@ -77,10 +78,10 @@ export class RunnerLiveUpdates {
     destroyRef: this.destroyRef,
     streamUrl: RUNNER_EVENT_STREAM_URL,
     eventTypes: RUNNER_EVENT_TYPES,
-    registry: RUNNER_EVENT_INVALIDATION_REGISTRY as Record<
-      RunnerEventType,
-      (data: RunnerEventPayload) => readonly (readonly unknown[])[]
-    >,
+    registry: openLookup(
+      RUNNER_EVENT_INVALIDATION_REGISTRY as Record<RunnerEventType, (data: RunnerEventPayload) => readonly (readonly unknown[])[]>,
+      () => () => [],
+    ),
     coalesceWindowMs: INVALIDATION_COALESCE_WINDOW_MS,
     onAuthFailed: () => void this.handleAuthFailed(),
   });

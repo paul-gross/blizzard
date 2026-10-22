@@ -61,7 +61,7 @@ def harness_telemetry_lines(harness: dict[str, Any] | None) -> list[str]:
     lines = ["harness telemetry:"]
     for signal, unit in _SIGNAL_UNIT.items():
         entry = harness[signal]
-        line = f"  {signal}: {_OUTCOME_TEXT[entry['outcome']]}"
+        line = f"  {signal}: {_OUTCOME_TEXT.get(entry['outcome'], entry['outcome'])}"
         if entry["outcome"] == "captured":
             line += f"  ({entry['accepted']} {unit} accepted, {entry['dropped']} dropped)"
         lines.append(line)

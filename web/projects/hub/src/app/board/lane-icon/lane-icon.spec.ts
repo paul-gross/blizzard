@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { type ChunkStatus, STATUS_TONE, toneColor } from 'fleet';
+import { type ChunkStatus, STATUS_TONE, toneColor, UNKNOWN_LANE } from 'fleet';
 import { LaneIcon, laneIconGlyph } from './lane-icon';
 
 describe('laneIconGlyph', () => {
@@ -40,11 +40,18 @@ describe('LaneIcon', () => {
 
   it("colors itself by the status's shared tone", async () => {
     const el = await render('needs', 'needs_human');
-    expect(el.style.color).toBe(toneColor(STATUS_TONE.needs_human));
+    expect(el.style.color).toBe(toneColor(STATUS_TONE('needs_human')));
   });
 
   it('names a status-picked drawing by the status', async () => {
     const el = await render('done', 'stopped');
     expect(el.getAttribute('title')).toBe('Stopped');
+  });
+
+  it('names a status this build does not know by its raw value, in the inert idle tone', async () => {
+    const el = await render(UNKNOWN_LANE, 'newer-status' as ChunkStatus);
+    expect(el.getAttribute('data-glyph')).toBe('notready');
+    expect(el.getAttribute('title')).toBe('newer-status');
+    expect(el.style.color).toBe(toneColor('idle'));
   });
 });

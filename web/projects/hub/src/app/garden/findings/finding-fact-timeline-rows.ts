@@ -1,4 +1,4 @@
-import { type FindingFactView, formatAbsolute, formatWhen, type hubApi } from 'fleet';
+import { type FindingFactView, formatAbsolute, formatWhen, type hubApi, openLookup } from 'fleet';
 
 /** One entry in a finding's fact chain, re-read for display — the
  * chain itself carries no id per entry, so {@link deriveFactTimelineRows} keys each
@@ -20,19 +20,22 @@ export interface FindingFactRow {
 
 /** A short human label per fact kind — `add`/`observed` never carry a note (a
  * routine sweep recording or re-confirming a finding), `gone` and the
- * human-driven exit/reopen verbs do. */
-export const FACT_KIND_LABELS: Readonly<Record<hubApi.FindingFactKind, string>> = {
-  add: 'Added',
-  observed: 'Observed',
-  gone: 'Gone',
-  delivered: 'Delivered',
-  resolved: 'Resolved',
-  'gone-confirmed': 'Confirmed gone',
-  'wont-fix': "Won't fix",
-  'not-a-finding': 'Not a finding',
-  superseded: 'Superseded',
-  reopened: 'Reopened',
-};
+ * human-driven exit/reopen verbs do. A kind this build does not know reads raw. */
+const FACT_KIND_LABELS = openLookup<hubApi.FindingFactKind, string>(
+  {
+    add: 'Added',
+    observed: 'Observed',
+    gone: 'Gone',
+    delivered: 'Delivered',
+    resolved: 'Resolved',
+    'gone-confirmed': 'Confirmed gone',
+    'wont-fix': "Won't fix",
+    'not-a-finding': 'Not a finding',
+    superseded: 'Superseded',
+    reopened: 'Reopened',
+  },
+  (raw) => raw,
+);
 
 /**
  * A finding's whole fact chain, re-read as timeline rows — a pure map
@@ -41,11 +44,10 @@ export const FACT_KIND_LABELS: Readonly<Record<hubApi.FindingFactKind, string>> 
  * `chunk-timeline-rows.ts`'s own precedent).
  */
 export function deriveFactTimelineRows(facts: readonly FindingFactView[], now: Date): readonly FindingFactRow[] {
-  const labels: Readonly<Partial<Record<string, string>>> = FACT_KIND_LABELS;
   return facts.map((fact, index) => ({
     key: `${index}`,
     kind: fact.kind,
-    label: labels[fact.kind] ?? fact.kind,
+    label: FACT_KIND_LABELS(fact.kind),
     note: fact.note ?? null,
     actor: fact.actor ?? null,
     when: formatWhen(fact.recorded_at, now),

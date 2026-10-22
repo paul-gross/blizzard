@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { EscalationCause, type ChunkDetail, type ChunkEscalationView } from '../../api/hub';
 import { createCopyFlash } from '../../core/clipboard';
+import { openLookup } from '../../core/open-lookup';
 import { KitButton } from '../../kit/kit-button';
 
 /**
@@ -45,7 +46,7 @@ export class ChunkEscalation {
     if (!esc) return '';
     const cause = esc.cause;
     if (!cause) return `Escalated (epoch ${esc.epoch}).`;
-    const sentence = isEscalationCause(cause) ? CAUSE_SENTENCES[cause] : `Escalated: ${cause}`;
+    const sentence = CAUSE_SENTENCES(cause);
     return `${sentence} (epoch ${esc.epoch}).`;
   });
 
@@ -74,18 +75,16 @@ export class ChunkEscalation {
 
 /** The sentence each recognized escalation cause opens with, ahead of ` (epoch N).`.
  * The hub-authored causes (`bounce-cap`, `migration-target-unresolvable`) name no
- * worker — no worker was involved. */
-const CAUSE_SENTENCES: Readonly<Record<EscalationCause, string>> = {
-  [EscalationCause.RETRIES_EXHAUSTED]: 'The worker exhausted its retries',
-  [EscalationCause.OWNER_UNRESOLVABLE]: "The runner could not resolve the chunk's owner",
-  [EscalationCause.NO_ACCEPTABLE_HARNESS]: 'No acceptable harness was available for the chunk',
-  [EscalationCause.SPEND_CAP]: 'The worker hit its spend cap',
-  [EscalationCause.BOUNCE_CAP]: 'The chunk reached its bounce cap',
-  [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",
-};
-
-/** The wire carries an escalation's cause as an open string — a stored cause is free
- * text on ingest — so it narrows here, and an unrecognized value renders raw. */
-function isEscalationCause(value: string): value is EscalationCause {
-  return (Object.values(EscalationCause) as readonly string[]).includes(value);
-}
+ * worker — no worker was involved. The wire carries a cause as an open string — a stored
+ * cause is free text on ingest — so an unrecognized value renders raw. */
+const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
+  {
+    [EscalationCause.RETRIES_EXHAUSTED]: 'The worker exhausted its retries',
+    [EscalationCause.OWNER_UNRESOLVABLE]: "The runner could not resolve the chunk's owner",
+    [EscalationCause.NO_ACCEPTABLE_HARNESS]: 'No acceptable harness was available for the chunk',
+    [EscalationCause.SPEND_CAP]: 'The worker hit its spend cap',
+    [EscalationCause.BOUNCE_CAP]: 'The chunk reached its bounce cap',
+    [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",
+  },
+  (raw) => `Escalated: ${raw}`,
+);

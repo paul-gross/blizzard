@@ -7,10 +7,12 @@ one more event kind. A projected escalation row carries a **negative** ``id``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class EventView(WireModel):
@@ -21,7 +23,7 @@ class EventView(WireModel):
 
     id: int
     recorded_at: str  # iso-utc
-    severity: EventLogSeverity
+    severity: Annotated[EventLogSeverity | Unrecognized, OPEN]
     kind: str
     runner_id: str | None = None
     runner_name: str | None = None

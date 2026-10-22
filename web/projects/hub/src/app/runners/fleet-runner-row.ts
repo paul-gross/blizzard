@@ -109,6 +109,6 @@ export class FleetRunnerRow {
   ]);
 
   protected toneFor(status: ChunkStatus): Tone {
-    return STATUS_TONE[status];
+    return STATUS_TONE(status);
   }
 }

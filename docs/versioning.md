@@ -8,21 +8,30 @@ carries no promise; `0.2.0` is the first release that does.
 
 ## What counts as breaking
 
-| Surface         | A release breaks it when it…                                                                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP API        | removes a route, adds a required field to a request, or removes a response field or changes its meaning                                                           |
-| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on |
-| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, or moves or removes a durable path under the runtime root                                   |
-| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                |
-| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                    |
-| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                        |
+| Surface         | A release breaks it when it…                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP API        | removes a route, adds a required field to a request, removes a response field or changes its meaning, or adds a response enum value a release's clients read closed |
+| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on   |
+| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, or moves or removes a durable path under the runtime root                                     |
+| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                  |
+| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                      |
+| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                          |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
 `tests/test_store_migrations.py::test_migrate_up_and_down`.
 
+Response enums are open from `0.3.0`, the first release whose clients tolerate a value they do not know; `0.2.0`'s
+clients do not. A consumer of a response must tolerate an unknown enum value — show it, skip it, or defer to the
+server's own state — and never fail on it. A response enum gaining a value is additive against a release whose own
+OpenAPI document marks every response position reaching that enum open (`x-blizzard-open`), and breaking against any
+other release, `0.2.0` included. Removing a value, a request enum losing a value, changing a value's meaning, a
+declared-closed field gaining a value, a closed response enum widened to a plain string, and a response union gaining a
+member all stay breaking against every release.
+
 Adding an optional config key, a new route, a new event type, a new trace attribute or span, a new nullable egress
-column, a new value of an enumerated egress column, or a migration that walks back cleanly is not breaking.
+column, a new value of an enumerated egress column, a new value of a response enum every supported release reads open,
+or a migration that walks back cleanly is not breaking.
 
 A release carries a surface whether or not a feature flag has it on, so it is held to these rules from that release on.
 
@@ -89,15 +98,17 @@ to, and is denied every claim until a later registration is admitted. The refuse
 other runners carry on, and retries registration on its tick; its panel's host page shows the refusal
 ([`docs/remote-runner.md`](./remote-runner.md)); a hub whose own line is below `floor` refuses to start. What is checked
 is every committed surface document against every supported release: `blizzard:compat` (`bzh:released-surface-additive`)
-fails a pull request or a push that breaks one unless the break is one the window admits, and `release.yml` runs it
-again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
+fails a pull request or a push that breaks one unless the break is one the window admits, or one a recorded allowance
+admits because that release line's consumers survive it ([`contracts/compat/README.md`](../contracts/compat/README.md)),
+and `release.yml` runs it again at a tag. [`docs/ci.md`](./ci.md) owns where each run happens.
 
-Most string-valued wire fields stay open strings, so a value the receiver does not recognize round-trips instead of
-failing. `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is the exception: it is typed as a closed
-`TurnKind` literal because a transcript viewer branches its rendering on it turn by turn. Closing it costs on both
-directions — a runner shipping a kind an older hub does not know 422s the whole ingest batch rather than storing it
-opaquely, and a stored segment carrying an out-of-vocabulary kind raises on read instead of round-tripping. Adding a
-value to the `TurnKind` vocabulary is therefore breaking against the skew window, not additive.
+A vocabulary field a response carries is open: a client reads a value outside the vocabulary it knows as unrecognized
+and carries the raw string on, instead of failing. A response field is declared closed only where acting without knowing
+the value would do wrong work, as for the fields a runner dispatches a node-step on; a gained value there is breaking. A
+field a server takes as input stays closed, so the server refuses a value it does not know with `422`. That includes a
+class used in both directions: `TurnSegmentView.kind` (`src/blizzard/wire/transcript_segment.py`) is a closed
+`TurnKind`, because a runner ships transcript segments to the hub. A runner sending a kind an older hub does not know
+fails the whole ingest batch, so adding a value to `TurnKind` is breaking against the skew window, not additive.
 
 The capability-matched fleet peek sits on the additive side of that same window from two directions at once:
 `POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a previous-minor runner simply never

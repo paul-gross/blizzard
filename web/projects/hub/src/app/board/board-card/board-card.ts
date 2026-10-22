@@ -146,7 +146,7 @@ export class BoardCardComponent {
    * in flight (RUNNING, WAIT/HUMAN, NEEDS HUMAN), and only when there is an open PR to link or a
    * merge to await. Landed commits never show here — the chunk detail owns the full history. */
   protected showsDelivery(card: BoardCard): boolean {
-    const lane = STATUS_LANE[card.status];
+    const lane = STATUS_LANE(card.status);
     return (
       !card.terminal &&
       (lane === 'running' || lane === 'waiting' || lane === 'needs') &&

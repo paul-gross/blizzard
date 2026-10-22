@@ -52,4 +52,8 @@ describe('deriveLeaseStatus', () => {
       tone: 'idle',
     });
   });
+
+  it('reads a state this build does not know raw, in the inert tone', () => {
+    expect(deriveLeaseStatus(lease({ state: 'draining' as runnerApi.LeaseView['state'] }))).toEqual({ label: 'DRAINING', tone: 'idle' });
+  });
 });

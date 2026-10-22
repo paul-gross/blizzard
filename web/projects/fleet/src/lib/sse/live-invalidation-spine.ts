@@ -6,8 +6,8 @@ import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
 /** {@link LiveInvalidationSpine}'s construction parameters: the stream to open, the
  * event kinds it carries, and the registry mapping each kind to the query keys it
- * stales. `onFrame`/`onAuthFailed` are invoked on every frame or auth failure,
- * uninterpreted. */
+ * stales — a lookup (`openLookup`) that stales nothing for a kind it does not list.
+ * `onFrame`/`onAuthFailed` are invoked on every frame or auth failure, uninterpreted. */
 export interface LiveInvalidationSpineOptions<TPayload extends object, TType extends string> {
   sse: SseService;
   queryClient: QueryClient;
@@ -17,7 +17,7 @@ export interface LiveInvalidationSpineOptions<TPayload extends object, TType ext
    * can reopen it on another URL. */
   streamUrl: string | (() => string);
   eventTypes: readonly TType[];
-  registry: Record<TType, (data: TPayload) => readonly (readonly unknown[])[]>;
+  registry: (type: TType) => (data: TPayload) => readonly (readonly unknown[])[];
   coalesceWindowMs: number;
   onFrame?: (type: TType, data: TPayload) => void;
   onAuthFailed?: () => void;
@@ -161,7 +161,7 @@ export class LiveInvalidationSpine<TPayload extends object, TType extends string
    * Reconnect-driven whole-tree invalidation (the `reopens()` watcher in {@link start})
    * bypasses this entirely and stays synchronous. */
   private dispatch(type: TType, data: TPayload): void {
-    const keys = this.opts.registry[type]?.(data) ?? [];
+    const keys = this.opts.registry(type)(data);
     for (const queryKey of keys) {
       this.pendingInvalidations.set(JSON.stringify(queryKey), queryKey);
     }

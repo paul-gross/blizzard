@@ -18,7 +18,7 @@
       />
     } @else {
       <div class="board" data-testid="board">
-        @for (col of columns; track col.key) {
+        @for (col of columns(); track col.key) {
           <app-board-column
             [column]="col"
             [cards]="cardsFor(col.key)"

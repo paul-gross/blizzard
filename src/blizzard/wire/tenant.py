@@ -13,8 +13,10 @@ from blizzard.foundation.tenants import (
     TenantDeletionState,
     TenantState,
 )
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.graph import GraphSyncEntry
+from blizzard.wire.vocabulary import OPEN
 
 #: A tenant's name: 1 to 64 characters, no leading or trailing whitespace; inner whitespace, line breaks included, is
 #: kept.
@@ -45,7 +47,7 @@ class TenantView(WireModel):
     name: str
     created_at: str
     created_by: str
-    state: TenantState
+    state: Annotated[TenantState | Unrecognized, OPEN]
     closed_at: str | None = None
 
 
@@ -54,7 +56,7 @@ class TenantDeletionResponse(WireModel):
     ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``)."""
 
     tenant_id: str
-    state: TenantDeletionState
+    state: Annotated[TenantDeletionState | Unrecognized, OPEN]
     rows_removed: int | None = None
 
 

@@ -1,9 +1,8 @@
 """The hub OpenAPI classifier (bzh:fleet-wire-additive), pure over two parsed documents.
 
-The wire selection is the hub↔runner surface whose consumers the skew window governs;
-``is_any_operation`` selects the whole document, which the HTTP API surface diffs. A
-finding is ``deprecated`` when the baseline marked the removed or changed operation,
-property, or enum schema ``deprecated: true``."""
+The wire selection is the hub↔runner surface the skew window governs; ``is_any_operation`` selects the whole document,
+which the HTTP API surface diffs. A finding is ``deprecated`` when the baseline marked the thing ``deprecated: true``. A
+gained response enum value is additive where the baseline marks every response position reaching it open."""
 
 from __future__ import annotations
 
@@ -18,6 +17,8 @@ _SURFACE_EXTRA_PATHS = ("/api/auth/jwks.json", "/api/auth/authorize")
 #: Single operations a runner reaches on an operator path — `runner init` adding its runner, or its host.
 _SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"), ("post", "/api/hosts"))
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
+#: The document mark an open response position carries; compat reads documents, never the code that writes them.
+_OPEN_MARK = "x-blizzard-open"
 
 #: Whether the operation at (path, method) is on the surface being diffed.
 type Selection = Callable[[str, str], bool]
@@ -79,7 +80,12 @@ def _response_schema(op: dict) -> dict | None:
 
 
 def _collect_reachable(
-    doc: dict, node: dict | None, role: str, roles: dict[str, set[str]], seen: set[tuple[str, str]]
+    doc: dict,
+    node: dict | None,
+    role: str,
+    roles: dict[str, set[str]],
+    seen: set[tuple[str, str]],
+    marks: dict[str, list[bool]],
 ) -> None:
     if node is None:
         return
@@ -87,37 +93,50 @@ def _collect_reachable(
     if ref:
         name = _ref_name(ref)
         roles.setdefault(name, set()).add(role)
+        if role == "response":
+            marks.setdefault(name, []).append(node.get(_OPEN_MARK) is True)
         key = (name, role)
         if key in seen:
             return
         seen.add(key)
-        _collect_reachable(doc, _schema_components(doc).get(name), role, roles, seen)
+        _collect_reachable(doc, _schema_components(doc).get(name), role, roles, seen, marks)
         return
     for sub in node.get("properties", {}).values():
-        _collect_reachable(doc, sub, role, roles, seen)
+        _collect_reachable(doc, sub, role, roles, seen, marks)
     if "items" in node:
-        _collect_reachable(doc, node["items"], role, roles, seen)
+        _collect_reachable(doc, node["items"], role, roles, seen, marks)
     if isinstance(node.get("additionalProperties"), dict):
-        _collect_reachable(doc, node["additionalProperties"], role, roles, seen)
+        _collect_reachable(doc, node["additionalProperties"], role, roles, seen, marks)
     for key in ("anyOf", "oneOf", "allOf"):
         for sub in node.get(key, []):
-            _collect_reachable(doc, sub, role, roles, seen)
+            _collect_reachable(doc, sub, role, roles, seen, marks)
 
 
 def _reachable_schemas(doc: dict, select: Selection) -> dict[str, set[str]]:
-    """Component schema name -> the surface roles ("request", "response") that reach it.
+    """Component schema name -> the surface roles ("request", "response") that reach it."""
+    return _walk(doc, select)[0]
+
+
+def _open_components(doc: dict, select: Selection) -> set[str]:
+    """The components whose every response position — each ``$ref`` a response walk meets — carries the open mark."""
+    return {name for name, marked in _walk(doc, select)[1].items() if all(marked)}
+
+
+def _walk(doc: dict, select: Selection) -> tuple[dict[str, set[str]], dict[str, list[bool]]]:
+    """Each reached component's roles, and the open mark of each response position that references it.
 
     ``seen`` is keyed by (schema, role): a schema reached by both roles must have its
     descendants walked once per role, not just whichever role's walk arrives first.
     """
     roles: dict[str, set[str]] = {}
     seen: set[tuple[str, str]] = set()
+    marks: dict[str, list[bool]] = {}
     for _path, _method, op in _surface_operations(doc, select):
-        _collect_reachable(doc, _request_schema(op), "request", roles, seen)
+        _collect_reachable(doc, _request_schema(op), "request", roles, seen, marks)
         for param in op.get("parameters", []):
-            _collect_reachable(doc, param.get("schema"), "request", roles, seen)
-        _collect_reachable(doc, _response_schema(op), "response", roles, seen)
-    return roles
+            _collect_reachable(doc, param.get("schema"), "request", roles, seen, marks)
+        _collect_reachable(doc, _response_schema(op), "response", roles, seen, marks)
+    return roles, marks
 
 
 # --- Classification ------------------------------------------------------------------
@@ -159,13 +178,13 @@ def _union_ref_names(schema: dict) -> set[str] | None:
     return {_ref_name(m["$ref"]) for m in members if "$ref" in m}
 
 
-def _inline_enum(schema: dict) -> list | None:
-    """The inline ``enum`` a property carries itself or on its non-null ``anyOf``/``oneOf`` member."""
+def _inline_enum(schema: dict) -> dict | None:
+    """The node carrying the inline ``enum`` of a property: itself, or its non-null ``anyOf``/``oneOf`` member."""
     if "enum" in schema:
-        return schema["enum"]
+        return schema
     for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])):
         if member.get("type") != "null" and "enum" in member:
-            return member["enum"]
+            return member
     return None
 
 
@@ -182,13 +201,21 @@ def _string_enum_target(base: dict, head: dict, head_schemas: dict) -> dict | No
 
 
 def _diff_enum_and_union(
-    label: str, base: dict, head: dict, is_request: bool, is_response: bool, violations: list[Violation]
+    label: str,
+    base: dict,
+    head: dict,
+    is_request: bool,
+    is_response: bool,
+    violations: list[Violation],
+    *,
+    is_open: bool = False,
 ) -> None:
+    """``is_open``: the baseline's clients tolerate a gained value here, so a gain is additive."""
     b_enum, h_enum = base.get("enum"), head.get("enum")
     if b_enum is not None and h_enum is not None:
         gained = set(h_enum) - set(b_enum)
         lost = set(b_enum) - set(h_enum)
-        if is_response and gained:
+        if is_response and gained and not is_open:
             violations.append(_violation(label, f"response enum gained value(s) {sorted(gained)}", base))
         if is_request and lost:
             violations.append(_violation(label, f"request enum lost value(s) {sorted(lost)}", base))
@@ -233,11 +260,12 @@ def _diff_property(
         if base_enum is not None:
             _diff_enum_and_union(
                 label,
-                {"enum": base_enum, "deprecated": bp.get("deprecated")},
+                {"enum": base_enum["enum"], "deprecated": bp.get("deprecated")},
                 target,
                 is_request,
                 is_response,
                 violations,
+                is_open=base_enum.get(_OPEN_MARK) is True,
             )
         return
 
@@ -257,7 +285,18 @@ def _diff_property(
     if is_request and _is_nullable(bp) and not _is_nullable(hp):
         violations.append(_violation(label, "request property dropped nullability", bp))
 
-    _diff_enum_and_union(label, bp, hp, is_request, is_response, violations)
+    _diff_enum_and_union(label, bp, hp, is_request, is_response, violations, is_open=bp.get(_OPEN_MARK) is True)
+
+    # A closed inline enum widened to a bare string gains values an older closed-`Literal` parse refuses.
+    base_enum = _inline_enum(bp)
+    if (
+        is_response
+        and base_enum is not None
+        and base_enum.get(_OPEN_MARK) is not True
+        and _inline_enum(hp) is None
+        and h_sig == ("string",)
+    ):
+        violations.append(_violation(label, "response enum widened to a plain string", bp))
 
     for key, suffix in (("items", "[]"), ("additionalProperties", "{}")):
         b_nested, h_nested = _nested_schema(bp, key), _nested_schema(hp, key)
@@ -273,8 +312,9 @@ def _diff_schema(
     is_response: bool,
     violations: list[Violation],
     head_schemas: dict | None = None,
+    is_open: bool = False,
 ) -> None:
-    _diff_enum_and_union(name, base, head, is_request, is_response, violations)
+    _diff_enum_and_union(name, base, head, is_request, is_response, violations, is_open=is_open)
 
     base_props: dict = base.get("properties", {})
     head_props: dict = head.get("properties", {})
@@ -367,12 +407,13 @@ def classify_spec_diff(
     """Every breaking change (bzh:fleet-wire-additive's declared classes) from ``base`` to
     ``head`` on the operations ``select`` keeps, reported under ``surface``. An empty list
     means the change is additive. ``deprecated`` is whether the baseline marked the removed
-    or changed thing deprecated."""
+    or changed thing deprecated; whether a response enum is open is read from ``base`` alone."""
     violations: list[Violation] = []
     _diff_paths_and_methods(base, head, violations, select)
 
     base_roles = _reachable_schemas(base, select)
     head_roles = _reachable_schemas(head, select)
+    base_open = _open_components(base, select)
     base_schemas = _schema_components(base)
     head_schemas = _schema_components(head)
     _diff_parameters(base, head, violations, head_schemas, select)
@@ -393,5 +434,6 @@ def classify_spec_diff(
             is_response="response" in role,
             violations=violations,
             head_schemas=head_schemas,
+            is_open=name in base_open,
         )
     return [replace(v, surface=surface) for v in violations]

@@ -47,7 +47,7 @@ def permit_view(permit: Permit, labels: ProjectLabelFields) -> PermitView:
         holder=permit.holder,
         capability=permit.capability,
         state=permit.state(),
-        verbs=list(permit.legal_verbs()),
+        verbs=[*permit.legal_verbs()],
         requested_at=iso_utc(permit.requested_at),
         requested_by=permit.requested_by,
         changed_at=iso_utc(latest.at) if latest is not None else None,

@@ -1,6 +1,6 @@
-// exemplar: bzh:frontend-containers-compose — each derivation proved as a pure function, no TestBed.
+// exemplar: bzh:frontend-containers-compose, bzh:frontend-open-vocabulary — each derivation proved as a pure function, no TestBed.
 
-import { type PermitView } from 'fleet';
+import { type PermitState, type PermitView } from 'fleet';
 import { permitProjectLabel, permitsLabel, withPendingPermitChanges } from './permits-page.model';
 
 const REQUESTED: PermitView = {
@@ -49,6 +49,12 @@ describe('permitProjectLabel', () => {
 describe('withPendingPermitChanges', () => {
   it('passes each permit through in its own state while nothing is in flight', () => {
     expect(withPendingPermitChanges([REQUESTED], [], [])).toEqual([{ permit: REQUESTED, state: 'requested', pending: false }]);
+  });
+
+  it('passes a state this build does not know through raw', () => {
+    const lapsed = { ...REQUESTED, state: 'lapsed' as PermitState };
+
+    expect(withPendingPermitChanges([lapsed], [], [])).toEqual([{ permit: lapsed, state: 'lapsed', pending: false }]);
   });
 
   it('shows a pending move as the state it enters', () => {

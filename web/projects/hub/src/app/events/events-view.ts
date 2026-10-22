@@ -1,13 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, type Tone, FleetWhen } from 'fleet';
+import { type EventView, hubApi, compactRef, runnerDisplayName, runnerTitle, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitChips, type KitChipOption, KitSelect, KitPanel, openLookup, type Tone, FleetWhen } from 'fleet';
 
-/** Each severity's chip label. */
-const SEVERITY_LABEL: Readonly<Record<hubApi.EventLogSeverity, string>> = {
-  info: 'Info',
-  warning: 'Warning',
-  critical: 'Critical',
-};
+/** Each severity's chip label; a severity this build does not know reads raw. */
+const SEVERITY_LABEL = openLookup<hubApi.EventLogSeverity, string>(
+  { info: 'Info', warning: 'Warning', critical: 'Critical' },
+  (raw) => raw,
+);
 
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
@@ -17,7 +16,7 @@ const SEVERITY_OPTIONS: readonly KitChipOption[] = [
   { value: '', label: 'All', testid: 'events-filter-all' },
   ...[...Object.values(hubApi.EventLogSeverity)].reverse().map((severity) => ({
     value: severity,
-    label: SEVERITY_LABEL[severity],
+    label: SEVERITY_LABEL(severity),
     testid: `events-filter-${severity}`,
   })),
 ];
@@ -25,12 +24,8 @@ const SEVERITY_OPTIONS: readonly KitChipOption[] = [
 /** `EventView.severity` → {@link Tone} — critical reads as the board's alarm red,
  * warning as its live-work amber, and info as its dim/idle color, so the badge
  * agrees with the rest of the board's derived-status vocabulary rather than
- * inventing a severity-only color scale. */
-const SEVERITY_TONE: Readonly<Record<EventView['severity'], Tone>> = {
-  critical: 'stale',
-  warning: 'running',
-  info: 'idle',
-};
+ * inventing a severity-only color scale. A severity this build does not know reads idle. */
+const SEVERITY_TONE = openLookup<EventView['severity'], Tone>({ critical: 'stale', warning: 'running', info: 'idle' }, () => 'idle');
 
 /**
  * The Events tab's presentational half — the operational
@@ -127,7 +122,7 @@ export class EventsView {
   }
 
   protected toneFor(severity: EventView['severity']): Tone {
-    return SEVERITY_TONE[severity] ?? 'idle';
+    return SEVERITY_TONE(severity);
   }
 
   protected shortId(id: string): string {

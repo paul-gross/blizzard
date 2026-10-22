@@ -7,8 +7,12 @@ A bounded, merged read over the same fact-derived vocabulary a live ``chunk-chan
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class ActivityView(WireModel):
@@ -32,7 +36,7 @@ class ActivityView(WireModel):
     cause: str | None = None
     graph_id: str | None = None
     # event-logged
-    severity: EventLogSeverity | None = None
+    severity: Annotated[EventLogSeverity | Unrecognized, OPEN] | None = None
     kind: str | None = None
     # runner-changed
     by: str | None = None

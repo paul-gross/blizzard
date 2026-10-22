@@ -16,7 +16,9 @@ import { HostPage } from './host-page';
  * subscriptions naming their spenders. A runner row's facts sit beside its held chunks at a
  * desktop width and genuinely stack under them at phone widths — the
  * `@media (max-width: 900px)` collapse jsdom cannot evaluate — with no horizontal overflow,
- * and every runner row and environment line inside the viewport.
+ * and every runner row and environment line inside the viewport. Served a registration state
+ * this build does not know, the title's registration badge reads the raw state at every width,
+ * with no horizontal overflow and no page error.
  *
  * Excluded from the default `ng test runner` run (`angular.json`'s `test.exclude`) because
  * it needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
@@ -162,6 +164,9 @@ const LEASES = {
   ],
 };
 
+/** A registration state a newer runner host may report that this build's generated vocabulary does not list. */
+const UNKNOWN_STATE = 'suspended_for_review';
+
 function route(method: string, path: string): unknown {
   if (method !== 'GET') return {};
   if (path === '/api/host/runners') return RUNNERS;
@@ -248,6 +253,56 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
         expect(root.querySelector('[data-testid="subscription-pace-group-spenders"]')?.textContent?.trim()).toBe(
           'spent by r-claude',
         );
+      }
+    } finally {
+      root.remove();
+      stub.restore();
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    }
+
+    expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it('reads an unknown registration state raw in the title badge at every width, with no overflow or page error', async () => {
+    const pageErrors: string[] = [];
+    const onError = (e: ErrorEvent) => pageErrors.push(e.message);
+    const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    const stub = stubRequestClient(runnerClient, (method, path) =>
+      method === 'GET' && path === '/api/host/registration' ? { ...REGISTRATION, state: UNKNOWN_STATE } : route(method, path),
+    );
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [HostPage],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HostPage);
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.display = 'block';
+    root.style.height = '800px';
+    document.body.appendChild(root);
+    await settle(fixture);
+
+    try {
+      for (const width of WIDTHS) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const label = `width=${width}`;
+        const vw = window.innerWidth;
+        const hostEl = root.querySelector<HTMLElement>('[data-testid="host-page"]')!;
+        expect(hostEl.scrollWidth, `${label}: the host page overflows horizontally`).toBeLessThanOrEqual(vw);
+
+        const badge = root.querySelector<HTMLElement>('[data-testid="host-registration-state"]');
+        expect(badge?.textContent?.trim(), `${label}: the registration badge does not read the raw state`).toBe(UNKNOWN_STATE);
+        expect(badge!.getBoundingClientRect().right, `${label}: the registration badge is past the viewport`).toBeLessThanOrEqual(vw);
       }
     } finally {
       root.remove();

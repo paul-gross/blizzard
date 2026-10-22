@@ -6,14 +6,12 @@ import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../..
 import type { Tone } from '../../kit';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { LensLink } from '../../core/lens-link';
+import { openLookup } from '../../core/open-lookup';
 
 /** A stated priority's badge tone — advice for the triaging human, never
- * a queue position, so it borrows the shared urgency ladder rather than inventing one. */
-const PRIORITY_TONE: Record<WorkItemPriority, Tone> = {
-  high: 'needs',
-  normal: 'waiting',
-  low: 'idle',
-};
+ * a queue position, so it borrows the shared urgency ladder rather than inventing one. A
+ * priority this build does not know reads `idle`. */
+const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal: 'waiting', low: 'idle' }, () => 'idle');
 
 /**
  * A chunk's resolved work items as a one-line-per-issue accordion — the
@@ -105,7 +103,7 @@ export class ChunkIssueList {
 
   /** A stated priority's badge tone, or `null` when the item states none. */
   protected priorityTone(item: WorkItemEntry): Tone | null {
-    return item.stated_priority ? PRIORITY_TONE[item.stated_priority] : null;
+    return item.stated_priority ? PRIORITY_TONE(item.stated_priority) : null;
   }
 
   /** A `user`-authored item's legible name — the resolved login, falling back to the

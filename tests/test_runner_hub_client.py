@@ -17,6 +17,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     ChunkEndedError,
@@ -703,8 +704,23 @@ def test_identity_reads_the_tenant_the_hub_answers_with(
     ],
 )
 def test_identity_returns_the_hubs_typed_refusal(refusal: TokenRefusal) -> None:
-    body = {"reason": refusal.reason.value, "runner_id": refusal.runner_id}
+    body = {"reason": str(refusal.reason), "runner_id": refusal.runner_id}
     assert _client(_refusing(401, json=body)).identity() == refusal
+
+
+@pytest.mark.unit
+def test_identity_carries_a_refusal_reason_it_does_not_know_raw() -> None:
+    body = {"reason": "gained", "runner_id": None}
+    assert _client(_refusing(401, json=body)).identity() == TokenRefusal(reason=Unrecognized("gained"))
+
+
+@pytest.mark.unit
+def test_an_incompatible_claim_carries_a_denial_reason_it_does_not_know_raw() -> None:
+    body = {"chunk_id": "ch_1", "incompatible_runner_id": "r1", "detail": "why", "reason": "gained"}
+    outcome = _client(lambda request: httpx.Response(409, json=body)).claim_route(
+        ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert outcome.denied_incompatible is not None and outcome.denied_incompatible.reason == Unrecognized("gained")
 
 
 @pytest.mark.unit
