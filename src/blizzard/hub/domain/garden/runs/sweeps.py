@@ -128,6 +128,12 @@ def sweep_coverage(declared: set[str], retired: set[str], facts: list[SweepFact]
     return live_declared, [fact for fact in facts if fact.scope_slug in declared]
 
 
+def declared_readings(declared: set[str], readings: list[MeasurementReading]) -> list[MeasurementReading]:
+    """The `readings` of a scope the routine declares — a measurement of a scope since unlinked
+    never joins the series."""
+    return [reading for reading in readings if reading.scope_slug in declared]
+
+
 class GardenSweepsService:
     """Reads a routine's last-swept table and measurement series, delegating the assembly
     to `compute_sweeps`. Takes the resolved `Routine` (`bzh:domain-takes-objects`) —
@@ -151,11 +157,9 @@ class GardenSweepsService:
             self._scopes.retired_slugs(routine.project_id),
             self._repo.last_swept_by_scope(routine.project_id, routine.name),
         )
-        measurements = [
-            reading
-            for reading in self._repo.measurements_in_window(routine.project_id, routine.name, since=since, until=until)
-            if reading.scope_slug in declared
-        ]
+        measurements = declared_readings(
+            declared, self._repo.measurements_in_window(routine.project_id, routine.name, since=since, until=until)
+        )
         return compute_sweeps(
             newest, measurements, routine_name=routine.name, scope_slugs=live_declared, since=since, until=until
         )
