@@ -43,7 +43,6 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
-from blizzard.runner.throttle.usage_limits import FloorClear
 from blizzard.tools.invariants import Invariants
 from tests.config_inputs import init_host, load_host_config, load_hub_config
 from tests.crash.support import (
@@ -2292,16 +2291,11 @@ def _usage_limit_mark_count(runner_dir: Path) -> int:
         return len(conn.execute(select(runner_schema.subscription_usage_limits.c.id)).all())
 
 
-def _clear_subscription_floor(runner_dir: Path) -> None:
-    """Open the floor of the subscription the runner spends by recording a clear through the host store — the
-    subscription-target clear's own write."""
+def _clear_subscription_floor(runner_dir: Path, port: int) -> None:
+    """Open the floor of the subscription the runner spends through the host's clear route."""
     slug = load_runner_config(runner_dir).subscriptions[0].slug
-    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
-    try:
-        host = build_host_stores(engine, errors=runner_store_errors(), clock=SystemClock())
-        host.usage_limits.record_floor_clear(slug, FloorClear(cleared_at=datetime.now(UTC), by="crash-sweep"))
-    finally:
-        engine.dispose()
+    with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+        host.post(f"/api/host/subscriptions/{slug}/floor/clear", json={"by": "crash-sweep"}).raise_for_status()
 
 
 @pytest.mark.parametrize("point", _USAGE_LIMIT_SWEEP)
@@ -2380,7 +2374,7 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
 
         # The limit named no reset, so the floor would hold for its fallback; a clear opens it now and
         # the SAME session finishes the work it was parked mid-way through.
-        _clear_subscription_floor(runner_dir)
+        _clear_subscription_floor(runner_dir, runner_port)
         assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
 
         after = _leases_for_chunk(runner_dir, chunk_id)

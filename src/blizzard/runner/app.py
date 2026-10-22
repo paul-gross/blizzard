@@ -61,6 +61,8 @@ from blizzard.runner.api.finding import router as finding_router
 from blizzard.runner.api.flag_guard import refuse_flag_off
 from blizzard.runner.api.flags import router as flags_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
+from blizzard.runner.api.floor import host_router as host_floor_router
+from blizzard.runner.api.floor import runner_router as runner_floor_router
 from blizzard.runner.api.garden import router as garden_router
 from blizzard.runner.api.git_commits import router as git_commits_router
 from blizzard.runner.api.harness_health import router as harness_health_router
@@ -117,6 +119,7 @@ from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessS
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
+from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.platform import identity_stamp
@@ -156,7 +159,7 @@ _HUMAN_GATE = (Depends(require_human_api),)
 # The host's own routes, at the root. Ungated: liveness and the SSO bounce.
 _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 # The host's human web lane: its own reads, the workspace prompts, and the one event stream.
-_HOST_HUMAN = (host_router, workspace_prompt_router, events_router)
+_HOST_HUMAN = (host_router, workspace_prompt_router, host_floor_router, events_router)
 # Each runner's ungated routes, in mount order: the worker hooks. `asks_router` is the one mixed router — its
 # POST is ungated, its GET carries the human gate at the route.
 _RUNNER_UNGATED = (
@@ -186,6 +189,7 @@ _RUNNER_HUMAN = (
     selftests_router,
     fleet_summary_router,
     control_router,
+    runner_floor_router,
     escalations_router,
     facts_router,
     takeovers_router,
@@ -273,6 +277,10 @@ def runner_seams(
     # every composer to repeat the derivation `runner_stores` already makes trivial.
     seams.asks = asks or (AskService(runner_stores.asks, clock, events=publisher) if runner_stores else None)
     seams.pause = pause or (PauseService(runner_stores.pause, clock, events=publisher) if runner_stores else None)
+    subscription = config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None
+    seams.runner_floor_clears = (
+        RunnerFloorClearService(runner_stores.usage_limits, subscription, clock) if runner_stores else None
+    )
     seams.lease_liveness = lease_liveness or (
         LeaseLivenessService(runner_stores.liveness, clock) if runner_stores else None
     )
@@ -445,6 +453,9 @@ def create_app(
     app.state.telemetry_receiver = telemetry_receiver
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores is not None else None
+    )
+    app.state.subscription_floor_clears = (
+        SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
     )
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url

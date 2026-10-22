@@ -2716,6 +2716,49 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "FloorClearRequest": {
+        "description": "Who is opening the floor \u2014 recorded on the clear.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "FloorClearRequest",
+        "type": "object"
+      },
+      "FloorClearView": {
+        "description": "The clear just recorded.",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "slug",
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearView",
+        "type": "object"
+      },
       "GardenProposalClosureKind": {
         "description": "How a garden proposal closed \u2014 recorded on the row itself when it closes, never\nderived from anything else.",
         "enum": [
@@ -7451,6 +7494,62 @@
         ]
       }
     },
+    "/api/host/subscriptions/{slug}/floor/clear": {
+      "post": {
+        "description": "Open a subscription's usage-limit floor now, for every runner spending it.\n\nA held start goes ahead on its next ask; a limit reported after the clear holds the floor again.",
+        "operationId": "clear_subscription_floor_api_host_subscriptions__slug__floor_clear_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloorClearRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FloorClearView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The host declares no such subscription."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Subscription Floor",
+        "tags": [
+          "host"
+        ]
+      }
+    },
     "/api/host/workspaces": {
       "get": {
         "description": "Every workspace the host declares.",
@@ -10249,6 +10348,67 @@
           }
         },
         "summary": "Patch Runner",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/runner/floor/clear": {
+      "post": {
+        "description": "Open this runner's own usage-limit floor now \u2014 only for a runner spending no subscription.\n\nA runner spending one is refused with ``409`` naming it, since its floor is that subscription's and opens for\nevery runner spending it.",
+        "operationId": "clear_runner_floor_runners__runner_id__api_runner_floor_clear_post",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloorClearRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FloorClearView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The runner spends a subscription; the detail names its slug, the floor to clear instead."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The runner's store is bound to no runner id."
+          }
+        },
+        "summary": "Clear Runner Floor",
         "tags": [
           "runner"
         ]

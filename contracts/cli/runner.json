@@ -621,6 +621,73 @@
       "path": "runner chunk",
       "short_help": "Worker: read facts about the chunk this node-step belongs to."
     },
+    "clear-floor": {
+      "help": "Open a usage-limit floor now, before its reset: a subscription's with ``--subscription``, for every runner\nspending it, or with ``--runner`` the floor of a runner spending none. Exactly one of the two.\n\nA runner that spends a subscription refuses ``--runner``, naming the subscription to clear instead.",
+      "params": [
+        {
+          "help": "The declared subscription whose usage-limit floor to open, for every runner spending it.",
+          "hidden": false,
+          "kind": "option",
+          "name": "subscription",
+          "opts": [
+            "--subscription"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+          "hidden": false,
+          "kind": "option",
+          "name": "directory",
+          "opts": [
+            "--dir"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner_url",
+          "opts": [
+            "--runner-url"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "The host's runner to address, by name or id; may be omitted on a host of one runner.",
+          "hidden": false,
+          "kind": "option",
+          "name": "runner",
+          "opts": [
+            "--runner"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        },
+        {
+          "help": "Who is clearing it (recorded on the clear).",
+          "hidden": false,
+          "kind": "option",
+          "name": "by",
+          "opts": [
+            "--by"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "text"
+        }
+      ],
+      "path": "runner clear-floor",
+      "short_help": "Open a usage-limit floor now, before its reset: a subscription's with ``--subscription``, for every runner spending it, or with ``--runner`` the floor of a runner spending none."
+    },
     "external-usage": {
       "commands": {
         "probe": {

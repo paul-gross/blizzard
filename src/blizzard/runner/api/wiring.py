@@ -49,6 +49,7 @@ from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, IRunnerBinding, RunnerReadStores
+from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
@@ -299,6 +300,16 @@ class RunnerWiring:
     def pause(self) -> PauseService:
         service: PauseService | None = self._seam("pause")
         return service if service is not None else self._refuse("pause service")
+
+    def runner_floor_clears(self) -> RunnerFloorClearService:
+        """The bound runner's own floor clear."""
+        service: RunnerFloorClearService | None = self._seam("runner_floor_clears")
+        return service if service is not None else self._refuse("runner floor-clear service")
+
+    def subscription_floor_clears(self) -> SubscriptionFloorClearService:
+        """The host's subscription floor clear."""
+        service: SubscriptionFloorClearService | None = self._seam("subscription_floor_clears")
+        return service if service is not None else self._refuse("subscription floor-clear service")
 
     def lease_liveness(self) -> LeaseLivenessService:
         service: LeaseLivenessService | None = self._seam("lease_liveness")

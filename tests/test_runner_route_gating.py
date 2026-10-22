@@ -59,6 +59,8 @@ _HUMAN: set[tuple[str, str]] = {
     ("GET", "/runners/{runner_id}/api/takeovers"),
     ("GET", "/runners/{runner_id}/api/dashboard"),
     ("GET", "/api/host/subscriptions"),
+    ("POST", "/api/host/subscriptions/{slug}/floor/clear"),
+    ("POST", "/runners/{runner_id}/api/runner/floor/clear"),
     ("GET", "/api/events/stream"),
     ("POST", "/runners/{runner_id}/api/chunks/{chunk_id}/requeues"),
     ("GET", "/runners/{runner_id}/api/chunks/{chunk_id}"),

@@ -1597,6 +1597,38 @@ export type FleetSummaryView = {
 };
 
 /**
+ * FloorClearRequest
+ *
+ * Who is opening the floor — recorded on the clear.
+ */
+export type FloorClearRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * FloorClearView
+ *
+ * The clear just recorded.
+ */
+export type FloorClearView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+    /**
+     * Slug
+     */
+    slug: string | null;
+};
+
+/**
  * GardenProposalClosureKind
  *
  * How a garden proposal closed — recorded on the row itself when it closes, never
@@ -4507,6 +4539,40 @@ export type ListSubscriptionsApiHostSubscriptionsGetResponses = {
 
 export type ListSubscriptionsApiHostSubscriptionsGetResponse = ListSubscriptionsApiHostSubscriptionsGetResponses[keyof ListSubscriptionsApiHostSubscriptionsGetResponses];
 
+export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostData = {
+    body: FloorClearRequest;
+    path: {
+        /**
+         * Slug
+         */
+        slug: string;
+    };
+    query?: never;
+    url: '/api/host/subscriptions/{slug}/floor/clear';
+};
+
+export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostErrors = {
+    /**
+     * The host declares no such subscription.
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostError = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostErrors[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostErrors];
+
+export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FloorClearView;
+};
+
+export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses];
+
 export type ListWorkspacesApiHostWorkspacesGetData = {
     body?: never;
     path?: never;
@@ -6253,6 +6319,46 @@ export type PatchRunnerRunnersRunnerIdApiRunnerPatchResponses = {
 };
 
 export type PatchRunnerRunnersRunnerIdApiRunnerPatchResponse = PatchRunnerRunnersRunnerIdApiRunnerPatchResponses[keyof PatchRunnerRunnersRunnerIdApiRunnerPatchResponses];
+
+export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostData = {
+    body: FloorClearRequest;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/runner/floor/clear';
+};
+
+export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostErrors = {
+    /**
+     * The runner spends a subscription; the detail names its slug, the floor to clear instead.
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * The runner's store is bound to no runner id.
+     */
+    503: unknown;
+};
+
+export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostError = ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostErrors[keyof ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostErrors];
+
+export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FloorClearView;
+};
+
+export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponse = ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses[keyof ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses];
 
 export type StartSelftestRunnersRunnerIdApiSelftestsPostData = {
     body: SelfTestStartRequest;

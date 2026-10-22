@@ -1,4 +1,5 @@
-"""Operator-facing verbs that reach the local ``RunnerDaemon``: status, the pause brake, takeover, requeue, selftest."""
+"""Operator-facing verbs that reach the local ``RunnerDaemon``: status, the pause brake, the floor clear, takeover,
+requeue, selftest."""
 
 from __future__ import annotations
 
@@ -312,6 +313,59 @@ def start(ctx: click.Context, directory: str, runner_url: str | None, runner: st
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub
     runner resume <runner_id>`` clears that one too."""
     _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url, runner=runner, door=Door.of(ctx))
+
+
+@click.command("clear-floor")
+@click.option(
+    "--subscription",
+    "subscription",
+    default=None,
+    help="The declared subscription whose usage-limit floor to open, for every runner spending it.",
+)
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+@runner_option
+@click.option("--by", "by", default="operator", help="Who is clearing it (recorded on the clear).")
+@click.pass_context
+def clear_floor(
+    ctx: click.Context, subscription: str | None, directory: str, runner_url: str | None, runner: str | None, by: str
+) -> None:
+    """Open a usage-limit floor now, before its reset: a subscription's with ``--subscription``, for every runner
+    spending it, or with ``--runner`` the floor of a runner spending none. Exactly one of the two.
+
+    A runner that spends a subscription refuses ``--runner``, naming the subscription to clear instead."""
+    if (subscription is None) == (runner is None):
+        raise click.UsageError("exactly one of --subscription and --runner is required")
+    with RunnerDaemon.reach("clear-floor", directory, runner_url, Door.of(ctx), runner) as daemon:
+        if subscription is not None:
+            resp = daemon.send_to_host(
+                "post", f"/api/host/subscriptions/{subscription}/floor/clear", json_body={"by": by}
+            )
+            if resp.status_code == 404:
+                raise click.ClickException(f"clear-floor: the host declares no subscription {subscription!r}")
+        else:
+            resp = daemon.send("post", "/api/runner/floor/clear", json_body={"by": by})
+            if resp.status_code == 409:
+                slug = resp.json()["detail"]["slug"]
+                raise click.ClickException(
+                    f"clear-floor: runner {runner} spends subscription {slug!r} — its floor is that subscription's;"
+                    f" clear it with `blizzard runner clear-floor --subscription {slug}`"
+                )
+        resp.raise_for_status()
+    target = f"subscription {subscription}" if subscription is not None else f"runner {runner}"
+    click.echo(f"cleared the usage-limit floor of {target} — held starts go ahead on their next ask")
 
 
 @click.command()
