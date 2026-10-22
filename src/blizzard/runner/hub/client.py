@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -280,6 +281,18 @@ class BindingDeclaration:
     project: str
     workspace_id: str
     agents: int
+
+
+@domain_model
+@dataclass(frozen=True)
+class DecliningDeclaration:
+    """One throttle this runner reports as saying no to new work: its ``lever``, the ``detail`` reading, the
+    ``subscription`` it concerns when it names one, and ``until`` — when its hold expects to lift."""
+
+    lever: str
+    detail: str
+    subscription: str | None = None
+    until: datetime | None = None
 
 
 @domain_model
@@ -629,6 +642,7 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         bindings: tuple[BindingDeclaration, ...] | None = None,
         agents: int | None = None,
         subscription: str | None = None,
+        declining: tuple[DecliningDeclaration, ...] | None = None,
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
         declared ``name``, and learn its hub-minted id from the reply. Idempotent, and refreshes the
@@ -641,7 +655,8 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         ``()`` declares that the runner serves none. ``bindings`` is the same declaration by workspace and agent count,
         which a hub that reads it takes over ``projects`` for; ``agents`` is the runner's one shared count,
         ``None`` declaring none; ``subscription`` is the slug of the declared
-        subscription the runner spends, ``None`` naming none. A refused version raises
+        subscription the runner spends, ``None`` naming none. ``declining`` is the throttles saying no right now, one
+        reason each: ``()`` for none, ``None`` omitted as null, which the hub reads as none. A refused version raises
         :class:`RunnerVersionRefused`, a refused token :class:`HubClientError`."""
         ...
 

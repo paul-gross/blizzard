@@ -12437,7 +12437,7 @@
         "type": "object"
       },
       "RunnerDecliningView": {
-        "description": "One throttle a runner reported as saying no, as the hub holds it \u2014 the response-side shape of\n:class:`RunnerDeclining`.",
+        "description": "One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration\nrequest's ``declining`` member.",
         "properties": {
           "detail": {
             "title": "Detail",

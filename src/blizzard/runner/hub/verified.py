@@ -13,6 +13,7 @@ from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
     ClaimRequest,
+    DecliningDeclaration,
     FactPushAck,
     HubClientError,
     HubQuestion,
@@ -102,6 +103,7 @@ class VerifiedHubClient:
         bindings: tuple[BindingDeclaration, ...] | None = None,
         agents: int | None = None,
         subscription: str | None = None,
+        declining: tuple[DecliningDeclaration, ...] | None = None,
     ) -> RegistrationReply:
         retries = self._verdict.registration_checks() or self._verdict.verdict().state is IdentityState.VERSION_REFUSED
         hub = self._inner if retries else self._verified()
@@ -118,6 +120,7 @@ class VerifiedHubClient:
             bindings=bindings,
             agents=agents,
             subscription=subscription,
+            declining=declining,
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

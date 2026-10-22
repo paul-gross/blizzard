@@ -7640,8 +7640,8 @@ export type RunnerDeclining = {
 /**
  * RunnerDecliningView
  *
- * One throttle a runner reported as saying no, as the hub holds it — the response-side shape of
- * :class:`RunnerDeclining`.
+ * One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration
+ * request's ``declining`` member.
  */
 export type RunnerDecliningView = {
     /**

@@ -61,6 +61,7 @@ from blizzard.runner.hub.client import (
     ChunkNotFoundError,
     ClaimedRoute,
     ClaimRequest,
+    DecliningDeclaration,
     FactPushAck,
     HubClientError,
     HubQuestion,
@@ -581,6 +582,7 @@ class FakeHub:
         self.registered_bindings: list[tuple[BindingDeclaration, ...] | None] = []
         self.registered_agents: list[int | None] = []
         self.registered_subscription: list[str | None] = []
+        self.registered_declining: list[tuple[DecliningDeclaration, ...] | None] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         # chunk ids `get_envelope` 404s for; `chunk_statuses` never raises for
@@ -790,6 +792,7 @@ class FakeHub:
         bindings: tuple[BindingDeclaration, ...] | None = None,
         agents: int | None = None,
         subscription: str | None = None,
+        declining: tuple[DecliningDeclaration, ...] | None = None,
     ) -> RegistrationReply:
         if self.down:
             raise HubClientError("fake hub is down")
@@ -805,6 +808,7 @@ class FakeHub:
         self.registered_bindings.append(bindings)
         self.registered_agents.append(agents)
         self.registered_subscription.append(subscription)
+        self.registered_declining.append(declining)
         if self.version_refusal is not None:
             raise RunnerVersionRefused(self.version_refusal)
         return RegistrationReply(

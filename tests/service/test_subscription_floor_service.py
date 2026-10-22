@@ -1,6 +1,7 @@
 """A usage limit holds every runner spending its subscription, and no other (service tier): one host, two
 subscriptions, two runners spending the first and one the second. No runner's own brake engages; a turned-over sample
-opens the floor unaided, and so does ``clear-floor`` with a sample still showing it shut. Samples are written into the
+opens the floor unaided, and so does ``clear-floor`` with a sample still showing it shut; the hub shows the floor as
+each held runner's declining reason while it holds, and nothing once it opens. Samples are written into the
 host store directly, as the service tier has no fake sampler. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
@@ -169,6 +170,13 @@ def _assert_unbraked(local: httpx.Client, runners: tuple[_Added, ...]) -> None:
         assert view.json()["pause"]["local"] is False, (runner.name, view.json()["pause"])
 
 
+def _declining(hub: httpx.Client, runner: _Added) -> list[str]:
+    """The levers the hub holds ``runner`` declining on, as its own read of itself serves them."""
+    view = hub.get(f"/api/fleet/runners/{runner.runner_id}", headers={"Authorization": f"Bearer {runner.token}"})
+    assert view.status_code == 200, view.text
+    return [str(reason["lever"]) for reason in view.json()["declining"]]
+
+
 def _stays_unleased(root: Path, runner: _Added, chunk_id: str, *, for_seconds: float) -> bool:
     """``runner`` never leases ``chunk_id`` in ``for_seconds`` — several of its ticks."""
     return not poll_until(lambda: _leased(root, runner.runner_id, chunk_id), timeout=for_seconds)
@@ -219,6 +227,11 @@ def test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clea
             assert not _leased(root, runner_a.runner_id, held_a)
             assert _parked(root, limited_lease)
             _assert_unbraked(local, everyone)
+            # The hub shows the floor as the reason for the two it holds, and nothing for the third.
+            assert poll_until(
+                lambda: _declining(hub, runner_a) == ["floor"] and _declining(hub, runner_b) == ["floor"], timeout=30.0
+            ), read_daemon_log(log)
+            assert _declining(hub, runner_c) == []
 
             # The window turned over, under 100 percent: the floor opens before its reset, with nobody acting.
             _sample(root, first, utilization_pct=20.0, resets_at=next_reset)
@@ -233,6 +246,7 @@ def test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clea
                 timeout=90.0,
             ), read_daemon_log(log)
             _assert_unbraked(local, everyone)
+            assert poll_until(lambda: _declining(hub, runner_a) == [], timeout=30.0), read_daemon_log(log)
 
             # A second limit, on the other spender, in the new period.
             limited_again = _seed(hub, project_b, _limited_spec(f"{REPO}/issues/2", next_reset))
@@ -249,6 +263,7 @@ def test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clea
             assert _stays_unleased(root, runner_a, held_a, for_seconds=5.0), read_daemon_log(log)
             assert not _leased(root, runner_b.runner_id, held_b)
             _assert_unbraked(local, everyone)
+            assert poll_until(lambda: _declining(hub, runner_a) == ["floor"], timeout=30.0), read_daemon_log(log)
 
             cleared = subprocess.run(
                 [str(RUNNER_BIN), "clear-floor", "--subscription", first, "--dir", str(root)],
@@ -271,3 +286,4 @@ def test_a_usage_limit_holds_its_subscription_s_runners_until_a_sample_or_a_clea
             ), read_daemon_log(log)
             assert _rows(root, "SELECT by FROM subscription_floor_clears WHERE slug = ?", first) == [("operator",)]
             _assert_unbraked(local, everyone)
+            assert poll_until(lambda: _declining(hub, runner_a) == [], timeout=30.0), read_daemon_log(log)

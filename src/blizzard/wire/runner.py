@@ -91,8 +91,8 @@ class RunnerDeclining(BaseModel):
 
 
 class RunnerDecliningView(WireModel):
-    """One throttle a runner reported as saying no, as the hub holds it — the response-side shape of
-    :class:`RunnerDeclining`."""
+    """One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration
+    request's ``declining`` member."""
 
     lever: str
     detail: str
