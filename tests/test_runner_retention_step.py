@@ -79,7 +79,7 @@ def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=config or LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
+        config=config or LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1),
     )
 
 
@@ -218,6 +218,7 @@ def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
         bindings=serving(1),
+        agents=1,
         worker_stdout_dir=str(stdout_dir),
     )
     ctx = _ctx(store, config=config)

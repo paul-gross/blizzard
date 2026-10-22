@@ -32,8 +32,10 @@ class PauseStateView(WireModel):
 
 
 class BindingCapacityView(WireModel):
-    """One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as
-    configured; ``project_id`` the project it resolved to, ``None`` while it routes nothing."""
+    """One binding's view of the runner's shared agents: ``agents`` is the binding's declared value, or the runner's
+    count when it declares none; ``used`` the agents working its project; ``free`` the runner's free agents, any of
+    which this binding may take. ``project`` is the entry as configured; ``project_id`` the project it resolved to,
+    ``None`` while it routes nothing."""
 
     project: str
     project_id: str | None = None
@@ -44,10 +46,14 @@ class BindingCapacityView(WireModel):
 
 
 class CapacitiesView(WireModel):
-    """Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or
+    """The runner's agent count and the open leases against it, with each binding's share. A lease whose project or
     workspace is not yet known counts against every binding it may belong to."""
 
     used: int
+    #: The runner's one agent count, shared by every binding.
+    agents: int = 0
+    #: ``agents`` less ``used``, never below zero.
+    free: int = 0
     bindings: list[BindingCapacityView] = []
 
 

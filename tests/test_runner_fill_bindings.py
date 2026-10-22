@@ -1,9 +1,11 @@
-"""FILL claims per binding: each project's chunks go into its own binding's workspace, at most its ``agents`` at once.
+"""FILL shares one agent count across the runner's bindings: each free agent sends one peek naming the projects whose
+workspace has a free environment, and the chunk the hub returns is claimed into its own project's workspace.
 
-A runner here binds ``pr_a`` to ``ws_a`` and ``pr_b`` to ``ws_b``. Each binding peeks the hub with its own project, so
-a full binding sends no peek and never stands in front of the other's work; against a hub too old to narrow the peek,
-another project's entry is passed over and ends that binding's turn; and two bindings resolving to one project stop
-every claim, named in the runner's status. Driven against a real (tmp sqlite) runner store with fakes at the seams."""
+A runner here binds ``pr_a`` to ``ws_a`` and ``pr_b`` to ``ws_b``. The hub's ready-queue order alone picks the project;
+a workspace with no free environment drops out of the peek; one found out of environments at acquisition drops out for
+the rest of the tick; against a hub too old to narrow the peek, an entry outside the named projects ends the fill; and
+two bindings resolving to one project stop every claim, named in the runner's status. Driven against a real (tmp
+sqlite) runner store with fakes at the seams."""
 
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
@@ -67,11 +70,14 @@ def _store(tmp_path) -> SqlAlchemyRunnerStore:  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _bindings(agents_a: int = 1, agents_b: int = 1) -> tuple[BindingDeclaration, ...]:
-    return (BindingDeclaration("pr_a", "ws_a", agents_a), BindingDeclaration("pr_b", "ws_b", agents_b))
+def _bindings() -> tuple[BindingDeclaration, ...]:
+    # Each binding's own `agents` is the runner's count here; the fill reads the runner's one count, never these.
+    return (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("pr_b", "ws_b", 2))
 
 
-def _ctx(store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...]):  # type: ignore[no-untyped-def]
+def _ctx(  # type: ignore[no-untyped-def]
+    store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...], *, agents: int = 2, workspaces=None
+):
     return make_context(
         store,
         hub=hub,
@@ -79,8 +85,8 @@ def _ctx(store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...]):  # type
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=bindings),
-        workspaces=_workspaces(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=bindings, agents=agents),
+        workspaces=workspaces or _workspaces(),
     )
 
 
@@ -88,7 +94,15 @@ def _entry(chunk_id: str, project_id: str, position: int = 0) -> QueueEntry:
     return QueueEntry(chunk_id=chunk_id, graph_id="gr_1", position=position, project_id=project_id)
 
 
-def _hold_open_lease(store, chunk_id: str, *, workspace_id: str | None, project_id: str | None) -> None:  # type: ignore[no-untyped-def]
+def _hold_open_lease(  # type: ignore[no-untyped-def]
+    store,
+    chunk_id: str,
+    *,
+    workspace_id: str | None,
+    project_id: str | None,
+    environment_id: str = "a1",
+    workdir: str = "/root-a/a1",
+) -> None:
     store.record_lease(
         NewLease(
             lease_id=f"lease_{chunk_id}",
@@ -103,96 +117,126 @@ def _hold_open_lease(store, chunk_id: str, *, workspace_id: str | None, project_
     )
     store.record_binding(
         chunk_id=chunk_id,
-        environment_id="a1",
-        workdir="/root-a/a1",
+        environment_id=environment_id,
+        workdir=workdir,
         bound_at=_NOW,
         workspace_id=workspace_id,
         project_id=project_id,
     )
 
 
-def _peeked_projects(hub: FakeHub) -> list[str | None]:
-    return [call.project for call in hub.peek_queue_requests]
+def _peeked_projects(hub: FakeHub) -> list[list[str] | None]:
+    return [call.projects for call in hub.peek_queue_requests]
 
 
-def test_each_projects_chunk_is_claimed_into_its_own_bindings_workspace(tmp_path) -> None:  # type: ignore[no-untyped-def]
+class _StaleHintProvider(FakeProvider):
+    """Lists a pool the pool-held read shows free, yet refuses every acquisition — the hint run ahead of the truth."""
+
+    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+        raise WorkspaceAcquisitionError("no environment free")
+
+
+def test_the_hubs_queue_order_alone_picks_the_project_each_free_agent_works(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = _Hub()
-    hub.queue = [_entry("ch_a", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
+    hub.queue_responses = [[_entry("ch_w1", "pr_b")], [_entry("ch_d1", "pr_a")], [_entry("ch_d2", "pr_a")]]
 
-    Fill(_ctx(store, hub, _bindings())).run()
+    Fill(_ctx(store, hub, _bindings(), agents=2)).run()
 
-    assert _peeked_projects(hub) == ["pr_a", "pr_b"]
-    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_a", "ws_a"), ("ch_b", "ws_b")]
+    assert _peeked_projects(hub) == [["pr_a", "pr_b"], ["pr_a", "pr_b"]]
+    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_w1", "ws_b"), ("ch_d1", "ws_a")]
     held = {b.chunk_id: (b.workspace_id, b.project_id, b.workdir) for b in store.held_bindings()}
-    assert held == {"ch_a": ("ws_a", "pr_a", "/root-a/a1"), "ch_b": ("ws_b", "pr_b", "/root-b/b1")}
+    assert held == {"ch_w1": ("ws_b", "pr_b", "/root-b/b1"), "ch_d1": ("ws_a", "pr_a", "/root-a/a1")}
 
 
-def test_a_binding_peeks_once_per_free_agent_and_stops_at_the_first_empty_answer(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    store = _store(tmp_path)
-    hub = _Hub()
-    hub.queue_responses = [[_entry("ch_a1", "pr_a")], [], [_entry("ch_b1", "pr_b")], [_entry("ch_b2", "pr_b")]]
-
-    Fill(_ctx(store, hub, _bindings(agents_a=2, agents_b=2))).run()
-
-    assert _peeked_projects(hub) == ["pr_a", "pr_a", "pr_b", "pr_b"]
-    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [
-        ("ch_a1", "ws_a"),
-        ("ch_b1", "ws_b"),
-        ("ch_b2", "ws_b"),
-    ]
-
-
-def test_a_full_binding_sends_no_peek_and_never_blocks_another_projects_claim(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_open_leases_are_counted_against_the_one_runner_count(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _hold_open_lease(store, "ch_running", workspace_id="ws_a", project_id="pr_a")
     hub = _Hub()
-    hub.queue = [_entry("ch_a2", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
+    hub.queue = [_entry("ch_b", "pr_b")]
 
-    Fill(_ctx(store, hub, _bindings())).run()
+    Fill(_ctx(store, hub, _bindings(), agents=1)).run()
+    assert hub.peek_queue_requests == [] and hub.claims == []
 
-    assert _peeked_projects(hub) == ["pr_b"]
-    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_b", "ws_b")]
-
-
-def test_a_held_row_of_unknown_project_counts_against_every_binding_on_its_workspace(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    store = _store(tmp_path)
-    _hold_open_lease(store, "ch_running", workspace_id="ws_a", project_id=None)
-    hub = _Hub()
-    hub.queue = [_entry("ch_a2", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
-
-    Fill(_ctx(store, hub, _bindings())).run()
-
-    assert _peeked_projects(hub) == ["pr_b"]
+    Fill(_ctx(store, hub, _bindings(), agents=2)).run()
+    assert _peeked_projects(hub) == [["pr_a", "pr_b"]]
+    assert [c.chunk_id for c in hub.claims] == ["ch_b"]
 
 
-def test_a_held_row_of_unknown_workspace_counts_against_every_binding(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_held_row_of_unknown_workspace_counts_against_the_runner_count(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _hold_open_lease(store, "ch_running", workspace_id=None, project_id=None)
     hub = _Hub()
     hub.queue = [_entry("ch_a2", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
 
-    Fill(_ctx(store, hub, _bindings())).run()
+    Fill(_ctx(store, hub, _bindings(), agents=1)).run()
 
     assert hub.peek_queue_requests == [] and hub.claims == []
 
 
-def test_another_projects_entry_from_an_unfiltered_hub_is_passed_over_and_ends_the_bindings_turn(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_workspace_with_no_free_environment_is_left_out_of_the_peek(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _hold_open_lease(store, "ch_b1", workspace_id="ws_b", project_id="pr_b", environment_id="b1", workdir="/root-b/b1")
+    _hold_open_lease(store, "ch_b2", workspace_id="ws_b", project_id="pr_b", environment_id="b2", workdir="/root-b/b2")
+    hub = _Hub()
+    hub.queue = [_entry("ch_a", "pr_a")]
+
+    Fill(_ctx(store, hub, _bindings(), agents=3)).run()
+
+    assert _peeked_projects(hub) == [["pr_a"]]
+    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_a", "ws_a")]
+
+
+def test_no_workspace_with_a_free_environment_sends_no_peek(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    for env in ("a1", "a2"):
+        _hold_open_lease(
+            store, f"ch_{env}", workspace_id="ws_a", project_id="pr_a", environment_id=env, workdir=f"/root-a/{env}"
+        )
+    for env in ("b1", "b2"):
+        _hold_open_lease(
+            store, f"ch_{env}", workspace_id="ws_b", project_id="pr_b", environment_id=env, workdir=f"/root-b/{env}"
+        )
+    hub = _Hub()
+    hub.queue = [_entry("ch_a", "pr_a")]
+
+    Fill(_ctx(store, hub, _bindings(), agents=9)).run()
+
+    assert hub.peek_queue_requests == [] and hub.claims == []
+
+
+def test_a_workspace_found_out_of_environments_at_acquisition_is_dropped_for_the_rest_of_the_tick(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    workspaces = WorkspaceRegistry(
+        [
+            WorkspaceEntry("ws_a", FakeProvider({"a1": "/root-a/a1"}), spawn_root="/root-a"),
+            WorkspaceEntry("ws_b", _StaleHintProvider({"b1": "/root-b/b1"}), spawn_root="/root-b"),
+        ]
+    )
+    hub = _Hub()
+    hub.queue_responses = [[_entry("ch_w1", "pr_b")], [_entry("ch_d1", "pr_a")]]
+
+    Fill(_ctx(store, hub, _bindings(), agents=2, workspaces=workspaces)).run()
+
+    assert _peeked_projects(hub) == [["pr_a", "pr_b"], ["pr_a"]]
+    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_d1", "ws_a")]
+
+
+def test_an_entry_outside_the_named_projects_from_an_unfiltered_hub_ends_the_fill(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = _Hub()
-    hub.narrows_peek = False  # a hub too old to honor `project` answers every served project's head
-    hub.queue = [_entry("ch_b", "pr_b")]
+    hub.narrows_peek = False  # a hub too old to honor `projects` answers any served project's head
+    hub.queue = [_entry("ch_x", "pr_other")]
 
-    Fill(_ctx(store, hub, _bindings(agents_a=2, agents_b=1))).run()
+    Fill(_ctx(store, hub, _bindings(), agents=2)).run()
 
-    # `pr_a` peeks once — its foreign answer ends its turn, though a second agent is free — then `pr_b` claims it.
-    assert _peeked_projects(hub) == ["pr_a", "pr_b"]
-    assert [(c.chunk_id, c.workspace_id) for c in hub.claims] == [("ch_b", "ws_b")]
+    assert _peeked_projects(hub) == [["pr_a", "pr_b"]]
+    assert hub.claims == []
 
 
 def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_both(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    bindings = (BindingDeclaration("pr_a", "ws_a", 1), BindingDeclaration("alpha", "ws_b", 1))
+    bindings = (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("alpha", "ws_b", 2))
     hub = _Hub()
     hub.queue = [_entry("ch_a", "pr_a")]
 
@@ -240,8 +284,8 @@ def test_two_bindings_resolving_to_one_project_claim_nothing_and_status_names_bo
 def test_status_counts_capacity_across_every_bound_workspace(tmp_path) -> None:  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = _Hub()
-    hub.queue = [_entry("ch_a", "pr_a", 0), _entry("ch_b", "pr_b", 1)]
-    Fill(_ctx(store, hub, _bindings())).run()
+    hub.queue_responses = [[_entry("ch_a", "pr_a")], [_entry("ch_b", "pr_b")]]
+    Fill(_ctx(store, hub, _bindings(), agents=2)).run()
     status = RunnerStatusService(
         FixedClock(_NOW),
         pause=store,
@@ -257,6 +301,7 @@ def test_status_counts_capacity_across_every_bound_workspace(tmp_path) -> None: 
         runner_name="r1",
         workspace_id="ws_a",
         bindings=_bindings(),
+        agents=2,
         hub_url="http://hub",
         harnesses=HarnessRegistry(
             {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=FakeHarness(handle=_HANDLE, verdict=None))}
@@ -265,8 +310,8 @@ def test_status_counts_capacity_across_every_bound_workspace(tmp_path) -> None: 
     )
 
     capacities = status.summary().capacities
-    assert capacities.used == 2
+    assert (capacities.used, capacities.agents, capacities.free) == (2, 2, 0)
     assert [(b.project, b.agents, b.used, b.free) for b in capacities.bindings] == [
-        ("pr_a", 1, 1, 0),
-        ("pr_b", 1, 1, 0),
+        ("pr_a", 2, 1, 0),
+        ("pr_b", 2, 1, 0),
     ]

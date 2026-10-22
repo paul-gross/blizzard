@@ -144,6 +144,7 @@ class LoopWiring:
                     BindingDeclaration(b.project, b.workspace, config.binding_agents(b)) for b in config.bindings
                 )
             ),
+            agents=config.agents,
             subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,
             declares_subscriptions=not graph.host.registered(),
             runner_prompt=self.runner_prompt,

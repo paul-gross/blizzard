@@ -525,7 +525,7 @@
         "type": "object"
       },
       "BindingCapacityView": {
-        "description": "One binding's agent slots: ``used`` plus ``free`` accounts for its ``agents``. ``project`` is the entry as\nconfigured; ``project_id`` the project it resolved to, ``None`` while it routes nothing.",
+        "description": "One binding's view of the runner's shared agents: ``agents`` is the binding's declared value, or the runner's\ncount when it declares none; ``used`` the agents working its project; ``free`` the runner's free agents, any of\nwhich this binding may take. ``project`` is the entry as configured; ``project_id`` the project it resolved to,\n``None`` while it routes nothing.",
         "properties": {
           "agents": {
             "title": "Agents",
@@ -616,8 +616,13 @@
         "type": "object"
       },
       "CapacitiesView": {
-        "description": "Agent-slot accounting per binding, plus the runner-wide count of open leases. A lease whose project or\nworkspace is not yet known counts against every binding it may belong to.",
+        "description": "The runner's agent count and the open leases against it, with each binding's share. A lease whose project or\nworkspace is not yet known counts against every binding it may belong to.",
         "properties": {
+          "agents": {
+            "default": 0,
+            "title": "Agents",
+            "type": "integer"
+          },
           "bindings": {
             "default": [],
             "items": {
@@ -626,6 +631,11 @@
             "title": "Bindings",
             "type": "array"
           },
+          "free": {
+            "default": 0,
+            "title": "Free",
+            "type": "integer"
+          },
           "used": {
             "title": "Used",
             "type": "integer"
@@ -633,6 +643,8 @@
         },
         "required": [
           "used",
+          "agents",
+          "free",
           "bindings"
         ],
         "title": "CapacitiesView",

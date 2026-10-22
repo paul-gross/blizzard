@@ -106,7 +106,7 @@ def list_runners(request: Request) -> HostRunnerListResponse:
                 ),
                 bindings=bindings,
                 agents_in_use=summary.capacities.used,
-                max_agents=sum(b.agents for b in summary.capacities.bindings),
+                max_agents=summary.capacities.agents,
             )
         )
     items.extend(

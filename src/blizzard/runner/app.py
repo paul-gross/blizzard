@@ -750,6 +750,7 @@ def _wire_runner(
         bindings=tuple(
             BindingDeclaration(b.project, b.workspace, config.binding_agents(b)) for b in config.bindings or ()
         ),
+        agents=config.agents,
         hub_url=config.hub_url,
         harnesses=harnesses,
         workspaces=workspaces,

@@ -15,6 +15,7 @@ from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.environments.free import FreeEnvironments, IWorkspaceFreeEnvironment
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -82,6 +83,8 @@ class LoopConfig:
     projects: tuple[str, ...] | None = None
     #: The same declaration by workspace and agent count, sent beside :attr:`projects` at every registration.
     bindings: tuple[BindingDeclaration, ...] | None = None
+    #: The agents the runner runs at once, shared by every binding; ``0`` runs none and registers none.
+    agents: int = 0
     #: The slug of the declared subscription the runner spends; ``None`` names none.
     subscription: str | None = None
     #: Whether the registration declares the host's subscriptions — false on a registered host, which reports them.
@@ -211,6 +214,11 @@ class LoopContext:
     #: The loop's own cross-tick retention-pass floor — mirrors ``harness_versions`` above.
     #: ``None`` (a one-shot tick) has no memory to gate on, so every pass runs.
     retention_passes: RetentionPasses | None = None
+
+    @property
+    def free_environments(self) -> IWorkspaceFreeEnvironment:
+        """The free-environment hint FILL reads before it peeks."""
+        return FreeEnvironments(self.workspaces, self.host_stores.runner_audit)
 
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]:
         """This runner's capabilities as the registration push and the matched fleet peek

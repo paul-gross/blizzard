@@ -679,7 +679,9 @@ def test_ceiling_pause_publishes_fact_changed(tmp_path: Path) -> None:
         harness=FakeHarness(handle=_HANDLE, verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), runner_ceiling_usd=5.0),
+        config=LoopConfig(
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, runner_ceiling_usd=5.0
+        ),
         events=events,
     )
 
@@ -789,6 +791,7 @@ def test_context_sample_crossing_publishes_fact_changed(tmp_path: Path) -> None:
             runner_name="r1",
             runner_id="rn_1",
             bindings=serving(1),
+            agents=1,
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,
         ),

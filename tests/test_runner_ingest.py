@@ -599,12 +599,13 @@ def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves
     host = load_host_config(hosts.here)
     added = host.sole_runner(MOVING)
     assert added.id == MOVING_ID
-    assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "ws-pre-host", 2)]
+    assert [(b.project, b.workspace) for b in added.bindings] == [("default", "ws-pre-host")]
     assert "ws-pre-host" in [w.id for w in host.workspaces]
     assert added.subscription == "anthropic"
     [declared] = [
         r for r in tomllib.loads(HostLayout(hosts.here).config_path.read_text())["runner"] if r["name"] == MOVING
     ]
+    assert (declared["agents"], "agents" in declared["projects"][0]) == (2, False)
     assert declared["harness"]["config_dir"] == str(hosts.here / "runners" / MOVING / "bundle")
     assert (hosts.here / "runners" / MOVING / "bundle" / "settings.json").exists()
     assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _PRE_HOST_TOKEN

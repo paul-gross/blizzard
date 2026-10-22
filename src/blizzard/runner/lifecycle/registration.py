@@ -92,6 +92,8 @@ class RegistrationConfig(Protocol):
     @property
     def bindings(self) -> tuple[BindingDeclaration, ...] | None: ...
     @property
+    def agents(self) -> int: ...
+    @property
     def subscription(self) -> str | None: ...
     @property
     def declares_subscriptions(self) -> bool: ...
@@ -154,6 +156,7 @@ class Registration:
                 gates=ctx.config.gates,
                 projects=ctx.config.projects,
                 bindings=ctx.config.bindings,
+                agents=ctx.config.agents or None,
                 subscription=ctx.config.subscription,
             )
         except RunnerVersionRefused as refused:

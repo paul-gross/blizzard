@@ -291,6 +291,7 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path, works
             runner_name="r1",
             runner_id=FIXTURE_RUNNER_ID,
             bindings=serving(1),
+            agents=1,
         ),
         spawn_root=workspace_root,
     )

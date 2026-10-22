@@ -320,6 +320,7 @@ def _tick_statement_count(
             runner_name="r1",
             runner_id="rn_1",
             bindings=serving(n),
+            agents=n,
             context_warn_tokens=300_000,
             context_sample_interval_seconds=60,
             transcripts_ship=ship,
@@ -383,6 +384,7 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
         runner_name="r1",
         workspace_id="ws1",
         bindings=serving(10),
+        agents=10,
         hub_url="http://hub",
         workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
         harnesses=HarnessRegistry(

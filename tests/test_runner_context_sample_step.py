@@ -86,6 +86,7 @@ def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300
                 runner_name="r1",
                 runner_id="rn_1",
                 bindings=serving(1),
+                agents=1,
                 context_warn_tokens=warn,
                 context_sample_interval_seconds=interval,
             ),

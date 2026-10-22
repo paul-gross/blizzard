@@ -627,6 +627,7 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         """``POST /api/fleet/runners`` — register the runner this client's token names under its
@@ -638,7 +639,8 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         read back to enforce. ``projects`` is the projects the runner serves, by id or slug: sent as
         given, ``None`` as null — never ``[]`` — so the hub keeps the declaration it holds, where
         ``()`` declares that the runner serves none. ``bindings`` is the same declaration by workspace and agent count,
-        which a hub that reads it takes over ``projects`` for; ``subscription`` is the slug of the declared
+        which a hub that reads it takes over ``projects`` for; ``agents`` is the runner's one shared count,
+        ``None`` declaring none; ``subscription`` is the slug of the declared
         subscription the runner spends, ``None`` naming none. A refused version raises
         :class:`RunnerVersionRefused`, a refused token :class:`HubClientError`."""
         ...

@@ -336,6 +336,7 @@ class HttpHubClient:
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         resp = self._post(
@@ -362,6 +363,7 @@ class HttpHubClient:
                     if bindings is not None
                     else None
                 ),
+                agents=agents,
                 subscription=subscription,
                 version=self._version,
             ).model_dump(mode="json"),

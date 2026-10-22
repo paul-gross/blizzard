@@ -314,10 +314,10 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
     root = _init_runner(tmp_path)
     _edit_host_file(
         root,
-        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
-        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "blizzard-context", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "default", workspace = "workspace-local" }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local" }, '
+        '{ project = "old-slug", workspace = "workspace-local" }, '
+        '{ project = "blizzard-context", workspace = "workspace-local" }]',
     )
     bound = _no_hub()
     _configure_runner_id(root, "rn_1")
@@ -338,9 +338,9 @@ def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(tmp_
     root = _init_runner(tmp_path)
     _edit_host_file(
         root,
-        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
-        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "default", workspace = "workspace-local" }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local" }, '
+        '{ project = "old-slug", workspace = "workspace-local" }]',
     )
     bound = _no_hub()
     _configure_runner_id(root, "rn_1")

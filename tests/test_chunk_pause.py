@@ -684,6 +684,7 @@ def test_a_worker_that_exits_on_its_interrupt_has_its_generation_recorded_after_
         runner_name="r1",
         runner_id=FIXTURE_RUNNER_ID,
         bindings=serving(1),
+        agents=1,
         worker_stdout_dir=str(stdout_dir),
     )
     ctx = _make_ctx(store, hub, harness, probe, config=config)

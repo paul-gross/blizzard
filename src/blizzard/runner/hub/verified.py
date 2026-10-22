@@ -100,6 +100,7 @@ class VerifiedHubClient:
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         retries = self._verdict.registration_checks() or self._verdict.verdict().state is IdentityState.VERSION_REFUSED
@@ -115,6 +116,7 @@ class VerifiedHubClient:
             gates=gates,
             projects=projects,
             bindings=bindings,
+            agents=agents,
             subscription=subscription,
         )
 

@@ -55,7 +55,7 @@ def _ctx(store, hub, *, pool: dict[str, str] | None = None, agents: int = 1):  #
         provider=FakeProvider(pool if pool is not None else {"e1": "/ws/e1", "e2": "/ws/e2"}),
         harness=FakeHarness(handle=_HANDLE, verdict="pass"),
         probe=FakeProbe(),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(agents)),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(agents), agents=agents),
     )
     # The tick's own memoizing cache, so a test sees the hub calls one tick makes.
     return dataclasses.replace(ctx, chunk_views=MemoizingChunkViewCache(ctx.hub))
