@@ -1,6 +1,5 @@
 """``blizzard hub runner-host …`` and ``blizzard hub runner add --host`` — the rendering half with the client stubbed
-(unit tier), and the CLI driven against a real hub app (component tier). ``blizzard hub host`` stays the daemon
-launcher."""
+(unit tier), and the CLI driven against a real hub app (component tier)."""
 
 from __future__ import annotations
 

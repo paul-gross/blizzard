@@ -58,7 +58,7 @@ class _Response:
 @click.group()
 @click.pass_context
 def _hub(ctx: click.Context) -> None:
-    CliCollaborators.of(ctx)  # pin the invoker's collaborators before ``obj`` becomes the session reader
+    CliCollaborators.of(ctx)
     ctx.obj = _Reader()
 
 

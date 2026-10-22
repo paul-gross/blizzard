@@ -1,7 +1,5 @@
 """How a CLI test hands its commands their HTTP: collaborators bound over a canned transport
-(:func:`bind_transport`) or per-verb callables (:func:`bind_stubs`), and invoked through the
-returned :class:`Bound`'s runner. Hub verbs, worker verbs and the runner's doors all build their clients through
-the bound factory."""
+(:func:`bind_transport`) or per-verb callables (:func:`bind_stubs`), invoked through the returned :class:`Bound`."""
 
 from __future__ import annotations
 
@@ -18,11 +16,9 @@ from blizzard.foundation.span_clock import Clock
 
 
 class StubClient:
-    """A client whose verbs are the callables a test supplies.
+    """A client whose verbs are the callables a test supplies, each answering as ``httpx.<verb>(url, **kwargs)``.
 
-    Each callable answers as the matching ``httpx`` module function does: ``(url, **kwargs)``, the client's own
-    ``timeout`` and ``headers`` riding along when its factory call named them. ``request`` and ``stream`` take the
-    method first; without a ``request`` callable, a request routes to its method's own."""
+    ``request`` and ``stream`` take the method first; without a ``request`` callable, a request routes to its method's own."""
 
     def __init__(
         self,
@@ -175,8 +171,7 @@ def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock:
 
 
 def bind_local_only(*, allow_base_urls: tuple[str, ...] = ()) -> Bound:
-    """Real clients, but only to the runner's own local API: a unix-socket client, the runner placeholder host, or a
-    ``base_url`` in ``allow_base_urls``. Any other client — the hub's — fails the test."""
+    """Real clients, but only to the runner's own local API or a ``base_url`` in ``allow_base_urls``; any other fails."""
     real = CliCollaborators.production().client_factory
 
     def factory(

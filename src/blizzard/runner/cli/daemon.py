@@ -33,8 +33,7 @@ class Door:
         return cls(OperatorTrace.source(ctx), CliCollaborators.of(ctx).client_factory)
 
     def uds_client(self, sock: Path) -> Client:
-        """A client whose transport reaches the runner over ``sock`` — the base_url host is a
-        placeholder, since the UDS transport decides where the bytes go."""
+        """A client reaching the runner over ``sock``; the base_url host is a placeholder."""
         return self.client_factory(
             base_url="http://runner", timeout=LOCAL_CLIENT_TIMEOUT, headers=self.trace.headers(), uds=str(sock)
         )

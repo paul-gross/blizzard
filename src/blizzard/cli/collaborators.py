@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import click
-
-# The CLI tree's one httpx import (``bzh:dependency-injection``): every other CLI module reaches httpx's types through
-# here, and its clients through ``CliCollaborators.client_factory``.
 from httpx import Client, ConnectError, HTTPError, HTTPStatusError, HTTPTransport, Response
 
 from blizzard.foundation.clock import IClock, SystemClock
@@ -29,7 +26,7 @@ __all__ = [
 
 
 class ClientFactory(Protocol):
-    """Builds one HTTP client. Every argument is optional: a bare call is the short-lived default client."""
+    """Builds one HTTP client; a bare call is the short-lived default."""
 
     def __call__(
         self,
@@ -38,9 +35,7 @@ class ClientFactory(Protocol):
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
         uds: str | None = None,
-    ) -> Client:
-        """``uds`` is a unix-socket path to reach the server through, instead of TCP."""
-        ...
+    ) -> Client: ...
 
 
 def _short_lived_client(

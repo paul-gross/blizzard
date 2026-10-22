@@ -27,7 +27,7 @@ _HUB_URL = "http://hub.local:8421"
 
 
 def _ctx(bound: Bound | None = None) -> CliContext:
-    """A context whose requests go through the bound collaborators' client factory (none bound: any request fails)."""
+    """A context whose requests go through the bound collaborators (none bound: any request fails)."""
     bound = bound or bind_stubs()
     return CliContext(
         hub_url=_HUB_URL,

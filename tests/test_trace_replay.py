@@ -282,8 +282,7 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
 def _relay(
     hub: HubHarness, *, post: Callable[..., httpx.Response] | None = None
 ) -> tuple[Bound, list[dict[str, object]]]:
-    """Route the CLI's requests to the hub's test client (its ``POST`` answered by ``post``, when given); returns the
-    bound collaborators and each replay request's body."""
+    """Route the CLI's requests to the hub's test client; returns the collaborators and each replay request's body."""
     bodies: list[dict[str, object]] = []
 
     def relayed_post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> httpx.Response:

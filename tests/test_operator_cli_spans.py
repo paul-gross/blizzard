@@ -64,8 +64,7 @@ class _HubCalls:
 def _bind(
     collector: _Collector | None = None, hub: _HubCalls | None = None, *, reach_the_network: bool = False
 ) -> Bound:
-    """Collaborators whose clients answer the collector and the hub from the doubles given; any other host is
-    refused, unless ``reach_the_network`` lets it through to the real network."""
+    """Collaborators answering the collector and the hub from the doubles given; any other host is refused."""
 
     def route(request: httpx.Request) -> httpx.Response:
         if request.url.host == "collector.local" and collector is not None:

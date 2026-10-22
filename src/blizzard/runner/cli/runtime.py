@@ -166,7 +166,6 @@ class InitCollaborators:
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
     #: The runner store's migrations at a URL — what ``runner ingest`` migrates a source copy through.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
-    #: The host process the ``host`` verb builds, and the harness bundle it publishes before accepting work.
     build_host_process: Callable[..., HostProcess] = build_host_process
     publish_harness_bundle: Callable[..., BundleSnapshot] = publish_harness_bundle
 
@@ -177,7 +176,6 @@ class InitCollaborators:
 
     @classmethod
     def http(cls, client_factory: ClientFactory) -> InitCollaborators:
-        """The collaborators whose hub calls go over HTTP, through ``client_factory``."""
         return cls(partial(_http_hub_clients, client_factory), partial(_http_host_clients, client_factory))
 
     def join_with(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:

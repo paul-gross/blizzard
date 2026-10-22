@@ -30,8 +30,7 @@ _VERIFIER = "a-fixed-test-verifier-with-enough-entropy-1234567890"
 
 
 def _cli_against(hub: HubHarness) -> list[dict[str, str]]:
-    """Route the CLI's ``GET``s to ``hub``, bind the runner :func:`_runner_list` invokes through, and hand back the
-    headers each request sent, in order."""
+    """Route the CLI's ``GET``s to ``hub``; returns the headers each request sent, in order."""
     sent: list[dict[str, str]] = []
 
     def get(url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:

@@ -38,7 +38,6 @@ _SECRET = "sentinel-secret-value"
 
 
 def _http_collaborators(**overrides: Any) -> InitCollaborators:
-    """The production HTTP ``InitCollaborators``, with ``overrides`` swapped in."""
     return replace(InitCollaborators.http(CliCollaborators.production().client_factory), **overrides)
 
 

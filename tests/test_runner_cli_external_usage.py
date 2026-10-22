@@ -56,7 +56,6 @@ _FAR_FUTURE_MILLIS = 4_102_444_800_000
 
 
 def _declare_credentials(root: Path, credentials: Path) -> None:
-    """Point the scaffolded ``anthropic`` subscription at ``credentials``."""
     config = root / HOST_CONFIG_FILENAME
     config.write_text(
         config.read_text().replace(
