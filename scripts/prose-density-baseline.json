@@ -928,7 +928,7 @@
    "comments": 38,
    "docstrings": 77,
    "over_cap": 8,
-   "total": 666
+   "total": 667
   },
   "blizzard_mock/mock_hub/internal/__init__.py": {
    "comments": 0,
@@ -1254,7 +1254,7 @@
    "comments": 121,
    "docstrings": 176,
    "over_cap": 15,
-   "total": 4490
+   "total": 4491
   },
   "test_mock_hub_bindings.py": {
    "comments": 0,
@@ -1278,13 +1278,13 @@
    "comments": 7,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 315
+   "total": 323
   },
   "test_mock_runner.py": {
    "comments": 28,
    "docstrings": 72,
    "over_cap": 4,
-   "total": 847
+   "total": 848
   },
   "test_opencode_cli_surface.py": {
    "comments": 34,
@@ -1326,7 +1326,7 @@
    "comments": 17,
    "docstrings": 85,
    "over_cap": 8,
-   "total": 569
+   "total": 572
   },
   "test_workflow_triggers.py": {
    "comments": 0,
@@ -9204,9 +9204,9 @@
   },
   "blizzard/runner/throttle/report.py": {
    "comments": 1,
-   "docstrings": 11,
+   "docstrings": 12,
    "over_cap": 0,
-   "total": 56
+   "total": 52
   },
   "blizzard/runner/throttle/resample.py": {
    "comments": 0,

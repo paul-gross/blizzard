@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer
+from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import ClaimsAnswer
 
 __all__ = ["FLOOR_LEVER", "DecliningReason", "declining_report", "floor_reason"]
@@ -42,15 +42,11 @@ def declining_report(answer: ClaimsAnswer, *, now: datetime) -> tuple[DecliningR
 
 def floor_reason(floor: FloorAnswer, *, now: datetime) -> DecliningReason:
     """The reason a holding ``floor`` gives at ``now``. Before the hold's expected reset it is exhausted until that
-    reset; past it, with a sample awaited, it is waiting on that sample until the grace opens the floor unconfirmed."""
+    reset. Past it, with a sample awaited, the reset is no longer ahead and no instant is named: surfaces word an
+    ``until`` as a reset, which the grace's opening is not."""
     hold = floor.hold
     if hold is None:
         raise ValueError("an admitting floor gives no reason")
     if now < hold.expected_reset:
         return DecliningReason(FLOOR_LEVER, "exhausted", floor.slug, hold.expected_reset)
-    return DecliningReason(
-        FLOOR_LEVER,
-        "exhausted, reset passed and no sample since",
-        floor.slug,
-        hold.expected_reset + FLOOR_UNCONFIRMED_GRACE,
-    )
+    return DecliningReason(FLOOR_LEVER, "exhausted, reset passed and no sample since", floor.slug)

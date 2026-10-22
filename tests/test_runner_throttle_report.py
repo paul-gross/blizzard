@@ -17,7 +17,7 @@ from blizzard.runner.hub.client import DecliningDeclaration
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
-from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer, FloorHold, HoldKind
+from blizzard.runner.throttle.floor import FloorAnswer, FloorHold, HoldKind
 from blizzard.runner.throttle.gate import ClaimsAnswer, GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.report import DecliningReason, declining_report
@@ -87,7 +87,7 @@ def test_a_floor_holding_before_its_reset_is_exhausted_until_that_reset() -> Non
     )
 
 
-def test_a_floor_past_its_reset_awaiting_a_sample_names_the_instant_its_grace_opens_it() -> None:
+def test_a_floor_past_its_reset_awaiting_a_sample_names_no_instant() -> None:
     _store, _hub, ctx = _ctx()
     reset = _NOW - timedelta(minutes=10)
     ctx.host_stores.usage_limits.record_usage_limit_mark(
@@ -99,7 +99,7 @@ def test_a_floor_past_its_reset_awaiting_a_sample_names_the_instant_its_grace_op
     assert reason.lever == "floor"
     assert reason.detail == "exhausted, reset passed and no sample since"
     assert reason.subscription == _SLUG
-    assert reason.until == reset + FLOOR_UNCONFIRMED_GRACE
+    assert reason.until is None
 
 
 def test_a_runner_naming_no_subscription_reports_its_own_floor_with_no_subscription() -> None:
