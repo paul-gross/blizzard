@@ -86,9 +86,10 @@ class IReadWorkRefsCorpus(Protocol):
         """Every open tenant's work-ref rows whose chunk is neither grouped away nor deleted."""
         ...
 
-    def live_work_refs_signature(self) -> WorkRefsSignature:
-        """A one-statement, hub-wide fingerprint of what :meth:`live_work_refs` and the status
-        derivation read — the change probe that lets the sweep skip the unbounded read."""
+    def live_work_refs_signature(self) -> Mapping[TenantId, WorkRefsSignature]:
+        """A one-statement, hub-wide read of each tenant's fingerprint of what :meth:`live_work_refs`
+        and the status derivation read — the change probe that lets the sweep skip the unbounded
+        read, its value per tenant. A tenant holding none of those rows has no entry."""
         ...
 
 

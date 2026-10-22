@@ -147,6 +147,10 @@ forge outages, and failed writes or clears are retried on the very next pass. A 
 rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk transition, an ingest, or any other hub
 request.
 
+Each tenant is judged on its own. The change check and the five-interval floor are kept per tenant, so a tenant whose
+source's forge cannot be read retries on every pass by itself while every other tenant keeps skipping unchanged passes,
+and a fault raised in one tenant is logged against it without stopping the pass for the rest.
+
 The one thing the sweep remembers, in the hub store, is which sources it annotates. A source whose `annotate` is turned
 off across a restart has every blizzard label it carries cleared once on the next pass, through its still-configured
 binding; a clear that fails is retried each pass until it finishes. A source whose record is retired is let go of the
@@ -176,11 +180,12 @@ closer and records each outcome. A PR opened before an upgrade keeps the body it
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
 a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then attempts up to a
-fixed number of due intents per pass through that source's binding, leaving the rest to the next pass, and a failed
-attempt stays pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata
-is only an opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical
-constraint: a close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is
-not a race to coordinate around.
+fixed number of due intents per pass through that source's binding, shared fairly among the tenants with due intents
+(one tenant's backlog never takes another's turn) and leaving the rest to the next pass, and a failed attempt stays
+pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata is only an
+opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a
+close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is not a race to
+coordinate around.
 
 It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
 any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`; the

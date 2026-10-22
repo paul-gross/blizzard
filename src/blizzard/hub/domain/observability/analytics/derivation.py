@@ -126,6 +126,8 @@ def stamp_events(
 
 
 #: A tenant's candidacy when it has no visible segment.
+#: The signature of a tenant holding no segment and no chunk.
+_GONE = DerivationSignature(segment_count=0, max_segment_id=None, max_received_at=None, chunk_count=0)
 _NOTHING_VISIBLE = CandidacyRead(visible_segment_ids=frozenset(), candidate_segment_ids=[])
 
 #: The change probe's forced floor — bounds how stale a missed signature can leave reality.
@@ -148,8 +150,9 @@ def derivation_due(
 class IReadDerivationCorpus(Protocol):
     """The event-derivation sweep's corpus, read across every open tenant, and its probe."""
 
-    def derivation_signature(self) -> DerivationSignature:
-        """The hub-wide change probe over every tenant's segments and chunks."""
+    def derivation_signature(self) -> Mapping[TenantId, DerivationSignature]:
+        """The hub-wide change probe, one statement, its value per tenant over that tenant's segments
+        and chunks; a tenant holding neither has no entry."""
         ...
 
     def candidacy(self, extractor_version: str) -> Mapping[TenantId, CandidacyRead]:
@@ -301,12 +304,10 @@ class TenantEventDerivation:
 
 
 class EventDerivationReconciler:
-    """The standing convergence pass, one per hub, stepped by the existing ``Sweep`` driver: derives
-    each candidate, then drops rows for any segment no longer visible. Holds, in memory only, the
-    last pass's :class:`~blizzard.hub.domain.observability.analytics.events.DerivationSignature`; a
-    fresh process always runs full, and :data:`FORCED_FULL_PASS_FLOOR` bounds staleness. ``corpus``
-    names every open tenant's segments, each beside its tenant; ``tenant`` opens a row's tenant's
-    :class:`TenantEventDerivation`, which acts on that tenant's segments alone."""
+    """The standing convergence pass, one per hub: derives each candidate, then drops rows for any
+    segment no longer visible. Holds, in memory only, each tenant's last converged signature and
+    instant, so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``); a fresh process
+    runs full, and :data:`FORCED_FULL_PASS_FLOOR` bounds staleness. ``tenant`` opens a tenant's half."""
 
     def __init__(
         self,
@@ -320,46 +321,71 @@ class EventDerivationReconciler:
         self._tenant = tenant
         self._clock = clock
         self._extractor_version = extractor_version
-        self._last_signature: DerivationSignature | None = None
-        self._last_full_pass_at: datetime | None = None
+        self._converged: dict[TenantId, tuple[DerivationSignature, datetime]] = {}
+        self._swept = False
 
     def sweep(self) -> None:
-        """One convergence pass, or a skip when the hub-wide probe reports nothing changed and the
-        floor isn't due. A segment is a ``(tenant, segment_id)`` pair throughout — segment ids are
-        runner-minted, so two tenants may each hold one id — and the stale set is the derived pairs
-        less the visible ones. A tenant closed since the corpus read is skipped; a tenant whose
-        graph pins fail to resolve leaves the pass unconverged, retried next tick."""
-        signature = self._corpus.derivation_signature()
+        """One convergence pass over every due tenant (never converged, floor elapsed, or signature
+        changed), or a skip when none is; the corpus is read only then. A segment is a
+        ``(tenant, segment_id)`` pair — segment ids are runner-minted — and the stale set is the derived
+        pairs less the visible ones. A closed tenant is skipped; one whose pins fail or whose half
+        raises is left unconverged and retried alone next tick."""
+        signatures = self._corpus.derivation_signature()
         now = self._clock.now()
-        if not derivation_due(self._last_signature, signature, self._last_full_pass_at, now):
+        self._converged = {
+            tenant: state for tenant, state in self._converged.items() if tenant in signatures or state[0] != _GONE
+        }
+        derived: Mapping[TenantId, frozenset[str]] | None = None
+        known = set(signatures) | set(self._converged)
+        if not self._swept:  # a fresh process also finds tenants whose every segment and chunk is gone
+            derived = self._corpus.derived_segment_ids()
+            known |= set(derived)
+        due = [tenant for tenant in sorted(known) if self._is_due(tenant, signatures.get(tenant, _GONE), now)]
+        if not due:
             _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
             return
+        self._swept = True
 
         reads = self._corpus.candidacy(self._extractor_version)
         visible = {(tenant, segment) for tenant, read in reads.items() for segment in read.visible_segment_ids}
-        derived_pairs = {
-            (tenant, segment) for tenant, segments in self._corpus.derived_segment_ids().items() for segment in segments
-        }
+        if derived is None:
+            derived = self._corpus.derived_segment_ids()
+        derived_pairs = {(tenant, segment) for tenant, segments in derived.items() for segment in segments}
         stale: dict[TenantId, set[str]] = {}
         for tenant, segment in derived_pairs - visible:
             stale.setdefault(tenant, set()).add(segment)
 
         tally = DerivationTally()
-        converged = True
-        for tenant in sorted(set(reads) | set(stale)):
+        converged: list[TenantId] = []
+        unconverged: list[TenantId] = []
+        for tenant in due:
+            if tenant not in reads and tenant not in stale:
+                converged.append(tenant)
+                continue
             candidates = reads.get(tenant, _NOTHING_VISIBLE).candidate_segment_ids
             try:
-                converged &= self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
+                ok = self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
             except (TenantClosed, UnknownTenant):
                 _log.info("transcript event derivation skipped a closed tenant", tenant=tenant)
+                continue
+            except Exception as exc:
+                ok = False
+                _log.warning("transcript event derivation failed for a tenant", tenant=tenant, fault=repr(exc))
+            (converged if ok else unconverged).append(tenant)
 
-        if converged:
-            self._last_signature = signature
-            self._last_full_pass_at = now
+        for tenant in converged:
+            self._converged[tenant] = (signatures.get(tenant, _GONE), now)
 
         _log.info(
             "transcript event derivation sweep completed",
             derived=tally.derived,
             dropped=tally.dropped,
             failed=tally.failed,
+            tenants_converged=len(converged),
+            tenants_skipped=len(known) - len(due),
+            tenants_unconverged=unconverged,
         )
+
+    def _is_due(self, tenant: TenantId, signature: DerivationSignature, now: datetime) -> bool:
+        last_signature, last_full_pass_at = self._converged.get(tenant, (None, None))
+        return derivation_due(last_signature, signature, last_full_pass_at, now)

@@ -52,12 +52,16 @@ def departed(previous: Iterable[str], annotating: Iterable[str]) -> list[str]:
 @domain_model
 @dataclass(frozen=True)
 class AnnotationProbe:
-    """Everything that can move what the sweep writes without a floor elapsing: the hub's live
-    work-ref inputs and the sources annotating now, each beside its tenant (read from each tenant's
-    config on every call)."""
+    """Everything that can move what the sweep writes for one tenant without a floor elapsing: the
+    tenant's live work-ref inputs and the sources annotating now (read from its config on every
+    call)."""
 
     work_refs: WorkRefsSignature
-    annotating: frozenset[tuple[TenantId, str]]
+    annotating: frozenset[str]
+
+
+#: A tenant holding none of the rows the work-refs probe counts.
+_NO_ROWS = WorkRefsSignature(marks=())
 
 
 def annotation_due(
@@ -187,11 +191,10 @@ class TenantAnnotation:
 
 
 class AnnotationReconciler:
-    """The forge-status pass, one per hub. Holds, in memory only, the probe and instant of its last
-    converged pass; ``full_pass_floor`` bounds how stale a pass the probe skipped can leave the
-    forge. ``tenants`` names the open tenants, ``tenant`` opens one's :class:`TenantAnnotation`, and
-    ``corpus`` names every open tenant's work refs, each beside its tenant — a tenant reconciles its
-    own rows alone, against its own sources."""
+    """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe and last converged
+    instant, so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``);
+    ``full_pass_floor`` bounds how stale a skipped pass can leave the forge. A tenant reconciles its own
+    rows alone, against its own sources."""
 
     def __init__(
         self,
@@ -207,41 +210,61 @@ class AnnotationReconciler:
         self._tenant = tenant
         self._clock = clock
         self._full_pass_floor = full_pass_floor
-        self._last_probe: AnnotationProbe | None = None
-        self._last_full_pass_at: datetime | None = None
+        self._converged: dict[TenantId, tuple[AnnotationProbe, datetime]] = {}
 
     def sweep(self) -> None:
-        """One reconciliation pass over every open tenant's opted-in sources and the one-shot clear
-        of each departed one — or a skip while the hub-wide probe is unchanged and the floor not due.
-        The corpus is read once, only when some tenant has a source to reconcile. Failures are
-        counted, not raised; a tenant closed since the pass began is skipped; only a converged pass
-        records its probe, so anything less is retried next pass."""
+        """One reconciliation pass over every due tenant (never converged, floor elapsed, or probe
+        changed); the corpus is read once, only when some tenant is due. A closed tenant is skipped and
+        a fault in one tenant's half is caught at that tenant; only a converged tenant records its
+        probe, so any other is retried alone next pass."""
         opened: dict[TenantId, TenantAnnotation] = {}
+        unconverged: list[TenantId] = []
+        annotating: dict[TenantId, Sequence[str]] = {}
         for tenant in sorted(self._tenants()):
             try:
                 opened[tenant] = self._tenant(tenant)
+                annotating[tenant] = opened[tenant].annotating()
             except (TenantClosed, UnknownTenant):
-                continue
-        annotating = {tenant: unit.annotating() for tenant, unit in opened.items()}
-        probe = AnnotationProbe(
-            work_refs=self._corpus.live_work_refs_signature(),
-            annotating=frozenset((tenant, name) for tenant, names in annotating.items() for name in names),
-        )
+                opened.pop(tenant, None)
+            except Exception as exc:
+                opened.pop(tenant, None)
+                unconverged.append(tenant)
+                _log.warning("forge-status sweep could not open a tenant", tenant=tenant, fault=repr(exc))
+        self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in opened}
+        signatures = self._corpus.live_work_refs_signature()
+        probes = {
+            tenant: AnnotationProbe(
+                work_refs=signatures.get(tenant, _NO_ROWS), annotating=frozenset(annotating[tenant])
+            )
+            for tenant in opened
+        }
         now = self._clock.now()
-        if not annotation_due(self._last_probe, probe, self._last_full_pass_at, now, self._full_pass_floor):
-            _log.info("forge-status sweep skipped", reason="probe unchanged")
+        due = [tenant for tenant in opened if self._is_due(tenant, probes[tenant], now)]
+        if not due:
+            _log.info(
+                "forge-status sweep skipped",
+                reason="probe unchanged",
+                tenants_skipped=len(opened),
+                tenants_unconverged=unconverged,
+            )
             return
         corpus = _PassCorpus(self._corpus)
         tally = AnnotationTally()
-        converged = True
-        for tenant, unit in opened.items():
+        reconciled = 0
+        for tenant in due:
             try:
-                converged &= unit.reconcile(tenant, annotating[tenant], partial(corpus.rows_of, tenant), tally)
+                converged = opened[tenant].reconcile(tenant, annotating[tenant], partial(corpus.rows_of, tenant), tally)
             except (TenantClosed, UnknownTenant):
                 _log.info("forge-status sweep skipped a closed tenant", tenant=tenant)
-        if converged:
-            self._last_probe = probe
-            self._last_full_pass_at = now
+                continue
+            except Exception as exc:
+                converged = False
+                _log.warning("forge-status sweep failed for a tenant", tenant=tenant, fault=repr(exc))
+            if converged:
+                self._converged[tenant] = (probes[tenant], now)
+                reconciled += 1
+            else:
+                unconverged.append(tenant)
         _log.info(
             "forge-status sweep completed",
             written=tally.written,
@@ -249,7 +272,14 @@ class AnnotationReconciler:
             skipped=tally.considered - tally.written - tally.cleared - tally.failed,
             failed=tally.failed,
             sources_skipped=tally.sources_skipped,
+            tenants_reconciled=reconciled,
+            tenants_skipped=len(opened) - len(due),
+            tenants_unconverged=sorted(unconverged),
         )
+
+    def _is_due(self, tenant: TenantId, probe: AnnotationProbe, now: datetime) -> bool:
+        last_probe, last_full_pass_at = self._converged.get(tenant, (None, None))
+        return annotation_due(last_probe, probe, last_full_pass_at, now, self._full_pass_floor)
 
 
 class _PassCorpus:

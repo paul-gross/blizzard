@@ -32,6 +32,7 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from tests.hub_event_rows import hub_events_of
 from tests.support import (
     close_tenant,
+    count_queries,
     default_project,
     default_tenant,
     hub_level_connections,
@@ -353,13 +354,26 @@ def test_backfill_epochs_are_the_open_tenants_each_with_its_tenant(world: _World
     assert {(d.tenant, d.segment_id) for d in drops} == {(t, f"sg_dropped_{t}") for t in (world.carried, _OPEN)}
 
 
-def test_the_probes_count_every_tenant_and_a_close_moves_the_work_refs_probe(tmp_path: Path) -> None:
+def test_the_probes_answer_per_tenant_in_one_statement_and_count_a_closed_tenant(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    tenants = {world.carried, _OPEN, _CLOSED}
+    assert count_queries(world.engine, world.corpus.live_work_refs_signature) == 1
+    assert count_queries(world.engine, world.corpus.derivation_signature) == 1
+    work_refs, derivation = world.corpus.live_work_refs_signature(), world.corpus.derivation_signature()
+    assert set(work_refs) == set(derivation) == tenants
+    assert sum(signature.segment_count for signature in derivation.values()) == 3
+    close_tenant(world.engine, _CLOSED)
+    assert world.corpus.live_work_refs_signature() == work_refs
+    assert world.corpus.derivation_signature() == derivation
+
+
+def test_a_row_in_one_tenant_moves_only_that_tenants_work_refs_probe(tmp_path: Path) -> None:
     world = _World(tmp_path)
     before = world.corpus.live_work_refs_signature()
-    assert world.corpus.derivation_signature().segment_count == 3
-    close_tenant(world.engine, _CLOSED)
-    assert world.corpus.live_work_refs_signature() != before
-    assert world.corpus.derivation_signature().segment_count == 3
+    world.insert(s.chunk_work_refs, tenant_id=_OPEN, chunk_id=_live(_OPEN), source="src", ref="another")
+    after = world.corpus.live_work_refs_signature()
+    assert after[_OPEN] != before[_OPEN]
+    assert {t: sig for t, sig in after.items() if t != _OPEN} == {t: sig for t, sig in before.items() if t != _OPEN}
 
 
 def test_every_corpus_statement_carries_the_hub_scoped_marker(world: _World) -> None:

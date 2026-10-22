@@ -225,11 +225,31 @@ class CloseDrainTally:
             self.failed += 1
 
 
+def fair_share(
+    due: Mapping[TenantId, Sequence[PendingCloseIntent]], limit: int, start: int
+) -> dict[TenantId, list[PendingCloseIntent]]:
+    """Up to ``limit`` of ``due``, one intent per tenant in turn from the ``start``-th tenant by name."""
+    tenants = sorted(due)
+    if tenants:
+        start %= len(tenants)
+        tenants = tenants[start:] + tenants[:start]
+    taken: dict[TenantId, list[PendingCloseIntent]] = {}
+    depth = 0
+    while sum(map(len, taken.values())) < limit:
+        round_ = [tenant for tenant in tenants if len(due[tenant]) > depth]
+        if not round_:
+            break
+        for tenant in round_[: limit - sum(map(len, taken.values()))]:
+            taken.setdefault(tenant, []).append(due[tenant][depth])
+        depth += 1
+    return taken
+
+
 class CloseDrainSweep:
-    """The close drain's one pass per hub: reads every open tenant's pending intents once, keeps the
-    due ones up to ``CLOSE_DRAIN_PASS_LIMIT`` in intent order, and hands each tenant its own share
-    through ``tenant`` — that tenant's :class:`CloseIntentDrainer`, opened for the rows' tenant — so
-    no tenant's intent is ever acted on in another tenant's scope."""
+    """The close drain's one pass per hub: reads every open tenant's pending intents once, keeps up to
+    ``CLOSE_DRAIN_PASS_LIMIT`` due ones by :func:`fair_share`, and hands each tenant its share through
+    its own :class:`CloseIntentDrainer`, so no intent is acted on in another tenant's scope and one
+    tenant's burst or fault never changes another's share."""
 
     def __init__(
         self,
@@ -241,32 +261,36 @@ class CloseDrainSweep:
         self._corpus = corpus
         self._tenant = tenant
         self._clock = clock
+        self._rotation = 0
 
     def sweep(self) -> None:
-        """One complete drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents. A tenant closed
-        since the corpus read is skipped, its intents left to its teardown. One aggregate INFO
-        summary per pass (``bzh:structlog-logging``)."""
+        """One drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents; a closed tenant is skipped and a
+        fault in one tenant is caught there."""
         now = self._clock.now()
-        due = [
-            row
-            for row in self._corpus.pending_close_intents()
+        due: dict[TenantId, list[PendingCloseIntent]] = {}
+        for row in self._corpus.pending_close_intents():
             if close_intent_is_due(
                 now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
-            )
-        ][:CLOSE_DRAIN_PASS_LIMIT]
-        by_tenant: dict[TenantId, list[PendingCloseIntent]] = {}
-        for row in due:
-            by_tenant.setdefault(row.tenant, []).append(row.intent)
+            ):
+                due.setdefault(row.tenant, []).append(row.intent)
+        by_tenant = fair_share(due, CLOSE_DRAIN_PASS_LIMIT, self._rotation)
+        self._rotation += 1
         tally = CloseDrainTally()
+        failed: list[TenantId] = []
         for tenant, intents in by_tenant.items():
             try:
                 self._tenant(tenant).drain(intents, tally)
             except (TenantClosed, UnknownTenant):
                 _log.info("close intent drain skipped a closed tenant", tenant=tenant, intents=len(intents))
+            except Exception as exc:
+                failed.append(tenant)
+                _log.warning("close intent drain failed for a tenant", tenant=tenant, fault=repr(exc))
         _log.info(
             "close intent drain sweep completed",
             closed=tally.closed,
             gone=tally.gone,
             failed=tally.failed,
             skipped=tally.skipped,
+            tenants=len(by_tenant),
+            tenants_failed=sorted(failed),
         )
