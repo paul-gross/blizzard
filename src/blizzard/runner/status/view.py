@@ -225,8 +225,7 @@ class ThrottleStatus:
     on_usage_limit: str = "hold"
 
     @classmethod
-    def of(cls, gate: ThrottleGate, *, braked: bool) -> ThrottleStatus:
-        verdict = gate.verdict()
+    def of(cls, verdict: GateVerdict, *, braked: bool) -> ThrottleStatus:
         return cls(state="braked" if braked else "admitting" if verdict.admits_claim else "declining", verdict=verdict)
 
 
@@ -354,7 +353,7 @@ class RunnerStatusService:
             served_projects=served_projects_status(self._projects, answer),
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
             routing_conflicts=routing.conflicts,
-            throttle=ThrottleStatus.of(self._throttle_gate, braked=local_paused or hub_paused)
+            throttle=ThrottleStatus.of(self._throttle_gate.verdict(), braked=local_paused or hub_paused)
             if self._throttle_gate is not None
             else None,
         )

@@ -110,8 +110,8 @@ def _throttle_lines(throttle: dict | None) -> list[str]:
     lines = [f"  throttle: {throttle['state']} (declining: {declining})", f"    floor ({target}): {answer} — {detail}"]
     for lever in throttle.get("levers", []):
         lines.append(
-            f"    {lever.get('name', 'lever')}: {lever.get('answer', 'unknown')}"
-            f" — {lever.get('reading', 'no reading')}; until {lever.get('until') or 'none'}"
+            f"    {lever['name']} ({lever['setting']}): {'admit' if lever['admits'] else 'hold'}"
+            f" — {lever['reading']}; until {lever['until'] or 'none'}"
         )
     lines.append(f"    on_decline: {throttle['on_decline']}; on_usage_limit: {throttle['on_usage_limit']}")
     return lines

@@ -110,9 +110,9 @@ def _hold_subscription(ctx: LoopContext) -> None:
 def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() -> None:
     _store, _hub, ctx = _ctx()
     gate = ThrottleGate(ctx)
-    assert _throttle_view(ThrottleStatus.of(gate, braked=False)).state == "admitting"
+    assert _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False)).state == "admitting"
     _hold_subscription(ctx)
-    view = _throttle_view(ThrottleStatus.of(gate, braked=True))
+    view = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=True))
     assert view.state == "braked"
     assert view.declining == ["floor"]
     assert view.floor.subscription == _SLUG
@@ -121,10 +121,40 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
     assert view.levers == []
     assert "declining: floor" in _throttle_lines(view.model_dump())[0]
     ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW, by="operator"))
-    cleared = _throttle_view(ThrottleStatus.of(gate, braked=False))
+    cleared = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
     assert cleared.floor.admits
     assert cleared.floor.clear is not None
     assert cleared.floor.clear.cleared_at.endswith("Z")
+
+
+def test_cli_renders_configured_lever_setting_reading_answer_and_until() -> None:
+    throttle = {
+        "state": "declining",
+        "declining": ["pace"],
+        "floor": {"subscription": None, "admits": True, "hold": None, "clear": None},
+        "levers": [
+            {
+                "name": "pace",
+                "setting": "7d, lead 5 points",
+                "reading": "70% spent, 50% elapsed",
+                "admits": False,
+                "until": "2026-10-22T19:00:00Z",
+            },
+            {
+                "name": "schedule",
+                "setting": "weekdays 09:00-17:00 America/New_York",
+                "reading": "inside span",
+                "admits": True,
+                "until": None,
+            },
+        ],
+        "on_decline": "hold",
+        "on_usage_limit": "hold",
+    }
+
+    lines = _throttle_lines(throttle)
+    assert lines[2] == "    pace (7d, lead 5 points): hold — 70% spent, 50% elapsed; until 2026-10-22T19:00:00Z"
+    assert lines[3] == "    schedule (weekdays 09:00-17:00 America/New_York): admit — inside span; until none"
 
 
 def _brake(store: Any) -> None:
@@ -165,7 +195,7 @@ def test_a_runner_naming_no_subscription_reads_its_own_mark() -> None:
     answer = ThrottleGate(ctx).floor()
     assert not answer.admits
     assert answer.slug is None
-    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx), braked=False))
+    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
     assert view.state == "declining"
     assert view.declining == ["floor"]
     assert view.floor.subscription is None
