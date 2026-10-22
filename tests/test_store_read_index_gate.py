@@ -22,6 +22,7 @@ import sqlalchemy as sa
 import blizzard.hub as hub_pkg
 import blizzard.runner as runner_pkg
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.observability.egress.repository import IReadEgressEvents, IReadUsageCorpus
 from blizzard.hub.domain.observability.tracing.repository import IReadStepCorpus
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
@@ -319,6 +320,20 @@ def test_each_hub_wide_cursor_index_serves_the_read_that_pages_across_tenants(
     assert any(detail.startswith(f"SEARCH {table} USING INDEX {index_name} (") for detail in details), (
         f"{protocol.__name__}.{method} no longer searches {table} through {index_name}; its plan was {details}"
     )
+
+
+def test_the_tenant_wide_distinct_classes_read_is_covered_by_the_routine_class_index(hub_world: HubWorld) -> None:
+    """The ``distinct_classes`` allowance admits only this read, on the claim that it never reads a finding row."""
+    with support.capture_statements(hub_world.engine) as statements:
+        HUB_CENSUS[(IReadFindingRepository, "distinct_classes")](hub_world)
+    details = [
+        row.detail
+        for statement, parameters in statements
+        if statement.lstrip().upper().startswith("SELECT")
+        for row in support.explain_query_plan(hub_world.engine, statement, parameters)
+    ]
+    covering = "SEARCH findings USING COVERING INDEX ix_findings_tenant_project_routine_class (tenant_id=?)"
+    assert covering in details, f"the tenant-wide class read is no longer a covering search; its plan was {details}"
 
 
 # The gate's mutation self-test, one case per offense the classifier must see: a hub-scoped cursor read falling back

@@ -1166,6 +1166,15 @@ def test_egress_positive_keys_accept_one_and_refuse_zero(tmp_path: Path, key: st
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("key", ["settle_seconds", "min_free_bytes"])
+def test_egress_non_negative_keys_accept_zero_and_refuse_minus_one(key: str) -> None:
+    assert getattr(parse_egress_config(ConfigView.unchecked({key: 0})), key) == 0
+    with pytest.raises(HubConfigError) as error:
+        parse_egress_config(ConfigView.unchecked({key: -1}))
+    assert str(error.value) == f"egress.{key} must be non-negative, got -1"
+
+
+@pytest.mark.unit
 def test_egress_file_paths_refuses_a_non_string_naming_every_mode() -> None:
     with pytest.raises(HubConfigError) as error:
         parse_egress_config(ConfigView.unchecked({"file_paths": 3}))
