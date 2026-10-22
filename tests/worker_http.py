@@ -1,10 +1,11 @@
-"""How a worker-CLI test hands its commands their HTTP: collaborators bound over a canned transport
-(:func:`bind_transport`) or ``get``/``post`` callables (:func:`bind_stubs`), and invoked through the
-returned :class:`Bound`'s runner."""
+"""How a CLI test hands its commands their HTTP: collaborators bound over a canned transport
+(:func:`bind_transport`) or per-verb callables (:func:`bind_stubs`), and invoked through the
+returned :class:`Bound`'s runner. Hub verbs, worker verbs and the runner's doors all build their clients through
+the bound factory."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,37 +18,91 @@ from blizzard.foundation.span_clock import Clock
 
 
 class StubClient:
-    """A client whose ``get`` and ``post`` are the callables a test supplies."""
+    """A client whose verbs are the callables a test supplies.
 
-    def __init__(self, get: Callable[..., Any] | None, post: Callable[..., Any] | None) -> None:
-        self._get = get
-        self._post = post
+    Each callable answers as the matching ``httpx`` module function does: ``(url, **kwargs)``, the client's own
+    ``timeout`` and ``headers`` riding along when its factory call named them. ``request`` and ``stream`` take the
+    method first; without a ``request`` callable, a request routes to its method's own."""
+
+    def __init__(
+        self,
+        calls: dict[str, Callable[..., Any]],
+        *,
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        self._calls = calls
+        self._ambient: dict[str, Any] = {}
+        if timeout is not None:
+            self._ambient["timeout"] = timeout
+        if headers:
+            self._ambient["headers"] = dict(headers)
         self.closed = False
 
+    def _verb(self, name: str, url: str, kwargs: dict[str, Any]) -> Any:
+        call = self._calls.get(name)
+        if call is None:
+            raise AssertionError(f"unexpected {name.upper()} {url}")
+        return call(url, **self._merged(kwargs))
+
+    def _merged(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        merged = {**self._ambient, **kwargs}
+        if "headers" in self._ambient and "headers" in kwargs:
+            merged["headers"] = {**self._ambient["headers"], **kwargs["headers"]}
+        return merged
+
     def get(self, url: str, **kwargs: Any) -> Any:
-        if self._get is None:
-            raise AssertionError(f"unexpected GET {url}")
-        return self._get(url, **kwargs)
+        return self._verb("get", url, kwargs)
 
     def post(self, url: str, **kwargs: Any) -> Any:
-        if self._post is None:
-            raise AssertionError(f"unexpected POST {url}")
-        return self._post(url, **kwargs)
+        return self._verb("post", url, kwargs)
+
+    def patch(self, url: str, **kwargs: Any) -> Any:
+        return self._verb("patch", url, kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> Any:
+        return self._verb("put", url, kwargs)
+
+    def delete(self, url: str, **kwargs: Any) -> Any:
+        return self._verb("delete", url, kwargs)
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Any:
+        if "request" in self._calls:
+            return self._calls["request"](method.lower(), url, **self._merged(kwargs))
+        return self._verb(method.lower(), url, kwargs)
+
+    def stream(self, method: str, url: str, **kwargs: Any) -> Any:
+        call = self._calls.get("stream")
+        if call is None:
+            raise AssertionError(f"unexpected streamed {method} {url}")
+        return call(method.lower(), url, **self._merged(kwargs))
 
     def close(self) -> None:
         self.closed = True
 
+    def __enter__(self) -> StubClient:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
 
 class _StubFactory:
-    """Builds :class:`StubClient` instances over the ``get`` and ``post`` a test supplies."""
+    """Builds :class:`StubClient` instances over the callables a test supplies."""
 
-    def __init__(self, get: Callable[..., Any] | None, post: Callable[..., Any] | None) -> None:
-        self.get = get
-        self.post = post
+    def __init__(self, calls: dict[str, Callable[..., Any]]) -> None:
+        self.calls = calls
         self.built: list[StubClient] = []
 
-    def __call__(self) -> StubClient:
-        client = StubClient(self.get, self.post)
+    def __call__(
+        self,
+        *,
+        base_url: str = "",
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+        uds: str | None = None,
+    ) -> StubClient:
+        client = StubClient(self.calls, timeout=timeout, headers=headers)
         self.built.append(client)
         return client
 
@@ -73,9 +128,27 @@ class Bound:
     built: list[Any]
 
 
-def bind_stubs(*, get: Callable[..., Any] | None = None, post: Callable[..., Any] | None = None) -> Bound:
-    """Answer worker commands' requests with ``get``/``post``."""
-    factory = _StubFactory(get, post)
+def bind_stubs(
+    *,
+    get: Callable[..., Any] | None = None,
+    post: Callable[..., Any] | None = None,
+    patch: Callable[..., Any] | None = None,
+    put: Callable[..., Any] | None = None,
+    delete: Callable[..., Any] | None = None,
+    request: Callable[..., Any] | None = None,
+    stream: Callable[..., Any] | None = None,
+) -> Bound:
+    """Answer commands' requests with the verb callables given; any other verb fails the test."""
+    given = {
+        "get": get,
+        "post": post,
+        "patch": patch,
+        "put": put,
+        "delete": delete,
+        "request": request,
+        "stream": stream,
+    }
+    factory = _StubFactory({name: call for name, call in given.items() if call is not None})
     collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type]
     return Bound(collaborators, _BoundRunner(collaborators), factory.built)
 
@@ -84,10 +157,40 @@ def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock:
     """Answer worker commands' requests through an ``httpx.MockTransport``."""
     built: list[Any] = []
 
-    def factory() -> httpx.Client:
-        client = httpx.Client(transport=httpx.MockTransport(handler))
+    def factory(
+        *,
+        base_url: str = "",
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+        uds: str | None = None,
+    ) -> httpx.Client:
+        client = httpx.Client(transport=httpx.MockTransport(handler), base_url=base_url, headers=headers)
+        if timeout is not None:
+            client.timeout = httpx.Timeout(timeout)
         built.append(client)
         return client
 
     collaborators = CliCollaborators(client_factory=factory, clock=clock or Clock(), wall_clock=SystemClock())
     return Bound(collaborators, _BoundRunner(collaborators), built)
+
+
+def bind_local_only(*, allow_base_urls: tuple[str, ...] = ()) -> Bound:
+    """Real clients, but only to the runner's own local API: a unix-socket client, the runner placeholder host, or a
+    ``base_url`` in ``allow_base_urls``. Any other client — the hub's — fails the test."""
+    real = CliCollaborators.production().client_factory
+
+    def factory(
+        *,
+        base_url: str = "",
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+        uds: str | None = None,
+    ) -> httpx.Client:
+        if uds is None and base_url not in allow_base_urls:
+            raise AssertionError(
+                f"a local verb contacted {base_url or 'a remote host'}; it must only reach the local API"
+            )
+        return real(base_url=base_url, timeout=timeout, headers=headers, uds=uds)
+
+    collaborators = CliCollaborators(client_factory=factory, clock=Clock(), wall_clock=SystemClock())
+    return Bound(collaborators, _BoundRunner(collaborators), [])

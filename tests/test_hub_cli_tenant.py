@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 import sqlalchemy as sa
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
@@ -21,6 +21,7 @@ from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.worker_http import bind_stubs
 
 _HUB_URL = "http://testserver"
 
@@ -32,22 +33,18 @@ def _said(result: Result) -> list[str]:
     return [line for line in result.output.splitlines() if '"event": ' not in line]
 
 
-def _signed_in_cli(hub: HubHarness, session: str, monkeypatch: pytest.MonkeyPatch) -> Cli:
+def _signed_in_cli(hub: HubHarness, session: str) -> Cli:
     """Route every call the CLI makes to ``hub``, signed in with ``session``, and hand back an invoker."""
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
-            return hub.client.request(
-                method, url, headers={"Authorization": f"Bearer {session}", **(headers or {})}, **kwargs
-            )
+    def forward(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        return hub.client.request(
+            method, url, headers={"Authorization": f"Bearer {session}", **(headers or {})}, **kwargs
+        )
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
+    bound = bind_stubs(request=forward)
 
     def invoke(*argv: str, stdin: str | None = None) -> Result:
-        return CliRunner().invoke(hub_group, [*argv, "--hub-url", _HUB_URL], input=stdin)
+        return bound.runner.invoke(hub_group, [*argv, "--hub-url", _HUB_URL], input=stdin)
 
     return invoke
 
@@ -60,10 +57,10 @@ def hub(tmp_path: Path) -> HubHarness:
 
 
 @pytest.fixture
-def cli(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> Cli:
+def cli(hub: HubHarness) -> Cli:
     hal = seed_user(hub, username="hal", role=Role.PENDING)
     seed_hub_admin(hub.engine, hal.user_id)
-    return _signed_in_cli(hub, seed_session(hub, hal), monkeypatch)
+    return _signed_in_cli(hub, seed_session(hub, hal))
 
 
 def _created(result: Result) -> str:
@@ -156,14 +153,14 @@ def test_delete_refuses_the_hubs_only_open_tenant_and_an_unknown_one(hub: HubHar
 
 
 @pytest.mark.unit
-def test_a_deletion_left_underway_says_the_hub_finishes_it(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_deletion_left_underway_says_the_hub_finishes_it() -> None:
     def delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
         body = {"tenant_id": "ten_a", "state": "deleting", "rows_removed": None}
         return httpx.Response(202, json=body, request=httpx.Request("DELETE", url))
 
-    monkeypatch.setattr(httpx, "delete", delete)
+    bound = bind_stubs(delete=delete)
 
-    result = CliRunner().invoke(hub_group, ["tenant", "delete", "ten_a", "--yes", "--hub-url", _HUB_URL])
+    result = bound.runner.invoke(hub_group, ["tenant", "delete", "ten_a", "--yes", "--hub-url", _HUB_URL])
 
     assert result.exit_code == 0, result.output
     assert "deletion is underway" in result.output
@@ -171,7 +168,7 @@ def test_a_deletion_left_underway_says_the_hub_finishes_it(monkeypatch: pytest.M
 
 
 @pytest.mark.unit
-def test_list_shows_a_deletion_underway_with_when_it_began(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_shows_a_deletion_underway_with_when_it_began() -> None:
     rows = [
         {"tenant_id": "ten_a", "name": "acme", "created_at": "t0", "created_by": "hal", "state": "open"},
         {
@@ -187,9 +184,9 @@ def test_list_shows_a_deletion_underway_with_when_it_began(monkeypatch: pytest.M
     def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
         return httpx.Response(200, json=rows, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(httpx, "get", get)
+    bound = bind_stubs(get=get)
 
-    result = CliRunner().invoke(hub_group, ["tenant", "list", "--hub-url", _HUB_URL])
+    result = bound.runner.invoke(hub_group, ["tenant", "list", "--hub-url", _HUB_URL])
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == [

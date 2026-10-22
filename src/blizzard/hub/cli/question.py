@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -46,7 +46,7 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
     resp = cli.send(
         "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
     )
-    if resp.status_code == httpx.codes.CONFLICT:
+    if resp.status_code == HTTPStatus.CONFLICT:
         body = resp.json()
         if "answered_by" in body:
             raise click.ClickException(f"already answered by {body['answered_by']}: {body.get('answer')!r}")

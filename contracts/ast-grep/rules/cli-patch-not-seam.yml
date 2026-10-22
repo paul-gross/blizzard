@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:cli-patch-not-seam
+language: Python
+severity: error
+message: >-
+  A test hands a CLI command its collaborators through the root group's obj (CliCollaborators, InitCollaborators); it
+  does not patch a name inside a CLI module by its dotted path (bzh:dependency-injection).
+files:
+  - tests/**
+rule:
+  pattern: $PATCHER.setattr($TARGET, $$$REST)
+constraints:
+  TARGET:
+    kind: string
+    regex: ^["']blizzard\.(\w+\.)*cli[."']

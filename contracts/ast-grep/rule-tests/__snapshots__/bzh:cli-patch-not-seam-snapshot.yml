@@ -1,0 +1,37 @@
+id: bzh:cli-patch-not-seam
+snapshots:
+  ? |
+    monkeypatch.setattr(
+        "blizzard.runner.cli.external_usage.select_sampler",
+        lambda *args, **kwargs: sampler,
+    )
+  : labels:
+    - source: |-
+        monkeypatch.setattr(
+            "blizzard.runner.cli.external_usage.select_sampler",
+            lambda *args, **kwargs: sampler,
+        )
+      style: primary
+      start: 0
+      end: 116
+  ? |
+    monkeypatch.setattr("blizzard.hub.cli.context.CLIENT_TIMEOUT", 1.0)
+  : labels:
+    - source: monkeypatch.setattr("blizzard.hub.cli.context.CLIENT_TIMEOUT", 1.0)
+      style: primary
+      start: 0
+      end: 67
+  ? |
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
+  : labels:
+    - source: monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
+      style: primary
+      start: 0
+      end: 75
+  ? |
+    monkeypatch.setattr('blizzard.cli.collaborators.CliCollaborators.production', fake)
+  : labels:
+    - source: monkeypatch.setattr('blizzard.cli.collaborators.CliCollaborators.production', fake)
+      style: primary
+      start: 0
+      end: 83

@@ -7,7 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 from click.testing import CliRunner, Result
 
@@ -16,6 +15,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -44,20 +44,16 @@ def hal(hub: HubHarness) -> User:
 
 
 @pytest.fixture
-def cli(hub: HubHarness, hal: User, monkeypatch: pytest.MonkeyPatch) -> Cli:
+def cli(hub: HubHarness, hal: User) -> Cli:
     """Every call the CLI makes routed to ``hub``, signed in as the hub administrator ``hal``."""
     session = seed_session(hub, hal)
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
-            signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
-            return hub.client.request(method, url, headers=signed_in, **kwargs)
+    def forward(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        signed_in = {"Authorization": f"Bearer {session}", **(headers or {})}
+        return hub.client.request(method, url, headers=signed_in, **kwargs)
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
-    return lambda *argv: CliRunner().invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
+    bound = bind_stubs(request=forward)
+    return lambda *argv: bound.runner.invoke(hub_group, [*argv, "--hub-url", _HUB_URL])
 
 
 def test_a_hub_administrator_lists_grants_and_revokes_another(hub: HubHarness, hal: User, cli: Cli) -> None:

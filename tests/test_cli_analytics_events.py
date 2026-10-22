@@ -1,6 +1,6 @@
 """``blizzard hub analytics events`` — a pure client of
-``GET /api/analytics/events``/``/events/ndjson`` driven with ``httpx`` stubbed (unit
-tier): the three output modes, the incompatible-flag guards, the local→UTC
+``GET /api/analytics/events``/``/events/ndjson`` driven with the client factory stubbed
+(unit tier): the three output modes, the incompatible-flag guards, the local→UTC
 ``--since``/``--until`` conversion, and the bare 401/403 messages."""
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.unit
 
@@ -89,10 +89,10 @@ def _local_timezone(tz: str) -> Iterator[None]:
 # --- the three output modes -----------------------------------------------------
 
 
-def test_default_output_is_a_human_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(200, {"events": [_EVENT], "next_cursor": None}))
+def test_default_output_is_a_human_table() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(200, {"events": [_EVENT], "next_cursor": None}))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events"])
 
     assert result.exit_code == 0, result.output
     assert "src/a.py" in result.output
@@ -100,22 +100,23 @@ def test_default_output_is_a_human_table(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "{" not in result.output  # not raw JSON
 
 
-def test_json_prints_the_raw_envelope_including_next_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_json_prints_the_raw_envelope_including_next_cursor() -> None:
     body = {"events": [_EVENT], "next_cursor": "cur_2"}
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(200, body))
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(200, body))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events", "--json"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events", "--json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == body
 
 
-def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ndjson_streams_every_line_to_stdout() -> None:
     resp = _FakeStreamResponse(200, lines=['{"id": 1}', '{"id": 2}'])
-    monkeypatch.setattr(httpx, "stream", _stream_returning(resp))
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: pytest.fail("--ndjson must not hit the paged route"))
+    bound = bind_stubs(
+        stream=_stream_returning(resp), get=lambda *a, **k: pytest.fail("--ndjson must not hit the paged route")
+    )
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events", "--ndjson"])
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines() == ['{"id": 1}', '{"id": 2}']
@@ -124,28 +125,28 @@ def test_ndjson_streams_every_line_to_stdout(monkeypatch: pytest.MonkeyPatch) ->
 # --- the incompatible-flag guards ------------------------------------------------
 
 
-def test_ndjson_rejects_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_json() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--json"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events", "--ndjson", "--json"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --json" in result.output
 
 
-def test_ndjson_rejects_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_cursor() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--cursor", "cur_1"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events", "--ndjson", "--cursor", "cur_1"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --cursor" in result.output
 
 
-def test_ndjson_rejects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach the hub"))
+def test_ndjson_rejects_limit() -> None:
+    bound = bind_stubs(stream=lambda *a, **k: pytest.fail("must not reach the hub"))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events", "--ndjson", "--limit", "10"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events", "--ndjson", "--limit", "10"])
 
     assert result.exit_code != 0
     assert "--ndjson is incompatible with --limit" in result.output
@@ -154,16 +155,16 @@ def test_ndjson_rejects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- filter round-trip (params reach the client call) ---------------------------------
 
 
-def test_every_filter_flag_becomes_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_every_filter_flag_becomes_a_query_param() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         hub_group,
         [
             "analytics",
@@ -203,16 +204,16 @@ def test_every_filter_flag_becomes_a_query_param(monkeypatch: pytest.MonkeyPatch
     }
 
 
-def test_the_default_limit_is_200_when_not_given(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_default_limit_is_200_when_not_given() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events"])
 
     assert result.exit_code == 0, result.output
     assert calls[0]["limit"] == "200"
@@ -221,17 +222,17 @@ def test_the_default_limit_is_200_when_not_given(monkeypatch: pytest.MonkeyPatch
 # --- --since/--until cross the boundary UTC-aware --------------------------------
 
 
-def test_since_and_until_convert_the_operators_local_time_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_since_and_until_convert_the_operators_local_time_to_utc() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> _FakeResponse:
         calls.append(params or {})
         return _FakeResponse(200, {"events": [], "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
 
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group,
             ["analytics", "events", "--since", "2026-01-01T10:00:00", "--until", "2026-01-01T12:00:00"],
         )
@@ -244,21 +245,19 @@ def test_since_and_until_convert_the_operators_local_time_to_utc(monkeypatch: py
 # --- the bare 401/403 messages --------------------------------------------------------
 
 
-def test_a_bare_401_gets_the_login_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse(401))
+def test_a_bare_401_gets_the_login_hint() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(401))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events"])
 
     assert result.exit_code != 0
     assert "blizzard hub login" in result.output
 
 
-def test_a_bare_403_surfaces_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        httpx, "get", lambda *a, **k: _FakeResponse(403, {"detail": "missing permission 'transcript:read'"})
-    )
+def test_a_bare_403_surfaces_the_servers_detail() -> None:
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(403, {"detail": "missing permission 'transcript:read'"}))
 
-    result = CliRunner().invoke(hub_group, ["analytics", "events"])
+    result = bound.runner.invoke(hub_group, ["analytics", "events"])
 
     assert result.exit_code != 0
     assert "missing permission 'transcript:read'" in result.output

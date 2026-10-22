@@ -9,9 +9,9 @@ import json
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -32,7 +32,7 @@ class _FakeResponse:
 pytestmark = pytest.mark.unit
 
 
-def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_json_on_a_read_verb_prints_the_raw_response_body() -> None:
     payload = [
         {
             "chunk_id": "ch_1",
@@ -46,21 +46,21 @@ def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.Mo
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(200, {"chunks": payload, "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "list", "--json"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list", "--json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == payload
 
 
-def test_json_on_a_write_verb_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_json_on_a_write_verb_prints_the_raw_response_body() -> None:
     payload = {"chunk_id": "ch_42", "status": "ready", "graph_id": "gr_1", "default_model": ["blizzard:basic"]}
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42", "--json"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "promote", "ch_42", "--json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == payload

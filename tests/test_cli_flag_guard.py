@@ -8,14 +8,15 @@ from typing import Any
 import click
 import httpx
 import pytest
-from click.testing import CliRunner
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.flag_guard import check_declared
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flag_gate import hub_flag_command, hub_flag_option
 from blizzard.wire.flags import FlagOff
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.unit
 
@@ -57,6 +58,7 @@ class _Response:
 @click.group()
 @click.pass_context
 def _hub(ctx: click.Context) -> None:
+    CliCollaborators.of(ctx)  # pin the invoker's collaborators before ``obj`` becomes the session reader
     ctx.obj = _Reader()
 
 
@@ -74,20 +76,20 @@ def _plain(cli: CliContext, extra: bool) -> None:
     click.echo(f"ran extra={extra}")
 
 
-def _serve(monkeypatch: pytest.MonkeyPatch, answer: _Response) -> None:
+def _serve(answer: _Response) -> Bound:
     def get(url: str, **_: Any) -> _Response:
         assert url.endswith("/api/flags")
         return answer
 
-    monkeypatch.setattr(httpx, "get", get)
+    return bind_stubs(get=get)
 
 
 def _flags(on: bool) -> _Response:
     return _Response(200, {"flags": {"hub-thing": on}, "overridden": []})
 
 
-def _run(*args: str) -> Any:
-    return CliRunner().invoke(_hub, list(args))
+def _run(*args: str, bound: Bound | None = None) -> Any:
+    return (bound or bind_stubs()).runner.invoke(_hub, list(args))
 
 
 _REFUSAL = FlagOff.of("hub-thing").message
@@ -101,39 +103,37 @@ def test_a_held_verb_is_listed_and_marked_and_runs_nothing_for_help() -> None:
 
 
 @pytest.mark.parametrize("answer", [_flags(False), _Response(200, {"flags": {}, "overridden": []}), _Response(404, {})])
-def test_a_held_verb_exits_1_with_the_message_while_off_or_unanswered(
-    monkeypatch: pytest.MonkeyPatch, answer: _Response
-) -> None:
-    _serve(monkeypatch, answer)
-    result = _run("held")
+def test_a_held_verb_exits_1_with_the_message_while_off_or_unanswered(answer: _Response) -> None:
+    result = _run("held", bound=_serve(answer))
     assert result.exit_code == 1
     assert _REFUSAL in result.output
     assert "ran" not in result.output.replace(_REFUSAL, "")
 
 
-def test_a_held_verb_runs_once_its_flag_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    _serve(monkeypatch, _flags(True))
-    result = _run("held")
+def test_a_held_verb_runs_once_its_flag_is_on() -> None:
+    result = _run("held", bound=_serve(_flags(True)))
     assert (result.exit_code, result.output) == (0, "ran\n")
 
 
-def test_a_held_option_is_listed_and_marked_refused_when_given_while_off_and_works_once_on(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_held_option_is_listed_and_marked_refused_when_given_while_off_and_works_once_on() -> None:
     helped = _run("plain", "--help").output
     assert "--extra" in helped and "Not yet on:" in helped
-    _serve(monkeypatch, _flags(False))
-    assert _run("plain").output == "ran extra=False\n"
-    refused = _run("plain", "--extra")
+    off = _serve(_flags(False))
+    assert _run("plain", bound=off).output == "ran extra=False\n"
+    refused = _run("plain", "--extra", bound=off)
     assert refused.exit_code == 1 and _REFUSAL in refused.output
-    _serve(monkeypatch, _flags(True))
-    assert _run("plain", "--extra").output == "ran extra=True\n"
+    assert _run("plain", "--extra", bound=_serve(_flags(True))).output == "ran extra=True\n"
 
 
-def test_a_flag_off_404_reaching_the_response_check_renders_the_same_message(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_flag_off_404_reaching_the_response_check_renders_the_same_message() -> None:
     body = {"detail": FlagOff.of("hub-thing").model_dump()}
-    monkeypatch.setattr(httpx, "get", lambda url, **_: _Response(404, body))
-    cli = CliContext(hub_url="http://hub.local", session_reader=_Reader(), trace=_NoTrace())
+    bound = bind_stubs(get=lambda url, **_: _Response(404, body))
+    cli = CliContext(
+        hub_url="http://hub.local",
+        session_reader=_Reader(),
+        trace=_NoTrace(),
+        client_factory=bound.collaborators.client_factory,
+    )
     with pytest.raises(click.ClickException) as raised:
         cli.get("/api/held", "GET /held")
     assert raised.value.message == _REFUSAL

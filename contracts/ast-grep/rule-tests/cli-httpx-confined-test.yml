@@ -1,0 +1,27 @@
+id: bzh:cli-httpx-confined
+valid:
+  # Building the client through the injected factory.
+  - |
+    from blizzard.cli.collaborators import CliCollaborators
+
+    with CliCollaborators.of(ctx).client_factory(timeout=5.0) as client:
+        client.get(url)
+  # Taking an httpx type through the one module that imports it.
+  - |
+    from blizzard.cli.collaborators import HTTPError, Response
+  # A module merely named like the library.
+  - |
+    from blizzard.hub import httpx_view
+invalid:
+  - |
+    import httpx
+  - |
+    import httpx as http_client
+  - |
+    from httpx import Client
+  - |
+    from httpx._exceptions import HTTPError
+  # Under TYPE_CHECKING, too.
+  - |
+    if TYPE_CHECKING:
+        import httpx

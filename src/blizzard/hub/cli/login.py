@@ -11,8 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlencode, urlparse
 
-import httpx
-
+from blizzard.cli.collaborators import ClientFactory
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.pkce import Pkce
 
@@ -84,19 +83,27 @@ class Login:
     redirect_uri: str
     state: str
     pkce: Pkce
+    client_factory: ClientFactory
 
     @classmethod
-    def loopback(cls, base_url: str, *, open_browser: bool = True, timeout: float = CALLBACK_TIMEOUT_SECONDS) -> Login:
+    def loopback(
+        cls,
+        base_url: str,
+        *,
+        client_factory: ClientFactory,
+        open_browser: bool = True,
+        timeout: float = CALLBACK_TIMEOUT_SECONDS,
+    ) -> Login:
         pkce = Pkce.new()
         state = secrets.token_urlsafe(18)
         callback = Callback(state)
-        return Loopback(base_url, callback.redirect_uri, state, pkce, callback, open_browser, timeout)
+        return Loopback(base_url, callback.redirect_uri, state, pkce, client_factory, callback, open_browser, timeout)
 
     @classmethod
-    def paste_code(cls, base_url: str, *, prompt_for_code: Callable[[], str]) -> Login:
+    def paste_code(cls, base_url: str, *, client_factory: ClientFactory, prompt_for_code: Callable[[], str]) -> Login:
         pkce = Pkce.new()
         state = secrets.token_urlsafe(18)
-        return PasteCode(base_url, OOB_REDIRECT_URI, state, pkce, prompt_for_code)
+        return PasteCode(base_url, OOB_REDIRECT_URI, state, pkce, client_factory, prompt_for_code)
 
     @property
     def authorize_url(self) -> str:
@@ -118,11 +125,11 @@ class Login:
         raise NotImplementedError
 
     def _exchange(self, code: str) -> str:
-        resp = httpx.post(
-            f"{self.base_url.rstrip('/')}/api/auth/cli/token",
-            json={"code": code, "code_verifier": self.pkce.verifier, "redirect_uri": self.redirect_uri},
-            timeout=_EXCHANGE_TIMEOUT,
-        )
+        with self.client_factory(timeout=_EXCHANGE_TIMEOUT) as client:
+            resp = client.post(
+                f"{self.base_url.rstrip('/')}/api/auth/cli/token",
+                json={"code": code, "code_verifier": self.pkce.verifier, "redirect_uri": self.redirect_uri},
+            )
         if resp.status_code != 200:
             raise LoginError(
                 "the hub rejected the login exchange — the code, PKCE verifier, or redirect_uri did not match"

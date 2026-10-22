@@ -5,8 +5,7 @@ from contextlib import contextmanager
 
 import click
 
-from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
-from blizzard.runner.cli.daemon import runner_option
+from blizzard.runner.cli.daemon import Door, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store_guard import configured_ids, store_write_guard
@@ -22,7 +21,7 @@ def transcript_group() -> None:
 
 @contextmanager
 def _transcript_config(
-    directory: str, *, runner: str | None, verb: str, action: str, trace: ITraceHeaders
+    directory: str, *, runner: str | None, verb: str, action: str, door: Door
 ) -> Iterator[RunnerConfig]:
     """Every store-writing transcript verb's guards, and the host directory held while the verb runs — shared so a
     second verb cannot ship with fewer of them than the first."""
@@ -37,7 +36,7 @@ def _transcript_config(
     with store_write_guard(
         config,
         action=action,
-        trace=trace,
+        door=door,
         runners={config.runner_id: config.name},
         configured=configured_ids(config),
         refuse_foreign=True,
@@ -63,7 +62,7 @@ def transcript_reship(ctx: click.Context, segment_id: str, directory: str, runne
     smaller per-record cap shrank. The hub never overwrites an accepted record, so superseding
     one means a second segment: BOTH then show on the board. Same operating rules as `backfill`."""
     with _transcript_config(
-        directory, runner=runner, verb="reshipping", action="reship a transcript", trace=OperatorTrace.source(ctx)
+        directory, runner=runner, verb="reshipping", action="reship a transcript", door=Door.of(ctx)
     ) as config:
         try:
             report = LoopWiring.of(config).reship_transcript(segment_id)
@@ -118,7 +117,7 @@ def transcript_backfill(
     if limit is not None and limit < 1:
         raise click.UsageError("--limit must be at least 1")
     with _transcript_config(
-        directory, runner=runner, verb="backfilling", action="backfill transcripts", trace=OperatorTrace.source(ctx)
+        directory, runner=runner, verb="backfilling", action="backfill transcripts", door=Door.of(ctx)
     ) as config:
         report = LoopWiring.of(config).backfill_transcripts(dry_run=dry_run, limit=limit)
     prefix = "would import" if dry_run else "imported"

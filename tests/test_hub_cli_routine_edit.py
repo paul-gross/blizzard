@@ -1,5 +1,5 @@
 """``blizzard hub routine edit`` (component tier) — a real ``build_hosted_app`` the CLI's
-``httpx`` verbs are routed into, so ``--clear`` meets the hub's own refusal of ``null`` on a list
+commands' requests are routed into, so ``--clear`` meets the hub's own refusal of ``null`` on a list
 field and acceptance of ``[]``."""
 
 from __future__ import annotations
@@ -8,13 +8,12 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import httpx
 import pytest
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.hub.cli import hub as hub_group
 from tests.config_inputs import build_hosted_hub_app, init_hub
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -35,24 +34,24 @@ nodes:
 """
 
 
+_bound: dict[str, Bound] = {}
+"""The collaborators the ``client`` fixture bound over its in-process app, for the invokers below."""
+
+
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def client(tmp_path: Path) -> Iterator[TestClient]:
     config = init_hub(tmp_path / "hub")
     with TestClient(build_hosted_hub_app(config)) as c:
 
-        def route(method: str):  # type: ignore[no-untyped-def]
-            def call(url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
-                return c.request(method.upper(), urlsplit(url).path, **kwargs)
+        def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+            return c.request(method.upper(), urlsplit(url).path, **kwargs)
 
-            return call
-
-        for method in ("get", "post", "put", "patch"):
-            monkeypatch.setattr(httpx, method, route(method))
+        _bound["hub"] = bind_stubs(request=forward)
         yield c
 
 
 def _edit(routine_id: str, *args: str):  # type: ignore[no-untyped-def]
-    return CliRunner().invoke(hub_group, ["routine", "edit", routine_id, *args], env={"BZ_HUB_URL": _HUB})
+    return _bound["hub"].runner.invoke(hub_group, ["routine", "edit", routine_id, *args], env={"BZ_HUB_URL": _HUB})
 
 
 def test_clear_empties_effort_model_and_harnesses_and_leaves_the_rest(client: TestClient) -> None:

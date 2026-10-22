@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
-from blizzard.cli.collaborators import CliCollaborators
-from blizzard.cli.operator_trace import OperatorTrace
+from blizzard.cli.collaborators import CliCollaborators, HTTPError
 from blizzard.cli.window import refuse_future_until, replay_windows, resume_since, since_option, until_option
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.runner.cli.daemon import RunnerDaemon, runner_option
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 
 # The local API's own door override; `control` declares the same variable.
@@ -112,7 +111,7 @@ def traces_status(
 ) -> None:
     """Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the
     last error. A credential in the endpoint is never shown."""
-    with RunnerDaemon.reach("traces status", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("traces status", directory, runner_url, Door.of(ctx), runner) as daemon:
         status = daemon.get("/api/traces/status").json()
     if as_json:
         click.echo(json.dumps(status, indent=2))
@@ -143,7 +142,7 @@ def traces_replay(
     replay_max_window is told in windows; a failure names the --since to resume from."""
     refuse_future_until(until, CliCollaborators.of(ctx).wall_clock)
     total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
-    with RunnerDaemon.reach("traces replay", directory, runner_url, OperatorTrace.source(ctx), runner) as daemon:
+    with RunnerDaemon.reach("traces replay", directory, runner_url, Door.of(ctx), runner) as daemon:
         status = daemon.get("/api/traces/status").json()
         windows = replay_windows(since, until, status.get("replay_max_window_seconds"))
         for number, (start, stop) in enumerate(windows, 1):
@@ -151,20 +150,20 @@ def traces_replay(
             where = f"window {number} of {len(windows)}; resume with --since {resume_since(start)}"
             try:
                 resp = daemon.client.post(daemon.runner_path("/api/traces/replay"), json=body, timeout=_REPLAY_TIMEOUT)
-            except httpx.HTTPError as exc:
+            except HTTPError as exc:
                 raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
-            if resp.status_code == httpx.codes.BAD_GATEWAY:
+            if resp.status_code == HTTPStatus.BAD_GATEWAY:
                 failure = resp.json()
                 raise click.ClickException(
                     f"{failure['detail']} (told {failure['leases']} leases, {failure['spans']} spans "
                     f"in {failure['batches']} batches before it stopped; {where})"
                 )
-            if resp.status_code in (httpx.codes.CONFLICT, httpx.codes.UNPROCESSABLE_ENTITY):
-                reason = "replay unavailable" if resp.status_code == httpx.codes.CONFLICT else "window refused"
+            if resp.status_code in (HTTPStatus.CONFLICT, HTTPStatus.UNPROCESSABLE_ENTITY):
+                reason = "replay unavailable" if resp.status_code == HTTPStatus.CONFLICT else "window refused"
                 raise click.ClickException(f"{reason}: {resp.json().get('detail', '')} ({where})")
             try:
                 resp.raise_for_status()
-            except httpx.HTTPError as exc:
+            except HTTPError as exc:
                 raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
             result = resp.json()
             for key in ("leases", "spans", "batches"):

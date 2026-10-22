@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
@@ -123,7 +123,7 @@ def graph_mint(cli: CliContext, path: str) -> None:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 
     resp = cli.send("post", "/api/graphs", json_body={"definition_yaml": definition_yaml})
-    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         report = resp.json()
         lines = [f"error: {e}" for e in report.get("errors", [])]
         lines += [f"warning: {w}" for w in report.get("warnings", [])]

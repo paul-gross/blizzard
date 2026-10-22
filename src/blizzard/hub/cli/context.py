@@ -6,11 +6,12 @@ import json
 import os
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
+from http import HTTPStatus
 from typing import Any, Protocol
 
 import click
-import httpx
 
+from blizzard.cli.collaborators import ClientFactory, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
@@ -64,6 +65,7 @@ class CliContext:
     hub_url: str
     session_reader: IReadSessionStore
     trace: ITraceHeaders
+    client_factory: ClientFactory
     as_json: bool = False
     tenant: str | None = None
 
@@ -73,6 +75,7 @@ class CliContext:
         hub_url: str | None,
         session_reader: IReadSessionStore,
         trace: ITraceHeaders,
+        client_factory: ClientFactory,
         as_json: bool = False,
         tenant: str | None = None,
     ) -> CliContext:
@@ -80,6 +83,7 @@ class CliContext:
             hub_url=hub_url or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
             session_reader=session_reader,
             trace=trace,
+            client_factory=client_factory,
             as_json=as_json,
             tenant=tenant,
         )
@@ -91,7 +95,7 @@ class CliContext:
         *,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         return self._verb("get", path, operation, params=params, on_status=on_status)
 
     def get_all(
@@ -131,7 +135,7 @@ class CliContext:
         door: bool = False,
         params: dict[str, str] | None = None,
         raw_body: RawBody | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         return self._verb(
             "post",
             path,
@@ -154,7 +158,7 @@ class CliContext:
         on_status: dict[int, str] | None = None,
         if_match: int | None = None,
         door: bool = False,
-    ) -> httpx.Response:
+    ) -> Response:
         return self._verb(
             "patch", path, operation, json_body=json_body, on_status=on_status, if_match=if_match, door=door
         )
@@ -168,7 +172,7 @@ class CliContext:
         on_status: dict[int, str] | None = None,
         if_match: int | None = None,
         door: bool = False,
-    ) -> httpx.Response:
+    ) -> Response:
         return self._verb(
             "put", path, operation, json_body=json_body, on_status=on_status, if_match=if_match, door=door
         )
@@ -181,7 +185,7 @@ class CliContext:
         json_body: object | None = None,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         return self._verb("delete", path, operation, json_body=json_body, params=params, on_status=on_status)
 
     def stream(
@@ -193,15 +197,15 @@ class CliContext:
         on_status: dict[int, str] | None = None,
     ) -> Iterator[str]:
         """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam).
-        Dispatches through ``httpx``'s module-level ``stream``, mirroring :meth:`send` so
-        ``monkeypatch.setattr`` still intercepts it; a refusal resolves before any line is
+        Streams through a client the injected factory builds; a refusal resolves before any line is
         yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration — a
         tenant or project refusal as :meth:`send` raises it."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
-            with httpx.stream(
-                "get", full_url, params=params, headers=self._headers() or None, timeout=CLIENT_TIMEOUT
-            ) as resp:
+            with (
+                self.client_factory(timeout=CLIENT_TIMEOUT) as client,
+                client.stream("GET", full_url, params=params, headers=self._headers() or None) as resp,
+            ):
                 if resp.status_code >= 400:
                     resp.read()
                 self._refuse_tenant(resp)
@@ -209,7 +213,7 @@ class CliContext:
                 self._refuse_flag_off(resp)
                 self.check(resp, operation, on_status=on_status)
                 yield from resp.iter_lines()
-        except httpx.HTTPError as exc:
+        except HTTPError as exc:
             raise self.failed(operation, exc) from exc
 
     def send(
@@ -223,14 +227,12 @@ class CliContext:
         if_match: int | None = None,
         door: bool = False,
         raw_body: RawBody | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         """The call itself, unchecked — for a verb that reads a status code of its own first —
         except a tenant or project refusal, which no verb answers itself (:meth:`_refuse_tenant`,
-        :meth:`_refuse_project`). Dispatches through
-        ``httpx``'s module-level verb function, same as :meth:`stream` — except a DELETE carrying a JSON body, which
-        ``httpx.delete`` refuses a ``json`` keyword for: that case goes through ``httpx.request`` instead."""
+        :meth:`_refuse_project`). Sent through a client the injected factory builds, same as :meth:`stream`."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
-        kwargs: dict[str, Any] = {"timeout": timeout}
+        kwargs: dict[str, Any] = {}
         if json_body is not None:
             kwargs["json"] = json_body
         if raw_body is not None:
@@ -245,18 +247,16 @@ class CliContext:
         if headers:
             kwargs["headers"] = headers
         try:
-            if method == "delete" and json_body is not None:
-                resp = httpx.request("delete", full_url, **kwargs)
-            else:
-                resp = getattr(httpx, method)(full_url, **kwargs)
-        except httpx.HTTPError as exc:
+            with self.client_factory(timeout=timeout) as client:
+                resp = client.request(method.upper(), full_url, **kwargs)
+        except HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
         self._refuse_tenant(resp)
         self._refuse_project(resp)
         self._refuse_flag_off(resp)
         return resp
 
-    def check(self, resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
+    def check(self, resp: Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
         """Map a handful of status codes to a ``ClickException`` reading the body's own
         ``detail`` (falling back to the per-code default named in ``on_status``); anything
         else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
@@ -264,16 +264,16 @@ class CliContext:
         surfaces the server's own ``detail``."""
         if on_status and resp.status_code in on_status:
             raise click.ClickException(self.detail(resp, on_status[resp.status_code]))
-        if resp.status_code == httpx.codes.UNAUTHORIZED:
+        if resp.status_code == HTTPStatus.UNAUTHORIZED:
             raise click.ClickException(_LOGIN_HINT)
-        if resp.status_code == httpx.codes.FORBIDDEN:
+        if resp.status_code == HTTPStatus.FORBIDDEN:
             raise click.ClickException(self.detail(resp, _FORBIDDEN_FALLBACK))
         try:
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except HTTPError as exc:
             raise self.failed(operation, exc) from exc
 
-    def detail(self, resp: httpx.Response, fallback: str) -> str:
+    def detail(self, resp: Response, fallback: str) -> str:
         """The server's own ``detail`` from a JSON error body, or ``fallback``."""
         try:
             body = resp.json()
@@ -318,7 +318,7 @@ class CliContext:
         for line in lines:
             click.echo(line)
 
-    def finish(self, resp: httpx.Response, message: str) -> None:
+    def finish(self, resp: Response, message: str) -> None:
         """Echo a write verb's result: the raw body under ``--json``, else a static
         success line that never has to parse the body at all."""
         if self.as_json:
@@ -339,7 +339,7 @@ class CliContext:
         if_match: int | None = None,
         door: bool = False,
         raw_body: RawBody | None = None,
-    ) -> httpx.Response:
+    ) -> Response:
         resp = self.send(
             method,
             path,
@@ -353,41 +353,41 @@ class CliContext:
         self.check(resp, operation, on_status=on_status)
         return resp
 
-    def _refuse_tenant(self, resp: httpx.Response) -> None:
+    def _refuse_tenant(self, resp: Response) -> None:
         """Raise when the hub refuses the tenant the call acts in, before a verb can read the status code as its own:
         a ``409 tenant_required`` (the caller belongs to several tenants and the call named none), or a ``404 no such
         tenant`` for the tenant ``--tenant`` named. Either lists the caller's tenants from ``/api/me``, ids beside
         names. A ``404 no such tenant`` on a call naming no tenant stays the hub's own words: it is the caller holding
         no membership, or a hub-level verb's own tenant argument."""
-        if resp.status_code == httpx.codes.CONFLICT and _error_code(resp) == _TENANT_REQUIRED:
+        if resp.status_code == HTTPStatus.CONFLICT and _error_code(resp) == _TENANT_REQUIRED:
             raise self._tenant_refusal(
                 "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
             )
-        if resp.status_code == httpx.codes.NOT_FOUND and self.detail(resp, "") == _NO_SUCH_TENANT:
+        if resp.status_code == HTTPStatus.NOT_FOUND and self.detail(resp, "") == _NO_SUCH_TENANT:
             if self.tenant is None:
                 raise click.ClickException(_NO_SUCH_TENANT)
             raise self._tenant_refusal(
                 f"no tenant {self.tenant} you can enter — it does not exist, it is closed, or you are not its member"
             )
 
-    def _refuse_project(self, resp: httpx.Response) -> None:
+    def _refuse_project(self, resp: Response) -> None:
         """Raise on a ``422 project_required`` — the call needs a project, named none, and the tenant holds several —
         listing the tenant's projects from the refusal itself, ids beside slugs and names, and asking for
         ``--project``."""
-        if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
+        if resp.status_code != HTTPStatus.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
             return
         raise project_required(_projects_of(resp))
 
-    def _refuse_flag_off(self, resp: httpx.Response) -> None:
+    def _refuse_flag_off(self, resp: Response) -> None:
         """Raise on a ``404 flag_off`` — the route is held behind a flag that is off — in the refusal's own words."""
-        if resp.status_code == httpx.codes.NOT_FOUND and _error_code(resp) == _FLAG_OFF:
+        if resp.status_code == HTTPStatus.NOT_FOUND and _error_code(resp) == _FLAG_OFF:
             raise click.ClickException(self.detail(resp, "not available yet: its flag is off"))
 
     def _tenant_refusal(self, headline: str) -> click.ClickException:
         """``headline``, then the tenants the caller can name with ``--tenant``. ``/api/me`` is asked without the
         refused tenant's header, which would refuse it too."""
         me = replace(self, tenant=None).send("get", "/api/me")
-        tenants = _tenants_of(me) if me.status_code == httpx.codes.OK else []
+        tenants = _tenants_of(me) if me.status_code == HTTPStatus.OK else []
         lines = [headline]
         if tenants:
             lines.append("your tenants:")
@@ -416,7 +416,7 @@ def project_required(projects: list[dict[str, str]]) -> click.ClickException:
     return click.ClickException("\n".join(lines))
 
 
-def _error_code(resp: httpx.Response) -> str | None:
+def _error_code(resp: Response) -> str | None:
     """The ``code`` of a structured error body (``{"detail": {"code": …}}``), else ``None``."""
     try:
         body = resp.json()
@@ -427,7 +427,7 @@ def _error_code(resp: httpx.Response) -> str | None:
     return code if isinstance(code, str) else None
 
 
-def _tenants_of(me: httpx.Response) -> list[dict[str, str]]:
+def _tenants_of(me: Response) -> list[dict[str, str]]:
     """The ``tenants`` rows of an ``/api/me`` body that carry an id, a name and a role."""
     try:
         body = me.json()
@@ -440,7 +440,7 @@ def _tenants_of(me: httpx.Response) -> list[dict[str, str]]:
     return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]
 
 
-def _projects_of(refusal: httpx.Response) -> list[dict[str, str]]:
+def _projects_of(refusal: Response) -> list[dict[str, str]]:
     """The ``projects`` rows of a ``project_required`` refusal that carry an id, a slug and a name."""
     detail = refusal.json().get("detail")
     rows = detail.get("projects") if isinstance(detail, dict) else None

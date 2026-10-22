@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import click
-import httpx
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -25,7 +24,8 @@ def external_usage_group() -> None:
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
-def external_usage_probe(slug: str | None, directory: str) -> None:
+@click.pass_context
+def external_usage_probe(ctx: click.Context, slug: str | None, directory: str) -> None:
     """Sample one declared subscription's rate-limit usage, by SLUG, and print it.
 
     Read-only, writes nothing. It reads the subscriptions the host declares; SLUG may be left out
@@ -38,8 +38,9 @@ def external_usage_probe(slug: str | None, directory: str) -> None:
     if slug not in declared:
         raise click.ClickException(f"no declared subscription with slug {slug!r} (declared: {sorted(declared)})")
     declaration = declared[slug]
-    with httpx.Client() as client:
-        sampler = select_sampler(declaration, clock=SystemClock(), http_client=lambda: client)
+    collaborators = CliCollaborators.of(ctx)
+    with collaborators.client_factory() as client:
+        sampler = select_sampler(declaration, clock=collaborators.wall_clock, http_client=lambda: client)
         if sampler is None:
             click.echo(f"no sample: {declaration.provider!r} (slug {declaration.slug!r}) has no known sampler binding")
             return

@@ -3,24 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.flag_guard import flag_command, flag_option
-from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.foundation.flags import FlagRegistry
-from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.runner.cli.daemon import Door, RunnerDaemon
 
 
 def host_flags(ctx: click.Context) -> Mapping[str, bool]:
     """The addressed host's flags answer; empty from a host too old to answer."""
-    with RunnerDaemon.reach(
-        "flags", ctx.params["directory"], ctx.params.get("runner_url"), OperatorTrace.source(ctx)
-    ) as daemon:
+    with RunnerDaemon.reach("flags", ctx.params["directory"], ctx.params.get("runner_url"), Door.of(ctx)) as daemon:
         resp = daemon.send_to_host("get", "/api/flags")
-    return {} if resp.status_code == httpx.codes.NOT_FOUND else dict(resp.raise_for_status().json()["flags"])
+    return {} if resp.status_code == HTTPStatus.NOT_FOUND else dict(resp.raise_for_status().json()["flags"])
 
 
 def runner_flag_command(flag: str, *, registry: FlagRegistry) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

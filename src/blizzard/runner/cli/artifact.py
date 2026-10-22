@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from http import HTTPStatus
 from urllib.parse import quote
 
 import click
-import httpx
 
+from blizzard.cli.collaborators import HTTPStatusError
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
 from blizzard.runner.cli.worker_call import WorkerCall
@@ -117,9 +118,9 @@ def _is_not_found(exc: click.ClickException) -> bool:
     """Only a genuine ``404`` is worth a second, staged-set lookup — any other rejection (a
     ``409`` ambiguity, a ``403``) already names its own cause and gets no staged detour."""
     cause = exc.__cause__
-    if not isinstance(cause, httpx.HTTPStatusError):
+    if not isinstance(cause, HTTPStatusError):
         return False
-    return getattr(cause.response, "status_code", None) == httpx.codes.NOT_FOUND
+    return getattr(cause.response, "status_code", None) == HTTPStatus.NOT_FOUND
 
 
 @artifact_group.command("get")

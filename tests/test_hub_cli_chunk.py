@@ -1,5 +1,5 @@
 """``blizzard hub chunk migrate`` / ``restart`` / ``set`` / ``show`` (unit tier) — pure
-clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with ``httpx`` stubbed.
+clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with the client stubbed.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -42,15 +43,15 @@ def _patch_response(chunk_id: str, intended_migration: object | None) -> _FakeRe
 
 
 @pytest.mark.unit
-def test_migrate_forced_sends_to_graph_and_node(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_forced_sends_to_graph_and_node() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _patch_response("ch_1", {"mode": "forced", "graph_id": "gr_2", "graph_name": "beta", "node_name": "n2"})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--node", "n2"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -65,15 +66,15 @@ def test_migrate_forced_sends_to_graph_and_node(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_migrate_auto_omits_node(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_auto_omits_node() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _patch_response("ch_1", {"mode": "auto", "graph_id": "gr_2", "graph_name": "beta", "node_name": None})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8421/api/chunks/ch_1", {"intended_migration": {"to_graph": "beta"}})]
@@ -82,15 +83,15 @@ def test_migrate_auto_omits_node(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_migrate_cancel_sends_null_intent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_cancel_sends_null_intent() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _patch_response("ch_1", None)
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel"])
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8421/api/chunks/ch_1", {"intended_migration": None})]
@@ -98,79 +99,79 @@ def test_migrate_cancel_sends_null_intent(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-def test_migrate_cancel_conflicts_with_to_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_cancel_conflicts_with_to_graph() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the flags conflict")
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--to-graph", "beta"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--to-graph", "beta"])
 
     assert result.exit_code != 0
     assert "--cancel" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_cancel_conflicts_with_node(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_cancel_conflicts_with_node() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API when the flags conflict")
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--node", "n2"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--cancel", "--node", "n2"])
 
     assert result.exit_code != 0
     assert "--cancel" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_without_to_graph_or_cancel_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_without_to_graph_or_cancel_is_refused() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         raise AssertionError("must not call the API without --to-graph or --cancel")
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1"])
 
     assert result.exit_code != 0
     assert "--to-graph" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_maps_409_to_the_server_detail() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "chunk is already pinned to graph gr_2"})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code != 0
     assert "already pinned to graph gr_2" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_maps_422_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_maps_422_to_the_server_detail() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "node must not be blank"})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--node", " "])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--node", " "])
 
     assert result.exit_code != 0
     assert "node must not be blank" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_maps_404_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_maps_404_to_the_server_detail() -> None:
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown chunk ch_ghost"})
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_ghost", "--to-graph", "beta"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_ghost", "--to-graph", "beta"])
 
     assert result.exit_code != 0
     assert "unknown chunk ch_ghost" in result.output
 
 
 @pytest.mark.unit
-def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_migrate_json_prints_the_raw_response_body() -> None:
     payload = {
         "chunk_id": "ch_1",
         "graph_id": "gr_1",
@@ -182,8 +183,8 @@ def test_migrate_json_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPat
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--json"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "migrate", "ch_1", "--to-graph", "beta", "--json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == payload
@@ -198,7 +199,7 @@ def _summary(chunk_id: str, node_name: str) -> _FakeResponse:
 
 
 @pytest.mark.unit
-def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restart_without_a_node_posts_a_null_target() -> None:
     """The common case — restart this step on clean context; the hub resolves the node."""
     calls: list[tuple[str, object]] = []
 
@@ -206,8 +207,8 @@ def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPa
         calls.append((url, json))
         return _summary("ch_1", "build")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     posted = ("http://hub.local:8421/api/chunks/ch_1/restart", {"node": None, "to_graph": None, "by": "operator"})
@@ -216,22 +217,22 @@ def test_restart_without_a_node_posts_a_null_target(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_restart_sends_the_named_node_and_actor(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restart_sends_the_named_node_and_actor() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _summary("ch_1", "plan")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "plan", "--by", "ada"])
 
     assert result.exit_code == 0, result.output
     assert calls[0][1] == {"node": "plan", "to_graph": None, "by": "ada"}
 
 
 @pytest.mark.unit
-def test_restart_sends_the_cross_graph_target_and_names_it_back(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restart_sends_the_cross_graph_target_and_names_it_back() -> None:
     """`--to-graph` is the eager move `migrate` only ever schedules (#371)."""
     calls: list[tuple[str, object]] = []
 
@@ -239,8 +240,8 @@ def test_restart_sends_the_cross_graph_target_and_names_it_back(monkeypatch: pyt
         calls.append((url, json))
         return _summary("ch_1", "build")
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--to-graph", "beta"])
 
     assert result.exit_code == 0, result.output
     assert calls[0][1] == {"node": None, "to_graph": "beta", "by": "operator"}
@@ -248,12 +249,12 @@ def test_restart_sends_the_cross_graph_target_and_names_it_back(monkeypatch: pyt
 
 
 @pytest.mark.unit
-def test_restart_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restart_maps_409_to_the_server_detail() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"detail": "node 'deploy' does not exist on graph gr_1"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "deploy"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "restart", "ch_1", "--node", "deploy"])
 
     assert result.exit_code != 0
     assert "does not exist on graph gr_1" in result.output
@@ -264,7 +265,7 @@ def test_restart_maps_409_to_the_server_detail(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.unit
-def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_sends_repeated_default_model_flags_as_an_ordered_list() -> None:
     """`--default-model` is repeatable and ORDERED — the CLI must preserve the
     operator's flag order verbatim."""
     calls: list[tuple[str, object]] = []
@@ -282,8 +283,8 @@ def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: 
             },
         )
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         [
             "chunk",
@@ -311,7 +312,7 @@ def test_set_sends_repeated_default_model_flags_as_an_ordered_list(monkeypatch: 
 
 
 @pytest.mark.unit
-def test_set_omits_a_field_the_operator_did_not_name(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_omits_a_field_the_operator_did_not_name() -> None:
     """An unnamed field must not reach the body at all."""
     calls: list[object] = []
 
@@ -328,8 +329,8 @@ def test_set_omits_a_field_the_operator_did_not_name(monkeypatch: pytest.MonkeyP
             },
         )
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(hub_group, ["chunk", "set", "ch_1", "--default-effort", "high"])
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "set", "ch_1", "--default-effort", "high"])
 
     assert result.exit_code == 0, result.output
     assert calls == [{"default_effort": "high"}]
@@ -344,7 +345,7 @@ def test_set_with_no_option_at_all_is_a_usage_error() -> None:
 
 
 @pytest.mark.unit
-def test_set_sends_repeated_default_harnesses_flags_as_an_ordered_list(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_sends_repeated_default_harnesses_flags_as_an_ordered_list() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -361,8 +362,8 @@ def test_set_sends_repeated_default_harnesses_flags_as_an_ordered_list(monkeypat
             },
         )
 
-    monkeypatch.setattr(httpx, "patch", fake_patch)
-    result = CliRunner().invoke(
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(
         hub_group,
         ["chunk", "set", "ch_1", "--default-harnesses", "claude_code", "--default-harnesses", "codex"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -376,7 +377,7 @@ def test_set_sends_repeated_default_harnesses_flags_as_an_ordered_list(monkeypat
 
 
 @pytest.mark.unit
-def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_reads_both_defaults_back_in_text_mode() -> None:
     """`chunk set` can write both, so text mode has to read both back — otherwise an
     operator can only see what they wrote via `--json`."""
 
@@ -394,8 +395,8 @@ def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPa
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default model: blizzard:advanced, blizzard:basic" in result.output
@@ -403,7 +404,7 @@ def test_show_reads_both_defaults_back_in_text_mode(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_dashes_a_chunk_expressing_no_preference() -> None:
     """No preference set reads as a dash rather than as unknown or as a fabricated
     model name."""
 
@@ -421,15 +422,15 @@ def test_show_dashes_a_chunk_expressing_no_preference(monkeypatch: pytest.Monkey
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default model: -   default effort: -" in result.output
 
 
 @pytest.mark.unit
-def test_show_reads_default_harnesses_back_in_text_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_reads_default_harnesses_back_in_text_mode() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -445,8 +446,8 @@ def test_show_reads_default_harnesses_back_in_text_mode(monkeypatch: pytest.Monk
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default harnesses: claude_code, codex" in result.output
@@ -473,19 +474,19 @@ def _detail(chunk_id: str, **extra: object) -> _FakeResponse:
 
 
 @pytest.mark.unit
-def test_show_renders_blocked_naming_the_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_renders_blocked_naming_the_prerequisite() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", blocked={"prerequisite_chunk_id": "ch_prereq"})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "blocked: waiting on ch_prereq" in result.output
 
 
 @pytest.mark.unit
-def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail(
             "ch_1",
@@ -498,8 +499,8 @@ def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied(monkeypatch
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "prerequisites: ch_a (satisfied), ch_b (unsatisfied)" in result.output
@@ -507,12 +508,12 @@ def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied(monkeypatch
 
 
 @pytest.mark.unit
-def test_show_gains_no_lines_when_no_blocked_marking_or_edges(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", blocked=None, neighborhood={"prerequisites": [], "dependents": []})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "blocked" not in result.output
@@ -521,24 +522,24 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges(monkeypatch: pytes
 
 
 @pytest.mark.unit
-def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", cost={"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.03})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "cost: ~$0.03" in result.output
 
 
 @pytest.mark.unit
-def test_show_marks_no_estimate_when_none_was_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_show_marks_no_estimate_when_none_was_reported() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _detail("ch_1", cost={"cost_usd": 0.10, "cost_partial": False})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "cost: $0.10" in result.output
@@ -551,7 +552,7 @@ def test_show_marks_no_estimate_when_none_was_reported(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_depend_declares_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_declares_and_defaults_by_to_operator() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -567,8 +568,8 @@ def test_depend_declares_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyP
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", "depend", "ch_1", "ch_2"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -584,7 +585,7 @@ def test_depend_declares_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
-def test_depend_sends_a_named_by(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_sends_a_named_by() -> None:
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -600,20 +601,20 @@ def test_depend_sends_a_named_by(monkeypatch: pytest.MonkeyPatch) -> None:
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2", "--by", "ada"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2", "--by", "ada"])
 
     assert result.exit_code == 0, result.output
     assert calls == [{"prerequisite_chunk_id": "ch_2", "by": "ada"}]
 
 
 @pytest.mark.unit
-def test_depend_refuses_a_dependent_not_editable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_refuses_a_dependent_not_editable() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"chunk_id": "ch_1", "status": "running", "detail": "not editable"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_1" in result.output
@@ -621,7 +622,7 @@ def test_depend_refuses_a_dependent_not_editable(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_depend_refuses_a_cycle_naming_the_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_refuses_a_cycle_naming_the_pair() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             409,
@@ -632,8 +633,8 @@ def test_depend_refuses_a_cycle_naming_the_pair(monkeypatch: pytest.MonkeyPatch)
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_1" in result.output
@@ -642,12 +643,12 @@ def test_depend_refuses_a_cycle_naming_the_pair(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_depend_refuses_an_ephemeral_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_refuses_an_ephemeral_prerequisite() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {"chunk_id": "ch_2", "detail": "ephemeral"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_2" in result.output
@@ -655,12 +656,12 @@ def test_depend_refuses_an_ephemeral_prerequisite(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_depend_maps_404_naming_both_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_depend_maps_404_naming_both_chunks() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_1" in result.output
@@ -668,7 +669,7 @@ def test_depend_maps_404_naming_both_chunks(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.unit
-def test_release_dependency_releases_and_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_release_dependency_releases_and_defaults_by_to_operator() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -686,8 +687,8 @@ def test_release_dependency_releases_and_defaults_by_to_operator(monkeypatch: py
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group,
         ["chunk", "release-dependency", "ch_1", "ch_2"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -705,7 +706,7 @@ def test_release_dependency_releases_and_defaults_by_to_operator(monkeypatch: py
 
 
 @pytest.mark.unit
-def test_release_dependency_refuses_when_no_edge_stands(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_release_dependency_refuses_when_no_edge_stands() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             409,
@@ -716,8 +717,8 @@ def test_release_dependency_refuses_when_no_edge_stands(monkeypatch: pytest.Monk
             },
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_1" in result.output
@@ -725,19 +726,19 @@ def test_release_dependency_refuses_when_no_edge_stands(monkeypatch: pytest.Monk
 
 
 @pytest.mark.unit
-def test_release_dependency_maps_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_release_dependency_maps_404() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
     assert "ch_1" in result.output
 
 
 @pytest.mark.unit
-def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_list_marks_a_blocked_chunk() -> None:
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -756,8 +757,8 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list"])
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
@@ -766,7 +767,7 @@ def test_chunk_list_marks_a_blocked_chunk(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-def test_chunk_list_folds_an_estimate_into_the_one_cost_figure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_list_folds_an_estimate_into_the_one_cost_figure() -> None:
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -785,8 +786,8 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure(monkeypatch: pyte
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list"])
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
@@ -795,7 +796,7 @@ def test_chunk_list_folds_an_estimate_into_the_one_cost_figure(monkeypatch: pyte
 
 
 @pytest.mark.unit
-def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chunk_list_drains_every_page() -> None:
     page_1 = {
         "chunks": [
             {"chunk_id": "ch_1", "status": "ready", "current_node_id": "nd_1", "cost": {}},
@@ -815,8 +816,8 @@ def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
             return _FakeResponse(200, page_2)
         return _FakeResponse(200, page_1)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["chunk", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
@@ -826,15 +827,15 @@ def test_chunk_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("verb", ["promote", "demote"])
-def test_placement_verbs_post_the_anchor_when_named(monkeypatch: pytest.MonkeyPatch, verb: str) -> None:
+def test_placement_verbs_post_the_anchor_when_named(verb: str) -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object = None, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(202, {"chunk_id": "ch_1", "status": "not_ready"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["chunk", verb, "ch_1", "--after", "ch_2"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 

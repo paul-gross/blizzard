@@ -21,6 +21,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
 from tests.support import HubHarness, build_hub, default_project, seed_project
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -59,25 +60,25 @@ def hub(tmp_path: Path) -> HubHarness:
     return hub
 
 
+_bound: dict[str, Bound] = {}
+"""The collaborators the routing fixture bound over the in-process hub, for the invokers below."""
+
+
 @pytest.fixture
-def sent(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
+def sent(hub: HubHarness) -> list[dict[str, str]]:
     """Route every call the CLI makes to ``hub``, and hand back the headers each one sent, in order."""
     headers_sent: list[dict[str, str]] = []
 
-    def routed(method: str) -> Callable[..., Any]:
-        def call(url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
-            headers_sent.append(dict(headers or {}))
-            return hub.client.request(method, url, headers=headers, **kwargs)
+    def forward(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        headers_sent.append(dict(headers or {}))
+        return hub.client.request(method, url, headers=headers, **kwargs)
 
-        return call
-
-    for method in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(httpx, method, routed(method))
+    _bound["hub"] = bind_stubs(request=forward)
     return headers_sent
 
 
 def _cli(*argv: str) -> Result:
-    return CliRunner().invoke(hub_group, ["project", *argv, "--hub-url", _HUB_URL])
+    return _bound["hub"].runner.invoke(hub_group, ["project", *argv, "--hub-url", _HUB_URL])
 
 
 def _said(result: Result) -> list[str]:
@@ -212,7 +213,7 @@ def test_a_call_needing_a_project_on_a_tenant_holding_several_prints_its_project
     only = default_project(hub.engine)
     second = seed_project(hub.engine, "gears")
 
-    result = CliRunner().invoke(hub_group, ["scope", "create", "billing", "--hub-url", _HUB_URL])
+    result = _bound["hub"].runner.invoke(hub_group, ["scope", "create", "billing", "--hub-url", _HUB_URL])
 
     assert result.exit_code != 0
     said = _said(result)

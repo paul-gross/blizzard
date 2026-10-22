@@ -41,6 +41,7 @@ from tests.host_files import load_runner_config
 from tests.runner_client import runner_seams
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_init_fakes import init_runner
+from tests.worker_http import Bound, bind_local_only
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -135,19 +136,15 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
     raise AssertionError(f"runner local API never came up on {path}")
 
 
-def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
+def _no_hub(*allow_base_urls: str) -> Bound:
     """Fail loudly if the CLI verb reaches for the hub — it must never."""
-
-    def explode(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("`runner status` contacted the hub; it must be a pure client of the local API")
-
-    monkeypatch.setattr(httpx, "post", explode)
+    return bind_local_only(allow_base_urls=allow_base_urls)
 
 
 @pytest.mark.component
-def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     store = _registered_store(root)
     store.record_lease(
         NewLease(
@@ -228,7 +225,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     )
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     out = result.output
@@ -259,11 +256,11 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
 
 
 @pytest.mark.component
-def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "leases (0):" in result.output
@@ -279,15 +276,13 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
 
 
 @pytest.mark.component
-def test_status_headline_names_no_tenant_before_a_hub_names_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_headline_names_no_tenant_before_a_hub_names_one(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _configure_runner_id(root, "rn_1")
     _store(root).record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     headline = result.output.splitlines()[0]
@@ -296,9 +291,9 @@ def test_status_headline_names_no_tenant_before_a_hub_names_one(
 
 
 @pytest.mark.component
-def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _configure_runner_id(root, "rn_1")
     _store(root).record_runner_identity(
         RunnerIdentity(
@@ -306,7 +301,7 @@ def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monk
         )
     )
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[0].startswith("runner r-one (rn_1)  tenant=bravo (tn_bravo)  workspace=")
@@ -314,7 +309,7 @@ def test_status_headline_names_the_tenant_beside_the_runner(tmp_path: Path, monk
 
 @pytest.mark.component
 def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_the_hub_unreachable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     root = _init_runner(tmp_path)
     _edit_host_file(
@@ -324,7 +319,7 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
         '{ project = "old-slug", workspace = "workspace-local", agents = 1 }, '
         '{ project = "blizzard-context", workspace = "workspace-local", agents = 1 }]',
     )
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _configure_runner_id(root, "rn_1")
     store = _store(root)
     store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
@@ -332,16 +327,14 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
         (ServedProject("blizzard", "prj_1", "blizzard", "Blizzard"), ServedProject("old-slug")), at=_NOW
     )
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert '  serves: blizzard; unresolved: "old-slug"; not yet answered: "blizzard-context"' in result.output
 
 
 @pytest.mark.component
-def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
     _edit_host_file(
         root,
@@ -349,7 +342,7 @@ def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(
         'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
         '{ project = "old-slug", workspace = "workspace-local", agents = 1 }]',
     )
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _configure_runner_id(root, "rn_1")
     store = _store(root)
     store.record_runner_identity(RunnerIdentity(runner_id="rn_1", runner_name="r-one", registered_at=_NOW))
@@ -361,7 +354,7 @@ def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(
         at=_NOW,
     )
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert (
@@ -371,24 +364,22 @@ def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(
 
 
 @pytest.mark.component
-def test_status_marks_a_fresh_runners_default_not_yet_answered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_marks_a_fresh_runners_default_not_yet_answered(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert '  serves: not yet answered: "default"' in result.output
 
 
 @pytest.mark.component
-def test_status_names_both_runners_and_the_reset_command_while_refusing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_names_both_runners_and_the_reset_command_while_refusing(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root, refusing=("rn_store", "rn_other")):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     refusing = next(line for line in result.output.splitlines() if "REFUSING" in line)
@@ -399,38 +390,32 @@ def test_status_names_both_runners_and_the_reset_command_while_refusing(
 
 
 @pytest.mark.component
-def test_status_names_the_windows_refusal_while_the_version_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_names_the_windows_refusal_while_the_version_is_refused(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root, version_refused="upgrade the runner to 0.9 or later"):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "  REFUSING: upgrade the runner to 0.9 or later" in result.output.splitlines()
 
 
 @pytest.mark.component
-def test_status_renders_the_configured_gates_with_the_hub_unreachable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_renders_the_configured_gates_with_the_hub_unreachable(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
     _edit_host_file(root, "gates = []", 'gates = ["build", "review"]')
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "gates: build, review" in result.output
 
 
 @pytest.mark.component
-def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_renders_a_miss_reason_for_a_lapsed_subscription(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     store = _store(root)
     store.record_external_usage_attempt(
         slug="anthropic",
@@ -442,7 +427,7 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
     )
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "anthropic (anthropic): miss (credential lapsed: log in again)" in result.output
@@ -462,10 +447,10 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(
     ids=["renewed", "failed", "unrecorded"],
 )
 def test_status_renders_the_newest_renewal_typed_beside_a_successful_sample(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: RenewalOutcome | None, expected: str
+    tmp_path: Path, outcome: RenewalOutcome | None, expected: str
 ) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     store = _store(root)
     store.record_external_usage_attempt(
         slug="anthropic",
@@ -479,7 +464,7 @@ def test_status_renders_the_newest_renewal_typed_beside_a_successful_sample(
         store.record_credential_renewal_outcome(claim_id=claim_id, outcome=outcome, recorded_at=_NOW)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "anthropic (anthropic): ok, sampled at" in result.output
@@ -487,34 +472,30 @@ def test_status_renders_the_newest_renewal_typed_beside_a_successful_sample(
 
 
 @pytest.mark.component
-def test_status_renders_no_renewal_line_for_a_slug_never_renewed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_renders_no_renewal_line_for_a_slug_never_renewed(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _store(root)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "renewal:" not in result.output
 
 
 @pytest.mark.component
-def test_status_omits_an_unheld_pool_slot_from_held_environments(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_omits_an_unheld_pool_slot_from_held_environments(tmp_path: Path) -> None:
     """``GET /api/environments`` carries the whole configured pool; an
     unheld slot must not leak into the CLI's held-environments section."""
     root = _init_runner(tmp_path)
     _edit_host_file(root, 'envs = ["e1"]', 'envs = ["e1", "e2"]')
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     store = _registered_store(root)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "held environments (1):" in result.output
@@ -523,13 +504,11 @@ def test_status_omits_an_unheld_pool_slot_from_held_environments(
 
 
 @pytest.mark.component
-def test_status_renders_every_other_section_when_the_trace_status_read_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_renders_every_other_section_when_the_trace_status_read_fails(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root, trace_status=False):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "subscriptions (1):" in result.output
@@ -546,11 +525,9 @@ def test_status_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_status_prints_the_local_pause_reason_on_the_brake_line(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_prints_the_local_pause_reason_on_the_brake_line(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _registered_store(root).record_local_pause(
         paused=True,
         at=_NOW,
@@ -560,7 +537,7 @@ def test_status_prints_the_local_pause_reason_on_the_brake_line(
         reason="usage limit: claude_code",
     )
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "paused [local] — usage limit: claude_code" in result.output
@@ -599,14 +576,14 @@ def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _seed_escalation(_registered_store(root), reason="no-acceptable-harness-mint")
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root) as (_, tcp_url):
         (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
         health = httpx.get(f"{tcp_url}/runners/{runner['runner_id']}/api/harness-health").json()["items"]
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "/api/harness-health" in paths
@@ -623,12 +600,12 @@ def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalati
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     _seed_escalation(_registered_store(root), reason="escalated")
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "escalations (1):" in result.output
@@ -638,13 +615,13 @@ def test_status_reads_no_harness_health_without_a_no_acceptable_harness_escalati
 
 
 @pytest.mark.component
-def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_names_a_held_binding_matching_no_workspace(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     store = _registered_store(root)
     store.record_binding(chunk_id="ch_9", environment_id="e9", workdir="/elsewhere/e9", bound_at=_NOW)
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "held bindings matching no workspace (1):" in result.output
@@ -677,14 +654,12 @@ def _serve_host_of_halted_runners(root: Path) -> Iterator[Path]:
 
 
 @pytest.mark.component
-def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbuilt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbuilt(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
     _edit_host_file(root, 'subscription = "anthropic"', 'subscription = "missing"')
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_host_of_halted_runners(root):
-        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
         health = httpx.Client(transport=httpx.HTTPTransport(uds=str(root / "host.sock")), base_url="http://host")
         served = health.get("/api/health").status_code
 
@@ -714,15 +689,13 @@ def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_an
 
 
 @pytest.mark.component
-def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root) as (_, tcp_url):
         (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
         results = [
-            CliRunner().invoke(runner_group, ["status", "--dir", str(root), *selector])
+            bound.runner.invoke(runner_group, ["status", "--dir", str(root), *selector])
             for selector in ([], ["--runner", runner["name"]], ["--runner", runner["runner_id"]])
         ]
 
@@ -732,12 +705,12 @@ def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(
 
 
 @pytest.mark.component
-def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)
-    _no_hub(monkeypatch)
+    bound = _no_hub()
     with _serve_local_api(root) as (_, tcp_url):
         (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
-        result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root), "--runner", "nope"])
+        result = bound.runner.invoke(runner_group, ["pause", "--dir", str(root), "--runner", "nope"])
 
     assert result.exit_code != 0
     assert "holds no runner 'nope'" in result.output

@@ -4,23 +4,58 @@ An invoker passes its own as ``obj`` to the root group; with none, the group bui
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 import click
+
+# The CLI tree's one httpx import (``bzh:dependency-injection``): every other CLI module reaches httpx's types through
+# here, and its clients through ``CliCollaborators.client_factory``.
+from httpx import Client, ConnectError, HTTPError, HTTPStatusError, HTTPTransport, Response
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.span_clock import Clock
 
-if TYPE_CHECKING:
-    import httpx
+__all__ = [
+    "CliCollaborators",
+    "Client",
+    "ClientFactory",
+    "ConnectError",
+    "HTTPError",
+    "HTTPStatusError",
+    "Response",
+]
 
 
-def _short_lived_client() -> httpx.Client:
-    import httpx
+class ClientFactory(Protocol):
+    """Builds one HTTP client. Every argument is optional: a bare call is the short-lived default client."""
 
-    return httpx.Client()
+    def __call__(
+        self,
+        *,
+        base_url: str = "",
+        timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
+        uds: str | None = None,
+    ) -> Client:
+        """``uds`` is a unix-socket path to reach the server through, instead of TCP."""
+        ...
+
+
+def _short_lived_client(
+    *,
+    base_url: str = "",
+    timeout: float | None = None,
+    headers: Mapping[str, str] | None = None,
+    uds: str | None = None,
+) -> Client:
+    kwargs: dict[str, object] = {"base_url": base_url, "headers": headers}
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    if uds is not None:
+        kwargs["transport"] = HTTPTransport(uds=uds)
+    return Client(**kwargs)  # type: ignore[arg-type]
 
 
 _PIN = "blizzard.cli.collaborators"
@@ -30,7 +65,7 @@ _PIN = "blizzard.cli.collaborators"
 class CliCollaborators:
     """What a command process's span and request machinery is built from."""
 
-    client_factory: Callable[[], httpx.Client]
+    client_factory: ClientFactory
     clock: Clock
     #: What a verb judges a time the operator typed against — separate from ``clock``, which stamps spans.
     wall_clock: IClock

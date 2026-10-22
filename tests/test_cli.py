@@ -12,6 +12,7 @@ import shutil
 import socket
 import threading
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,12 +21,14 @@ from alembic.script import ScriptDirectory
 from click.testing import CliRunner
 from sqlalchemy import insert
 
+from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.main import blizzard
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
-from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, daemon_holding
+from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, Door, daemon_holding
+from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
@@ -73,6 +76,9 @@ def test_migrate_revision_flags_are_exclusive(daemon: str, first: str, second: s
     assert result.exit_code == 2
     assert first in result.output and second in result.output
     assert not missing.exists()
+
+
+_DOOR = Door(UNTRACED, CliCollaborators.production().client_factory)
 
 
 def test_root_lists_hub_and_runner() -> None:
@@ -427,7 +433,7 @@ def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     HostLayout(root).legacy_socket_path.write_bytes(b"")
 
-    assert daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED) is None
+    assert daemon_holding(HostLayout(root).legacy_socket_path, _DOOR) is None
 
 
 def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
@@ -436,7 +442,7 @@ def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> N
     server = _serve_on(HostLayout(root).legacy_socket_path, _OK)
 
     try:
-        assert daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED) is not None
+        assert daemon_holding(HostLayout(root).legacy_socket_path, _DOOR) is not None
     finally:
         server.close()
 
@@ -450,7 +456,7 @@ def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected
     server = _serve_on(HostLayout(root).legacy_socket_path, reply)
 
     try:
-        holding = daemon_holding(HostLayout(root).legacy_socket_path, UNTRACED)
+        holding = daemon_holding(HostLayout(root).legacy_socket_path, _DOOR)
     finally:
         server.close()
 
@@ -639,9 +645,7 @@ def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None
     assert "serving blizzard-hub" not in result.output
 
 
-def test_runner_host_without_a_token_names_both_ways_to_get_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) -> None:
     """A runner the hub already lists takes an enroll, not a second add under a fresh id, so the
     no-token warning names both."""
     runner = init_runner()
@@ -652,9 +656,11 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(
     def stop(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("stop before serving")
 
-    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
-
-    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
+    result = runner.invoke(
+        blizzard,
+        ["runner", "host", "--dir", str(root)],
+        obj=replace(InitCollaborators(runner.hub.clients, runner.hub.host_clients), build_host_process=stop),
+    )
 
     assert isinstance(result.exception, RuntimeError)
     assert "runner runner-local" in result.output and "is halted: has no hub token" in result.output

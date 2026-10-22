@@ -30,8 +30,8 @@ _ENV = {
 
 def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     """Collaborators whose client factory hands out ``client`` — a fresh stub when none is given."""
-    handed = client or StubClient(None, None)
-    return CliCollaborators(client_factory=lambda: handed, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type,return-value]
+    handed = client or StubClient({})
+    return CliCollaborators(client_factory=lambda **_: handed, clock=Clock(), wall_clock=SystemClock())  # type: ignore[arg-type,return-value]
 
 
 def _runner_context() -> click.Context:
@@ -97,7 +97,7 @@ def test_run_finishes_with_zero_and_returns_the_result_of_a_command_that_returns
 
 
 def test_an_abandoned_span_post_leaves_the_client_open(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = StubClient(None, None)
+    client = StubClient({})
     _record_sends(monkeypatch, released=False)
 
     _traced(_ENV, _collaborators(client)).finish(0)
@@ -106,7 +106,7 @@ def test_an_abandoned_span_post_leaves_the_client_open(monkeypatch: pytest.Monke
 
 
 def test_a_finished_span_post_closes_the_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = StubClient(None, None)
+    client = StubClient({})
     sent = _record_sends(monkeypatch, released=True)
 
     _traced(_ENV, _collaborators(client)).finish(0)
@@ -116,7 +116,7 @@ def test_a_finished_span_post_closes_the_client(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_an_untraced_session_closes_the_client_it_built_and_posts_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = StubClient(None, None)
+    client = StubClient({})
     sent = _record_sends(monkeypatch, released=True)
     session = WorkerSession(_collaborators(client), {})
     session.client()

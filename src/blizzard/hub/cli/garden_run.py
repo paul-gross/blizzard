@@ -6,10 +6,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
@@ -46,7 +46,7 @@ def run_list(cli: CliContext, since: datetime | None, until: datetime | None, pr
         k: v for k, v in {"since": utc_query_value(since), "until": utc_query_value(until)}.items() if v is not None
     }
     resp = cli.send("get", "/api/runs", params=params | project_query(project))
-    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"run list rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "GET /runs")
     rows = resp.json()

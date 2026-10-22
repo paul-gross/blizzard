@@ -9,10 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import httpx
 import pytest
 import structlog.testing
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -26,6 +24,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from tests.config_inputs import build_hosted_hub_app, init_hub
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -44,22 +43,22 @@ def client(config: HubConfig) -> Iterator[TestClient]:
         yield c
 
 
-def _route_cli_through(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
-    """Send the CLI's ``httpx`` verbs to the in-process app."""
+_bound: dict[str, Bound] = {}
+"""The collaborators :func:`_route_cli_through` bound, for :func:`_cli`."""
 
-    def route(method: str):  # type: ignore[no-untyped-def]
-        def call(url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
-            kwargs.pop("headers", None)
-            return client.request(method.upper(), urlsplit(url).path, **kwargs)
 
-        return call
+def _route_cli_through(client: TestClient) -> None:
+    """Send the CLI's requests to the in-process app."""
 
-    for method in ("get", "post", "put"):
-        monkeypatch.setattr(httpx, method, route(method))
+    def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+        kwargs.pop("headers", None)
+        return client.request(method.upper(), urlsplit(url).path, **kwargs)
+
+    _bound["hub"] = bind_stubs(request=forward)
 
 
 def _cli(args: list[str], *, stdin: str | None = None):  # type: ignore[no-untyped-def]
-    return CliRunner().invoke(hub_group, ["secret", *args], input=stdin, env={"BZ_HUB_URL": _HUB})
+    return _bound["hub"].runner.invoke(hub_group, ["secret", *args], input=stdin, env={"BZ_HUB_URL": _HUB})
 
 
 def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient) -> None:
@@ -108,8 +107,8 @@ def test_a_validation_error_on_a_secret_route_echoes_no_input_but_other_routes_k
     assert "input" in other.json()["detail"][0]
 
 
-def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _route_cli_through(monkeypatch, client)
+def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient) -> None:
+    _route_cli_through(client)
     created = _cli(["create", "gh-test"], stdin=f"{_SENTINEL}\r\n")
     assert created.exit_code == 0
     assert "revision 1" in created.output
@@ -137,20 +136,16 @@ def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient, monke
     assert "revision 2" in _cli(["show", "gh-test"]).output
 
 
-def test_secret_set_refuses_an_unknown_name_and_creates_nothing(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _route_cli_through(monkeypatch, client)
+def test_secret_set_refuses_an_unknown_name_and_creates_nothing(client: TestClient) -> None:
+    _route_cli_through(client)
     refused = _cli(["set", "never-made"], stdin="v\n")
     assert refused.exit_code != 0
     assert "secret create" in refused.output
     assert client.get("/api/secrets/never-made").status_code == 404
 
 
-def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_by(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _route_cli_through(monkeypatch, client)
+def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_by(client: TestClient) -> None:
+    _route_cli_through(client)
     assert _cli(["create", "gh-test"], stdin=f"{_SENTINEL}\n").exit_code == 0
     created = client.post(
         "/api/repositories",
@@ -179,9 +174,7 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
     assert client.get("/api/secrets/gh-test").json()["retirable"] is True
 
 
-def test_a_planted_value_appears_on_no_surface(
-    config: HubConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_planted_value_appears_on_no_surface(config: HubConfig, tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = build_platform_tracing(
         replace(config.tracing, platform=True, platform_sample_ratio=1.0),
@@ -196,7 +189,7 @@ def test_a_planted_value_appears_on_no_surface(
         structlog.testing.capture_logs() as logs,
         TestClient(build_hosted_hub_app(config, platform_tracing=handle)) as client,
     ):
-        _route_cli_through(monkeypatch, client)
+        _route_cli_through(client)
         for resp in (
             client.post("/api/secrets", json={"name": "gh-test", "value": _SENTINEL}),
             client.post("/api/secrets", json={"value": _SENTINEL}),

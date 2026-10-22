@@ -1,14 +1,14 @@
 """``blizzard hub runner enroll`` (unit tier) — a pure client of the enroll endpoint,
-driven here with ``httpx.post`` stubbed.
+driven here with the client factory stubbed.
 """
 
 from __future__ import annotations
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -27,7 +27,7 @@ class _FakeResponse:
 
 
 @pytest.mark.unit
-def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token() -> None:
     calls: list[str] = []
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
@@ -37,9 +37,8 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypat
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(200, {"runner_id": "runner-a", "runner_name": "runner-a"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post, get=fake_get)
+    result = bound.runner.invoke(
         hub_group, ["runner", "enroll", "runner-a"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
@@ -49,12 +48,12 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token(monkeypat
 
 
 @pytest.mark.unit
-def test_enroll_maps_an_unknown_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enroll_maps_an_unknown_runner() -> None:
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["runner", "enroll", "ghost"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["runner", "enroll", "ghost"])
 
     assert result.exit_code != 0
     assert "ghost" in result.output

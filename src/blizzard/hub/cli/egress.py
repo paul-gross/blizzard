@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.window import refuse_future_until, since_option, until_option, utc_query_value
@@ -103,7 +103,7 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
     refuse_future_until(until, CliCollaborators.of(click.get_current_context()).wall_clock)
     body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
     resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
-    if resp.status_code == httpx.codes.BAD_GATEWAY:
+    if resp.status_code == HTTPStatus.BAD_GATEWAY:
         failure = resp.json()
         placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in failure["datasets"])
         raise click.ClickException(

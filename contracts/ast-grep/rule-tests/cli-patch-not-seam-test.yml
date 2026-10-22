@@ -1,0 +1,26 @@
+id: bzh:cli-patch-not-seam
+valid:
+  # Collaborators handed down through obj.
+  - |
+    result = runner.invoke(blizzard, ["runner", "host"], obj=collaborators)
+  # A dotted path outside the CLI trees.
+  - |
+    monkeypatch.setattr("blizzard.runner.api.events.Stream", _capturing_stream)
+  # An object-target patch.
+  - |
+    monkeypatch.setattr(store_cli, "SystemClock", clock)
+  # A string that merely names a CLI attribute.
+  - |
+    monkeypatch.setattr(thing, "blizzard.cli.command", value)
+invalid:
+  - |
+    monkeypatch.setattr("blizzard.runner.cli.runtime.build_host_process", stop)
+  - |
+    monkeypatch.setattr("blizzard.hub.cli.context.CLIENT_TIMEOUT", 1.0)
+  - |
+    monkeypatch.setattr('blizzard.cli.collaborators.CliCollaborators.production', fake)
+  - |
+    monkeypatch.setattr(
+        "blizzard.runner.cli.external_usage.select_sampler",
+        lambda *args, **kwargs: sampler,
+    )

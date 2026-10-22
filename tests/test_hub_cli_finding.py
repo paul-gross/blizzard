@@ -10,6 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from tests.worker_http import bind_stubs
 
 
 class _FakeResponse:
@@ -28,15 +29,15 @@ class _FakeResponse:
 
 
 @pytest.mark.unit
-def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_list_passes_routine_scope_and_include_gone() -> None:
     calls: list[tuple[str, dict[str, str]]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, params))
         return _FakeResponse(200, {"findings": [], "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         hub_group,
         ["finding", "list", "--routine", "nightly", "--scope", "blizzard", "--include-gone"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -52,15 +53,15 @@ def test_finding_list_passes_routine_scope_and_include_gone(monkeypatch: pytest.
 
 
 @pytest.mark.unit
-def test_finding_list_with_source_review_does_not_require_routine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_list_with_source_review_does_not_require_routine() -> None:
     calls: list[tuple[str, dict[str, str]]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append((url, params))
         return _FakeResponse(200, {"findings": [], "next_cursor": None})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(
         hub_group,
         ["finding", "list", "--scope", "blizzard", "--source", "review"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
@@ -86,7 +87,7 @@ def test_finding_list_without_routine_or_source_review_is_a_usage_error(monkeypa
 
 
 @pytest.mark.unit
-def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_list_prints_each_row() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -111,8 +112,8 @@ def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
 
     assert result.exit_code == 0, result.output
     assert "fin_1" in result.output
@@ -120,7 +121,7 @@ def test_finding_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_finding_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_list_drains_every_page() -> None:
     page_1 = {
         "findings": [
             {
@@ -165,8 +166,8 @@ def test_finding_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None
             return _FakeResponse(200, page_1)
         return _FakeResponse(200, page_2)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "list", "--routine", "nightly", "--scope", "blizzard"])
 
     assert result.exit_code == 0, result.output
     assert "fin_1" in result.output
@@ -174,7 +175,7 @@ def test_finding_list_drains_every_page(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_show_renders_the_detail() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -194,8 +195,8 @@ def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> Non
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["finding", "show", "fin_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_1"])
 
     assert result.exit_code == 0, result.output
     assert "fin_1" in result.output
@@ -203,7 +204,7 @@ def test_finding_show_renders_the_detail(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.unit
-def test_finding_show_renders_a_review_sourced_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_show_renders_a_review_sourced_finding() -> None:
     """`show` must surface `source`/`severity`/`raised_by_chunk_id` for a
     review-sourced finding rather than a bare, unhelpful `routine=None`."""
 
@@ -229,8 +230,8 @@ def test_finding_show_renders_a_review_sourced_finding(monkeypatch: pytest.Monke
             },
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["finding", "show", "fin_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_1"])
 
     assert result.exit_code == 0, result.output
     assert "source=review" in result.output
@@ -240,12 +241,12 @@ def test_finding_show_renders_a_review_sourced_finding(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_finding_show_unknown_id_reports_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_show_unknown_id_reports_404() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown finding fin_ghost"})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["finding", "show", "fin_ghost"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_ghost"])
 
     assert result.exit_code != 0
     assert "unknown finding fin_ghost" in result.output
@@ -271,15 +272,15 @@ def _finding_view(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.unit
-def test_finding_resolve_posts_finding_ids_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_resolve_posts_finding_ids_and_note() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, [_finding_view()])
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["finding", "resolve", "fin_1", "fin_2", "--note", "shipped it"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["finding", "resolve", "fin_1", "fin_2", "--note", "shipped it"])
 
     assert result.exit_code == 0, result.output
     assert calls == [
@@ -289,39 +290,39 @@ def test_finding_resolve_posts_finding_ids_and_note(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_finding_resolve_with_a_blank_note_surfaces_the_servers_422_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_resolve_with_a_blank_note_surfaces_the_servers_422_detail() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "'resolved' requires a non-empty note"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["finding", "resolve", "fin_1", "--note", "  "])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["finding", "resolve", "fin_1", "--note", "  "])
 
     assert result.exit_code != 0
     assert "requires a non-empty note" in result.output
 
 
 @pytest.mark.unit
-def test_finding_resolve_an_unknown_id_is_reported_as_404(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_resolve_an_unknown_id_is_reported_as_404() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(404, {"detail": "unknown finding fin_ghost"})
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["finding", "resolve", "fin_ghost", "--note", "n"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["finding", "resolve", "fin_ghost", "--note", "n"])
 
     assert result.exit_code != 0
     assert "unknown finding" in result.output
 
 
 @pytest.mark.unit
-def test_finding_supersede_posts_the_absorbing_finding_id(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_supersede_posts_the_absorbing_finding_id() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, [_finding_view(state="superseded", note="folded into fin_2")])
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
         hub_group, ["finding", "supersede", "fin_1", "--by", "fin_2", "--note", "folded into fin_2"]
     )
 
@@ -335,15 +336,15 @@ def test_finding_supersede_posts_the_absorbing_finding_id(monkeypatch: pytest.Mo
 
 
 @pytest.mark.unit
-def test_finding_reopen_posts_finding_ids_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finding_reopen_posts_finding_ids_and_note() -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse(200, [_finding_view(state="live", live=True, note="regressed")])
 
-    monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["finding", "reopen", "fin_1", "--note", "regressed"])
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["finding", "reopen", "fin_1", "--note", "regressed"])
 
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8421/api/findings/reopen", {"finding_ids": ["fin_1"], "note": "regressed"})]

@@ -1,5 +1,5 @@
 """``blizzard hub run list|show`` (unit tier) — pure clients of the two run-reading
-routes, driven here with ``httpx`` stubbed, the ``tests/test_hub_cli_routine.py`` shape.
+routes, driven here with the client stubbed, the ``tests/test_hub_cli_routine.py`` shape.
 A component-tier case at the bottom proves the same two verbs against a real, wired app
 (``tests/test_cli_analytics_events_component.py``'s relay shape)."""
 
@@ -14,7 +14,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.cli import hub as hub_group
@@ -24,6 +23,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from tests.support import HubHarness, build_hub, default_project, project_record
+from tests.worker_http import Bound, bind_stubs
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 
@@ -92,12 +92,12 @@ def _run_delta(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.unit
-def test_run_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_prints_each_row() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [_run_row()])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "list"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
@@ -106,28 +106,28 @@ def test_run_list_prints_each_row(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_run_list_on_no_runs_prints_a_friendly_message(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_on_no_runs_prints_a_friendly_message() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "list"])
 
     assert result.exit_code == 0, result.output
     assert "no runs in this window" in result.output
 
 
 @pytest.mark.unit
-def test_run_list_converts_local_since_until_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_converts_local_since_until_to_utc() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    bound = bind_stubs(get=fake_get)
     with _local_timezone("America/New_York"):  # UTC-5 in January, no DST
-        result = CliRunner().invoke(
+        result = bound.runner.invoke(
             hub_group, ["run", "list", "--since", "2026-01-01T10:00:00", "--until", "2026-01-15T10:00:00"]
         )
 
@@ -136,27 +136,27 @@ def test_run_list_converts_local_since_until_to_utc(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
-def test_run_list_omits_unset_since_and_until(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_omits_unset_since_and_until() -> None:
     calls: list[dict[str, str]] = []
 
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(200, [])
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "list"])
 
     assert result.exit_code == 0, result.output
     assert calls == [{}]
 
 
 @pytest.mark.unit
-def test_run_list_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_maps_a_422_to_a_click_exception() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"detail": "until must be after since"})
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "list"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "list"])
 
     assert result.exit_code != 0
     assert "until must be after since" in result.output
@@ -167,12 +167,12 @@ def test_run_list_maps_a_422_to_a_click_exception(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_run_show_renders_identity_and_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_show_renders_identity_and_outcome() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, _run_delta())
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
@@ -181,7 +181,7 @@ def test_run_show_renders_identity_and_outcome(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.unit
-def test_run_show_renders_the_escalation_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_show_renders_the_escalation_when_present() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -195,8 +195,8 @@ def test_run_show_renders_the_escalation_when_present(monkeypatch: pytest.Monkey
             ),
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "escalated at: build" in result.output
@@ -205,7 +205,7 @@ def test_run_show_renders_the_escalation_when_present(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
-def test_run_show_renders_added_observed_and_gone_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_show_renders_added_observed_and_gone_per_set() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             200,
@@ -233,8 +233,8 @@ def test_run_show_renders_added_observed_and_gone_per_set(monkeypatch: pytest.Mo
             ),
         )
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "show", "ch_1"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "fins_1" in result.output
@@ -245,12 +245,12 @@ def test_run_show_renders_added_observed_and_gone_per_set(monkeypatch: pytest.Mo
 
 
 @pytest.mark.unit
-def test_run_show_maps_a_404_to_a_click_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_show_maps_a_404_to_a_click_exception() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(404)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(hub_group, ["run", "show", "ch_ghost"])
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["run", "show", "ch_ghost"])
 
     assert result.exit_code != 0
     assert "ch_ghost" in result.output
@@ -282,15 +282,15 @@ def _routine(hub: HubHarness) -> Routine:
 _HUB_URL = "http://hub.local:8421"
 
 
-def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+def _relay(hub: HubHarness) -> Bound:
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> httpx.Response:
         return hub.client.get(url, params=params)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    return bind_stubs(get=fake_get)
 
 
 @pytest.mark.component
-def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     routine = _routine(hub)
     scope = hub.services.scopes.get(routine.project_id, routine.default_scope_slug)
@@ -304,14 +304,14 @@ def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path, mo
     )
     hub.promote(result.chunk_id)
     hub.clock.advance(timedelta(hours=1))
-    _relay(hub, monkeypatch)
+    bound = _relay(hub)
 
-    list_result = CliRunner().invoke(hub_group, ["run", "list"], env={"BZ_HUB_URL": _HUB_URL})
+    list_result = bound.runner.invoke(hub_group, ["run", "list"], env={"BZ_HUB_URL": _HUB_URL})
 
     assert list_result.exit_code == 0, list_result.output
     assert result.chunk_id in list_result.output
 
-    show_result = CliRunner().invoke(hub_group, ["run", "show", result.chunk_id], env={"BZ_HUB_URL": _HUB_URL})
+    show_result = bound.runner.invoke(hub_group, ["run", "show", result.chunk_id], env={"BZ_HUB_URL": _HUB_URL})
 
     assert show_result.exit_code == 0, show_result.output
     assert result.chunk_id in show_result.output

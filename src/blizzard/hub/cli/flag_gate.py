@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from http import HTTPStatus
 from typing import Any
 
 import click
-import httpx
 
 from blizzard.cli.flag_guard import flag_command, flag_option
 from blizzard.foundation.flags import FlagRegistry
@@ -17,7 +17,7 @@ def hub_flags(ctx: click.Context) -> Mapping[str, bool]:
     """The addressed hub's flags answer; empty from a hub too old to answer."""
     cli: CliContext = ctx.params["cli"]
     resp = cli.send("get", "/api/flags")
-    if resp.status_code == httpx.codes.NOT_FOUND:
+    if resp.status_code == HTTPStatus.NOT_FOUND:
         return {}
     cli.check(resp, "GET /flags")
     return dict(resp.json()["flags"])

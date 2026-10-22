@@ -13,10 +13,9 @@ from pathlib import Path
 
 import click
 
-from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
 from blizzard.foundation.store.migrations import StoreBelowFloorError
-from blizzard.runner.cli.daemon import daemon_holding
+from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.runtime import InitCollaborators, forget_identity, write_runner_token
@@ -212,13 +211,13 @@ def ingest(ctx: click.Context, source: Path, directory: str, runner: str, worksp
     here. Refused while either host runs, or the hub does not hold the runner under this host; a re-run completes an
     interrupted ingest."""
     config = load_host(directory)
-    trace = OperatorTrace.source(ctx)
+    door = Door.of(ctx)
     collaborators = InitCollaborators.of(ctx)
     with collaborators.host_clients(config.hub_url) as host_clients:
         service = build_runner_ingest(
             config,
             host_clients(config.host_token.value),
-            holder=lambda sock: daemon_holding(sock, trace),
+            holder=lambda sock: daemon_holding(sock, door),
             migrations=collaborators.store_migrations,
         )
         try:
@@ -294,9 +293,9 @@ def _host_refused(answer: HostRefused, hub: str, act: str) -> str:
 
 def _running(ctx: click.Context, layout: HostLayout) -> str | None:
     """Whether a host is running in ``layout``'s directory — its lock held, or its socket answering — in words."""
-    trace = OperatorTrace.source(ctx)
+    door = Door.of(ctx)
     try:
-        with hold_host(layout, (layout.socket_path,), lambda sock: daemon_holding(sock, trace)):
+        with hold_host(layout, (layout.socket_path,), lambda sock: daemon_holding(sock, door)):
             return None
     except HostHeld as exc:
         return f"a running host holds {layout.root} ({exc})"

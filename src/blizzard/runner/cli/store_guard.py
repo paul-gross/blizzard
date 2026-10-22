@@ -8,13 +8,12 @@ from contextlib import contextmanager
 
 import click
 
-from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, RevisionMismatchError, StoreBelowFloorError
-from blizzard.runner.cli.daemon import daemon_holding
+from blizzard.runner.cli.daemon import Door, daemon_holding
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
@@ -51,7 +50,7 @@ def store_write_guard(
     config: RunnerConfig | HostConfig,
     *,
     action: str,
-    trace: ITraceHeaders,
+    door: Door,
     runners: Mapping[str, str],
     configured: tuple[str, ...],
     refuse_foreign: bool,
@@ -63,7 +62,7 @@ def store_write_guard(
     with hold_host(
         layout,
         (layout.legacy_socket_path,),
-        lambda sock: daemon_holding(sock, trace),
+        lambda sock: daemon_holding(sock, door),
         lambda held: click.ClickException(f"{held}, so this cannot {action} — stop it first"),
     ):
         with click_exception_on(RevisionMismatchError, MigrationConnectionError, StoreBelowFloorError):

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from click.testing import CliRunner
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.store.utc import iso_utc
@@ -36,6 +35,7 @@ from tests.test_egress_sweep import (
     _sweep,
 )
 from tests.trace_hub import seed_open_tenant_chunk, trace_store
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -262,20 +262,16 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
     assert _kinds(hub) == []
 
 
-def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path) -> None:
     config = _real(tmp_path, backfill_max_window=3600)
     hub, graph = _hub(tmp_path, config)
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
     _closed_step(hub, graph, 1)
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json),
-    )
+    bound = bind_stubs(post=lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json))
 
-    dry = CliRunner().invoke(
+    dry = bound.runner.invoke(
         hub_group,
         ["egress", "backfill", "--since", "2026-07-12T00:00:00", "--until", "2026-07-12T00:30:00", "--dry-run"],
         env={**_ENV, "TZ": "UTC"},
@@ -283,7 +279,7 @@ def test_the_cli_reports_counts_and_renders_refusals(tmp_path: Path, monkeypatch
     assert dry.exit_code == 0, dry.output
     assert "would write" in dry.output
 
-    wide = CliRunner().invoke(
+    wide = bound.runner.invoke(
         hub_group,
         ["egress", "backfill", "--since", "2026-07-12T00:00:00", "--until", "2026-07-13T00:00:00"],
         env=_ENV,
@@ -361,14 +357,14 @@ def test_an_events_dry_run_counts_without_writing(tmp_path: Path) -> None:
     assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
 
 
-def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path) -> None:
     hub, _ = _hub(tmp_path, _real(tmp_path, backfill_max_window=3600))
     sent: list[object] = []
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: sent.append(a))
+    bound = bind_stubs(post=lambda *a, **k: sent.append(a))
     now = hub.clock.now()
     collaborators = replace(CliCollaborators.production(), wall_clock=hub.clock)
 
-    result = CliRunner().invoke(
+    result = bound.runner.invoke(
         hub_group,
         [
             "egress",

@@ -1,4 +1,4 @@
-"""``blizzard hub events`` against the real router (component tier): ``httpx.get`` relayed
+"""``blizzard hub events`` against the real router (component tier): ``GET``s relayed
 to the app's own ``TestClient``, so the route, its filters, and the auth triad genuinely run."""
 
 from __future__ import annotations
@@ -9,29 +9,30 @@ from pathlib import Path
 
 import httpx
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.cli import hub as hub_group
 from tests.support import HubHarness, build_hub, chunk_stores, seed_chunk, seed_graph, seed_session, seed_user
+from tests.worker_http import Bound, bind_stubs
 
 pytestmark = pytest.mark.component
 
 _HUB_URL = "http://hub.local:8421"
 
 
-def _relay(hub: HubHarness, monkeypatch: pytest.MonkeyPatch, token: str | None) -> None:
+def _relay(hub: HubHarness, token: str | None) -> Bound:
     headers = {"Cookie": f"bz_session={token}"} if token is not None else {}
 
     def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx.Response:
         return hub.client.get(url, params=params, headers=headers)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
+    return bind_stubs(get=fake_get)
 
 
-def _invoke(*args: str) -> Result:
-    return CliRunner().invoke(hub_group, ["events", *args], env={"BZ_HUB_URL": _HUB_URL})
+def _invoke(bound: Bound, *args: str) -> Result:
+    return bound.runner.invoke(hub_group, ["events", *args], env={"BZ_HUB_URL": _HUB_URL})
 
 
 def _seeded_hub(tmp_path: Path) -> tuple[HubHarness, str, str]:
@@ -71,41 +72,39 @@ def _messages(result: Result) -> list[str]:
     return [e["message"] for e in json.loads(result.stdout)["events"]]
 
 
-def test_each_filter_matches_the_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_each_filter_matches_the_route(tmp_path: Path) -> None:
     hub, token, between = _seeded_hub(tmp_path)
-    _relay(hub, monkeypatch, token)
+    bound = _relay(hub, token)
 
-    assert _messages(_invoke("--json")) == ["lost", "retried", "abandoned"]
-    assert _messages(_invoke("--chunk", "ch_a", "--json")) == ["retried", "abandoned"]
-    assert _messages(_invoke("--severity", "warning", "--json")) == ["retried"]
-    assert _messages(_invoke("--runner", "r2", "--json")) == ["lost"]
-    assert _messages(_invoke("--since", between, "--json")) == ["lost", "retried"]
-    assert _messages(_invoke("--limit", "1", "--json")) == ["lost"]
+    assert _messages(_invoke(bound, "--json")) == ["lost", "retried", "abandoned"]
+    assert _messages(_invoke(bound, "--chunk", "ch_a", "--json")) == ["retried", "abandoned"]
+    assert _messages(_invoke(bound, "--severity", "warning", "--json")) == ["retried"]
+    assert _messages(_invoke(bound, "--runner", "r2", "--json")) == ["lost"]
+    assert _messages(_invoke(bound, "--since", between, "--json")) == ["lost", "retried"]
+    assert _messages(_invoke(bound, "--limit", "1", "--json")) == ["lost"]
 
 
-def test_json_carries_detail_and_the_table_reads_the_real_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_json_carries_detail_and_the_table_reads_the_real_rows(tmp_path: Path) -> None:
     hub, token, _between = _seeded_hub(tmp_path)
-    _relay(hub, monkeypatch, token)
+    bound = _relay(hub, token)
 
-    as_json = _invoke("--chunk", "ch_b", "--json")
+    as_json = _invoke(bound, "--chunk", "ch_b", "--json")
     assert json.loads(as_json.stdout)["events"][0]["detail"] == {"n": 20}
 
-    table = _invoke("--chunk", "ch_b")
+    table = _invoke(bound, "--chunk", "ch_b")
     assert table.exit_code == 0, table.output
     assert "worker-lost" in table.output
     assert "runner=r2" in table.output
 
 
-def test_the_auth_triad_returns_the_apis_own_detail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_auth_triad_returns_the_apis_own_detail(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
 
-    _relay(hub, monkeypatch, None)
-    anon = _invoke()
+    anon = _invoke(_relay(hub, None))
     assert anon.exit_code != 0
     assert "blizzard hub login" in anon.output
 
     pending = seed_user(hub, username="pat", role=Role.PENDING)
-    _relay(hub, monkeypatch, seed_session(hub, pending))
-    refused = _invoke()
+    refused = _invoke(_relay(hub, seed_session(hub, pending)))
     assert refused.exit_code != 0
     assert "no such tenant" in refused.output
