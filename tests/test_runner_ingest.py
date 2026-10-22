@@ -338,9 +338,9 @@ def test_ingest_is_refused_for_a_new_workspace_id_on_a_runner_bound_to_several(
     layout = HostLayout(hosts.there)
     append_workspace(layout, '\n[[workspace]]\nid = "second"\nroot = "/srv/second"\nenvs = ["s1"]\n', strict=STRICT)
     text = layout.config_path.read_text()
-    bound = '{ project = "default", workspace = "workspace-local", agents = 1 }'
+    bound = '{ project = "default", workspace = "workspace-local" }'
     head, _, tail = text.rpartition(bound)
-    layout.config_path.write_text(head + bound + ', { project = "other", workspace = "second", agents = 1 }' + tail)
+    layout.config_path.write_text(head + bound + ', { project = "other", workspace = "second" }' + tail)
     _refuse(fake_init_hub, hosts, "bound to 2 workspaces", "--workspace-id", _NEW_WORKSPACE)
 
 
@@ -599,12 +599,13 @@ def test_ingest_of_a_directory_that_has_not_graduated_takes_its_runner_and_moves
     host = load_host_config(hosts.here)
     added = host.sole_runner(MOVING)
     assert added.id == MOVING_ID
-    assert [(b.project, b.workspace, b.agents) for b in added.bindings] == [("default", "ws-pre-host", 2)]
+    assert [(b.project, b.workspace) for b in added.bindings] == [("default", "ws-pre-host")]
     assert "ws-pre-host" in [w.id for w in host.workspaces]
     assert added.subscription == "anthropic"
     [declared] = [
         r for r in tomllib.loads(HostLayout(hosts.here).config_path.read_text())["runner"] if r["name"] == MOVING
     ]
+    assert (declared["agents"], "agents" in declared["projects"][0]) == (2, False)
     assert declared["harness"]["config_dir"] == str(hosts.here / "runners" / MOVING / "bundle")
     assert (hosts.here / "runners" / MOVING / "bundle" / "settings.json").exists()
     assert HubTokenFile.of(hosts.here, _VARIABLE).held() == _PRE_HOST_TOKEN
@@ -817,3 +818,12 @@ def test_an_archive_carries_the_prompt_of_the_workspace_its_runner_is_bound_to_t
     prompts = {r["workspace_id"]: r["prompt"] for r in rows(here, "workspace_prompt")}
     assert prompts[_NEW_WORKSPACE] == "the standing prompt"
     here.dispose()
+
+
+def test_a_rewritten_bindings_literal_keeps_only_the_agents_a_binding_declared() -> None:
+    from blizzard.runner.config import ProjectBinding
+    from blizzard.runner.ingest import _bindings_literal
+
+    literal = _bindings_literal((ProjectBinding("a", "w", 2), ProjectBinding("b", "w")))
+
+    assert literal == '[{ project = "a", workspace = "w", agents = 2 }, { project = "b", workspace = "w" }]'

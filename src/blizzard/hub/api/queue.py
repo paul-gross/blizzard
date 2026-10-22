@@ -229,7 +229,18 @@ class MatchedPeek:
         chunks = services.queue.ordered_ready(statuses=statuses)
         policy = QueueMatchPolicy.of(request.policy)
         served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
-        candidates = served_chunks[:1] if policy is QueueMatchPolicy.HOLD else served_chunks
+        per_project = request.projects is not None
+        if policy is not QueueMatchPolicy.HOLD:
+            candidates = served_chunks
+        elif per_project:
+            # Under a per-project hold only each project's head can be offered, so the first served chunk per project
+            # bounds the bulk reads by the projects named.
+            heads: dict[str | None, Chunk] = {}
+            for chunk in served_chunks:
+                heads.setdefault(chunk.project_id, chunk)
+            candidates = list(heads.values())
+        else:
+            candidates = served_chunks[:1]
         markings = _blocked_markings(services, statuses, [chunk.chunk_id for chunk in candidates])
         facts = services.chunks.facts.movement_facts_for([chunk.chunk_id for chunk in candidates])
         graph_ids = sorted({chunk.graph_id for chunk in candidates})
@@ -242,6 +253,7 @@ class MatchedPeek:
             capabilities=_domain_capabilities(request.capabilities),
             blocked=markings,
             policy=policy,
+            hold_per_project=per_project,
         )
         project_id = entry.chunk.project_id if entry is not None else None
         return cls(entry, services.projects.get(project_id) if project_id is not None else None)

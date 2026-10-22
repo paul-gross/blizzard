@@ -46,26 +46,28 @@ _ROUTING = routing_map(
 )
 
 
-def test_each_binding_reports_what_remains_of_its_own_agents() -> None:
+def test_every_binding_reports_the_runners_free_agents() -> None:
     holds = [OpenLeaseHold("ch_1", held=True, workspace_id="ws1", project_id="pr_a")]
-    assert Capacities.of(_BINDINGS, _ROUTING, holds) == Capacities(
+    assert Capacities.of(_BINDINGS, _ROUTING, holds, 4) == Capacities(
         used=1,
+        agents=4,
+        free=3,
         bindings=(
             BindingCapacity(project="a", project_id="pr_a", workspace_id="ws1", agents=4, used=1, free=3),
-            BindingCapacity(project="b", project_id="pr_b", workspace_id="ws2", agents=2, used=0, free=2),
+            BindingCapacity(project="b", project_id="pr_b", workspace_id="ws2", agents=2, used=0, free=3),
         ),
     )
 
 
 def test_free_never_reads_below_zero() -> None:
     holds = [OpenLeaseHold(f"ch_{n}", held=False) for n in range(5)]
-    capacities = Capacities.of(_BINDINGS, _ROUTING, holds)
-    assert capacities.used == 5
+    capacities = Capacities.of(_BINDINGS, _ROUTING, holds, 4)
+    assert (capacities.used, capacities.agents, capacities.free) == (5, 4, 0)
     assert [b.free for b in capacities.bindings] == [0, 0]
 
 
 def test_an_unresolved_binding_reports_no_project_id() -> None:
-    capacities = Capacities.of(_BINDINGS, routing_map(_BINDINGS, None), [])
+    capacities = Capacities.of(_BINDINGS, routing_map(_BINDINGS, None), [], 4)
     assert [b.project_id for b in capacities.bindings] == [None, None]
 
 

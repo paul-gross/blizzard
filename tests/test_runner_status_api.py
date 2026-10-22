@@ -92,6 +92,7 @@ def _app_with_status(
         runner_name=config.name,
         workspace_id=TEST_WORKSPACE_ID,
         bindings=serving(agents) if bindings is None else bindings,
+        agents=agents,
         hub_url=config.hub_url,
         workspaces=single_workspace(FakeProvider({env: f"/ws/{env}" for env in pool})),
         gates=gates,
@@ -134,6 +135,8 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     assert body["pause"] == {"local": False, "hub": False, "effective": False, "local_reason": None}
     assert body["capacities"] == {
         "used": 0,
+        "agents": 3,
+        "free": 3,
         "bindings": [
             {
                 "project": FIXTURE_PROJECT_ID,

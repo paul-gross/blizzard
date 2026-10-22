@@ -6313,6 +6313,10 @@ export type QueuePeekRequest = {
      * Project
      */
     project?: string | null;
+    /**
+     * Projects
+     */
+    projects?: Array<string> | null;
 };
 
 /**
@@ -7779,6 +7783,10 @@ export type RunnerPauseRequest = {
  */
 export type RunnerRegistrationRequest = {
     /**
+     * Agents
+     */
+    agents?: number | null;
+    /**
      * Bindings
      */
     bindings?: Array<RunnerBinding> | null;
@@ -7909,6 +7917,10 @@ export type RunnerRegistryView = {
      * Added By
      */
     added_by: string | null;
+    /**
+     * Agents
+     */
+    agents: number | null;
     /**
      * Bindings
      */
@@ -8138,6 +8150,10 @@ export type RunnerVersionStanding = typeof RunnerVersionStanding[keyof typeof Ru
  * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
  */
 export type RunnerView = {
+    /**
+     * Agents
+     */
+    agents: number | null;
     /**
      * Bindings
      */

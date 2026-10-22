@@ -6,7 +6,7 @@ registering — it is only offered no work."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -49,13 +49,18 @@ def flag_bindings(
 
 
 def offered_projects(
-    registration: RunnerRegistration, host: Host | None, *, project: str | None = None
+    registration: RunnerRegistration,
+    host: Host | None,
+    *,
+    project: str | None = None,
+    projects: Collection[str] | None = None,
 ) -> frozenset[str]:
     """The ids of the projects the matched peek may offer ``registration`` work from. None is offered under an
     unrostered subscription, with bindings or without. Otherwise a runner without bindings is offered every project it
     serves, and one with them is not offered a project reached only through withheld bindings. ``project`` keeps only
     the declaration entry it names, by the entry as declared or the id it resolved to; no such entry, or an unresolved
-    one, leaves nothing."""
+    one, leaves nothing. ``projects`` keeps the union of the entries it names, matched the same way, and offers nothing
+    when empty. Neither widens what the runner can reach."""
     flags = flag_bindings(registration.bindings, registration.subscription, host)
     if flags.subscription_unrostered:
         return frozenset()
@@ -63,12 +68,13 @@ def offered_projects(
     if registration.bindings is not None:
         reachable = {b.project for b in registration.bindings if not flags.withholds(b)}
         reached = {entry.project_id for entry in registration.served if entry.project_id and entry.entry in reachable}
-    if project is None:
+    if project is None and projects is None:
         return frozenset(reached)
+    wanted = {project} if project is not None else set(projects or ())
     named = {
         entry.project_id
         for entry in registration.served
-        if entry.project_id and project in (entry.entry, entry.project_id)
+        if entry.project_id and wanted & {entry.entry, entry.project_id}
     }
     return frozenset(reached & named)
 

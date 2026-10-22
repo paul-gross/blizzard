@@ -69,9 +69,10 @@ def list_runners(request: Request) -> HostRunnerListResponse:
     items: list[HostRunnerView] = []
     for served in registry.served:
         runner = wiring.for_runner(served)
+        config = runner.config()
         bindings = [
-            HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=b.agents)
-            for b in runner.config().bindings or ()
+            HostRunnerBindingView(project=b.project, workspace_id=b.workspace, agents=config.binding_agents(b))
+            for b in config.bindings or ()
         ]
         halted_reasons = _refusal(runner.maybe_identity_verdict())
         state: HostRunnerState = "halted" if halted_reasons else "serving"
@@ -105,7 +106,7 @@ def list_runners(request: Request) -> HostRunnerListResponse:
                 ),
                 bindings=bindings,
                 agents_in_use=summary.capacities.used,
-                max_agents=sum(b.agents for b in summary.capacities.bindings),
+                max_agents=summary.capacities.agents,
             )
         )
     items.extend(

@@ -8,6 +8,7 @@ import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',
@@ -230,16 +231,15 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runner-env-strip"]')).toBeNull();
   });
 
-  it('draws one agents bar per project binding, and none for a runner declaring none', async () => {
+  it('draws one agents bar per runner, and none for a runner declaring none', async () => {
     const el = await render(
       [row('rn_bound', { host_id: 'h1', bindingLines: [binding(2, 2, 'blizzard'), binding(1, 0, 'winter')] }), row('rn_solo')],
       [CARD],
     );
 
     const bars = [...el.querySelectorAll('[data-runner="rn_bound"] [data-testid="runner-agents"]')];
-    expect(bars.map((bar) => bar.querySelector('[data-testid="slot-bar-name"]')?.textContent?.trim())).toEqual(['blizzard', 'winter']);
-    expect(bars.map(label)).toEqual(['2/2 agents', '0/1 agents']);
-    expect(bars.map((bar) => bar.querySelectorAll('.cell.on').length)).toEqual([2, 0]);
+    expect(bars.map((bar) => bar.querySelector('[data-testid="slot-bar-name"]')?.textContent?.trim())).toEqual(['agents']);
+    expect(bars.map(label)).toEqual(['2/3 agents']);
     expect(el.querySelector('[data-runner="rn_solo"] [data-testid="runner-agents"]')).toBeNull();
   });
 

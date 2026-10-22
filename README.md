@@ -152,8 +152,8 @@ one in from another host's directory.
 Edit `blizzard-host.toml` to declare a git origin. A new runner defaults to the built-in `basic` workspace: it clones
 repos into `workspace/projects/` under the host directory and creates one worktree per repo under each chunk's folder.
 No winter installation is needed. Add a `[[workspace.repo]]` to the scaffolded `[[workspace]]`, and set the runner's
-`agents` in its `projects` binding. The excerpt below shows the scaffolded file's `[[workspace]]` and `[[runner]]`
-tables with those additions, not the whole file:
+`agents` count. The excerpt below shows the scaffolded file's `[[workspace]]` and `[[runner]]` tables with those
+additions, not the whole file:
 
 ```toml
 [[workspace]]
@@ -169,10 +169,11 @@ url = "https://github.com/you/todo-mvc.git"
 [[runner]]
 name = "runner-local"                  # as scaffolded; keep it
 id = "rn_..."                          # written by init; keep it
-projects = [{ project = "default", workspace = "workspace-local", agents = 2 }]
+agents = 2                             # one count, shared by every project the runner serves
+projects = [{ project = "default", workspace = "workspace-local" }]
 ```
 
-Keep the scaffolded `[[runner]]`'s `name` and `id`; edit only its `projects`.
+Keep the scaffolded `[[runner]]`'s `name` and `id`; edit only its `agents` and `projects`.
 
 ```bash
 blizzard runner host .      # register with the hub and start pulling work

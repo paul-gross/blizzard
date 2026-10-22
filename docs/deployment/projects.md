@@ -141,21 +141,28 @@ stream.
 
 A runner is offered only the chunks of the projects it serves, and the hub rechecks the project when the runner claims
 one. The runner's `[[runner]]` in `blizzard-host.toml` names them as bindings, each a project by id or by slug, the
-`[[workspace]]` it works in, and the `agents` that may work it at once:
+`[[workspace]]` it works in. The runner's own `agents` count is shared by every binding:
 
 ```toml
 [[runner]]
+# How many agents may work at once, across every project below.
+agents = 1
 # The projects this runner serves; [] serves none. The key is required.
-projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]
+projects = [{ project = "default", workspace = "workspace-local" }]
 ```
 
 The runner sends the project list at every registration. A `[[runner]]` with no `projects` key is halted, naming the
 key, and only `projects = []` declares that the runner serves nothing.
 
-A runner may bind its projects to several workspaces. Each binding's `agents` caps that binding alone, and a full
-binding asks the hub for nothing, so a busy project never stands in front of another project's work. The environments of
-one `[[workspace]]` form one pool, shared by every runner of the host that binds a project to it. Two entries that
-resolve to the same project leave the runner claiming nothing until one is removed; its status names both.
+A runner may bind its projects to several workspaces. A free agent asks the hub for the next ready chunk of any project
+whose workspace has a free environment, and the hub's ready-queue order alone decides which project that is; a project
+whose workspace is full never stands in front of another project's work. The environments of one `[[workspace]]` form
+one pool, shared by every runner of the host that binds a project to it. Two entries that resolve to the same project
+leave the runner claiming nothing until one is removed; its status names both.
+
+A binding's own `agents` is deprecated. When `[[runner]] agents` is unset, the runner's count is the sum of its
+bindings' `agents`, and the host logs the deprecation; when both are set, the runner's count wins and the per-binding
+values are ignored. A binding without `agents` and no runner count halts the runner.
 
 `blizzard-runner init` writes a binding of `default` into a fresh host file, so a new runner is offered work on its
 first registration with no edit. A repeated `--project <id|slug>` names other projects instead, and the runner is added

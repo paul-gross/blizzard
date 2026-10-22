@@ -53,7 +53,7 @@ def _ctx(
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name=name, bindings=serving(1), runner_id=configured),
+        config=LoopConfig(runner_name=name, bindings=serving(1), agents=1, runner_id=configured),
         registered=registered,
     )
     return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
@@ -75,6 +75,7 @@ def _status_name(ctx: LoopContext) -> tuple[str | None, str]:
         runner_name=ctx.config.runner_name,
         workspace_id="ws1",
         bindings=serving(1),
+        agents=1,
         hub_url="http://hub.example",
         workspaces=single_workspace(FakeProvider({})),
         harnesses=HarnessRegistry({}),

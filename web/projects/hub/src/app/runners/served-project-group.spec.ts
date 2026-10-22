@@ -76,7 +76,7 @@ describe('ServedProjectGroup', () => {
     expect(el.querySelector('[data-testid="runner-served"]')).toBeNull();
     expect(texts(el, 'runner-binding-project')).toEqual(['Default', 'Glacier']);
     expect(texts(el, 'runner-binding-workspace')).toEqual(['ws-1', 'ws-9']);
-    expect(texts(el, 'runner-binding-agents')).toEqual(['1 / 3 agents', '0 / 1 agents']);
+    expect(texts(el, 'runner-binding-agents')).toEqual(['1 working', '0 working']);
     const unreported = el.querySelectorAll('[data-testid="runner-binding-unreported"]');
     expect(unreported).toHaveLength(1);
     expect(unreported[0].closest('[data-workspace-id]')?.getAttribute('data-workspace-id')).toBe('ws-9');

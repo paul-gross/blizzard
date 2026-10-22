@@ -119,7 +119,9 @@ def _setup(
     store = make_store("sqlite://")
     hub = _ScriptedClaimHub(outcomes)
     views = _RecordingChunkViews(hub=hub)
-    config = LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), queue_strict=strict)
+    config = LoopConfig(
+        runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, queue_strict=strict
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -212,7 +214,7 @@ def test_claim_one_disposes_each_claim_outcome(  # type: ignore[no-untyped-def]
         QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0),
         QueueEntry(chunk_id="ch_2", graph_id="gr_1", position=1),
     ]
-    queue = ReadyQueue.peeked(ctx, fixture_route())
+    queue = ReadyQueue.peeked(ctx, (fixture_route(),))
 
     with capture_logs() as logs:
         result = queue.claim_one()
@@ -239,7 +241,7 @@ def test_claim_one_enters_a_won_claim_via_fill():  # type: ignore[no-untyped-def
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
 
     with capture_logs() as logs:
-        ReadyQueue.peeked(ctx, fixture_route()).claim_one()
+        ReadyQueue.peeked(ctx, (fixture_route(),)).claim_one()
 
     assert [r["via"] for r in _records(logs, _SPAWN_SUPPRESSED)] == ["fill"]
 

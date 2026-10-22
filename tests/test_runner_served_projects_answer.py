@@ -100,7 +100,9 @@ def _ctx(tmp_path: Path, hub: FakeHub, projects: tuple[str, ...] | None) -> Loop
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=FakeHarness(handle=None, verdict=None),  # type: ignore[arg-type]
         probe=FakeProbe(alive=set()),
-        config=LoopConfig(runner_name="r", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), projects=projects),
+        config=LoopConfig(
+            runner_name="r", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1, projects=projects
+        ),
     )
     return type(ctx)(**{**ctx.__dict__, "identity": RunnerIdentityHolder(store.runner_identity())})
 

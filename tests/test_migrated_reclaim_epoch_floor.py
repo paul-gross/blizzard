@@ -157,7 +157,7 @@ def test_migrated_chunk_reclaimed_by_a_fresh_runner_mints_above_the_hub_floor(tm
         process=FakeProbe(alive={(200, "start-200")}),
         worktree_git=FakeWorktreeGit(),
         config=LoopConfig(
-            runner_name="r2", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=DEFAULT_PROJECT_SLUG)
+            runner_name="r2", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=DEFAULT_PROJECT_SLUG), agents=1
         ),
         identity=registered_identity("r2", "r2"),
         worker_files=WorkerStdoutFiles("", store),

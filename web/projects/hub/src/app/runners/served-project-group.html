@@ -21,7 +21,7 @@
             {{ line.project }}
           </fleet-kit-badge>
           <span class="b-ws" data-testid="runner-binding-workspace">{{ line.workspaceId }}</span>
-          <span class="b-agents" data-testid="runner-binding-agents">{{ line.agentsInUse }} / {{ line.agents }} agents</span>
+          <span class="b-agents" data-testid="runner-binding-agents">{{ line.agentsInUse }} working</span>
           @if (line.unreported) {
             <fleet-kit-badge
               data-testid="runner-binding-unreported"

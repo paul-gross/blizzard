@@ -224,6 +224,7 @@ class RunnerRegistryStore:
         projects: tuple[ServedEntry, ...] | None = None,
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
+        agents: int | None = None,
         version: str | None = None,
         at: datetime,
     ) -> bool:
@@ -265,6 +266,7 @@ class RunnerRegistryStore:
             "gates": gates_json,
             "bindings": _bindings_json(bindings),
             "subscription": subscription,
+            "agents": agents,
             "reported_version": version,
             "version_refusal": None,
             "version_judged_at": at,
@@ -698,6 +700,7 @@ class RunnerRegistryStore:
                 else None
             ),
             subscription=row.subscription,
+            agents=row.agents,
             reported_version=row.reported_version,
             version_refusal=None if row.version_refusal is None else VersionRefusalReason(row.version_refusal),
             version_judged_at=row.version_judged_at,

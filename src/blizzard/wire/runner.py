@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -107,6 +107,9 @@ class RunnerRegistrationRequest(BaseModel):
     bindings: list[RunnerBinding] | None = None
     #: The slug of the host subscription every binding spends; ``None`` names none.
     subscription: str | None = None
+    #: The agents the runner runs at once, shared by every binding; positive when set, ``None`` from a runner that
+    #: predates the shared count.
+    agents: int | None = Field(default=None, gt=0)
     #: The blizzard version this runner runs; ``None`` from a runner that predates the handshake.
     version: str | None = None
 
@@ -269,6 +272,8 @@ class RunnerView(WireModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
+    # The agents the runner declared it runs at once; `None` from a runner that predates the shared count.
+    agents: int | None = None
     # One member per declared subscription; the age-gated fallback without a roster.
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.
@@ -311,6 +316,8 @@ class RunnerRegistryView(WireModel):
     locally_paused_reason: str | None = None
     # The configured environment-pool size — ``None`` when none was reported, never zero.
     env_capacity: int | None = None
+    # The agents the runner declared it runs at once; `None` from a runner that predates the shared count.
+    agents: int | None = None
     # One member per declared subscription; the age-gated fallback without a roster.
     subscriptions: list[SubscriptionUsageView] = []
     # The runner's reported capability snapshot — every harness/tier it can execute right now.

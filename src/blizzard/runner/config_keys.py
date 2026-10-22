@@ -65,7 +65,7 @@ _RETIRED: dict[str, tuple[str, str | None]] = {
     "workspace_prompt_package": (STRING, "workspace[].prompt_package"),
     "token_env": (STRING, None),
     "runner_id": (STRING, "runner[].id"),
-    "max_agents": (INTEGER, "runner[].projects[].agents"),
+    "max_agents": (INTEGER, "runner[].agents"),
     "external_subscription_usage": (TABLE, "subscription"),
 }
 #: Keys that belong to a ``[[runner]]`` and are refused at the top level.
@@ -174,7 +174,8 @@ _HOST_KEYS = (
     ConfigKey("runner[].projects", ARRAY_OF_TABLES, required=True),
     ConfigKey("runner[].projects[].project", STRING, required=True),
     ConfigKey("runner[].projects[].workspace", STRING, required=True),
-    ConfigKey("runner[].projects[].agents", INTEGER, required=True),
+    ConfigKey("runner[].agents", INTEGER),
+    ConfigKey("runner[].projects[].agents", INTEGER, deprecated=True, replaced_by="runner[].agents"),
     ConfigKey("runner[].gates", STRING_LIST, default=()),
     ConfigKey("runner[].runner_prompt", STRING, default=""),
     ConfigKey("runner[].runner_prompt_file", STRING, default=""),

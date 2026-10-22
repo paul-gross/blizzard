@@ -8,6 +8,7 @@ import type { RunnerRow } from './runner-rows.model';
 import { RunnerPanelView } from './runner-view';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',

@@ -82,10 +82,9 @@ describe('envGauges', () => {
 });
 
 describe('agentGauges', () => {
-  it('draws one gauge per binding — its project’s agents busy of those it allows, never summed', () => {
+  it('draws one gauge — the agents busy across its bindings of the runner’s count, summing bindings only when none registered', () => {
     expect(agentGauges(row('r', { bindingLines: [binding('blizzard', 2, 2), binding('winter', 1, 0)] }))).toEqual([
-      { name: 'blizzard', used: 2, total: 2 },
-      { name: 'winter', used: 0, total: 1 },
+      { name: 'agents', used: 2, total: 3 },
     ]);
   });
 
@@ -95,6 +94,14 @@ describe('agentGauges', () => {
 });
 
 describe('railVm', () => {
+  it('gauges a runner against the count it registered, not its bindings', () => {
+    const a = row('a', { agents: 2, bindingLines: [binding('p', 2, 1), binding('q', 2, 1)] });
+    const vm = railVm(groups([], [a]));
+
+    expect(vm.rows.map((entry) => entry.agents)).toEqual([[{ name: 'agents', used: 2, total: 2 }]]);
+  });
+
+
   it('lists hosted runners in card order, then the host-less, each with its agents', () => {
     const a = row('a', { bindingLines: [binding('p', 1, 0)] });
     const b = row('b');
@@ -105,7 +112,7 @@ describe('railVm', () => {
       ['h1-name', 'h1'],
       [null, 'b'],
     ]);
-    expect(vm.rows.map((entry) => entry.agents)).toEqual([[{ name: 'p', used: 0, total: 1 }], []]);
+    expect(vm.rows.map((entry) => entry.agents)).toEqual([[{ name: 'agents', used: 0, total: 1 }], []]);
     expect(vm.envs).toEqual([{ name: 'h1-ws0', used: 0, total: 1 }]);
     expect(vm.subscriptions).toEqual([]);
   });

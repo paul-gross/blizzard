@@ -103,21 +103,32 @@ class Capacities:
     """See ``src/blizzard/wire/runner_status.py``'s ``CapacitiesView``."""
 
     used: int
+    agents: int = 0
+    free: int = 0
     bindings: tuple[BindingCapacity, ...] = ()
 
     @classmethod
     def of(
-        cls, bindings: Sequence[BindingDeclaration], routing: RoutingMap, holds: Sequence[OpenLeaseHold]
+        cls,
+        bindings: Sequence[BindingDeclaration],
+        routing: RoutingMap,
+        holds: Sequence[OpenLeaseHold],
+        agents: int,
     ) -> Capacities:
-        """Each binding's slots, counted as FILL counts them; ``free`` never reads below zero, even when more
-        leases count against a binding than its ``agents`` allow."""
+        """The runner's ``agents`` against its open leases, and each binding's use. Every agent is shared, so a
+        binding's ``free`` is the runner's; it never reads below zero, even when more leases are open than
+        ``agents``."""
+        open_leases = open_lease_count(holds)
+        free = free_slots(agents, open_leases)
         resolved = [routing.project_id(binding.project) for binding in bindings]
         used = binding_usage(
             [SlotBinding(workspace_id=b.workspace_id, project_id=p) for b, p in zip(bindings, resolved, strict=True)],
             holds,
         )
         return cls(
-            used=open_lease_count(holds),
+            used=open_leases,
+            agents=agents,
+            free=free,
             bindings=tuple(
                 BindingCapacity(
                     project=binding.project,
@@ -125,7 +136,7 @@ class Capacities:
                     workspace_id=binding.workspace_id,
                     agents=binding.agents,
                     used=in_use,
-                    free=free_slots(binding.agents, in_use),
+                    free=free,
                 )
                 for binding, project_id, in_use in zip(bindings, resolved, used, strict=True)
             ),
@@ -261,6 +272,7 @@ class RunnerStatusService:
         runner_name: str,
         workspace_id: str,
         bindings: tuple[BindingDeclaration, ...] = (),
+        agents: int = 0,
         hub_url: str,
         harnesses: IHarnessLifecycleRegistry,
         workspaces: IWorkspaceSpawnRoots,
@@ -287,6 +299,7 @@ class RunnerStatusService:
         self._runner_name = runner_name
         self._workspace_id = workspace_id
         self._bindings = bindings
+        self._agents = agents
         self._hub_url = hub_url
         self._gates = gates
         self._runner_dir = runner_dir
@@ -304,7 +317,7 @@ class RunnerStatusService:
             runner_name=identity.runner_name if identity is not None else self._runner_name,
             workspace_id=self._workspace_id,
             pause=PauseState.of(local=local_paused, hub=hub_paused, local_reason=local_reason),
-            capacities=Capacities.of(self._bindings, routing, self._environments.open_lease_holds()),
+            capacities=Capacities.of(self._bindings, routing, self._environments.open_lease_holds(), self._agents),
             hub=HubConnectivity.of(
                 endpoint=self._hub_url,
                 contact_at=self._pause.hub_contact_at(),

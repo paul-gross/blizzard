@@ -451,6 +451,7 @@ class PeekCall:
     capabilities: list[HarnessCapability]
     policy: str
     project: str | None = None
+    projects: list[str] | None = None
 
 
 #: The bearer token a :class:`FakeHub` client presents unless a test hands it another.
@@ -578,6 +579,7 @@ class FakeHub:
         self.registered_gates: list[tuple[str, ...]] = []
         self.registered_projects: list[tuple[str, ...] | None] = []
         self.registered_bindings: list[tuple[BindingDeclaration, ...] | None] = []
+        self.registered_agents: list[int | None] = []
         self.registered_subscription: list[str | None] = []
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
@@ -611,11 +613,32 @@ class FakeHub:
         self._held = held
 
     def peek_queue(
-        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+        self,
+        capabilities: Sequence[HarnessCapability],
+        *,
+        policy: str,
+        project: str | None = None,
+        projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
         self.peek_queue_calls += 1
-        self.peek_queue_requests.append(PeekCall(capabilities=list(capabilities), policy=policy, project=project))
+        self.peek_queue_requests.append(
+            PeekCall(
+                capabilities=list(capabilities),
+                policy=policy,
+                project=project,
+                projects=None if projects is None else list(projects),
+            )
+        )
         entries = self.queue_responses.pop(0) if self.queue_responses else list(self.queue)
+        if projects is not None and self.narrows_peek:
+            if len(projects) == 1:
+                project = projects[0]  # a scripted entry naming no project is taken as the lone named one's own
+                return [
+                    replace(entry, project_id=project) if entry.project_id is None else entry
+                    for entry in entries
+                    if entry.project_id in (None, project)
+                ]
+            return [entry for entry in entries if entry.project_id in projects]
         if project is None or not self.narrows_peek:
             return entries
         # A scripted entry naming no project is taken as the peeked project's own.
@@ -765,6 +788,7 @@ class FakeHub:
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         if self.down:
@@ -779,6 +803,7 @@ class FakeHub:
         self.registered_gates.append(gates)
         self.registered_projects.append(projects)
         self.registered_bindings.append(bindings)
+        self.registered_agents.append(agents)
         self.registered_subscription.append(subscription)
         if self.version_refusal is not None:
             raise RunnerVersionRefused(self.version_refusal)
@@ -1599,11 +1624,12 @@ def make_context(
             runner_name="r1",
             runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID,
             bindings=serving(),
+            agents=1,
         )
     )
     if resolved_config.bindings is None and resolved_config.projects is None:
         # A runner declaring nothing claims nothing: the default binding gives it one project to claim for.
-        resolved_config = replace(resolved_config, bindings=serving())
+        resolved_config = replace(resolved_config, bindings=serving(), agents=resolved_config.agents or 1)
     if not resolved_config.runner_id:
         # The runner the store is bound to — the fixture runner, whose token the fake hub holds.
         resolved_config = replace(resolved_config, runner_id=store.connections.runner_id or FIXTURE_RUNNER_ID)

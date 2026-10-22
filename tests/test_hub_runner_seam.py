@@ -153,7 +153,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
         workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),
@@ -252,7 +252,7 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
         workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1)),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(1), agents=1),
         # The id the hub resolves the fleet client's token to.
         identity=registered_identity("r1", "r1"),
         worker_files=WorkerStdoutFiles("", store),

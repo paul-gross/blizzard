@@ -21,6 +21,8 @@ function runner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.Ho
 function capacities(bindings: { project: string; workspace_id: string; used: number }[]): runnerApi.CapacitiesView {
   return {
     used: bindings.reduce((sum, binding) => sum + binding.used, 0),
+    agents: 4,
+    free: 4 - bindings.reduce((sum, binding) => sum + binding.used, 0),
     bindings: bindings.map((binding) => ({ ...binding, project_id: `proj_${binding.project}`, agents: 4, free: 4 - binding.used })),
   };
 }

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -476,3 +477,53 @@ def test_a_moved_chunk_is_peeked_by_the_node_it_moved_to(moved: ChunkFacts) -> N
 def test_a_chunk_moved_to_a_node_its_graph_lacks_is_passed_over() -> None:
     gone = ChunkFacts(minted=True, transitions=[TransitionFact("nd_gone", Executor.RUNNER, 1, _MOVED_AT)])
     assert _peek({"ch_1": gone}) is None
+
+
+# --- Hold scoped to a project ---
+
+_OTHER = ProjectId("proj_2")
+
+
+def _hold_scan(*, per_project: bool) -> list[str]:
+    """A blocked head of ``proj_1`` ranked ahead of a later ``proj_1`` chunk and a ``proj_2`` chunk, under hold."""
+    graph = _graph([_BUILD])
+    chunks = [
+        replace(_chunk(), chunk_id="ch_a1"),
+        replace(_chunk(), chunk_id="ch_a2"),
+        replace(_chunk(), chunk_id="ch_b1", project_id=_OTHER),
+    ]
+    picked = select_matched_entry(
+        chunks,
+        served={_PROJECT, _OTHER},
+        graphs={graph.graph_id: graph},
+        facts={c.chunk_id: ChunkFacts(minted=True, promoted=True) for c in chunks},
+        capabilities=[_capability("claude", default=True)],
+        blocked={"ch_a1": ["ch_pre"]},
+        policy=QueueMatchPolicy.HOLD,
+        hold_per_project=per_project,
+    )
+    return [] if picked is None else [picked.chunk.chunk_id]
+
+
+def test_a_per_project_hold_stops_only_the_project_of_an_unusable_entry() -> None:
+    assert _hold_scan(per_project=True) == ["ch_b1"]
+
+
+def test_a_global_hold_stops_the_scan_at_an_unusable_head() -> None:
+    assert _hold_scan(per_project=False) == []
+
+
+def test_a_per_project_hold_never_offers_a_later_entry_of_the_stopped_project() -> None:
+    graph = _graph([_BUILD])
+    chunks = [replace(_chunk(), chunk_id="ch_a1"), replace(_chunk(), chunk_id="ch_a2")]
+    picked = select_matched_entry(
+        chunks,
+        served={_PROJECT},
+        graphs={graph.graph_id: graph},
+        facts={c.chunk_id: ChunkFacts(minted=True, promoted=True) for c in chunks},
+        capabilities=[_capability("claude", default=True)],
+        blocked={"ch_a1": ["ch_pre"]},
+        policy=QueueMatchPolicy.HOLD,
+        hold_per_project=True,
+    )
+    assert picked is None

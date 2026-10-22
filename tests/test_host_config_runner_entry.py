@@ -22,7 +22,8 @@ def test_a_scaffold_names_the_default_runner_and_serves_default(tmp_path: Path) 
     (entry,) = scaffold.runners
     assert (entry.name, entry.id) == (DEFAULT_RUNNER_NAME, None)
     assert tuple(binding.project for binding in entry.bindings) == SCAFFOLD_PROJECTS == ("default",)
-    assert 'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]' in scaffold.to_toml()
+    assert 'projects = [{ project = "default", workspace = "workspace-local" }]' in scaffold.to_toml()
+    assert "agents = 1\n" in scaffold.to_toml()
 
 
 def test_a_scaffold_naming_projects_serves_those_instead(tmp_path: Path) -> None:
@@ -31,9 +32,10 @@ def test_a_scaffold_naming_projects_serves_those_instead(tmp_path: Path) -> None
     runner = load_host_config(tmp_path).runner_config(_TOKEN)
     assert runner.projects == ("blizzard", "blizzard-context")
     assert runner.bindings == (
-        ProjectBinding("blizzard", "workspace-local", 1),
-        ProjectBinding("blizzard-context", "workspace-local", 1),
+        ProjectBinding("blizzard", "workspace-local"),
+        ProjectBinding("blizzard-context", "workspace-local"),
     )
+    assert runner.agents == 1
 
 
 def test_a_name_is_stripped_and_a_blank_one_is_a_host_error(tmp_path: Path) -> None:
@@ -103,4 +105,56 @@ def test_bindings_survive_a_round_trip(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, projects=projects)
     loaded = load_host_config(tmp_path)
     (tmp_path / "blizzard-host.toml").write_text(loaded.to_toml())
-    assert load_host_config(tmp_path).sole_runner().bindings == loaded.sole_runner().bindings
+    reloaded = load_host_config(tmp_path)
+    assert [(b.project, b.workspace) for b in reloaded.sole_runner().bindings] == [
+        ("a", "workspace-local"),
+        ("b", "workspace-local"),
+    ]
+    (reloaded_own, loaded_own) = (reloaded.sole_runner().own, loaded.sole_runner().own)
+    assert reloaded_own is not None and loaded_own is not None
+    assert reloaded_own.agents == loaded_own.agents == 4
+
+
+def _agents_host(tmp_path: Path, body: str) -> HostConfig:
+    write_minimal_host(tmp_path, runner_name="r-claude")
+    text = (tmp_path / "blizzard-host.toml").read_text()
+    start = text.index("[[runner]]")
+    head = text[:start]
+    (tmp_path / "blizzard-host.toml").write_text(head + '[[runner]]\nid = "rn_x"\nname = "r-claude"\n' + body)
+    return load_host_config(tmp_path)
+
+
+_BOTH = 'projects = [{ project = "a", workspace = "workspace-local", agents = 2 }, { project = "b", workspace = "workspace-local", agents = 3 }]\n'
+_BARE = (
+    'projects = [{ project = "a", workspace = "workspace-local" }, { project = "b", workspace = "workspace-local" }]\n'
+)
+
+
+def test_an_unset_runner_count_is_the_sum_of_the_bindings_and_warns_deprecated(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, _BOTH)
+    (entry,) = host.runners
+    assert entry.own is not None and entry.own.agents == 5
+    assert any("deprecated" in warning for warning in host.warnings)
+
+
+def test_a_runner_count_wins_over_the_bindings_and_warns_they_are_ignored(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, "agents = 4\n" + _BOTH)
+    (entry,) = host.runners
+    assert entry.own is not None and entry.own.agents == 4
+    assert [w for w in host.warnings if "ignored" in w] and len([w for w in host.warnings if "r-claude" in w]) == 1
+
+
+def test_a_runner_count_with_bare_bindings_is_quiet(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, "agents = 4\n" + _BARE)
+    assert host.runners[0].warnings == ()
+    assert host.runner_config(_TOKEN).agents == 4
+
+
+def test_no_count_and_a_bare_binding_halts_the_runner(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, _BARE)
+    assert "has no agents" in "; ".join(host.runners[0].errors)
+
+
+def test_a_runner_serving_nothing_with_no_count_has_none(tmp_path: Path) -> None:
+    host = _agents_host(tmp_path, "projects = []\n")
+    assert host.runners[0].own is not None and host.runners[0].own.agents == 0

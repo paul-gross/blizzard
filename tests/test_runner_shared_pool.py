@@ -80,7 +80,7 @@ def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceR
         harness=FakeHarness(handle=WorkerHandle(session_id="s", pid=1, process_start_time="t", pgid=1), verdict=None),
         probe=FakeProbe(),
         clock=FixedClock(_NOW),
-        config=LoopConfig(runner_name=runner_id, runner_id=runner_id, bindings=serving(1)),
+        config=LoopConfig(runner_name=runner_id, runner_id=runner_id, bindings=serving(1), agents=1),
         workspaces=workspaces,
     )
 
@@ -93,7 +93,7 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> No
     ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
     ctx_b = dataclasses.replace(_runner(store_b, "r_b", workspaces, "ch_b"), host_stores=ctx_a.host_stores)
 
-    runner_a = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_a, fixture_route()).claim_one())
+    runner_a = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_a, (fixture_route(),)).claim_one())
     runner_a.start()
     assert provider.entered.acquire(timeout=_WAIT)  # A is inside the provider, holding the workspace's lock
 
@@ -104,13 +104,13 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path) -> No
     assert [row.seq for row in store_b.pending_outbound()] == [seq]
 
     # B cannot take the lock: its claim is "nothing this tick" and never enters the provider.
-    assert not ReadyQueue.peeked(ctx_b, fixture_route()).claim_one()
+    assert not ReadyQueue.peeked(ctx_b, (fixture_route(),)).claim_one()
     assert provider.acquisitions == ["ch_a"]
 
     provider.release_first.set()
     runner_a.join(_WAIT)
     assert not runner_a.is_alive()
-    ReadyQueue.peeked(ctx_b, fixture_route()).claim_one()
+    ReadyQueue.peeked(ctx_b, (fixture_route(),)).claim_one()
 
     held = {
         binding.chunk_id: binding.environment_id
@@ -128,7 +128,7 @@ def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tm
     ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
     ctx_b = dataclasses.replace(_runner(store_b, "r_b", workspaces, "ch_b"), host_stores=ctx_a.host_stores)
 
-    runner_a = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_a, fixture_route()).claim_one())
+    runner_a = threading.Thread(target=lambda: ReadyQueue.peeked(ctx_a, (fixture_route(),)).claim_one())
     runner_a.start()
     assert provider.entered.acquire(timeout=_WAIT)  # A is inside the provider, holding the workspace's lock
 

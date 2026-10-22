@@ -7,7 +7,7 @@ matched peek, one entry for the calling principal, sharing the ``GET``'s respons
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BlockedView, WorkRefModel
@@ -46,6 +46,16 @@ class QueuePeekRequest(BaseModel):
     #: Narrows the peek to this one project of the runner's declaration, by the entry as declared or the project id it
     #: resolved to; a project the runner does not serve is offered nothing. ``None`` peeks every project it serves.
     project: str | None = None
+    #: Narrows the peek to these projects of the runner's declaration, each by the entry as declared or the id it
+    #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` leaves the peek
+    #: to ``project``; an empty list offers nothing. Sent together with ``project`` it is refused.
+    projects: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _one_narrowing(self) -> QueuePeekRequest:
+        if self.project is not None and self.projects is not None:
+            raise ValueError("send either project or projects, not both")
+        return self
 
 
 class QueuePageView(WireModel):

@@ -212,9 +212,19 @@ class HttpHubClient:
         self._version = version
 
     def peek_queue(
-        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+        self,
+        capabilities: Sequence[HarnessCapability],
+        *,
+        policy: str,
+        project: str | None = None,
+        projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
-        request = QueuePeekRequest(capabilities=[_capability(c) for c in capabilities], policy=policy, project=project)
+        request = QueuePeekRequest(
+            capabilities=[_capability(c) for c in capabilities],
+            policy=policy,
+            project=project,
+            projects=None if projects is None else list(projects),
+        )
         resp = self._post(f"{_FLEET_API}/queue/peek", request.model_dump(mode="json"))
         return _queue(QueuePeekResponse.model_validate(resp.json()))
 
@@ -326,6 +336,7 @@ class HttpHubClient:
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         resp = self._post(
@@ -352,6 +363,7 @@ class HttpHubClient:
                     if bindings is not None
                     else None
                 ),
+                agents=agents,
                 subscription=subscription,
                 version=self._version,
             ).model_dump(mode="json"),

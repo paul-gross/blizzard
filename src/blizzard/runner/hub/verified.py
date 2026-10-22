@@ -54,9 +54,14 @@ class VerifiedHubClient:
         return self._verified().chunk_statuses(chunk_ids)
 
     def peek_queue(
-        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+        self,
+        capabilities: Sequence[HarnessCapability],
+        *,
+        policy: str,
+        project: str | None = None,
+        projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
-        return self._verified().peek_queue(capabilities, policy=policy, project=project)
+        return self._verified().peek_queue(capabilities, policy=policy, project=project, projects=projects)
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         return self._verified().claim_route(claim)
@@ -95,6 +100,7 @@ class VerifiedHubClient:
         gates: tuple[str, ...] = (),
         projects: tuple[str, ...] | None = None,
         bindings: tuple[BindingDeclaration, ...] | None = None,
+        agents: int | None = None,
         subscription: str | None = None,
     ) -> RegistrationReply:
         retries = self._verdict.registration_checks() or self._verdict.verdict().state is IdentityState.VERSION_REFUSED
@@ -110,6 +116,7 @@ class VerifiedHubClient:
             gates=gates,
             projects=projects,
             bindings=bindings,
+            agents=agents,
             subscription=subscription,
         )
 

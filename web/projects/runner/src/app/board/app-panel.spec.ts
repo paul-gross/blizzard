@@ -67,7 +67,7 @@ function dashboardBody(runnerId: string, overrides: Partial<runnerApi.DashboardV
       runner_id: runnerId,
       workspace_id: 'ws',
       pause: { local: false, hub: false, effective: false, local_reason: null },
-      capacities: { used: 0, bindings: [] },
+      capacities: { used: 0, agents: 4, free: 4, bindings: [] },
       hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
       last_tick_at: null,
       gates: [],

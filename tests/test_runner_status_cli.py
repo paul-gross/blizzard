@@ -232,7 +232,7 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -
     assert "runner runner-local" in out
     assert "running" in out  # not paused
     assert "capacity: 1/1 used" in out  # only lease_1 is active; lease_2 closed
-    assert "default (unresolved) -> workspace-local: 1/1 used, 0 free" in out
+    assert "default (unresolved) -> workspace-local: 1 working" in out
     assert "hub: unreachable" in out  # never synced — honest, not assumed
     assert "held environments (3):" in out
     assert "e1" in out and "e2" in out and "e3" in out
@@ -314,10 +314,10 @@ def test_status_names_the_served_projects_unresolved_and_not_yet_answered_with_t
     root = _init_runner(tmp_path)
     _edit_host_file(
         root,
-        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
-        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "blizzard-context", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "default", workspace = "workspace-local" }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local" }, '
+        '{ project = "old-slug", workspace = "workspace-local" }, '
+        '{ project = "blizzard-context", workspace = "workspace-local" }]',
     )
     bound = _no_hub()
     _configure_runner_id(root, "rn_1")
@@ -338,9 +338,9 @@ def test_status_names_two_bindings_resolving_to_one_project_as_not_claiming(tmp_
     root = _init_runner(tmp_path)
     _edit_host_file(
         root,
-        'projects = [{ project = "default", workspace = "workspace-local", agents = 1 }]',
-        'projects = [{ project = "blizzard", workspace = "workspace-local", agents = 1 }, '
-        '{ project = "old-slug", workspace = "workspace-local", agents = 1 }]',
+        'projects = [{ project = "default", workspace = "workspace-local" }]',
+        'projects = [{ project = "blizzard", workspace = "workspace-local" }, '
+        '{ project = "old-slug", workspace = "workspace-local" }]',
     )
     bound = _no_hub()
     _configure_runner_id(root, "rn_1")

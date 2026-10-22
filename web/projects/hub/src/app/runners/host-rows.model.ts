@@ -27,15 +27,24 @@ export interface BindingLine {
   readonly unreported: boolean;
 }
 
-/** A row carrying binding lines — a runner row, or anything shaped like one. */
+/** A row carrying binding lines — a runner row, or anything shaped like one — and the agent count its runner
+ * registered, absent for a previous-minor runner. */
 interface BoundRow {
+  readonly agents?: number | null;
   readonly bindingLines: readonly BindingLine[];
 }
 
-/** The agents `rows` declare — the sum of their binding lines'; `null` for none declared. */
+/** A runner's declared agents: the count it registered, else the sum of its binding lines' (a previous-minor
+ * runner declares per binding); `null` when it declares none. */
+function runnerAgents(row: BoundRow): number | null {
+  if (row.agents != null) return row.agents;
+  return row.bindingLines.length === 0 ? null : row.bindingLines.reduce((sum, line) => sum + line.agents, 0);
+}
+
+/** The agents `rows` declare — the sum of their runners' declared agents; `null` for none declared. */
 export function declaredAgents(rows: readonly BoundRow[]): number | null {
-  const declared = rows.flatMap((row) => row.bindingLines);
-  return declared.length === 0 ? null : declared.reduce((sum, line) => sum + line.agents, 0);
+  const declared = rows.map(runnerAgents).filter((agents): agents is number => agents !== null);
+  return declared.length === 0 ? null : declared.reduce((sum, agents) => sum + agents, 0);
 }
 
 /** The agents busy across `rows` — the sum of their binding lines' agents in use. */

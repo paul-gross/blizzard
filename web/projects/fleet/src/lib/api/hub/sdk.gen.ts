@@ -1292,8 +1292,8 @@ export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = fal
  * serves that it can both work (its declared capabilities admit the entry) and claim (not
  * dependency-blocked), with the request's match policy applied to both. The served set is
  * the principal's stored declaration less what its host's report withholds (a binding whose workspace the host has
- * not reported, or every binding under an unrostered subscription), narrowed to ``project`` when sent; a runner
- * serving nothing is offered nothing.
+ * not reported, or every binding under an unrostered subscription), narrowed to ``project`` or
+ * ``projects`` when sent; a runner serving nothing is offered nothing.
  */
 export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boolean = false>(options: Options<PeekMatchedQueueApiFleetQueuePeekPostData, ThrowOnError>): RequestResult<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError> => (options.client ?? client).post<PeekMatchedQueueApiFleetQueuePeekPostResponses, PeekMatchedQueueApiFleetQueuePeekPostErrors, ThrowOnError>({
     url: '/api/fleet/queue/peek',

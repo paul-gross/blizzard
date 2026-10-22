@@ -155,7 +155,7 @@ _LEGACY_KEYS: Mapping[str, _LegacyKey] = {
     ),
     "name": _LegacyKey(_Placement.RUNNER),
     "projects": _LegacyKey(_Placement.RUNNER),
-    "max_agents": _LegacyKey(_Placement.RUNNER, retired="the `agents` of each binding in `[[runner]] projects`"),
+    "max_agents": _LegacyKey(_Placement.RUNNER, retired="`[[runner]] agents`"),
     "external_subscription_usage": _LegacyKey(_Placement.HOST, retired="a `[[subscription]]` the runner names"),
 }
 
@@ -255,6 +255,8 @@ class RunnerEntry:
     own: RunnerConfig | None = None
     #: The runner errors found reading the entry; :meth:`HostConfig.projections` adds the host-dependent ones.
     errors: tuple[str, ...] = ()
+    #: What reading the entry earns a start-up warning for, such as a deprecated key.
+    warnings: tuple[str, ...] = ()
 
 
 @domain_model
@@ -457,6 +459,7 @@ class HostConfig:
             hub_token=token.value,
             projects=tuple(binding.project for binding in entry.bindings),
             bindings=entry.bindings,
+            agents=own.agents,
             subscriptions=chosen,
         )
 
@@ -629,7 +632,7 @@ class HostConfig:
             DEFAULT_RUNNER_NAME,
             subscription=SCAFFOLD_SUBSCRIPTION.slug,
             bindings=tuple(
-                ProjectBinding(project, workspace.id, SCAFFOLD_AGENTS)
+                ProjectBinding(project, workspace.id)
                 for project in (projects if projects is not None else SCAFFOLD_PROJECTS)
             ),
         )
@@ -701,6 +704,7 @@ def scaffold_runner(
     bindings: tuple[ProjectBinding, ...],
     subscription: str | None = None,
     runner_id: str | None = None,
+    agents: int | None = None,
 ) -> RunnerEntry:
     """A ``[[runner]]`` carrying the scaffold's runner defaults, seeded from the injected ``BZ_*`` environment:
     ``init``'s first runner, and each one ``runner add`` appends."""
@@ -710,6 +714,7 @@ def scaffold_runner(
     own = RunnerConfig(
         root=root,
         db_url=HostLayout(root).default_db_url,
+        agents=SCAFFOLD_AGENTS if agents is None else agents,
         gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
         harness_sections=HarnessSections.scaffold(root, environ),
         runner_prompt=environ.get(ENV_RUNNER_PROMPT, ""),
@@ -849,6 +854,7 @@ def _parse(
         warnings=(
             *_permission_warnings(path, holds_credentials="host_token" in document or bool(hub_tokens)),
             *(f"{entry.key} is ignored while the flag {entry.flag} is off" for entry in held),
+            *(warning for entry in entries for warning in entry.warnings),
         ),
     )
 
@@ -887,9 +893,9 @@ def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[s
     runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in _LEGACY_KEYS}
     runner["id"] = runner_id
     runner["name"] = legacy.get("name", legacy.get("runner_id", DEFAULT_RUNNER_NAME))
-    agents = legacy.get("max_agents", _LEGACY_MAX_AGENTS)
+    runner["agents"] = legacy.get("max_agents", _LEGACY_MAX_AGENTS)
     projects = legacy["projects"] if "projects" in legacy else list(served)
-    runner["projects"] = [{"project": project, "workspace": workspace["id"], "agents": agents} for project in projects]
+    runner["projects"] = [{"project": project, "workspace": workspace["id"]} for project in projects]
     declared = legacy.get("subscription")
     if declared is None:
         usage = legacy.get("external_subscription_usage", {})
@@ -1026,9 +1032,11 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
         if key in raw:
             problems.add(f"{key!r} has no home under a host: it is {home}")
     bindings = _bindings(raw, problems)
+    warnings: list[str] = []
+    agents = _runner_agents(raw, bindings, problems, warnings)
     own = problems.attempt(
         "its tables",
-        lambda: _own_tables(raw, root=root, db_url=db_url, path=path),
+        lambda: replace(_own_tables(raw, root=root, db_url=db_url, path=path), agents=agents),
         None,
     )
     return RunnerEntry(
@@ -1038,7 +1046,28 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
         bindings=bindings,
         own=own,
         errors=tuple(problems.found),
+        warnings=tuple(f"runner {name}: {warning}" for warning in warnings),
     )
+
+
+def _runner_agents(raw: ConfigView, bindings: tuple[ProjectBinding, ...], errors: _Errors, warnings: list[str]) -> int:
+    """The runner's one agent count: its own ``agents`` when set, else the sum of its bindings' deprecated ``agents``
+    — an error when some binding declares none."""
+    declared = [binding.agents for binding in bindings if binding.agents is not None]
+    if "agents" in raw:
+        agents = raw.get("agents")
+        if isinstance(agents, bool) or not isinstance(agents, int) or agents < 1:
+            errors.add(f"agents must be a positive integer, got {agents!r}")
+            return 0
+        if declared:
+            warnings.append("agents is set, so the per-binding `agents` in `projects` are ignored")
+        return agents
+    if len(declared) < len(bindings):
+        errors.add("has no agents: set `agents` on the runner")
+        return 0
+    if declared:
+        warnings.append("the per-binding `agents` in `projects` is deprecated: set `agents` on the runner")
+    return sum(declared)
 
 
 def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
@@ -1047,7 +1076,7 @@ def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
         return ()
     listed = raw.get("projects")
     if not isinstance(listed, list):
-        errors.add(f"projects must be a list of {{ project, workspace, agents }} bindings, got {listed!r}")
+        errors.add(f"projects must be a list of {{ project, workspace }} bindings, got {listed!r}")
         return ()
     bindings: list[ProjectBinding] = []
     for binding in listed:
@@ -1064,7 +1093,7 @@ def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
             errors.add(f"projects entry {binding!r} must name a project and a workspace")
             continue
         label = f"binding of project {project.strip()!r}"
-        if isinstance(agents, bool) or not isinstance(agents, int) or agents < 1:
+        if agents is not None and (isinstance(agents, bool) or not isinstance(agents, int) or agents < 1):
             errors.add(f"{label}: agents must be a positive integer, got {agents!r}")
             continue
         if any(bound.project == project.strip() for bound in bindings):
@@ -1205,8 +1234,7 @@ _TABLE_HEADER = re.compile(r"^\[([^\[\]]+)\]$", re.MULTILINE)
 def _runner_toml(entry: RunnerEntry) -> str:
     own = entry.own
     projects = ", ".join(
-        f"{{ project = {json.dumps(b.project)}, workspace = {json.dumps(b.workspace)}, agents = {b.agents} }}"
-        for b in entry.bindings
+        f"{{ project = {json.dumps(b.project)}, workspace = {json.dumps(b.workspace)} }}" for b in entry.bindings
     )
     text = "\n[[runner]]\n"
     if entry.id is not None:
@@ -1214,6 +1242,8 @@ def _runner_toml(entry: RunnerEntry) -> str:
     text += f"name = {json.dumps(entry.name)}\n"
     if entry.subscription is not None:
         text += f"subscription = {json.dumps(entry.subscription)}\n"
+    if own is not None and own.agents:
+        text += f"agents = {own.agents}\n"
     text += f"projects = [{projects}]\n"
     if own is None:
         return text

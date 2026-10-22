@@ -309,6 +309,7 @@ def test_a_registration_repeating_what_is_held_changes_nothing() -> None:
         replace(_SAME, gates=()),
         replace(_SAME, bindings=(RunnerBinding(project="p", workspace_id="ws-a", agents=1),)),
         replace(_SAME, subscription=None),
+        replace(_SAME, agents=2),
     ],
 )
 def test_a_registration_reporting_a_different_fact_changes_it(report: RunnerReport) -> None:

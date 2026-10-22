@@ -118,30 +118,33 @@ class ClaimContext(SpawnContext, Protocol):
 
 @dataclass
 class ReadyQueue:
-    """One binding's view of the hub's ready queue — peek its project's head, acquire its environments
-    all-or-nothing from the binding's workspace, bind them locally, then race for the route. ``_entries``
-    is one peek's own snapshot, holding at most one entry when a capability-asserting runner peeks fresh
-    before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
+    """The hub's ready queue as the runner's routed bindings see it — one peek naming their projects, then for the
+    returned entry: acquire its environments all-or-nothing from its project's workspace, bind them locally, then race
+    for the route. ``_entries`` is one peek's own snapshot, holding at most one entry when a capability-asserting
+    runner peeks fresh before every ``claim_one()`` (``tests/test_runner_loop.py``'s pinning)."""
 
     ctx: ClaimContext
-    binding: RoutedBinding
+    bindings: tuple[RoutedBinding, ...]
     _entries: list[QueueEntry] = field(default_factory=list)
+    #: The workspace the last ``claim_one()`` found out of environments, so the caller stops peeking for its projects.
+    env_bound_workspace_id: str | None = None
+    _binding: RoutedBinding | None = None
 
     @classmethod
-    def peeked(cls, ctx: ClaimContext, binding: RoutedBinding) -> ReadyQueue:
+    def peeked(cls, ctx: ClaimContext, bindings: tuple[RoutedBinding, ...]) -> ReadyQueue:
         if registered_runner_id(ctx.identity) is None:
-            return cls(ctx, binding, _entries=[])  # nothing is claimed before the runner's first registration
+            return cls(ctx, bindings, _entries=[])  # nothing is claimed before the runner's first registration
         try:
             peeked = ctx.hub.peek_queue(
                 ctx.capability_snapshot(),
                 # The same knob `_next` reach-ahead already honors locally, sent per call
                 # rather than read hub-side, so both dimensions get the identical policy.
                 policy="hold" if ctx.config.queue_strict else "pass-over",
-                project=binding.project_id,
+                projects=[binding.project_id for binding in bindings],
             )
         except HubClientError:
-            return cls(ctx, binding, _entries=[])
-        return cls(ctx, binding, _entries=list(peeked))
+            return cls(ctx, bindings, _entries=[])
+        return cls(ctx, bindings, _entries=list(peeked))
 
     def claim_one(self) -> bool:
         """Claim and start one chunk. ``False`` when nothing more can be filled for this binding this tick;
@@ -149,20 +152,23 @@ class ReadyQueue:
         entry = self._next()
         if entry is None:
             return False
-        if entry.project_id != self.binding.project_id:
-            # Only a hub too old to narrow the peek answers another project; it would answer the same entry again.
+        self.env_bound_workspace_id = None
+        self._binding = next((b for b in self.bindings if b.project_id == entry.project_id), None)
+        if self._binding is None:
+            # Only a hub too old to narrow the peek answers a project outside the named ones; it would answer the
+            # same entry again.
             _log.info(
-                "peeked entry passed over — another project's",
+                "peeked entry passed over — not a named project's",
                 chunk_id=entry.chunk_id,
                 entry_project_id=entry.project_id,
-                binding_project_id=self.binding.project_id,
+                binding_project_ids=[b.project_id for b in self.bindings],
             )
             return False
         chunk_id = entry.chunk_id
         # The workspace's pool is shared host-wide: from the held read to the recorded binding, no other runner may
         # draw from it (bzh:pool-acquisition-exclusive). A runner that cannot take the lock claims nothing this tick
         # rather than stall the leases its Advance step serves. The hub claim runs after, outside the lock.
-        with self.ctx.workspaces.try_acquisition_lock(self._workspace_id) as taken:
+        with self.ctx.workspaces.try_acquisition_lock(self._workspace_id()) as taken:
             if not taken:
                 return False
             acquired = self._acquire(entry)
@@ -191,7 +197,7 @@ class ReadyQueue:
                 runner_name=self.ctx.config.runner_name,
                 **claim_denial_fields(outcome),
             )
-            self.ctx.env_release.release_binding(chunk_id, self._workspace_id, acquired)
+            self.ctx.env_release.release_binding(chunk_id, self._workspace_id(), acquired)
             return disposition.keep_filling
         assert outcome.claimed is not None  # a won claim carries its route
         _CP_AFTER_CLAIM.reached()
@@ -208,18 +214,18 @@ class ReadyQueue:
         entry whose outcome is still undetermined."""
         return pick_claim_entry(self._entries, strict=self.ctx.config.queue_strict)
 
-    @property
     def _workspace_id(self) -> str:
-        """The workspace this binding claims into."""
-        return self.binding.workspace_id
+        """The workspace the entry in hand claims into — its project's binding's."""
+        assert self._binding is not None  # claim_one() routes the entry before any step reads it
+        return self._binding.workspace_id
 
     def _pool_held(self) -> list[EnvBinding]:
         """Every binding held in this binding's workspace's pool, by any runner of the host."""
-        return self.ctx.host_stores.runner_audit.held_workspace_bindings(self._workspace_id)
+        return self.ctx.host_stores.runner_audit.held_workspace_bindings(self._workspace_id())
 
     def _acquire(self, entry: QueueEntry) -> list[AcquiredEnvironment] | None:
         held = list(dict.fromkeys(binding.environment_id for binding in self._pool_held()))
-        provider = self.ctx.workspaces.provider(self._workspace_id)
+        provider = self.ctx.workspaces.provider(self._workspace_id())
         assert provider is not None  # a binding naming a workspace the host does not declare halts its runner
         _CP_BEFORE_ACQUIRE.reached()
         try:
@@ -246,6 +252,7 @@ class ReadyQueue:
             return None
         except WorkspaceAcquisitionError:
             _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
+            self.env_bound_workspace_id = self._workspace_id()
             return None  # env capacity exhausted; the chunk waits
 
     def _bind(self, entry: QueueEntry, acquired: list[AcquiredEnvironment]) -> None:
@@ -262,7 +269,7 @@ class ReadyQueue:
                 environment_id=env.environment_id,
                 workdir=env.workdir,
                 bound_at=now,
-                workspace_id=self._workspace_id,
+                workspace_id=self._workspace_id(),
                 project_id=entry.project_id,
             )
             if self.ctx.events is not None:
@@ -288,14 +295,14 @@ class ReadyQueue:
             )
         )
         self.ctx.env_release.release_binding(
-            entry.chunk_id, self._workspace_id, [env for env in acquired if env.environment_id in giveback]
+            entry.chunk_id, self._workspace_id(), [env for env in acquired if env.environment_id in giveback]
         )
         self._entries.remove(entry)
 
     def _route_claim(self, chunk_id: str, acquired: list[AcquiredEnvironment]) -> ClaimRequest:
         return ClaimRequest(
             chunk_id=chunk_id,
-            workspace_id=self._workspace_id,
+            workspace_id=self._workspace_id(),
             environment_ids=[env.environment_id for env in acquired],
         )
 

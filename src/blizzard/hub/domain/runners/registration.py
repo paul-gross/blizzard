@@ -217,6 +217,8 @@ class RunnerRegistration:
     bindings: tuple[RunnerBinding, ...] | None = None
     #: The slug of the host subscription the bindings spend, as last sent; ``None`` when it named none.
     subscription: str | None = None
+    #: The agents the runner last declared it runs at once, shared by its bindings; ``None`` when it sent none.
+    agents: int | None = None
     #: The version the latest judged registration reported; ``None`` when it reported none.
     reported_version: str | None = None
     #: Why the window refused the latest judged registration; ``None`` when it was admitted, or never judged.
@@ -266,6 +268,7 @@ class RunnerRegistration:
             or report.gates != self.gates
             or report.bindings != self.bindings
             or report.subscription != self.subscription
+            or report.agents != self.agents
             or (served is not None and served != self.served)
         )
 
@@ -396,6 +399,7 @@ class RunnerReport:
     gates: tuple[str, ...]
     bindings: tuple[RunnerBinding, ...] | None
     subscription: str | None
+    agents: int | None = None
 
 
 @domain_model
@@ -745,6 +749,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         projects: tuple[ServedEntry, ...] | None = None,
         bindings: tuple[RunnerBinding, ...] | None = None,
         subscription: str | None = None,
+        agents: int | None = None,
         version: str | None = None,
         at: datetime,
     ) -> bool:

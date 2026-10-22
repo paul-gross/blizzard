@@ -98,6 +98,8 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         ),
         capacities=CapacitiesView(
             used=summary.capacities.used,
+            agents=summary.capacities.agents,
+            free=summary.capacities.free,
             bindings=[
                 BindingCapacityView(
                     project=b.project,

@@ -8,6 +8,7 @@ import type { RunnerRow } from './runner-rows.model';
 import { RunnersView } from './runners-view';
 
 const REGISTRY: RunnerRegistryView = {
+  agents: null,
   runner_id: '',
   runner_name: '',
   added_at: '',
@@ -565,7 +566,7 @@ describe('RunnersView host cards', () => {
 
     // A hosted row shows its bindings and subscription in place of its workspace line and slot bar.
     const rA = card.querySelector('[data-runner="rA"]');
-    expect(rA?.querySelector('[data-testid="runner-binding-agents"]')?.textContent?.trim()).toBe('1 / 2 agents');
+    expect(rA?.querySelector('[data-testid="runner-binding-agents"]')?.textContent?.trim()).toBe('1 working');
     expect(rA?.querySelector('[data-testid="runner-subscription-name"]')?.textContent?.trim()).toBe('Anthropic');
     expect(rA?.querySelector('[data-testid="mobile-fleet-runner-slot-bar"]')).toBeNull();
     expect(card.querySelector('[data-runner="rB"] [data-testid="runner-subscription-unrostered"]')).not.toBeNull();

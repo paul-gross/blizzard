@@ -254,13 +254,17 @@ def peek_matched_queue(
     serves that it can both work (its declared capabilities admit the entry) and claim (not
     dependency-blocked), with the request's match policy applied to both. The served set is
     the principal's stored declaration less what its host's report withholds (a binding whose workspace the host has
-    not reported, or every binding under an unrostered subscription), narrowed to ``project`` when sent; a runner
-    serving nothing is offered nothing."""
+    not reported, or every binding under an unrostered subscription), narrowed to ``project`` or
+    ``projects`` when sent; a runner serving nothing is offered nothing."""
     registration = services.registry.get_runner(principal.runner_id)
     host = None
     if registration is not None and registration.host_id is not None:
         host = services.hosts.get_host(registration.host_id)
-    served = frozenset() if registration is None else offered_projects(registration, host, project=request.project)
+    served = (
+        frozenset()
+        if registration is None
+        else offered_projects(registration, host, project=request.project, projects=request.projects)
+    )
     statuses = services.chunks.facts.load_live_statuses()
     return queue_api.MatchedPeek.of(services, statuses, request, served=served).view
 
@@ -960,6 +964,7 @@ def register_runner(
                 else tuple(RunnerBinding(b.project, b.workspace_id, b.agents) for b in request.bindings)
             ),
             subscription=request.subscription,
+            agents=request.agents,
             version=request.version,
         )
     except RunnerVersionRefused as exc:
