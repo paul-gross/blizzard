@@ -451,6 +451,7 @@ class PeekCall:
     capabilities: list[HarnessCapability]
     policy: str
     project: str | None = None
+    projects: list[str] | None = None
 
 
 #: The bearer token a :class:`FakeHub` client presents unless a test hands it another.
@@ -611,11 +612,25 @@ class FakeHub:
         self._held = held
 
     def peek_queue(
-        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+        self,
+        capabilities: Sequence[HarnessCapability],
+        *,
+        policy: str,
+        project: str | None = None,
+        projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
         self.peek_queue_calls += 1
-        self.peek_queue_requests.append(PeekCall(capabilities=list(capabilities), policy=policy, project=project))
+        self.peek_queue_requests.append(
+            PeekCall(
+                capabilities=list(capabilities),
+                policy=policy,
+                project=project,
+                projects=None if projects is None else list(projects),
+            )
+        )
         entries = self.queue_responses.pop(0) if self.queue_responses else list(self.queue)
+        if projects is not None and self.narrows_peek:
+            return [entry for entry in entries if entry.project_id in projects]
         if project is None or not self.narrows_peek:
             return entries
         # A scripted entry naming no project is taken as the peeked project's own.

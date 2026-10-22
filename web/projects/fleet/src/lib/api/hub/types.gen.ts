@@ -6313,6 +6313,10 @@ export type QueuePeekRequest = {
      * Project
      */
     project?: string | null;
+    /**
+     * Projects
+     */
+    projects?: Array<string> | null;
 };
 
 /**

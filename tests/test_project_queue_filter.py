@@ -110,14 +110,57 @@ def test_a_runner_serving_nothing_is_offered_nothing(tmp_path: Path) -> None:
     assert _peek(hub, token, policy="hold") == []
 
 
-def test_the_peek_serves_the_runners_stored_declaration_and_ignores_projects_in_the_body(tmp_path: Path) -> None:
+def test_the_peek_serves_the_runners_stored_declaration_and_never_widens_it_by_the_body(tmp_path: Path) -> None:
     hub, beta = _two_project_hub(tmp_path)
     _ingest(hub, "1", "beta")
     own = _ingest(hub, "2", "default")
     token = seed_runner(hub, "r-default", projects=("default",))
 
-    claimed = {"project_id": beta, "projects": [beta], "served": [beta]}
-    assert _peek(hub, token, **claimed) == [(own, 1)]
+    assert _peek(hub, token, projects=[beta]) == []
+    assert _peek(hub, token, projects=[beta, "default"]) == [(own, 1)]
+    assert _peek(hub, token, served=[beta]) == [(own, 1)]
+
+
+def test_projects_narrows_to_the_union_it_names_in_queue_order(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    first = _ingest(hub, "1", "beta")
+    second = _ingest(hub, "2", "default")
+    token = seed_runner(hub, "r-both", projects=("default", "beta"))
+
+    assert _peek(hub, token, projects=["default", "beta"]) == [(first, 0)]
+    assert _peek(hub, token, projects=["default"]) == [(second, 1)]
+    assert _peek(hub, token, projects=[]) == []
+
+
+def test_sending_project_and_projects_together_is_refused(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    token = seed_runner(hub, "r-both", projects=("default", "beta"))
+
+    resp = hub.client.post(
+        "/api/fleet/queue/peek",
+        json={"capabilities": _CAPABILITY, "project": "beta", "projects": ["beta"]},
+        headers=_bearer(token),
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
+def test_a_per_project_hold_offers_the_next_project_past_an_unusable_head(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    blocked = _ingest(hub, "1", "default", promote=False)
+    assert (
+        hub.client.patch(f"/api/chunks/{blocked}", json={"default_harnesses": ["special-harness"]}).status_code == 202
+    )
+    assert hub.client.post(f"/api/chunks/{blocked}/promote").status_code == 202
+    hub.clock.advance(timedelta(seconds=1))
+    _ingest(hub, "2", "default")
+    other = _ingest(hub, "3", "beta")
+    token = seed_runner(hub, "r-both", projects=("default", "beta"))
+
+    assert _peek(hub, token, policy="hold") == []
+    assert _peek(hub, token, policy="hold", project="default") == []
+    assert _peek(hub, token, policy="hold", projects=["default", "beta"]) == [(other, 2)]
+    assert _peek(hub, token, policy="hold", projects=["default"]) == []
 
 
 def test_a_dependency_on_another_projects_chunk_still_holds_back_its_dependent(tmp_path: Path) -> None:

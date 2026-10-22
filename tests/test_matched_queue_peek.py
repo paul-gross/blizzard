@@ -180,7 +180,12 @@ def test_succeeds_with_a_valid_token(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
 
 
-def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "extra",
+    [{}, {"policy": "hold", "projects": ["default"]}, {"policy": "hold", "projects": []}],
+    ids=["pass-over", "per-project-hold", "no-projects"],
+)
+def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path, extra: dict[str, object]) -> None:
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small = build_hub(tmp_path / "small")
@@ -196,7 +201,7 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
 
     def call(hub, key: str, token: str) -> None:  # type: ignore[no-untyped-def]
         resp = hub.client.post(
-            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY}, headers=_bearer(token)
+            "/api/fleet/queue/peek", json={"capabilities": _DEFAULT_CAPABILITY, **extra}, headers=_bearer(token)
         )
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json()["entries"])
@@ -206,5 +211,5 @@ def test_peek_query_count_is_independent_of_fleet_size(tmp_path: Path) -> None:
 
     # Every request returns at most one entry regardless of fleet size — the assertion
     # that matters here is the query count, not the entry count.
-    assert results == {"small": 1, "large": 1}
+    assert results == ({"small": 0, "large": 0} if extra.get("projects") == [] else {"small": 1, "large": 1})
     assert small_count == large_count

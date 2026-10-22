@@ -567,10 +567,16 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(
-        self, capabilities: Sequence[HarnessCapability], *, policy: str, project: str | None = None
+        self,
+        capabilities: Sequence[HarnessCapability],
+        *,
+        policy: str,
+        project: str | None = None,
+        projects: Sequence[str] | None = None,
     ) -> list[QueueEntry]:
         """``POST /api/fleet/queue/peek`` — at most one queue entry matching ``capabilities``
-        under ``policy``, narrowed to ``project`` when one is named; a refusal raises ``HubClientError``."""
+        under ``policy``, narrowed to ``project`` — or to the ``projects`` it names, whose
+        per-project hold they also scope — when one is named; a refusal raises ``HubClientError``."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:

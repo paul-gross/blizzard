@@ -94,6 +94,7 @@ def select_matched_entry(
     capabilities: Sequence[RunnerCapability],
     blocked: Mapping[str, list[str]],
     policy: QueueMatchPolicy,
+    hold_per_project: bool = False,
 ) -> MatchedEntry | None:
     """The matched peek's own selection: ``chunks``'s order is first narrowed to the
     projects in ``served`` — the caller's served set — and the first narrowed entry the
@@ -101,8 +102,12 @@ def select_matched_entry(
     returned. A chunk of a project outside ``served`` is never examined, so it is never
     the head :attr:`QueueMatchPolicy.HOLD` stops at; an empty ``served`` selects nothing.
     Under :attr:`QueueMatchPolicy.HOLD` only the narrowed head is examined;
-    :attr:`PASS_OVER` scans the whole narrowed order."""
+    :attr:`PASS_OVER` scans the whole narrowed order. With ``hold_per_project`` the hold is scoped to a project: an
+    unusable entry stops only its own project, whose later entries are skipped while the scan goes on to the others."""
+    stopped: set[str | None] = set()
     for entry in entries_of(chunks, served):
+        if entry.chunk.project_id in stopped:
+            continue
         chunk, position = entry.chunk, entry.position
         graph = graphs.get(chunk.graph_id)
         if graph is None:  # pragma: no cover - a pinned graph always resolves
@@ -114,7 +119,9 @@ def select_matched_entry(
         if not unusable:
             return MatchedEntry(chunk=chunk, position=position)
         if policy is QueueMatchPolicy.HOLD:
-            return None
+            if not hold_per_project:
+                return None
+            stopped.add(entry.chunk.project_id)
     return None
 
 

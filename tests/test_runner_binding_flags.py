@@ -119,6 +119,21 @@ def test_project_keeps_the_entry_it_names_by_entry_or_by_resolved_id() -> None:
     assert offered_projects(runner, host, project="old") == frozenset()
 
 
+def test_projects_keeps_the_union_of_the_entries_it_names() -> None:
+    runner = _runner((_A, _X), None, _SERVED)
+    host = _host("ws-a", "ws-x")
+
+    assert offered_projects(runner, host, projects=["alpha", "prj_b"]) == {"prj_a", "prj_b"}
+    assert offered_projects(runner, host, projects=["beta", "gamma"]) == {"prj_b"}
+    assert offered_projects(runner, host, projects=[]) == frozenset()
+
+
+def test_projects_cannot_widen_what_a_flag_withholds() -> None:
+    runner = _runner((_A, _X), None, _SERVED)
+
+    assert offered_projects(runner, _host("ws-a"), projects=["alpha", "beta"]) == {"prj_a"}
+
+
 def test_project_cannot_widen_what_a_flag_withholds() -> None:
     runner = _runner((_X,), None, _SERVED)
 
