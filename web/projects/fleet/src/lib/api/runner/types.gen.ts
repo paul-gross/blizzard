@@ -1619,23 +1619,49 @@ export type FloorClearRequest = {
 };
 
 /**
- * FloorClearView
- *
- * The clear just recorded.
+ * FloorHoldView
  */
-export type FloorClearView = {
+export type FloorHoldView = {
     /**
-     * By
+     * Awaits Sample
      */
-    by: string;
+    awaits_sample: boolean;
     /**
-     * Cleared At
+     * Expected Reset
      */
-    cleared_at: string;
+    expected_reset: string;
     /**
-     * Slug
+     * Grace Opens At
      */
-    slug: string | null;
+    grace_opens_at: string | null;
+    /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Window
+     */
+    window: string | null;
+};
+
+/**
+ * FloorStatusView
+ */
+export type FloorStatusView = {
+    /**
+     * Admits
+     */
+    admits: boolean;
+    clear: BlizzardWireRunnerStatusFloorClearView | null;
+    hold: FloorHoldView | null;
+    /**
+     * Subscription
+     */
+    subscription: string | null;
 };
 
 /**
@@ -2213,6 +2239,7 @@ export type HostRunnerView = {
      * State
      */
     state: 'serving' | 'halted';
+    throttle: ThrottleStatusView | null;
 };
 
 /**
@@ -3353,6 +3380,7 @@ export type RunnerStatusView = {
      * Tenant Name
      */
     tenant_name: string | null;
+    throttle: ThrottleStatusView | null;
     /**
      * Unmatched Bindings
      */
@@ -3782,6 +3810,61 @@ export type TakeoverRequest = {
      * Force
      */
     force?: boolean;
+};
+
+/**
+ * ThrottleLeverView
+ *
+ * One configured lever in gate order, with its setting, reading and answer.
+ */
+export type ThrottleLeverView = {
+    /**
+     * Admits
+     */
+    admits: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Reading
+     */
+    reading: string;
+    /**
+     * Setting
+     */
+    setting: string;
+    /**
+     * Until
+     */
+    until: string | null;
+};
+
+/**
+ * ThrottleStatusView
+ */
+export type ThrottleStatusView = {
+    /**
+     * Declining
+     */
+    declining: Array<string>;
+    floor: FloorStatusView;
+    /**
+     * Levers
+     */
+    levers: Array<ThrottleLeverView>;
+    /**
+     * On Decline
+     */
+    on_decline: string;
+    /**
+     * On Usage Limit
+     */
+    on_usage_limit: string;
+    /**
+     * State
+     */
+    state: string;
 };
 
 /**
@@ -4375,6 +4458,40 @@ export type WorkspacePromptResponse = {
     source: 'override' | 'config';
 };
 
+/**
+ * FloorClearView
+ *
+ * The clear just recorded.
+ */
+export type BlizzardRunnerApiFloorFloorClearView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+    /**
+     * Slug
+     */
+    slug: string | null;
+};
+
+/**
+ * FloorClearView
+ */
+export type BlizzardWireRunnerStatusFloorClearView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+};
+
 export type CallbackApiAuthCallbackPostData = {
     body?: never;
     path?: never;
@@ -4578,7 +4695,7 @@ export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse
     /**
      * Successful Response
      */
-    200: FloorClearView;
+    200: BlizzardRunnerApiFloorFloorClearView;
 };
 
 export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses];
@@ -6365,7 +6482,7 @@ export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses = {
     /**
      * Successful Response
      */
-    200: FloorClearView;
+    200: BlizzardRunnerApiFloorFloorClearView;
 };
 
 export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponse = ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses[keyof ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses];

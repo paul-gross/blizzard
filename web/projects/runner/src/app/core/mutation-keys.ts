@@ -14,4 +14,8 @@ export function localPauseMutationKey(runnerId: string | null): readonly unknown
   return [runnerId, 'mutation', 'local-pause'];
 }
 
+export function floorClearMutationKey(runnerId: string | null): readonly unknown[] {
+  return [runnerId, 'mutation', 'floor-clear'];
+}
+
 export const runnerLogoutMutationKey = ['auth', 'mutation', 'runner-logout'] as const;

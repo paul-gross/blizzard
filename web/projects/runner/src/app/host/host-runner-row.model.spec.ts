@@ -11,6 +11,7 @@ const RUNNER = (overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.Ho
   served: true,
   halted_reasons: [],
   pause: { local: false, hub: false, effective: false, local_reason: null },
+  throttle: null,
   bindings: [{ project: 'console', workspace_id: 'ws', agents: 4 }],
   agents_in_use: 1,
   max_agents: 4,
@@ -65,6 +66,16 @@ function one(runner: runnerApi.HostRunnerView, status?: runnerApi.RunnerStatusVi
 }
 
 describe('hostRunnerRows', () => {
+  it('shows a read-only declining floor from the host before the runner dashboard arrives', () => {
+    const row = one(RUNNER({ throttle: {
+      state: 'declining', declining: ['floor'], floor: { subscription: 'anthropic', admits: false, clear: null,
+        hold: { kind: 'usage limit', harness_id: null, window: null, expected_reset: '2026-10-22T14:00:00Z', awaits_sample: false, grace_opens_at: null } },
+      levers: [], on_decline: 'hold', on_usage_limit: 'hold',
+    } }));
+    expect(row.throttle?.summary).toBe('declining — floor, resets 2026-10-22T14:00:00Z');
+    expect(row.throttle?.lines[0].text).toContain('anthropic: exhausted');
+  });
+
   it('reads a halted runner red, with only its HALTED badge carrying the reasons', () => {
     const row = one(RUNNER({ runner_id: null, state: 'halted', halted_reasons: ['no token', 'no hub'] }));
 

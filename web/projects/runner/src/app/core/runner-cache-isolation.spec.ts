@@ -36,6 +36,7 @@ function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
     served: true,
     halted_reasons: [],
     pause: { local: false, hub: false, effective: false, local_reason: null },
+    throttle: null,
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
     agents_in_use: 0,
     max_agents: 4,

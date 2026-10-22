@@ -20,6 +20,7 @@ const ROW = (overrides: Partial<HostRunnerRow> = {}): HostRunnerRow => ({
     { harnessId: 'claude_code', name: 'claude code', version: '2.1.0', available: true, admitted: null, cause: null, degradations: [] },
   ],
   gates: [],
+  throttle: null,
   hub: { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 2, refusal: null, hubVersion: null, window: null },
   problems: [],
   state: [{ label: 'WORKING', tone: 'running', title: null }],

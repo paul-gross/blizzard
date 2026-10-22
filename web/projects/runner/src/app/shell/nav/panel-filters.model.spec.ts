@@ -12,6 +12,7 @@ function runner(name: string, overrides: Partial<runnerApi.HostRunnerView> = {})
     served: true,
     halted_reasons: [],
     pause: { local: false, hub: false, effective: false, local_reason: null },
+    throttle: null,
     bindings: [],
     agents_in_use: 0,
     max_agents: 0,

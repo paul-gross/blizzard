@@ -11,6 +11,7 @@ function runner(overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.Ho
     served: true,
     halted_reasons: [],
     pause: { local: false, hub: false, effective: false, local_reason: null },
+    throttle: null,
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
     agents_in_use: 1,
     max_agents: 4,

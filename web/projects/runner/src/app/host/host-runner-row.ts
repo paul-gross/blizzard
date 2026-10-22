@@ -28,6 +28,7 @@ export class HostRunnerRowView {
 
   private readonly binds = viewChild.required<TemplateRef<unknown>>('binds');
   private readonly spends = viewChild.required<TemplateRef<unknown>>('spends');
+  private readonly throttle = viewChild.required<TemplateRef<unknown>>('throttle');
   private readonly harness = viewChild.required<TemplateRef<unknown>>('harness');
   private readonly hub = viewChild.required<TemplateRef<unknown>>('hub');
   private readonly gates = viewChild.required<TemplateRef<unknown>>('gates');
@@ -37,10 +38,14 @@ export class HostRunnerRowView {
   /** A halted runner reports nothing but why it is halted, so it shows only its state. */
   protected readonly facts = computed<readonly KitFact[]>(() => {
     const row = this.row();
-    if (row.halted) return [{ label: 'State', template: this.state() }];
+    if (row.halted) return [
+      { label: 'State', template: this.state() },
+      ...(row.throttle ? [{ label: 'Throttle', template: this.throttle(), testid: 'host-runner-throttle' }] : []),
+    ];
     return [
       { label: 'Binds', template: this.binds(), testid: 'host-runner-binds' },
       ...(row.spends.length > 0 ? [{ label: 'Spends', template: this.spends(), testid: 'host-runner-spends' }] : []),
+      ...(row.throttle ? [{ label: 'Throttle', template: this.throttle(), testid: 'host-runner-throttle' }] : []),
       { label: 'Harness', template: this.harness(), testid: 'host-runner-harness' },
       ...(row.hub ? [{ label: 'Hub', template: this.hub(), testid: 'host-runner-hub' }] : []),
       { label: 'Gates', template: this.gates(), testid: 'host-runner-gates' },

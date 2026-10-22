@@ -13,7 +13,7 @@ function hostEnv(fields: Partial<runnerApi.HostEnvironmentView> & { environment_
 function hostRunner(
   fields: Pick<runnerApi.HostRunnerView, 'runner_id' | 'name' | 'state' | 'agents_in_use' | 'max_agents'>,
 ): runnerApi.HostRunnerView {
-  return { ...fields, served: fields.runner_id !== null, halted_reasons: [], pause: null, bindings: [] };
+  return { ...fields, served: fields.runner_id !== null, halted_reasons: [], pause: null, throttle: null, bindings: [] };
 }
 
 describe('headerConnectionLabel', () => {
