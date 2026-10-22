@@ -108,6 +108,7 @@ from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -126,6 +127,7 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.runner_guard import install_runner_guard
 from blizzard.runner.store.scoped import RunnerStoreConnections
@@ -980,6 +982,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         invocation_boundaries=InvocationBoundaryStore(connections),
         selftest_results=SelfTestResultStore(connections),
         lease_traces=LeaseTraceFactsStore(connections),
+        usage_limits=RunnerUsageLimitStore(connections),
     )
 
 
@@ -1028,6 +1031,7 @@ def _build_host_stores(connections: RunnerStoreConnections, clock: IClock) -> Ho
         host_lane=HostLaneStore(connections),
         host_identity=HostIdentityStore(connections),
         host_ingests=HostIngestStore(connections),
+        usage_limits=SubscriptionUsageLimitStore(connections),
         runner_audit=RunnerAudit(connections),
     )
 

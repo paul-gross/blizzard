@@ -112,6 +112,7 @@ from blizzard.runner.store.internal.host_ingest_store import HostIngestStore
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.internal.host_lane_store import HostLaneStore
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
+from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
@@ -129,6 +130,7 @@ from blizzard.runner.store.internal.selftest_result_store import SelfTestResultS
 from blizzard.runner.store.internal.takeover_store import TakeoverStore
 from blizzard.runner.store.internal.token_store import TokenStore
 from blizzard.runner.store.internal.transcript_ledger_store import TranscriptLedgerStore
+from blizzard.runner.store.internal.usage_limit_store import RunnerUsageLimitStore
 from blizzard.runner.store.internal.usage_store import UsageStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.store.schema import transcript_outbound_buffer, transcript_segments
@@ -194,6 +196,7 @@ class SqlAlchemyRunnerStore(
     InvocationBoundaryStore,
     SelfTestResultStore,
     LeaseTraceFactsStore,
+    RunnerUsageLimitStore,
 ):
     """The flat, every-concept-at-once runner store — test support only:
     production composes the extracted concept adapters individually via
@@ -236,6 +239,7 @@ class SqlAlchemyRunnerStore(
         InvocationBoundaryStore.__init__(self, store)
         SelfTestResultStore.__init__(self, store)
         LeaseTraceFactsStore.__init__(self, store)
+        RunnerUsageLimitStore.__init__(self, store)
         self._engine = engine
         self._errors = errors
 
@@ -336,6 +340,7 @@ def make_host_stores(store: SqlAlchemyRunnerStore, clock: IClock | None = None) 
         host_lane=store,
         host_identity=store,
         host_ingests=HostIngestStore(store.connections),
+        usage_limits=SubscriptionUsageLimitStore(store.connections),
         runner_audit=RunnerAudit(store.connections),
     )
 
@@ -368,6 +373,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         invocation_boundaries=store,
         selftest_results=store,
         lease_traces=store,
+        usage_limits=store,
     )
 
 

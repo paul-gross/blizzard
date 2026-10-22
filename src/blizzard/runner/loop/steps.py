@@ -600,6 +600,8 @@ class Retention(Step):
             ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
             ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
             ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
+            ("subscription usage limit", lambda: ctx.host_stores.usage_limits.prune_usage_limits(now=now)),
+            ("runner usage limit", lambda: ctx.stores.usage_limits.prune_usage_limits(now=now)),
             (
                 "worker stdout",
                 lambda: ctx.worker_files.sweep(

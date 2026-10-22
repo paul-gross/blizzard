@@ -314,6 +314,15 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_credential_renewal_outcome": Silent("the same runner-local renewal diagnostics, closing its claim."),
     "prune_credential_renewals": Silent(_RETENTION_PRUNE),
+    "record_usage_limit_mark": Silent(
+        "the usage-limit path's mark (runner/lifecycle/usage_limit.py) — a floor fact the gate reads before each "
+        "start; the lease's park beside it is what the board sees, and no kind in the vocabulary represents a mark."
+    ),
+    "record_floor_clear": Silent(
+        "a floor opened by hand (the clear route) — a floor fact the gate reads before each start; no kind in the "
+        "vocabulary represents a clear."
+    ),
+    "prune_usage_limits": Silent(_RETENTION_PRUNE),
     # --- operator config -------------------------------------------------------------
     "set_workspace_prompt": Silent("operator-set runtime config; no kind in the vocabulary represents it."),
     "clear_workspace_prompt": Silent("the same operator-set runtime config, removed; no kind represents it either."),

@@ -202,6 +202,12 @@ from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.pause import IReadPauseRepository
+from blizzard.runner.throttle.usage_limits import (
+    FloorClear,
+    IReadRunnerUsageLimitRepository,
+    IReadSubscriptionUsageLimitRepository,
+    UsageLimitMark,
+)
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
@@ -274,6 +280,21 @@ class RunnerWorld:
     transcript_segment_id: str
     workspace_id: str
     usage_slug: str
+
+
+def _usage_limit_mark(lease_id: str, generation: int, at: datetime) -> UsageLimitMark:
+    return UsageLimitMark(
+        marked_at=at,
+        resets_at=at + timedelta(hours=5),
+        window="five_hour",
+        window_resets_at=at + timedelta(hours=5),
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        detail="limit reached",
+        lease_id=lease_id,
+        epoch=1,
+        generation=generation,
+        invocation_kind="worker",
+    )
 
 
 def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorld:
@@ -690,6 +711,12 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         slug="census-host", sampled_at=_t(96), payload=None, report_kind="census.kind", report_payload="{}"
     )
     host.host_lane.record_host_high_water(seq=0, at=_t(97))
+    for generation, at in ((1, _t(98)), (2, _t(99))):
+        mark = _usage_limit_mark(lease_2, generation, at)
+        host.usage_limits.record_usage_limit_mark(usage_slug, mark)
+        stores.usage_limits.record_usage_limit_mark(mark)
+        host.usage_limits.record_floor_clear(usage_slug, FloorClear(cleared_at=at, by="operator"))
+        stores.usage_limits.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
 
     read = RunnerReadStores.of(stores)
     return RunnerWorld(
@@ -872,6 +899,16 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
     (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
+    (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
+        w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
+    ),
+    (IReadSubscriptionUsageLimitRepository, "latest_floor_clear"): lambda w: (
+        w.host_read.usage_limits.latest_floor_clear(w.usage_slug)
+    ),
+    (IReadRunnerUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
+        w.read.usage_limits.latest_usage_limit_mark()
+    ),
+    (IReadRunnerUsageLimitRepository, "latest_floor_clear"): lambda w: w.read.usage_limits.latest_floor_clear(),
     (IReadHostLaneRepository, "host_buffered_count"): lambda w: w.host_read.host_lane.host_buffered_count(),
     (IReadHostLaneRepository, "host_high_water_seen"): lambda w: w.host_read.host_lane.host_high_water_seen(),
     (IReadHostLaneRepository, "pending_host_facts"): lambda w: w.host_read.host_lane.pending_host_facts(limit=10),

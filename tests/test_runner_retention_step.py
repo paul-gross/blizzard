@@ -22,7 +22,15 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.retention_floor import RETENTION_FLOOR, RetentionPasses
 from blizzard.runner.loop.steps import Retention
-from blizzard.runner.store.schema import external_usage_samples, heartbeats
+from blizzard.runner.store.schema import (
+    external_usage_samples,
+    heartbeats,
+    runner_floor_clears,
+    runner_usage_limits,
+    subscription_floor_clears,
+    subscription_usage_limits,
+)
+from blizzard.runner.throttle.usage_limits import FloorClear, UsageLimitMark
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -98,6 +106,38 @@ def _seed_a_superseded_and_a_newest_usage_sample(store, *, old: datetime) -> Non
     )
 
 
+def _seed_superseded_and_newest_floor_facts(ctx, *, old: datetime) -> None:  # type: ignore[no-untyped-def]
+    """An aged mark and clear per key, each superseded by a newer one that is itself aged past the window."""
+    for generation, at in ((1, old), (2, old + timedelta(minutes=1))):
+        mark = UsageLimitMark(
+            marked_at=at,
+            resets_at=None,
+            window=None,
+            window_resets_at=None,
+            harness_id="claude-code",
+            detail="limit reached",
+            lease_id="lease_1",
+            epoch=1,
+            generation=generation,
+            invocation_kind="worker",
+        )
+        ctx.host_stores.usage_limits.record_usage_limit_mark("anthropic", mark)
+        ctx.host_stores.usage_limits.record_floor_clear("anthropic", FloorClear(cleared_at=at, by="operator"))
+        ctx.stores.usage_limits.record_usage_limit_mark(mark)
+        ctx.stores.usage_limits.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
+
+
+def _floor_fact_row_counts(store) -> list[int]:  # type: ignore[no-untyped-def]
+    keyed = (
+        (subscription_usage_limits, subscription_usage_limits.c.slug == "anthropic"),
+        (subscription_floor_clears, subscription_floor_clears.c.slug == "anthropic"),
+        (runner_usage_limits, runner_usage_limits.c.runner_id == FIXTURE_RUNNER_ID),
+        (runner_floor_clears, runner_floor_clears.c.runner_id == FIXTURE_RUNNER_ID),
+    )
+    with store._engine.connect() as conn:
+        return [int(conn.execute(sa.select(sa.func.count()).select_from(t).where(k)).scalar_one()) for t, k in keyed]
+
+
 def _heartbeat_row_count(store) -> int:  # type: ignore[no-untyped-def]
     with store._engine.connect() as conn:
         return int(
@@ -128,12 +168,14 @@ def test_retention_prunes_every_lane_on_its_first_pass(tmp_path) -> None:  # typ
     _seed_a_superseded_and_a_newest_heartbeat(store, old=old)
     _seed_a_superseded_and_a_newest_usage_sample(store, old=old)
     ctx = _ctx(store)
+    _seed_superseded_and_newest_floor_facts(ctx, old=_NOW - timedelta(days=9))
 
     Retention(ctx).run()
 
     assert stale_outbound_seq not in {f.seq for f in store.recent_outbound(10)}
     assert _heartbeat_row_count(store) == 1
     assert _usage_sample_row_count(store) == 1
+    assert _floor_fact_row_counts(store) == [1, 1, 1, 1]
 
 
 @pytest.mark.unit
@@ -229,9 +271,13 @@ class _CountingLanes:
         stores = ctx.stores
         stores = dataclasses.replace(stores, outbound=_Counting(stores.outbound, "outbound", "prune_outbound"))
         stores = dataclasses.replace(stores, liveness=_Counting(stores.liveness, "heartbeat", "prune_heartbeats"))
+        stores = dataclasses.replace(
+            stores, usage_limits=_Counting(stores.usage_limits, "runner floor", "prune_usage_limits")
+        )
         host_stores = dataclasses.replace(
             ctx.host_stores,
             external_usage=_Counting(ctx.host_stores.external_usage, "usage", "prune_external_usage_samples"),
+            usage_limits=_Counting(ctx.host_stores.usage_limits, "subscription floor", "prune_usage_limits"),
         )
         self.ctx = dataclasses.replace(
             ctx,
@@ -242,7 +288,7 @@ class _CountingLanes:
         )
 
 
-_ALL_LANES = ["outbound", "heartbeat", "usage", "stdout"]
+_ALL_LANES = ["outbound", "heartbeat", "usage", "subscription floor", "runner floor", "stdout"]
 
 
 @pytest.mark.unit

@@ -59,6 +59,12 @@ from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.scoped import RUNNER_SCOPING, RUNNER_UNSCOPED_OPTION
 from blizzard.runner.throttle.pause import IWritePauseRepository
+from blizzard.runner.throttle.usage_limits import (
+    FloorClear,
+    IWriteRunnerUsageLimitRepository,
+    IWriteSubscriptionUsageLimitRepository,
+    UsageLimitMark,
+)
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import IWriteLeaseTraces, LeaseTraceCheckpoint
 from blizzard.runner.transcripts.invocation_boundaries import IWriteInvocationBoundaryRepository
@@ -412,6 +418,28 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWritePauseRepository, "record_pause_park_resume"): lambda w: w.stores.pause.record_pause_park_resume(
         lease_id=w.lease_8, resumed_at=_at(39)
     ),
+    (IWriteRunnerUsageLimitRepository, "record_usage_limit_mark"): lambda w: (
+        w.stores.usage_limits.record_usage_limit_mark(
+            UsageLimitMark(
+                marked_at=_at(54),
+                resets_at=None,
+                window=None,
+                window_resets_at=None,
+                harness_id=CLAUDE_CODE_HARNESS_ID,
+                detail="limit reached",
+                lease_id=w.lease_2,
+                epoch=2,
+                generation=9,
+                invocation_kind="judge",
+            )
+        )
+    ),
+    (IWriteRunnerUsageLimitRepository, "record_floor_clear"): lambda w: w.stores.usage_limits.record_floor_clear(
+        FloorClear(cleared_at=_at(55), by="operator")
+    ),
+    (IWriteRunnerUsageLimitRepository, "prune_usage_limits"): lambda w: w.stores.usage_limits.prune_usage_limits(
+        now=_at(10**8)
+    ),
     (IWriteLeaseTraces, "append_trace_cursor"): lambda w: w.stores.lease_traces.append_trace_cursor(
         LeaseTraceCheckpoint(LeaseCursorKey.opening(_at(40)), 3, _at(40))
     ),
@@ -539,6 +567,10 @@ WRITE_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IWriteCredentialRenewalRepository, "record_credential_renewal_outcome"): _HOST_ONLY
     + " (credential_renewal_outcomes)",
     (IWriteCredentialRenewalRepository, "prune_credential_renewals"): _HOST_ONLY + " (credential_renewal_*)",
+    (IWriteSubscriptionUsageLimitRepository, "record_usage_limit_mark"): _HOST_ONLY + " (subscription_usage_limits)",
+    (IWriteSubscriptionUsageLimitRepository, "record_floor_clear"): _HOST_ONLY + " (subscription_floor_clears)",
+    (IWriteSubscriptionUsageLimitRepository, "prune_usage_limits"): _HOST_ONLY
+    + " (subscription_usage_limits, subscription_floor_clears)",
 }
 
 

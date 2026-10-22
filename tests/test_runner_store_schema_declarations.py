@@ -30,6 +30,8 @@ _HOST_TABLES = frozenset(
         "host_outbound_buffer",
         "host_high_water_seen",
         "host_ingests",
+        "subscription_usage_limits",
+        "subscription_floor_clears",
     }
 )
 
@@ -206,6 +208,8 @@ def test_the_host_transfer_treatments_are_the_declared_ones() -> None:
         "external_usage_samples": schema.HOST_TRANSFER_APPEND,
         "credential_renewal_claims": schema.HOST_TRANSFER_APPEND,
         "credential_renewal_outcomes": schema.HOST_TRANSFER_APPEND,
+        "subscription_usage_limits": schema.HOST_TRANSFER_APPEND,
+        "subscription_floor_clears": schema.HOST_TRANSFER_APPEND,
         "workspace_prompt": schema.HOST_TRANSFER_WORKSPACE,
         **dict.fromkeys(
             (
