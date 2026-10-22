@@ -199,7 +199,16 @@ def artifact_get(
         click.echo(resp.text)
         return
     artifact = resp.json()
-    if not ArtifactKind(artifact["kind"]).carries_content():
+    try:
+        kind: ArtifactKind | None = ArtifactKind(artifact["kind"])
+    except ValueError:
+        kind = None  # a kind a newer runner serves: its content, if it carries any, still prints
+    if kind is None and artifact.get("content") is None:
+        raise click.ClickException(
+            f"artifact get: {name!r} is a {artifact['kind']!r} artifact, a kind this CLI does not know, "
+            "and carries no content (drop --content to read it whole)"
+        )
+    if kind is not None and not kind.carries_content():
         raise click.ClickException(
             f"artifact get: {name!r} is a git-commit artifact — it has no content (drop --content to read its ref)"
         )

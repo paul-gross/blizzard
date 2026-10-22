@@ -5,14 +5,18 @@ strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.runner import VersionWindowView
+from blizzard.wire.vocabulary import OPEN
 
 
 class PauseStateView(WireModel):
@@ -80,7 +84,7 @@ class IdentityVerdictView(WireModel):
     version window refuses it. ``reason`` says why for those last four.
     ``reset_command`` names how to restore the token: the token variable and the configured id."""
 
-    state: IdentityState
+    state: Annotated[IdentityState | Unrecognized, OPEN]
     store_runner_id: str | None
     token_runner_id: str | None
     checked_at: str | None
@@ -279,10 +283,10 @@ class SubscriptionView(WireModel):
     provider: str
     sampled_at: str | None = None
     ok: bool | None = None
-    miss_reason: SampleMissReason | None = None
+    miss_reason: Annotated[SampleMissReason | Unrecognized, OPEN] | None = None
     renewal_attempted_at: str | None = None
-    renewal_result: RenewalResult | None = None
-    renewal_failure_reason: RenewalFailureReason | None = None
+    renewal_result: Annotated[RenewalResult | Unrecognized, OPEN] | None = None
+    renewal_failure_reason: Annotated[RenewalFailureReason | Unrecognized, OPEN] | None = None
 
 
 class DashboardView(BaseModel):

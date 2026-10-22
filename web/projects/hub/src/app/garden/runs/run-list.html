@@ -17,7 +17,7 @@
               <span class="rl-routine">{{ row.routineName }}/{{ row.scopeSlug }}</span>
               <fleet-kit-badge
                 class="rl-outcome"
-                [tone]="STATUS_TONE[row.outcome]"
+                [tone]="STATUS_TONE(row.outcome)"
                 variant="soft"
                 [attr.data-testid]="'rl-outcome-' + row.chunkId"
                 >{{ row.outcome }}</fleet-kit-badge

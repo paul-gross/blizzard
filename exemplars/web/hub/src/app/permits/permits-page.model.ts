@@ -1,6 +1,6 @@
-// exemplar: bzh:frontend-containers-compose, bzh:frontend-pending-override — the derivations the page composes.
+// exemplar: bzh:frontend-containers-compose, bzh:frontend-pending-override, bzh:frontend-open-vocabulary — the derivations the page composes.
 
-import { PermitState, PermitVerb, type PermitView } from 'fleet';
+import { openLookup, PermitState, PermitVerb, type PermitView } from 'fleet';
 import type { PermitMoveVars, PermitRevokeVars } from './permits.mutations';
 
 /** The query param narrowing the listing to one holder. */
@@ -25,12 +25,16 @@ export interface PermitRow {
   readonly pending: boolean;
 }
 
-const STATE_AFTER: Readonly<Record<PermitVerb, PermitState>> = {
-  [PermitVerb.GRANT]: PermitState.GRANTED,
-  [PermitVerb.SUSPEND]: PermitState.SUSPENDED,
-  [PermitVerb.RESUME]: PermitState.GRANTED,
-  [PermitVerb.REVOKE]: PermitState.REVOKED,
-};
+/** The state each verb leaves a permit in; a verb this build cannot place leaves the permit's own. */
+const STATE_AFTER = openLookup<PermitVerb, PermitState | null>(
+  {
+    [PermitVerb.GRANT]: PermitState.GRANTED,
+    [PermitVerb.SUSPEND]: PermitState.SUSPENDED,
+    [PermitVerb.RESUME]: PermitState.GRANTED,
+    [PermitVerb.REVOKE]: PermitState.REVOKED,
+  },
+  () => null,
+);
 
 /** `permits` as rows, each in-flight move or revocation applied over its own permit. */
 export function withPendingPermitChanges(
@@ -46,6 +50,6 @@ export function withPendingPermitChanges(
     const verb = pending.get(permit.permit_id);
     return verb === undefined
       ? { permit, state: permit.state, pending: false }
-      : { permit, state: STATE_AFTER[verb], pending: true };
+      : { permit, state: STATE_AFTER(verb) ?? permit.state, pending: true };
   });
 }

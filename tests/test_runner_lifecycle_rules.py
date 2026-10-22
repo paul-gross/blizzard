@@ -58,6 +58,7 @@ from blizzard.runner.lifecycle.model import (
     ReapMove,
     RecordOverload,
     RestartDisposition,
+    SpawnHold,
     TakeoverHolds,
     UnpauseMove,
     adopt_enters_node,
@@ -520,12 +521,12 @@ def test_answer_ready() -> None:
 
 def test_apply_move() -> None:
     nxt = make_envelope("ch_1", "review", node_id="nd_review", choices=[("pass", "ok")])
-    assert apply_move(ApplyOutcome.NEXT, nxt, chunk_paused=False) is ApplyMove.ENTER_NEXT
-    assert apply_move(ApplyOutcome.NEXT, None, chunk_paused=False) is ApplyMove.NONE
-    assert apply_move(ApplyOutcome.HUB_NODE_TAKEN, None, chunk_paused=True) is ApplyMove.HOLD_FOR_HUB_NODE
-    assert apply_move(ApplyOutcome.MIGRATED, None, chunk_paused=False) is ApplyMove.RELEASE_MIGRATED
-    assert apply_move(ApplyOutcome.DONE, None, chunk_paused=True) is ApplyMove.RELEASE_DONE
-    assert apply_move(ApplyOutcome.PARKED_AT_GATE, None, chunk_paused=False) is ApplyMove.HOLD_AT_GATE
+    assert apply_move(ApplyOutcome.NEXT, nxt, hold=None) is ApplyMove.ENTER_NEXT
+    assert apply_move(ApplyOutcome.NEXT, None, hold=None) is ApplyMove.NONE
+    assert apply_move(ApplyOutcome.HUB_NODE_TAKEN, None, hold=SpawnHold.PAUSED) is ApplyMove.HOLD_FOR_HUB_NODE
+    assert apply_move(ApplyOutcome.MIGRATED, None, hold=None) is ApplyMove.RELEASE_MIGRATED
+    assert apply_move(ApplyOutcome.DONE, None, hold=SpawnHold.PAUSED) is ApplyMove.RELEASE_DONE
+    assert apply_move(ApplyOutcome.PARKED_AT_GATE, None, hold=None) is ApplyMove.HOLD_AT_GATE
 
 
 def test_next_under_chunk_pause_holds() -> None:
@@ -533,7 +534,7 @@ def test_next_under_chunk_pause_holds() -> None:
         apply_move(
             ApplyOutcome.NEXT,
             make_envelope("ch_1", "review", node_id="nd_review", choices=[("pass", "ok")]),
-            chunk_paused=True,
+            hold=SpawnHold.PAUSED,
         )
         is ApplyMove.HOLD_PAUSED
     )

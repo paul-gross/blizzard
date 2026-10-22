@@ -11,8 +11,10 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.runner import RunnerSubscriptionDeclaration, SubscriptionUsageView
+from blizzard.wire.vocabulary import OPEN
 
 
 class HostWorkspace(BaseModel):
@@ -98,7 +100,7 @@ class HostRegistryView(WireModel):
 
     host_id: str
     host_name: str
-    connection: RunnerConnection
+    connection: Annotated[RunnerConnection | Unrecognized, OPEN]
     online: bool
     added_at: str
     added_by: str | None = None

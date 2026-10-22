@@ -19,6 +19,7 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
@@ -111,6 +112,18 @@ def test_a_token_the_hub_never_received_stops() -> None:
     with pytest.raises(BootstrapStopped) as stopped:
         kept_identity(TokenRefusal(reason=RunnerTokenRefusalReason.MISSING), held=_FROM_FILE, allow_readd=True)
     assert stopped.value.stop is BootstrapStop.TOKEN_NOT_RECEIVED
+
+
+@pytest.mark.unit
+def test_a_refusal_reason_this_build_does_not_know_stops_carrying_it_raw() -> None:
+    refusal = TokenRefusal(reason=Unrecognized("suspended"), runner_id="rn_1")
+    with pytest.raises(BootstrapStopped) as stopped:
+        kept_identity(refusal, held=_FROM_FILE, allow_readd=True)
+    assert (stopped.value.stop, stopped.value.runner_id, stopped.value.reason) == (
+        BootstrapStop.TOKEN_REFUSED,
+        "rn_1",
+        "suspended",
+    )
 
 
 @pytest.mark.unit

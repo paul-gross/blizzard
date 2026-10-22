@@ -6,12 +6,14 @@ separate fields."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.project_colors import HexColor, ProjectColor
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class ProjectView(BaseModel):
@@ -21,7 +23,8 @@ class ProjectView(BaseModel):
     slug: str
     name: str
     description: str
-    color: ProjectColor | HexColor
+    #: A palette name this build does not know parses as ``Unrecognized``; a hex colour still parses as one.
+    color: Annotated[ProjectColor | Unrecognized, OPEN] | HexColor
     revision: int
     created_at: str
 

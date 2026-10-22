@@ -1,9 +1,8 @@
 """The pass/fail decision over classifier findings, pure over their results.
 
-A finding the base already carried is inherited and never fails. A new one passes against a release
-only with a ``!`` commit and either a baseline that marked it deprecated or, on an open ``master``, a
-breaking note declaring it; on a release line nothing new passes. The window's own moves are judged
-here too: the floor moves only for a break that needs it, and an ``opening`` cannot reopen a major."""
+A finding the base already carried is inherited, and one an applicable allowance names is allowed; neither fails. A
+new one passes only with a ``!`` commit and either a deprecated baseline or, on an open ``master``, a breaking note
+declaring it; on a release line nothing else passes. The window's own moves are judged here too."""
 
 from __future__ import annotations
 
@@ -12,6 +11,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
+from blizzard.tools.compat.allowances import Allowance
 from blizzard.tools.compat.releases import Window
 from blizzard.tools.compat.violation import Violation
 
@@ -30,6 +30,7 @@ class Verdict:
     violation: Violation
     passes: bool
     inherited: bool = False
+    allowance: Allowance | None = None
 
 
 def is_acknowledged(subjects: Sequence[str]) -> bool:
@@ -44,22 +45,27 @@ def judge(
     declarable: bool = False,
     declared: Collection[tuple[str, str]] = (),
     inherited: Collection[tuple[str, str, str, str]] = (),
+    allowed: Mapping[tuple[str, str, str, str], Allowance] | None = None,
 ) -> list[Verdict]:
     """A verdict per finding per release (``findings`` is keyed by release tag).
 
     ``inherited`` holds the base's ``(release, surface, where, reason)``; ``declared`` the ``(surface, where)`` an added
-    note declares, admitted only when ``declarable``. Under ``line`` no new pair passes."""
+    note declares, admitted only when ``declarable``; ``allowed`` the allowances that may admit, by the same key.
+    Under ``line`` no new pair passes but an allowed one."""
+    allowed = allowed or {}
     return [
         Verdict(
             release,
             violation,
             (release, *_key(violation)) in inherited
+            or (release, *_key(violation)) in allowed
             or (
                 not line
                 and acknowledged
                 and (violation.deprecated or (declarable and (violation.surface, violation.where) in declared))
             ),
             (release, *_key(violation)) in inherited,
+            allowed.get((release, *_key(violation))),
         )
         for release, violations in findings.items()
         for violation in violations
@@ -71,8 +77,8 @@ def _key(violation: Violation) -> tuple[str, str, str]:
 
 
 def _failing(verdicts: Sequence[Verdict]) -> set[tuple[str, str, str]]:
-    """The findings a floor raise would retire: an inherited one still needs it."""
-    return {_key(v.violation) for v in verdicts if not v.passes or v.inherited}
+    """The findings a floor raise would retire: an inherited or allowed one still needs it."""
+    return {_key(v.violation) for v in verdicts if not v.passes or v.inherited or v.allowance is not None}
 
 
 def judge_window(

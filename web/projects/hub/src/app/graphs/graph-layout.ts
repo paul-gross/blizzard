@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre';
 
-import { hubApi, type GraphNodeView, type GraphView } from 'fleet';
+import { hubApi, type GraphNodeView, type GraphView, unlisted } from 'fleet';
 import { LABEL_HEIGHT, type TextMeasurer, labelBoxWidth, migrationBox, nodeBox } from './graph-box-sizing';
 import { type EdgeKind, type EdgeTarget, type ResolvedEdge, resolveEdges } from './graph-edge-target';
 
@@ -162,13 +162,16 @@ function curvedPath(points: readonly { x: number; y: number }[]): string {
 /** The dagre graph-lib id `target` routes through — a real node id, the shared
  * `done` sink, or a migration's own sink, one per distinct target graph name. */
 function dagreTargetId(target: EdgeTarget): string {
-  switch (target.kind) {
+  const kind = target.kind;
+  switch (kind) {
     case hubApi.ChoiceTargetKind.NODE:
       return target.nodeId;
     case hubApi.ChoiceTargetKind.DONE:
       return DONE_SINK;
     case hubApi.ChoiceTargetKind.GRAPH:
       return migrationSinkId(target.targetGraph);
+    default:
+      return unlisted(kind);
   }
 }
 

@@ -43,10 +43,10 @@ export class HubPanel {
 
   /** Each fleet-count bucket's colour, from the chunk status it counts. */
   protected readonly bucketColor = {
-    ready: toneColor(STATUS_TONE.ready),
-    running: toneColor(STATUS_TONE.running),
-    waiting: toneColor(STATUS_TONE.waiting_on_human),
-    needs: toneColor(STATUS_TONE.needs_human),
+    ready: toneColor(STATUS_TONE('ready')),
+    running: toneColor(STATUS_TONE('running')),
+    waiting: toneColor(STATUS_TONE('waiting_on_human')),
+    needs: toneColor(STATUS_TONE('needs_human')),
   } as const;
 
   protected readonly triadState = computed(() => asyncState(this.dashboards, this.summary() === null));

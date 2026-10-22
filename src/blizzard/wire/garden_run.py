@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class DeliveredSetView(BaseModel):
@@ -32,9 +36,9 @@ class RunRowView(WireModel):
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: RunMode
+    mode: Annotated[RunMode | Unrecognized, OPEN]
     minted_at: str
-    outcome: ChunkStatus
+    outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     delivered: list[DeliveredSetView]
     #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
@@ -87,8 +91,8 @@ class RunDeltaView(WireModel):
     chunk_id: str
     routine_name: str
     scope_slug: str
-    mode: RunMode
-    outcome: ChunkStatus
+    mode: Annotated[RunMode | Unrecognized, OPEN]
+    outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     sets: list[DeliveredSetDeltaView]
     #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.

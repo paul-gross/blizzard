@@ -1,6 +1,6 @@
 import { type Signal, computed, signal } from '@angular/core';
 
-import { errorMessage, injectPendingMutationVariables } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, unlisted } from 'fleet';
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import {
   hostEnrollMutationKey,
@@ -84,6 +84,9 @@ export function injectHostVerbs(onError: (message: string | null) => void): {
           },
           onError: (error) => onError(errorMessage(error, 'Enroll failed.')),
         });
+        return;
+      default:
+        unlisted(event);
         return;
     }
   }

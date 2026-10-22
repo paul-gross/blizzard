@@ -53,7 +53,8 @@ cd web && npm ci && npm run lint && npm run test && npm run structural-gate && n
 every trigger but a tag, with full history, over the event's own range: a pull request's base and head, a push's
 `before` and `sha`, and `--line` when the target is a `release/*` branch. A finding the range's base already carries is
 reported as inherited and does not fail; a new one fails unless a `!`-marked commit in the range acknowledges it and the
-release's baseline marked it deprecated or, with `opening` set in the window, an added breaking change note declares it.
+release's baseline marked it deprecated or, with `opening` set in the window, an added breaking change note declares it,
+or unless an entry in `contracts/compat/allowances.toml` admits it — that file's README owns when one does.
 `mise run compat` reproduces it locally against `origin/master`; `--json` prints every finding with its verdict.
 
 `blizzard-change-notes check` (`src/blizzard/tools/change_notes/`) fails on a file under `changes/` that breaks the

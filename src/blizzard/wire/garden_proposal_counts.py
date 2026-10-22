@@ -4,10 +4,14 @@ column (`GardenProposalCounts.created`'s own rule)."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import ConfigDict, Field
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class GardenProposalCountsRowView(WireModel):
@@ -17,7 +21,7 @@ class GardenProposalCountsRowView(WireModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    origin: GardenProposalOrigin
+    origin: Annotated[GardenProposalOrigin | Unrecognized, OPEN]
     routine_name: str | None
     class_: str = Field(alias="class")
     open: int
@@ -39,5 +43,5 @@ class GardenProposalCountsView(WireModel):
     since: str
     until: str
     routine: str | None
-    origin: GardenProposalOrigin | None = None
+    origin: Annotated[GardenProposalOrigin | Unrecognized, OPEN] | None = None
     rows: list[GardenProposalCountsRowView]

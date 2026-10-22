@@ -152,14 +152,18 @@ describe('conditionLabel', () => {
   });
 
   it('names the operator text for every miss reason', () => {
-    for (const reason of Object.keys(MISS_REASON_TEXT) as runnerApi.SampleMissReason[]) {
-      expect(conditionLabel(false, reason)).toBe(`miss: ${MISS_REASON_TEXT[reason]}`);
+    for (const reason of MISS_REASON_TEXT.keys) {
+      expect(conditionLabel(false, reason)).toBe(`miss: ${MISS_REASON_TEXT(reason)}`);
     }
     expect(conditionLabel(false, 'credential_lapsed')).toBe('miss: credential lapsed: log in again');
   });
 
   it('reads unknown for a miss with no reason', () => {
     expect(conditionLabel(false, null)).toBe('miss: unknown');
+  });
+
+  it('reads a miss reason this build does not know raw', () => {
+    expect(conditionLabel(false, 'quota_exceeded' as runnerApi.SampleMissReason)).toBe('miss: quota_exceeded');
   });
 });
 
@@ -175,8 +179,8 @@ describe('renewalLabel', () => {
   });
 
   it('names the operator text for every failure reason', () => {
-    for (const reason of Object.keys(RENEWAL_FAILURE_TEXT) as runnerApi.RenewalFailureReason[]) {
-      expect(renewalLabel('failed', reason, ATTEMPTED, NOW)).toBe(`failed (${RENEWAL_FAILURE_TEXT[reason]}) -34s ago`);
+    for (const reason of RENEWAL_FAILURE_TEXT.keys) {
+      expect(renewalLabel('failed', reason, ATTEMPTED, NOW)).toBe(`failed (${RENEWAL_FAILURE_TEXT(reason)}) -34s ago`);
     }
     expect(renewalLabel('failed', 'timed_out', ATTEMPTED, NOW)).toBe('failed (timed out) -34s ago');
     expect(renewalLabel('failed', null, ATTEMPTED, NOW)).toBe('failed (unknown cause) -34s ago');
@@ -184,6 +188,11 @@ describe('renewalLabel', () => {
 
   it('reads an attempt with no outcome on record as unrecorded', () => {
     expect(renewalLabel('unrecorded', null, ATTEMPTED, NOW)).toBe('attempted -34s ago, outcome not recorded');
+  });
+
+  it('reads a result or failure reason this build does not know raw', () => {
+    expect(renewalLabel('deferred' as runnerApi.RenewalResult, null, ATTEMPTED, NOW)).toBe('deferred -34s ago');
+    expect(renewalLabel('failed', 'revoked' as runnerApi.RenewalFailureReason, ATTEMPTED, NOW)).toBe('failed (revoked) -34s ago');
   });
 });
 

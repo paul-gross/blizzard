@@ -1,14 +1,16 @@
-// exemplar: bzh:frontend-container-presentational, bzh:frontend-kit-floor — inputs and outputs only, chrome from the kit.
+// exemplar: bzh:frontend-container-presentational, bzh:frontend-kit-floor, bzh:frontend-open-vocabulary — inputs and outputs only, chrome from the kit.
 
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { type KitAsyncStateValue, PermitVerb, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
+import { type KitAsyncStateValue, openLookup, PermitVerb, FleetWhen, KitAsyncState, KitButton, KitDialog, KitPanel, KitTextInput } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { type PermitRow, permitProjectLabel } from './permits-page.model';
 import type { PermitMove, PermitMoveVars, PermitRevokeVars } from './permits.mutations';
 
-const MOVE_LABEL: Readonly<Record<PermitMove, string>> = { grant: 'Grant', suspend: 'Suspend', resume: 'Resume' };
+/** Each move's control label. A verb this build does not know is offered no control: the hub names it legal, but
+ * this build cannot say what it does. */
+const MOVE_LABEL = openLookup<PermitMove, string>({ grant: 'Grant', suspend: 'Suspend', resume: 'Resume' }, (raw) => raw);
 
 /** A panel of permits, one row each, offering each row the verbs its permit names as legal. */
 @Component({
@@ -39,7 +41,7 @@ export class PermitsView {
   protected readonly note = signal('');
 
   protected moves(row: PermitRow): PermitMove[] {
-    return row.permit.verbs.filter((verb): verb is PermitMove => verb !== PermitVerb.REVOKE);
+    return row.permit.verbs.filter((verb) => MOVE_LABEL.has(verb));
   }
 
   protected canRevoke(row: PermitRow): boolean {
@@ -47,7 +49,7 @@ export class PermitsView {
   }
 
   protected moveLabel(verb: PermitMove): string {
-    return MOVE_LABEL[verb];
+    return MOVE_LABEL(verb);
   }
 
   protected projectLabel(row: PermitRow): string {

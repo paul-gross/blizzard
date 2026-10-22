@@ -13,6 +13,7 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.trace_ids import StepKey, step_root
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.hub.client import HubClientError, PushedFact
 from blizzard.runner.hub.outbound import buffered_completion, buffered_gate
 from blizzard.runner.hub.outbound_buffer import BufferedFact
@@ -169,6 +170,10 @@ class OutboundDrain:
             _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
             Attempt(self.ctx, lease).fail(reason=LeaseClosureReason.FAILED, via="pull")
             return True
+        if isinstance(response.outcome, Unrecognized):
+            _log.warning(
+                "decision outcome not recognized — parking", chunk_id=lease.chunk_id, outcome=response.outcome.raw
+            )
         Attempt(self.ctx, lease).close(LeaseClosureReason.PARKED, self.ctx.clock.now())
         _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
         return True
@@ -178,7 +183,8 @@ class OutboundDrain:
 
         Between the closure and any next-attempt spawn sits the boundary the per-chunk spend cap
         checks at: the attempt just closed is genuinely done, so parking here kills nothing live."""
-        breach = self._spend_cap_breach(lease) if response.outcome == ApplyOutcome.NEXT else None
+        may_advance = response.outcome == ApplyOutcome.NEXT or isinstance(response.outcome, Unrecognized)
+        breach = self._spend_cap_breach(lease) if may_advance else None
         move = completion_move(response.outcome, capped=breach is not None)
         if move is CompletionMove.FAIL:
             _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")

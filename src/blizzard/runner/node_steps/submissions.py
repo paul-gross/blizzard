@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.node_steps.envelope import Envelope
 
 
@@ -75,6 +76,7 @@ class ApplyReply:
     """The hub's answer to a completion or a gate submission: ``next_envelope`` is set when
     ``outcome`` is ``NEXT``, ``detail`` on any other outcome."""
 
-    outcome: ApplyOutcome
+    #: ``Unrecognized`` for an outcome this build does not know: the hub consumed the submission, so it is accepted.
+    outcome: ApplyOutcome | Unrecognized
     next_envelope: Envelope | None = None
     detail: str | None = None

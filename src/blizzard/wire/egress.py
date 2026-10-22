@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel
 
 from blizzard.foundation.egress_state import EgressState
+from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.wire.vocabulary import OPEN
 
 
 class EgressDatasetStatus(BaseModel):
@@ -27,7 +29,7 @@ class EgressStatusResponse(BaseModel):
     is not on or the directory cannot be read. ``backfill_max_window_seconds`` is the widest window one backfill
     may write."""
 
-    state: EgressState
+    state: Annotated[EgressState | Unrecognized, OPEN]
     rejected_setting: str | None
     rejected_value: str | None
     directory: str | None
@@ -60,7 +62,7 @@ class EgressResetResponse(BaseModel):
     dataset: str
     from_at: str | None
     to_at: str
-    direction: Literal["skipped", "repeated"]
+    direction: Annotated[Literal["skipped", "repeated"] | Unrecognized, OPEN]
 
 
 class EgressBackfillRequest(BaseModel):

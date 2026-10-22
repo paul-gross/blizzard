@@ -7,13 +7,17 @@ each ``name`` marked ``effective``; the lifecycle verbs return an updated view."
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN, DeclaredClosed
 
 
 class GraphMintRequest(BaseModel):
@@ -53,7 +57,9 @@ class ProducesEntry(WireModel):
     """One node's ``produces:`` expectation, kind-carrying."""
 
     name: str
-    kind: ArtifactKind = ArtifactKind.ASSET
+    kind: Annotated[ArtifactKind, DeclaredClosed("the runner holds the node's produced artifacts to their kind")] = (
+        ArtifactKind.ASSET
+    )
 
 
 class GraphChoiceView(WireModel):
@@ -75,7 +81,7 @@ class GraphEdgeView(WireModel):
     to_node_name: str
     prompt_addendum: str | None = None
     #: What ``to_node_name`` points at.
-    target_kind: ChoiceTargetKind = ChoiceTargetKind.NODE
+    target_kind: Annotated[ChoiceTargetKind | Unrecognized, OPEN] = ChoiceTargetKind.NODE
     #: The cross-graph target's graph name; ``None`` unless ``target_kind`` is ``graph``.
     target_graph: str | None = None
 
@@ -110,12 +116,12 @@ class GraphNodeView(WireModel):
 
     node_id: str
     name: str
-    executor: Executor
-    session: SessionMode
+    executor: Annotated[Executor | Unrecognized, OPEN]
+    session: Annotated[SessionMode | Unrecognized, OPEN]
     # The session reference target: ``None`` for a bare reference,
     # otherwise the declared session or node name it targets. Read with ``session``.
     session_source: str | None = None
-    judged_by: JudgedBy
+    judged_by: Annotated[JudgedBy | Unrecognized, OPEN]
     retries_max: int | None = None
     retries_exhausted: str | None = None
     prompt: str | None = None
@@ -184,4 +190,4 @@ class GraphSummaryView(WireModel):
     created_at: str
     effective: bool
     retired: bool = False
-    lifecycle: GraphLifecycle = GraphLifecycle.EFFECTIVE
+    lifecycle: Annotated[GraphLifecycle | Unrecognized, OPEN] = GraphLifecycle.EFFECTIVE

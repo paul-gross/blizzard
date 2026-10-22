@@ -249,6 +249,21 @@ describe('layoutGraph', () => {
     expect(layoutGraph(broken, measure)).toEqual({ ok: false });
   });
 
+  it('skips an edge whose target_kind this build does not list, laying out the rest', () => {
+    const gained: GraphView = {
+      ...DEFAULT_LIKE,
+      edges: [
+        ...(DEFAULT_LIKE.edges ?? []),
+        { ...EDGE_DEFAULTS, from_node_id: 'n_review', choice_id: 'c_pass2', to_node_name: 'elsewhere', target_kind: 'portal' as never },
+      ],
+    };
+    const result = layoutGraph(gained, measure);
+    expect(result.ok).toBe(true);
+    const baseline = layoutGraph(DEFAULT_LIKE, measure);
+    if (!result.ok || !baseline.ok) throw new Error('expected both layouts to succeed');
+    expect(result.graph.edges.length).toBe(baseline.graph.edges.length);
+  });
+
   describe('migration targets', () => {
     /** One node with an edge to `done` and several edges to `graph:<name>`
      * cross-graph migration targets, all of which must resolve. */

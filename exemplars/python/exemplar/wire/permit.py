@@ -1,6 +1,6 @@
 """Permit wire bodies — requesting, moving and reading a project's permits."""
 
-# exemplar: bzh:utc-instants, bzh:frontend-wire-conformist, bzh:wire-sent-is-required.
+# exemplar: bzh:utc-instants, bzh:frontend-wire-conformist, bzh:wire-sent-is-required, bzh:open-response-vocabulary.
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, StringConstraints
 
+from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.wire.vocabulary import OPEN
 from exemplar.foundation.permits import PermitState, PermitVerb
 from exemplar.wire.base import ResponseModel
 
@@ -42,8 +44,9 @@ class PermitView(ResponseModel):
     project_name: str | None = None
     holder: str
     capability: str
-    state: PermitState
-    verbs: list[PermitVerb]
+    # exemplar: a response view's vocabulary is open — a value a newer hub adds parses as ``Unrecognized``.
+    state: Annotated[PermitState | Unrecognized, OPEN]
+    verbs: list[Annotated[PermitVerb | Unrecognized, OPEN]]
     requested_at: str
     requested_by: str
     #: When the newest grant, suspension, resumption or revocation landed; ``None`` before the first.

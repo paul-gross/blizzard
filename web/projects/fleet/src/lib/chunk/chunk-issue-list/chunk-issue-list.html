@@ -60,6 +60,8 @@
                       }}</a>, node {{ author.node_name }}</span
                     >
                   }
+                  <!-- An author kind this build does not know names no one it can render: the byline is skipped. -->
+                  @default {}
                 }
               </div>
             }

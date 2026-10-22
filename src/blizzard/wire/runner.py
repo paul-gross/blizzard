@@ -15,7 +15,9 @@ from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRefusalReason
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class RunnerCapability(BaseModel):
@@ -119,7 +121,7 @@ class VersionWindowView(BaseModel):
 class RunnerVersionRefusal(WireModel):
     """The hub's window refusing a runner's version."""
 
-    reason: VersionRefusalReason
+    reason: Annotated[VersionRefusalReason | Unrecognized, OPEN]
     #: The version the runner reported; ``None`` when it reported none, or one that does not parse.
     runner_version: str | None = None
     hub_version: str
@@ -213,7 +215,7 @@ class RunnerIdentityRefusal(WireModel):
     the runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``
     or ``unknown`` one."""
 
-    reason: RunnerTokenRefusalReason
+    reason: Annotated[RunnerTokenRefusalReason | Unrecognized, OPEN]
     runner_id: str | None = None
 
 
@@ -239,9 +241,9 @@ class SubscriptionUsageView(WireModel):
     sampled_at: str | None = None
     windows: list[ExternalSubscriptionUsageWindowView]
     #: ``"credential_lapsed"`` when the newest reported miss outranks the newest sample; ``None`` otherwise.
-    condition: SampleMissReason | None = None
+    condition: Annotated[SampleMissReason | Unrecognized, OPEN] | None = None
     #: The newest reported miss's own reason; ``None`` when there is none.
-    miss_reason: SampleMissReason | None = None
+    miss_reason: Annotated[SampleMissReason | Unrecognized, OPEN] | None = None
     #: The newest reported miss's own instant; ``None`` alongside ``miss_reason``.
     missed_at: str | None = None
 
@@ -294,7 +296,7 @@ class RunnerRegistryView(WireModel):
     runner_id: str
     # The runner's latest display name — not unique, never a key.
     runner_name: str
-    connection: RunnerConnection
+    connection: Annotated[RunnerConnection | Unrecognized, OPEN]
     online: bool
     # When the runner was added, and by whom; `added_by` is `None` when the hub did not record one.
     added_at: str
@@ -330,9 +332,9 @@ class RunnerRegistryView(WireModel):
     # The version the runner's latest registration reported; `None` when it reported none.
     version: str | None = None
     # Where that registration stands against the hub's window; `None` for a runner never registered.
-    version_standing: RunnerVersionStanding | None = None
+    version_standing: Annotated[RunnerVersionStanding | Unrecognized, OPEN] | None = None
     # Why the window refused it, alongside a `refused` standing only.
-    version_refusal: VersionRefusalReason | None = None
+    version_refusal: Annotated[VersionRefusalReason | Unrecognized, OPEN] | None = None
 
 
 class RunnerRegistryListResponse(WireModel):

@@ -35,7 +35,9 @@ export interface ResolvedEdge {
 /** Resolves every edge's target — from the wire edge's `target_kind`, a node in
  * this graph, the reserved `done` terminal, or a migration to `target_graph` — and
  * its structural kind. Returns `null` if an edge names a target it cannot place (an
- * unknown node name, or a graph migration carrying no target graph).
+ * unknown node name, or a graph migration carrying no target graph). An edge whose
+ * `target_kind` this build does not list is skipped, so the rest of the diagram
+ * still renders.
  *
  * Only edges present in `graph.edges` are resolved. */
 export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, string>): ResolvedEdge[] | null {
@@ -65,6 +67,8 @@ export function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, str
       });
       continue;
     }
+    // A target kind a newer hub added: this build cannot place it, so it draws no edge.
+    if (targetKind !== hubApi.ChoiceTargetKind.NODE) continue;
     const toId = nameToId.get(edge.to_node_name);
     if (toId === undefined) return null;
     const fromIndex = indexById.get(edge.from_node_id);

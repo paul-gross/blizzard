@@ -3,10 +3,18 @@ specs, never the real committed one."""
 
 from __future__ import annotations
 
-import pytest
+import copy
+from enum import StrEnum
+from typing import Annotated
 
+import pytest
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.api import classify_api
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
+from blizzard.wire.vocabulary import OPEN
 
 pytestmark = pytest.mark.unit
 
@@ -605,3 +613,151 @@ def test_a_wire_finding_is_reported_once_under_the_wire() -> None:
     wire = classify_spec_diff(base, head)
     assert len(wire) == 1
     assert classify_api(base, head, wire=wire) == []
+
+
+# --- open-marked response enums (bzh:open-response-vocabulary) ----------------------------------
+
+_OPEN = "x-blizzard-open"
+
+
+def _open_ref(name: str, *, marked: bool = True) -> dict:
+    return {**_ref(name), **({_OPEN: True} if marked else {})}
+
+
+def _state_specs(*positions: dict, gained: bool = True) -> tuple[dict, dict]:
+    """A response ``Widget`` holding each of ``positions`` as a property, the ``State`` enum gaining a value at head.
+
+    The baseline carries ``positions`` as given; the head marks every one, so only the baseline's marks decide."""
+
+    def spec(values: list[str], properties: dict) -> dict:
+        schemas = {
+            "Widget": {"type": "object", "properties": properties},
+            "State": {"type": "string", "enum": values},
+        }
+        return _spec({"/api/fleet/widgets": {"get": _op(response_schema=_ref("Widget"))}}, schemas)
+
+    base_props = {f"p{i}": position for i, position in enumerate(positions)}
+    head_props = {f"p{i}": _marked_everywhere(position) for i, position in enumerate(positions)}
+    return spec(["ready"], base_props), spec(["ready", "paused"] if gained else ["ready"], head_props)
+
+
+def _marked_everywhere(node: dict) -> dict:
+    """``node`` with the open mark on every ``$ref`` it holds, however nested."""
+    if "$ref" in node:
+        return {**node, _OPEN: True}
+    marked = dict(node)
+    if "anyOf" in node:
+        marked["anyOf"] = [_marked_everywhere(member) for member in node["anyOf"]]
+    for key in ("items", "additionalProperties"):
+        if isinstance(node.get(key), dict):
+            marked[key] = _marked_everywhere(node[key])
+    return marked
+
+
+def _gains(base: dict, head: dict) -> list[str]:
+    return [t for t in _violation_texts(classify_spec_diff(base, head)) if "response enum gained value" in t]
+
+
+def test_a_gain_is_additive_when_every_baseline_response_position_is_marked_open() -> None:
+    base, head = _state_specs(
+        _open_ref("State"),
+        {"anyOf": [_open_ref("State"), {"type": "null"}]},
+        {"type": "array", "items": _open_ref("State")},
+        {"type": "object", "additionalProperties": _open_ref("State")},
+    )
+    assert classify_spec_diff(base, head) == []
+
+
+def test_a_gain_is_a_finding_when_any_baseline_response_position_lacks_the_mark() -> None:
+    base, head = _state_specs(_open_ref("State"), {"type": "array", "items": _open_ref("State", marked=False)})
+    assert _gains(base, head) == ["State: response enum gained value(s) ['paused']"]
+
+
+def test_the_head_documents_marks_do_not_open_a_baseline_position() -> None:
+    base, head = _state_specs(_open_ref("State", marked=False))
+    assert _gains(base, head) == ["State: response enum gained value(s) ['paused']"]
+
+
+def test_an_unmarked_request_position_does_not_stop_marked_response_positions_opening_the_enum() -> None:
+    base, head = _state_specs(_open_ref("State"))
+    for spec in (base, head):
+        spec["paths"]["/api/fleet/widgets"]["get"] = _op(
+            response_schema=_ref("Widget"), request_schema={"type": "object", "properties": {"s": _ref("State")}}
+        )
+    assert classify_spec_diff(base, head) == []
+
+
+def test_a_marked_inline_enum_gaining_a_value_is_additive_and_an_unmarked_one_is_not() -> None:
+    def specs(marked: bool) -> tuple[dict, dict]:
+        mark = {_OPEN: True} if marked else {}
+        return _response_widget_specs(
+            {"type": "object", "properties": {"status": {"type": "string", "enum": ["ready"], **mark}}},
+            {"type": "object", "properties": {"status": {"type": "string", "enum": ["ready", "paused"], **mark}}},
+        )
+
+    assert classify_spec_diff(*specs(marked=True)) == []
+    assert any("response enum gained value" in t for t in _violation_texts(classify_spec_diff(*specs(marked=False))))
+
+
+def test_an_unmarked_inline_enum_widened_to_a_plain_string_is_breaking_and_a_marked_one_is_not() -> None:
+    def specs(marked: bool) -> tuple[dict, dict]:
+        mark = {_OPEN: True} if marked else {}
+        return _response_widget_specs(
+            {"type": "object", "properties": {"kind": {"type": "string", "enum": ["bounce"], **mark}}},
+            {"type": "object", "properties": {"kind": {"type": "string"}}},
+        )
+
+    assert any(
+        "response enum widened to a plain string" in t
+        for t in _violation_texts(classify_spec_diff(*specs(marked=False)))
+    )
+    assert classify_spec_diff(*specs(marked=True)) == []
+
+
+def test_a_marked_literal_moved_onto_an_enum_component_gaining_a_value_is_additive() -> None:
+    color = {"type": "string", "enum": ["red", "blue"], "title": "Color"}
+    base_prop = {"anyOf": [{"type": "string", "enum": ["red"], _OPEN: True}, {"type": "null"}]}
+    head_prop = {"anyOf": [_open_ref("Color"), {"type": "null"}]}
+    base, head = _response_widget_specs(
+        {"type": "object", "properties": {"color": base_prop}},
+        {"type": "object", "properties": {"color": head_prop}},
+    )
+    head["components"]["schemas"]["Color"] = color
+    assert classify_spec_diff(base, head) == []
+
+
+def test_a_union_gaining_a_member_stays_a_finding_whatever_its_members_carry() -> None:
+    extra = {"A": {"type": "object", "properties": {}}, "B": {"type": "object", "properties": {}}}
+    base, head = _response_widget_specs(
+        {"type": "object", "properties": {"payload": {"anyOf": [_open_ref("A")], _OPEN: True}}},
+        {"type": "object", "properties": {"payload": {"anyOf": [_open_ref("A"), _open_ref("B")], _OPEN: True}}},
+    )
+    base["components"]["schemas"].update(extra)
+    head["components"]["schemas"].update(extra)
+    assert any("response union gained member" in t for t in _violation_texts(classify_spec_diff(base, head)))
+
+
+class _Tone(StrEnum):
+    LIGHT = "light"
+
+
+class _OpenToneView(BaseModel):
+    tone: Annotated[_Tone | Unrecognized, OPEN]
+
+
+class _ClosedToneView(BaseModel):
+    tone: _Tone
+
+
+def _generated_gain(view: type[BaseModel]) -> tuple[dict, dict]:
+    app = FastAPI()
+    app.get("/api/fleet/tone", response_model=view)(lambda: None)
+    base = app.openapi()
+    head = copy.deepcopy(base)
+    head["components"]["schemas"]["_Tone"]["enum"].append("dark")
+    return base, head
+
+
+def test_the_mark_the_open_annotation_writes_is_the_one_compat_reads() -> None:
+    assert classify_spec_diff(*_generated_gain(_OpenToneView)) == []
+    assert _gains(*_generated_gain(_ClosedToneView)) == ["_Tone: response enum gained value(s) ['dark']"]

@@ -61,7 +61,7 @@ export class BoardListRow {
   protected readonly finishedAt = computed(() => (this.card().terminal ? this.card().completedAt : null));
 
   /** The closing line's color: the chunk's status tone, as its lane icon takes. */
-  protected readonly finishedColor = computed(() => toneColor(STATUS_TONE[this.card().status]));
+  protected readonly finishedColor = computed(() => toneColor(STATUS_TONE(this.card().status)));
 
   protected toggleFold(): void {
     this.expanded.update((open) => !open);

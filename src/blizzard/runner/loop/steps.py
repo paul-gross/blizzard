@@ -386,10 +386,10 @@ class Pull(Step):
                 continue
             superseded = escalation.superseded_by(view, runner_id=runner_id, fenced_out=fenced.out(view, escalation))
             if not superseded:
-                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=view.status.value)
+                _log.debug("escalation left open", chunk_id=escalation.chunk_id, hub_status=str(view.status))
                 continue
             ctx.stores.escalations.record_escalation_closure(
-                chunk_id=escalation.chunk_id, reason=view.status.value, at=ctx.clock.now()
+                chunk_id=escalation.chunk_id, reason=str(view.status), at=ctx.clock.now()
             )
             if ctx.events is not None:
                 ctx.events.publish_escalation_changed(
@@ -414,7 +414,7 @@ class Pull(Step):
                 _log.debug("takeover left open — hub unreadable", chunk_id=takeover.chunk_id, error=str(exc))
                 continue
             if not takeover.ended_by(view):
-                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=view.status.value)
+                _log.debug("takeover left open", chunk_id=takeover.chunk_id, hub_status=str(view.status))
                 continue
             TakeoverCloser(ctx.stores.takeover, ctx.clock, ctx.events).close(
                 TakeoverCloseScope(chunk_id=takeover.chunk_id, open_takeover=takeover), takeover.takeover_id

@@ -7,19 +7,28 @@ completion's reply — the next envelope, a hub-node takeover signal, or a failu
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.node_steps import ApplyOutcome, Executor, JudgedBy, SessionMode
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
+from blizzard.wire.vocabulary import OPEN, DeclaredClosed
+
+#: A runner that cannot read how a node-step runs would run it wrongly, so a gained value stays a break.
+DISPATCH_CLOSED = DeclaredClosed("the runner dispatches the node-step on it")
+#: A runner materializes an envelope artifact by its kind; an unknown kind has no materialization to fall back on.
+ARTIFACT_CLOSED = DeclaredClosed("the runner materializes the artifact by its kind")
 
 
 class EnvelopeArtifact(WireModel):
     """One artifact carried into a node-step, resolved latest-by-epoch."""
 
     name: str
-    kind: ArtifactKind
+    kind: Annotated[ArtifactKind, ARTIFACT_CLOSED]
     node_name: str
     epoch: int
     # git_commit variant
@@ -35,7 +44,7 @@ class GraphArtifact(BaseModel):
     a graph's ``artifacts:`` entry, carried alongside every envelope for that graph."""
 
     name: str
-    kind: ArtifactKind
+    kind: Annotated[ArtifactKind, ARTIFACT_CLOSED]
     content: str
 
 
@@ -44,9 +53,9 @@ class WorkerArtifact(WireModel):
     and names its producing node and epoch; a graph-scope row is one of the pinned graph
     mint's own baked-in declarations and carries neither, since no node-step produced it."""
 
-    scope: ArtifactScope
+    scope: Annotated[ArtifactScope | Unrecognized, OPEN]
     name: str
-    kind: ArtifactKind
+    kind: Annotated[ArtifactKind | Unrecognized, OPEN]
     node_name: str | None = None
     epoch: int | None = None
     # git_commit variant
@@ -71,8 +80,8 @@ class NodeConfig(WireModel):
 
     node_id: str
     node_name: str
-    executor: Executor
-    session: SessionMode
+    executor: Annotated[Executor, DISPATCH_CLOSED]
+    session: Annotated[SessionMode, DISPATCH_CLOSED]
     # The session reference target; ``None`` means bare ``resume`` or ``fresh``.
     session_source: str | None = None
     # The declared pool this node-step belongs to — ``None`` for a node that names one by
@@ -89,7 +98,7 @@ class NodeConfig(WireModel):
     # The declared pool's compaction window, opaque like ``session_effort`` — ``None`` expresses no
     # preference. Declaration-only, like ``session_rotate``: no chunk-level default fallback.
     session_compaction_window: str | None = None
-    judged_by: JudgedBy
+    judged_by: Annotated[JudgedBy, DISPATCH_CLOSED]
     checks: list[str] = []
     # Where this node's checks run, relative to the leased env's workdir, and the per-check
     # timeout.
@@ -124,6 +133,6 @@ class ApplyResponse(WireModel):
     """The response to a completion submission. Exactly one of ``next_envelope`` (when ``outcome ==
     next``) or ``detail`` (on a non-advancing outcome) is meaningful; ``outcome`` discriminates."""
 
-    outcome: ApplyOutcome
+    outcome: Annotated[ApplyOutcome | Unrecognized, OPEN]
     next_envelope: NodeEnvelope | None = None
     detail: str | None = None

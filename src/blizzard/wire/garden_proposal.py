@@ -6,6 +6,8 @@ docstring for the convention."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.garden_proposals import (
@@ -13,7 +15,9 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class GardenProposalCandidate(BaseModel):
@@ -35,11 +39,11 @@ class GardenProposalClosureView(BaseModel):
     """How a garden proposal closed — a pass or an accept, either way
     terminal."""
 
-    closure: GardenProposalClosureKind
+    closure: Annotated[GardenProposalClosureKind | Unrecognized, OPEN]
     reason: str | None
     closed_by: str
     closed_at: str
-    item_outcome: GardenProposalItemOutcome | None
+    item_outcome: Annotated[GardenProposalItemOutcome | Unrecognized, OPEN] | None
     source: str | None
     ref: str | None
 
@@ -52,7 +56,7 @@ class GardenProposalView(WireModel):
     model_config = ConfigDict(populate_by_name=True)
 
     proposal_id: str
-    origin: GardenProposalOrigin
+    origin: Annotated[GardenProposalOrigin | Unrecognized, OPEN]
     routine_name: str | None
     created_by: str | None = None
     class_: str = Field(alias="class")

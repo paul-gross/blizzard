@@ -8,8 +8,12 @@ are ISO-8601 strings that **always carry an explicit UTC offset**
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from blizzard.foundation.leases import LeaseDisplayStatus, LeaseState
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class LeaseView(WireModel):
@@ -29,9 +33,9 @@ class LeaseView(WireModel):
     workdir: str | None
     created_at: str
     last_heartbeat_at: str | None
-    state: LeaseState
+    state: Annotated[LeaseState | Unrecognized, OPEN]
     #: What the panel shows: the chunk's open takeover, escalation, or ask when one outranks ``state``.
-    display_status: LeaseDisplayStatus
+    display_status: Annotated[LeaseDisplayStatus | Unrecognized, OPEN]
     #: Whether a closed lease ended healthily (``transitioned``); ``False`` for an active one.
     closure_healthy: bool
     closed_at: str | None

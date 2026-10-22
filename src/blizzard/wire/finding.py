@@ -11,7 +11,9 @@ from typing import Annotated, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 def _require_text(value: str) -> str:
@@ -167,15 +169,15 @@ class FindingView(WireModel):
     introduced_at: str | None = None
     first_observed_at: str | None = None
     live: bool
-    state: FindingState
+    state: Annotated[FindingState | Unrecognized, OPEN]
     note: str | None = None
     last_seen_at: str | None
     observed_count: int
-    source: FindingSource = FindingSource.ROUTINE
-    severity: FindingSeverity | None = None
+    source: Annotated[FindingSource | Unrecognized, OPEN] = FindingSource.ROUTINE
+    severity: Annotated[FindingSeverity | Unrecognized, OPEN] | None = None
     raised_by_chunk_id: str | None = None
     #: How an exited finding left; `None` while it has not exited.
-    exit: FindingExit | None = None
+    exit: Annotated[FindingExit | Unrecognized, OPEN] | None = None
     #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
     project_id: str | None = None
     project_slug: str | None = None
@@ -193,7 +195,7 @@ class FindingsPageView(WireModel):
 class FindingFactView(WireModel):
     """One entry in a finding's fact chain, oldest-first."""
 
-    kind: FindingFactKind
+    kind: Annotated[FindingFactKind | Unrecognized, OPEN]
     recorded_at: str
     note: str | None = None
     actor: str | None = None

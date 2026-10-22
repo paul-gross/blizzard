@@ -107,7 +107,7 @@ def _member_view(member: Member, *, identities: list[Identity], actor: ResolvedI
         hub_admin=member.hub_admin,
         created_at=iso_utc(user.created_at),
         identities=identity_views(identities),
-        assignable_roles=assignable_roles(actor=actor, subject=member, admins=admins),
+        assignable_roles=[*assignable_roles(actor=actor, subject=member, admins=admins)],
         revocable=revocable(actor=actor, subject=member, admins=admins),
     )
 

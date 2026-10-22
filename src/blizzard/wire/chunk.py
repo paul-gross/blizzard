@@ -7,7 +7,7 @@ views carry the **derived** status, never a stored column; work-item contents ar
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,10 +15,12 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
+from blizzard.wire.vocabulary import OPEN
 from blizzard.wire.work_source import WorkItemAuthorView
 
 
@@ -166,7 +168,7 @@ class ChunkSummary(WireModel):
 
     chunk_id: str
     graph_id: str
-    status: ChunkStatus
+    status: Annotated[ChunkStatus | Unrecognized, OPEN]
     # The chunk's status is terminal.
     terminal: bool = False
     # A promote would write a promotion: not currently promoted, and the verb is legal from its status.
@@ -288,7 +290,7 @@ class MigrationView(WireModel):
     landed_node_name: str | None = None
     choice_name: str | None = None
     model: str | None = None
-    source: MigrationSource | None = None
+    source: Annotated[MigrationSource | Unrecognized, OPEN] | None = None
     epoch: int
     recorded_at: str
 
@@ -343,7 +345,7 @@ class IntendedMigrationView(WireModel):
     server-side from the stored ``graph_id``, null when unresolvable. ``node_name`` is the ``forced``
     mode's landing target, null for ``auto``, whose landing is derived at consult time."""
 
-    mode: MigrationMode
+    mode: Annotated[MigrationMode | Unrecognized, OPEN]
     graph_id: str
     graph_name: str | None = None
     node_name: str | None = None
@@ -366,7 +368,7 @@ class ArtifactView(WireModel):
     the code. ``branch_url`` is the branch's forge URL. ``recorded_at`` decodes the id's ULID stamp."""
 
     key: str
-    kind: ArtifactKind
+    kind: Annotated[ArtifactKind | Unrecognized, OPEN]
     name: str
     node_id: str
     node_name: str
@@ -395,7 +397,7 @@ class HubAdvanceResponse(WireModel):
     error."""
 
     chunk_id: str
-    status: ChunkStatus
+    status: Annotated[ChunkStatus | Unrecognized, OPEN]
     ran: bool
     outcome_choice: str | None = None
     to_node_name: str | None = None
@@ -438,7 +440,7 @@ class GardenDeliveryResponse(WireModel):
     now or replayed; ``invalid`` carries the rejection reason in
     ``detail``."""
 
-    outcome: Literal["recorded", "invalid"]
+    outcome: Annotated[Literal["recorded", "invalid"] | Unrecognized, OPEN]
     detail: str = ""
 
 
@@ -446,7 +448,7 @@ class ReviewFindingsDeliveryResponse(WireModel):
     """The result of one `record-findings` materialization — the
     `GardenDeliveryResponse` shape."""
 
-    outcome: Literal["recorded", "invalid"]
+    outcome: Annotated[Literal["recorded", "invalid"] | Unrecognized, OPEN]
     detail: str = ""
 
 
@@ -557,7 +559,7 @@ class ChunkNeighborView(WireModel):
     scope this shares."""
 
     chunk_id: str
-    status: ChunkStatus | None = None
+    status: Annotated[ChunkStatus | Unrecognized, OPEN] | None = None
     satisfied: bool
 
 
@@ -580,7 +582,7 @@ class ChunkDetail(WireModel):
     # be resolved.
     graph_name: str | None = None
     graph_created_at: str | None = None
-    status: ChunkStatus
+    status: Annotated[ChunkStatus | Unrecognized, OPEN]
     current_node_id: str | None
     current_node_name: str | None = None
     latest_epoch: int | None
@@ -600,13 +602,13 @@ class ChunkDetail(WireModel):
     #: The chunk's status admits an operator pause.
     pausable: bool = False
     #: The status the chunk derives once a pause settles; its current status where a pause is refused or outranked.
-    status_if_paused: ChunkStatus | None = None
+    status_if_paused: Annotated[ChunkStatus | Unrecognized, OPEN] | None = None
     #: The chunk's status admits a completion (it is not already ``done``).
     completable: bool = False
     #: The chunk's status admits deletion (it has never been claimed).
     deletable: bool = False
     #: Why a delete would be refused — its status first, then a standing dependent; ``None`` when it would not.
-    delete_refusal: ChunkDeleteRefusal | None = None
+    delete_refusal: Annotated[ChunkDeleteRefusal | Unrecognized, OPEN] | None = None
     #: A promote would write a promotion: not currently promoted, and the verb is legal from its status.
     promotable: bool = False
     #: The chunk's graph may be re-pinned: unclaimed and never moved off its graph's start.
@@ -681,7 +683,7 @@ class ChunkStatusView(WireModel):
     the slim batch projection ``GET /api/fleet/chunk-statuses`` returns."""
 
     chunk_id: str
-    status: ChunkStatus
+    status: Annotated[ChunkStatus | Unrecognized, OPEN]
     route_runner_id: str | None = None
     pause: PauseView | None = None
     latest_epoch: int | None = None
@@ -716,7 +718,7 @@ class WorkItemEntry(WireModel):
     comments: list[str] = []
     error: str | None = None
     author: WorkItemAuthorView | None = None
-    stated_priority: WorkItemPriority | None = None
+    stated_priority: Annotated[WorkItemPriority | Unrecognized, OPEN] | None = None
 
 
 class WorkItemsView(WireModel):

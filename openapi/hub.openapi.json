@@ -208,7 +208,8 @@
           "severity": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EventLogSeverity"
+                "$ref": "#/components/schemas/EventLogSeverity",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -983,7 +984,8 @@
             ]
           },
           "outcome": {
-            "$ref": "#/components/schemas/ApplyOutcome"
+            "$ref": "#/components/schemas/ApplyOutcome",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -1059,7 +1061,8 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/ArtifactKind"
+            "$ref": "#/components/schemas/ArtifactKind",
+            "x-blizzard-open": true
           },
           "name": {
             "title": "Name",
@@ -2061,7 +2064,8 @@
           "delete_refusal": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ChunkDeleteRefusal"
+                "$ref": "#/components/schemas/ChunkDeleteRefusal",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -2276,12 +2280,14 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           },
           "status_if_paused": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ChunkStatus"
+                "$ref": "#/components/schemas/ChunkStatus",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -2552,7 +2558,8 @@
           "status": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ChunkStatus"
+                "$ref": "#/components/schemas/ChunkStatus",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -2964,7 +2971,8 @@
             "title": "Route Runner Id"
           },
           "status": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -3179,7 +3187,8 @@
             "title": "Runner Name"
           },
           "status": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           },
           "terminal": {
             "default": false,
@@ -4548,7 +4557,8 @@
               "repeated"
             ],
             "title": "Direction",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           },
           "from_at": {
             "anyOf": [
@@ -4732,7 +4742,8 @@
               "rejected"
             ],
             "title": "State",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -5044,7 +5055,8 @@
             "title": "Runner Name"
           },
           "severity": {
-            "$ref": "#/components/schemas/EventLogSeverity"
+            "$ref": "#/components/schemas/EventLogSeverity",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -5264,7 +5276,8 @@
           "exit": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FindingExit"
+                "$ref": "#/components/schemas/FindingExit",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -5411,7 +5424,8 @@
           "severity": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FindingSeverity"
+                "$ref": "#/components/schemas/FindingSeverity",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -5420,10 +5434,12 @@
           },
           "source": {
             "$ref": "#/components/schemas/FindingSource",
-            "default": "routine"
+            "default": "routine",
+            "x-blizzard-open": true
           },
           "state": {
-            "$ref": "#/components/schemas/FindingState"
+            "$ref": "#/components/schemas/FindingState",
+            "x-blizzard-open": true
           },
           "summary": {
             "title": "Summary",
@@ -5522,7 +5538,8 @@
             "title": "Actor"
           },
           "kind": {
-            "$ref": "#/components/schemas/FindingFactKind"
+            "$ref": "#/components/schemas/FindingFactKind",
+            "x-blizzard-open": true
           },
           "note": {
             "anyOf": [
@@ -5689,7 +5706,8 @@
           "exit": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FindingExit"
+                "$ref": "#/components/schemas/FindingExit",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -5829,7 +5847,8 @@
           "severity": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FindingSeverity"
+                "$ref": "#/components/schemas/FindingSeverity",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -5838,10 +5857,12 @@
           },
           "source": {
             "$ref": "#/components/schemas/FindingSource",
-            "default": "routine"
+            "default": "routine",
+            "x-blizzard-open": true
           },
           "state": {
-            "$ref": "#/components/schemas/FindingState"
+            "$ref": "#/components/schemas/FindingState",
+            "x-blizzard-open": true
           },
           "summary": {
             "title": "Summary",
@@ -6063,7 +6084,8 @@
               "invalid"
             ],
             "title": "Outcome",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -6163,7 +6185,8 @@
             "type": "array"
           },
           "origin": {
-            "$ref": "#/components/schemas/GardenProposalOrigin"
+            "$ref": "#/components/schemas/GardenProposalOrigin",
+            "x-blizzard-open": true
           },
           "project_id": {
             "anyOf": [
@@ -6258,12 +6281,14 @@
             "type": "string"
           },
           "closure": {
-            "$ref": "#/components/schemas/GardenProposalClosureKind"
+            "$ref": "#/components/schemas/GardenProposalClosureKind",
+            "x-blizzard-open": true
           },
           "item_outcome": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GardenProposalItemOutcome"
+                "$ref": "#/components/schemas/GardenProposalItemOutcome",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -6340,7 +6365,8 @@
             "type": "integer"
           },
           "origin": {
-            "$ref": "#/components/schemas/GardenProposalOrigin"
+            "$ref": "#/components/schemas/GardenProposalOrigin",
+            "x-blizzard-open": true
           },
           "passed": {
             "title": "Passed",
@@ -6413,7 +6439,8 @@
           "origin": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GardenProposalOrigin"
+                "$ref": "#/components/schemas/GardenProposalOrigin",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -6636,7 +6663,8 @@
             "type": "array"
           },
           "origin": {
-            "$ref": "#/components/schemas/GardenProposalOrigin"
+            "$ref": "#/components/schemas/GardenProposalOrigin",
+            "x-blizzard-open": true
           },
           "project_id": {
             "anyOf": [
@@ -6910,7 +6938,8 @@
           },
           "target_kind": {
             "$ref": "#/components/schemas/ChoiceTargetKind",
-            "default": "node"
+            "default": "node",
+            "x-blizzard-open": true
           },
           "to_node_name": {
             "title": "To Node Name",
@@ -7013,10 +7042,12 @@
             "type": "array"
           },
           "executor": {
-            "$ref": "#/components/schemas/Executor"
+            "$ref": "#/components/schemas/Executor",
+            "x-blizzard-open": true
           },
           "judged_by": {
-            "$ref": "#/components/schemas/JudgedBy"
+            "$ref": "#/components/schemas/JudgedBy",
+            "x-blizzard-open": true
           },
           "judgement_prompt": {
             "anyOf": [
@@ -7079,7 +7110,8 @@
             "title": "Retries Max"
           },
           "session": {
-            "$ref": "#/components/schemas/SessionMode"
+            "$ref": "#/components/schemas/SessionMode",
+            "x-blizzard-open": true
           },
           "session_source": {
             "anyOf": [
@@ -7222,7 +7254,8 @@
           },
           "lifecycle": {
             "$ref": "#/components/schemas/GraphLifecycle",
-            "default": "effective"
+            "default": "effective",
+            "x-blizzard-open": true
           },
           "name": {
             "title": "Name",
@@ -7757,7 +7790,8 @@
             "title": "Added By"
           },
           "connection": {
-            "$ref": "#/components/schemas/RunnerConnection"
+            "$ref": "#/components/schemas/RunnerConnection",
+            "x-blizzard-open": true
           },
           "enrolled": {
             "title": "Enrolled",
@@ -8079,7 +8113,8 @@
           "condition": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SampleMissReason"
+                "$ref": "#/components/schemas/SampleMissReason",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -8089,7 +8124,8 @@
           "miss_reason": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SampleMissReason"
+                "$ref": "#/components/schemas/SampleMissReason",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -8256,7 +8292,8 @@
             "type": "boolean"
           },
           "status": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           },
           "to_node_name": {
             "anyOf": [
@@ -8468,7 +8505,8 @@
             "title": "Graph Name"
           },
           "mode": {
-            "$ref": "#/components/schemas/MigrationMode"
+            "$ref": "#/components/schemas/MigrationMode",
+            "x-blizzard-open": true
           },
           "node_name": {
             "anyOf": [
@@ -8598,10 +8636,12 @@
             "type": "string"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "$ref": "#/components/schemas/Role",
+            "x-blizzard-open": true
           },
           "state": {
-            "$ref": "#/components/schemas/InvitationState"
+            "$ref": "#/components/schemas/InvitationState",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -8701,7 +8741,8 @@
           "assignable_roles": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/Role"
+              "$ref": "#/components/schemas/Role",
+              "x-blizzard-open": true
             },
             "title": "Assignable Roles",
             "type": "array"
@@ -8717,7 +8758,8 @@
           },
           "permissions": {
             "items": {
-              "$ref": "#/components/schemas/Permission"
+              "$ref": "#/components/schemas/Permission",
+              "x-blizzard-open": true
             },
             "title": "Permissions",
             "type": "array"
@@ -8725,7 +8767,8 @@
           "role": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Role"
+                "$ref": "#/components/schemas/Role",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -8771,13 +8814,15 @@
           },
           "permissions": {
             "items": {
-              "$ref": "#/components/schemas/Permission"
+              "$ref": "#/components/schemas/Permission",
+              "x-blizzard-open": true
             },
             "title": "Permissions",
             "type": "array"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "$ref": "#/components/schemas/Role",
+            "x-blizzard-open": true
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -8835,7 +8880,8 @@
           "assignable_roles": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/Role"
+              "$ref": "#/components/schemas/Role",
+              "x-blizzard-open": true
             },
             "title": "Assignable Roles",
             "type": "array"
@@ -8877,7 +8923,8 @@
             "type": "boolean"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "$ref": "#/components/schemas/Role",
+            "x-blizzard-open": true
           },
           "user_id": {
             "title": "User Id",
@@ -9018,7 +9065,8 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/MigrationSource"
+                "$ref": "#/components/schemas/MigrationSource",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -9742,7 +9790,8 @@
           "color": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ProjectColor"
+                "$ref": "#/components/schemas/ProjectColor",
+                "x-blizzard-open": true
               },
               {
                 "pattern": "^#[0-9a-f]{6}$",
@@ -11118,7 +11167,8 @@
               "invalid"
             ],
             "title": "Outcome",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -11684,7 +11734,8 @@
             "type": "boolean"
           },
           "effective_mode": {
-            "$ref": "#/components/schemas/RunMode"
+            "$ref": "#/components/schemas/RunMode",
+            "x-blizzard-open": true
           },
           "ref": {
             "title": "Ref",
@@ -11859,10 +11910,12 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/RunMode"
+            "$ref": "#/components/schemas/RunMode",
+            "x-blizzard-open": true
           },
           "outcome": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           },
           "project_id": {
             "anyOf": [
@@ -11995,10 +12048,12 @@
             "type": "string"
           },
           "mode": {
-            "$ref": "#/components/schemas/RunMode"
+            "$ref": "#/components/schemas/RunMode",
+            "x-blizzard-open": true
           },
           "outcome": {
-            "$ref": "#/components/schemas/ChunkStatus"
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
           },
           "project_id": {
             "anyOf": [
@@ -12445,7 +12500,8 @@
         "description": "Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names\nthe runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``\nor ``unknown`` one.",
         "properties": {
           "reason": {
-            "$ref": "#/components/schemas/RunnerTokenRefusalReason"
+            "$ref": "#/components/schemas/RunnerTokenRefusalReason",
+            "x-blizzard-open": true
           },
           "runner_id": {
             "anyOf": [
@@ -12862,7 +12918,8 @@
             "type": "array"
           },
           "connection": {
-            "$ref": "#/components/schemas/RunnerConnection"
+            "$ref": "#/components/schemas/RunnerConnection",
+            "x-blizzard-open": true
           },
           "env_capacity": {
             "anyOf": [
@@ -13032,7 +13089,8 @@
           "version_refusal": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/VersionRefusalReason"
+                "$ref": "#/components/schemas/VersionRefusalReason",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -13042,7 +13100,8 @@
           "version_standing": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RunnerVersionStanding"
+                "$ref": "#/components/schemas/RunnerVersionStanding",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -13197,7 +13256,8 @@
             "type": "string"
           },
           "reason": {
-            "$ref": "#/components/schemas/VersionRefusalReason"
+            "$ref": "#/components/schemas/VersionRefusalReason",
+            "x-blizzard-open": true
           },
           "runner_version": {
             "anyOf": [
@@ -14098,7 +14158,8 @@
           "condition": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SampleMissReason"
+                "$ref": "#/components/schemas/SampleMissReason",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -14108,7 +14169,8 @@
           "miss_reason": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SampleMissReason"
+                "$ref": "#/components/schemas/SampleMissReason",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -14227,7 +14289,8 @@
             "title": "Rows Removed"
           },
           "state": {
-            "$ref": "#/components/schemas/TenantDeletionState"
+            "$ref": "#/components/schemas/TenantDeletionState",
+            "x-blizzard-open": true
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -14337,7 +14400,8 @@
             "type": "string"
           },
           "state": {
-            "$ref": "#/components/schemas/TenantState"
+            "$ref": "#/components/schemas/TenantState",
+            "x-blizzard-open": true
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -14661,7 +14725,8 @@
               "rejected"
             ],
             "title": "State",
-            "type": "string"
+            "type": "string",
+            "x-blizzard-open": true
           }
         },
         "required": [
@@ -15422,7 +15487,8 @@
           "assignable_roles": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/Role"
+              "$ref": "#/components/schemas/Role",
+              "x-blizzard-open": true
             },
             "title": "Assignable Roles",
             "type": "array"
@@ -15455,7 +15521,8 @@
             "type": "array"
           },
           "role": {
-            "$ref": "#/components/schemas/Role"
+            "$ref": "#/components/schemas/Role",
+            "x-blizzard-open": true
           },
           "user_id": {
             "title": "User Id",
@@ -15694,7 +15761,8 @@
           "closure": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkItemClosure"
+                "$ref": "#/components/schemas/WorkItemClosure",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -15742,7 +15810,8 @@
           "stated_priority": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkItemPriority"
+                "$ref": "#/components/schemas/WorkItemPriority",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -15869,7 +15938,8 @@
           "stated_priority": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkItemPriority"
+                "$ref": "#/components/schemas/WorkItemPriority",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -15991,7 +16061,8 @@
           "closure": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkItemClosure"
+                "$ref": "#/components/schemas/WorkItemClosure",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"
@@ -16039,7 +16110,8 @@
           "stated_priority": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkItemPriority"
+                "$ref": "#/components/schemas/WorkItemPriority",
+                "x-blizzard-open": true
               },
               {
                 "type": "null"

@@ -80,7 +80,7 @@ export class RunnersView {
   /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE`
    * (`bzh:frontend-formatters`). */
   protected toneFor(status: ChunkStatus): Tone {
-    return STATUS_TONE[status];
+    return STATUS_TONE(status);
   }
 
   /** Whether to render the env-slot bar: only when the runner reported a

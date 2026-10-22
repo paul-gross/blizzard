@@ -16,6 +16,7 @@ from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -58,7 +59,7 @@ class IdentityRouteMissing(HubClientError):
 class VersionRefusal:
     """The hub's refusal of this runner's version; ``detail`` names what to upgrade."""
 
-    reason: VersionRefusalReason
+    reason: VersionRefusalReason | Unrecognized
     runner_version: str | None
     hub_version: str
     floor: str
@@ -370,7 +371,7 @@ class IncompatibleDenial:
     chunk_id: str
     incompatible_runner_id: str
     detail: str = "runner capabilities no longer satisfy the chunk's reachable lineage"
-    reason: ClaimDenialReason = ClaimDenialReason.CAPABILITY
+    reason: ClaimDenialReason | Unrecognized = ClaimDenialReason.CAPABILITY
 
 
 @domain_model
@@ -516,7 +517,7 @@ class TokenRefusal:
     """The hub's refusal of a presented bearer token. ``runner_id`` names the runner a ``revoked``
     or ``retired`` token was issued to; ``None`` for a ``missing`` or ``unknown`` one."""
 
-    reason: RunnerTokenRefusalReason
+    reason: RunnerTokenRefusalReason | Unrecognized
     runner_id: str | None = None
 
 

@@ -32,6 +32,7 @@ import {
   hubRunnersKey,
 } from '../core/query-keys';
 import { FLEET_CLOCK } from '../core/now-signal';
+import { openLookup } from '../core/open-lookup';
 import { HUB_PROJECT_FILTER } from '../core/project-filter';
 import { LiveInvalidationSpine } from './live-invalidation-spine';
 import { type SseStatus, SseService } from './sse.service';
@@ -193,26 +194,30 @@ function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])
  * adding a row here, not a `case` in {@link LiveInvalidationSpine.dispatch}. Exhaustive
  * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
  * new event type added to the generated vocabulary is then a compile error here until
- * it is given a row, instead of silently dispatching to nothing.
+ * it is given a row, instead of silently dispatching to nothing. A type a newer hub sends
+ * before then stales nothing.
  *
  * The live-update service re-reads a query on the events its row names; the poll is a
  * backstop for a dropped frame, never the primary freshness path.
  */
-const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) => readonly (readonly unknown[])[]> = {
-  [HubEventType.CHUNK_CHANGED]: chunkChangedKeys,
-  [HubEventType.QUESTION_ASKED]: chunkQuestionKeys,
-  [HubEventType.QUESTION_ANSWERED]: chunkQuestionKeys,
-  [HubEventType.DECISION_OPENED]: chunkDecisionKeys,
-  [HubEventType.DECISION_RESOLVED]: chunkDecisionKeys,
-  // A backlog reorder fires the same event as a ready-queue one (no distinct
-  // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
-  [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
-  // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
-  [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey],
-  // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
-  [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
-  [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
-};
+const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayload) => readonly (readonly unknown[])[]>(
+  {
+    [HubEventType.CHUNK_CHANGED]: chunkChangedKeys,
+    [HubEventType.QUESTION_ASKED]: chunkQuestionKeys,
+    [HubEventType.QUESTION_ANSWERED]: chunkQuestionKeys,
+    [HubEventType.DECISION_OPENED]: chunkDecisionKeys,
+    [HubEventType.DECISION_RESOLVED]: chunkDecisionKeys,
+    // A backlog reorder fires the same event as a ready-queue one (no distinct
+    // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
+    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
+    // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
+    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey],
+    // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
+    [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
+    [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
+  },
+  () => () => [],
+);
 
 /**
  * One event recorded for the Activity feed: its stream arrival order (`seq` — a stable, monotonic client

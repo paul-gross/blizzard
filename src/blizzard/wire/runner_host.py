@@ -4,13 +4,17 @@ an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
 from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
+from blizzard.wire.vocabulary import OPEN
 
 
 class HostRunnerStateView(WireModel):
@@ -19,7 +23,7 @@ class HostRunnerStateView(WireModel):
     #: The hub-minted id; ``None`` only for a halted runner configured without one.
     runner_id: str | None
     name: str
-    state: HostRunnerState
+    state: Annotated[HostRunnerState | Unrecognized, OPEN]
 
 
 class HostRunnerBindingView(BaseModel):
@@ -54,7 +58,7 @@ class HostRegistrationView(WireModel):
     recorded (``host_id``, ``tenant_id``), the name and runners the hub last answered for it, when, and — short of
     registered — why. ``buffered_facts`` counts the facts waiting on the host's own lane."""
 
-    state: HostRegistrationState
+    state: Annotated[HostRegistrationState | Unrecognized, OPEN]
     host_id: str | None = None
     tenant_id: str | None = None
     host_name: str | None = None

@@ -1,4 +1,4 @@
-// exemplar: bzh:frontend-pending-override — the page mounted on its route, the hub answered by a request stub.
+// exemplar: bzh:frontend-pending-override, bzh:frontend-open-vocabulary — the page mounted on its route, the hub answered by a request stub.
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -7,7 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type MeResponse, type PermitView, hubClient } from 'fleet';
+import { type MeResponse, type PermitState, type PermitVerb, type PermitView, hubClient } from 'fleet';
 import { HUB_PROJECT_FILTER } from 'fleet/shell';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { PermitsPage } from './permits-page';
@@ -104,6 +104,15 @@ describe('PermitsPage', () => {
     expect(el.querySelectorAll('[data-testid="permits-row"]')).toHaveLength(2);
     expect(el.querySelector('[data-testid="permits-grant"]')).toBeNull();
     expect(el.querySelector('[data-testid="permits-revoke"]')).toBeNull();
+  });
+
+  it('shows a state a newer hub sends raw, and offers no control for a verb this build does not know', async () => {
+    const lapsed: PermitView = { ...REQUESTED, state: 'lapsed' as PermitState, verbs: ['renew' as PermitVerb, 'grant', 'revoke'] };
+    const { el } = await mount('/permits', (_method, path) => (path === '/api/permits' ? { permits: [lapsed], next_cursor: null } : {}));
+
+    expect(row(el, 'pmt_1').querySelector('[data-testid="permits-state"]')?.textContent).toContain('lapsed');
+    expect(row(el, 'pmt_1').querySelector('[data-testid="permits-grant"]')).toBeTruthy();
+    expect(row(el, 'pmt_1').querySelector('[data-testid="permits-renew"]')).toBeNull();
   });
 
   it("disables only the acted-on row's controls while its verb is in flight", async () => {

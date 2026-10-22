@@ -10,6 +10,7 @@ from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.unrecognized import Unrecognized
 
 __all__ = [
     "ArtifactAmbiguous",
@@ -53,7 +54,7 @@ class ArtifactCandidate(Protocol):
     node-scoped one, its producing node."""
 
     @property
-    def scope(self) -> ArtifactScope: ...
+    def scope(self) -> ArtifactScope | Unrecognized: ...
     @property
     def node_name(self) -> str | None: ...
 

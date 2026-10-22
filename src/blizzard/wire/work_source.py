@@ -7,10 +7,14 @@ domain's own enums, request and response alike (``status: ChunkStatus`` preceden
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class WorkSourceSummary(WireModel):
@@ -108,11 +112,11 @@ class WorkItemView(WireModel):
     title: str
     body: str
     author: WorkItemAuthorView
-    stated_priority: WorkItemPriority | None
+    stated_priority: Annotated[WorkItemPriority | Unrecognized, OPEN] | None
     created_at: str
     edited_at: str
     closed_at: str | None
-    closure: WorkItemClosure | None
+    closure: Annotated[WorkItemClosure | Unrecognized, OPEN] | None
 
 
 class WorkItemsListView(WireModel):

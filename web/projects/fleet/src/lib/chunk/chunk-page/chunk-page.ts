@@ -219,7 +219,7 @@ export class ChunkPage {
   /** The chunk's related work-source items, in the shape the issue pane reads. */
   protected readonly workItems = computed<WorkItemsState>(() => deriveWorkItemsState(this.workItemsQuery));
 
-  protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
+  protected readonly tone = computed(() => STATUS_TONE(this.detail()?.status ?? 'ready'));
   /** Every prerequisite this chunk still waits on, and every chunk it still holds up —
    * the whole edge set the identity line names. */
   protected readonly blockedBy = computed<readonly string[]>(() =>

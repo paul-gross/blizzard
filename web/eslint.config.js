@@ -59,6 +59,12 @@ module.exports = defineConfig([
       // `source.split('\n').length` for any file ending in the usual trailing newline
       // — a file at exactly 400 real lines that used to fail now passes.
       "max-lines": ["error", { max: 400, skipBlankLines: false, skipComments: false }],
+      // A newer server may send a value the generated client does not list
+      // (`bzh:frontend-open-vocabulary`), so no switch may assume its cases are the whole
+      // vocabulary. Lint is not type-aware, so the rule holds every switch, not only one
+      // over a wire value; `web/scripts/structural-gate.js` holds the templates' `@switch`.
+      // The comment pattern matches nothing, so no `// no default` comment stands in for one.
+      "default-case": ["error", { commentPattern: "^(?!)$" }],
     },
   },
   // Spec files declare inline @Component test-host fixtures — test scaffolding,

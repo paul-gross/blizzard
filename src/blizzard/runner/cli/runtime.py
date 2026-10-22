@@ -764,6 +764,8 @@ def _stopped(exc: BootstrapStopped, joining: _Joining, token_file: HubTokenFile,
             )
         case BootstrapStop.TOKEN_NOT_RECEIVED:
             return f"the hub at {hub} received no token from this runner, so nothing was added"
+        case BootstrapStop.TOKEN_REFUSED:
+            return f"the hub at {hub} refused this runner's token ({exc.reason}), so nothing was added"
         case BootstrapStop.STORE_NAMES_A_RUNNER:
             return (
                 f"this runner holds no token, but its store belongs to runner {runner_id}, so nothing was added: "

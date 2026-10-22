@@ -9,10 +9,13 @@ directly."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from blizzard.auth_core import Permission, Role
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.api.auth_session import TENANT_HEADER, implicit_operator, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.memberships import Membership
@@ -22,6 +25,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantId
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -33,8 +37,8 @@ class MeTenant(BaseModel):
 
     tenant_id: str
     name: str
-    role: Role
-    permissions: list[Permission]
+    role: Annotated[Role | Unrecognized, OPEN]
+    permissions: list[Annotated[Permission | Unrecognized, OPEN]]
 
 
 class MeResponse(WireModel):
@@ -46,10 +50,10 @@ class MeResponse(WireModel):
     user_id: str
     username: str
     display_name: str
-    role: Role | None
-    permissions: list[Permission]
+    role: Annotated[Role | Unrecognized, OPEN] | None
+    permissions: list[Annotated[Permission | Unrecognized, OPEN]]
     #: Every role the role-assignment API may grant.
-    assignable_roles: list[Role] = []
+    assignable_roles: list[Annotated[Role | Unrecognized, OPEN]] = []
     #: Every open tenant the caller holds a membership in, ordered by id.
     tenants: list[MeTenant] = []
     #: Whether the caller is a hub administrator.
@@ -77,21 +81,21 @@ def me(request: Request) -> MeResponse:
         only = tenants[0] if len(memberships) == 1 and len(tenants) == 1 else None
     named = request.headers.get(TENANT_HEADER)
     resolved = next((t for t in tenants if t.tenant_id == named), None) if named else only
-    role = None if resolved is None else resolved.role
+    role = None if resolved is None else Role(resolved.role)
     return MeResponse(
         user_id=identity.user_id,
         username=identity.username,
         display_name=identity.display_name,
         role=role,
-        permissions=sorted(permissions_for(role, identity.hub_admin)),
-        assignable_roles=list(ASSIGNABLE_ROLES),
+        permissions=[*sorted(permissions_for(role, identity.hub_admin))],
+        assignable_roles=[*ASSIGNABLE_ROLES],
         tenants=tenants,
         hub_admin=identity.hub_admin,
     )
 
 
 def _tenant(tenant: TenantId, name: str, role: Role, *, hub_admin: bool) -> MeTenant:
-    return MeTenant(tenant_id=tenant, name=name, role=role, permissions=sorted(permissions_for(role, hub_admin)))
+    return MeTenant(tenant_id=tenant, name=name, role=role, permissions=[*sorted(permissions_for(role, hub_admin))])
 
 
 def _operator_tenants(request: Request) -> list[MeTenant]:

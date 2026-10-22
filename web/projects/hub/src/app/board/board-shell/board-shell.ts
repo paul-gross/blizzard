@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
 import { workLines } from '../board-card/board-card.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
@@ -18,7 +18,8 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 
 /**
  * The mission-control chunk board — the six status columns and their
- * cards.
+ * cards, plus a seventh, headed with the raw status, while any chunk carries a status this
+ * build does not know (`unknownLane`).
  *
  * READY and BACKLOG are two of those columns: both are hub-ranked
  * lists (`bzh:ranking-is-per-list`), so each renders top-to-bottom in its own
@@ -114,7 +115,10 @@ export class BoardShell {
   /** Emitted with the layout the switch was set to. */
   readonly layoutChange = output<BoardLayout>();
 
-  protected readonly columns = LANES;
+  protected readonly columns = computed(() => {
+    const unknown = unknownLane(this.chunks());
+    return unknown === null ? LANES : [...LANES, unknown];
+  });
 
   protected skeletonsFor(columnKey: string): number {
     return this.state() === 'loading' ? (this.laneSkeletons().get(columnKey) ?? 0) : 0;
@@ -122,12 +126,13 @@ export class BoardShell {
   protected readonly layoutTabs = LAYOUT_TABS;
 
   /** The list's rows, each tagged with its lane: what wants a person, then work in flight —
-   * each lane newest first — then READY and BACKLOG in their hub order, then DONE, newest
-   * finished first. Every group holds the same cards in the same order its grid column does. */
+   * each lane newest first — then any chunk whose status this build does not know, then READY
+   * and BACKLOG in their hub order, then DONE, newest finished first. Every group holds the same
+   * cards in the same order its grid column does. */
   protected readonly listGroups = computed<BoardListGroups>(() => {
     const tagged = (key: string): readonly BoardListEntry[] => this.cardsFor(key).map((card) => ({ lane: key, card }));
     return {
-      live: [...tagged('needs'), ...tagged('waiting'), ...tagged('running')],
+      live: [...tagged('needs'), ...tagged('waiting'), ...tagged('running'), ...tagged(UNKNOWN_LANE)],
       ready: tagged('ready'),
       backlog: tagged('notready'),
       done: tagged(DONE_LANE),
@@ -140,7 +145,7 @@ export class BoardShell {
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
-    const grouped = new Map<string, BoardCard[]>(LANES.map((lane) => [lane.key, []]));
+    const grouped = new Map<string, BoardCard[]>(this.columns().map((lane) => [lane.key, []]));
     // Every chunk's status by id, so a blocked card can name its blocker's state without
     // a second read — the blocker is itself a chunk on this board.
     const statusById = new Map(this.chunks().map((c) => [c.chunk_id, c.status]));
@@ -221,7 +226,9 @@ export class BoardShell {
     return counts === null ? null : laneCounts(counts);
   });
 
+  /** A lane's all-time count; the unknown lane, which no count covers, counts the chunks it shows. */
   protected countFor(columnKey: string): number | null {
+    if (columnKey === UNKNOWN_LANE) return this.cardsFor(columnKey).length;
     return this.laneTotals()?.get(columnKey) ?? null;
   }
 
