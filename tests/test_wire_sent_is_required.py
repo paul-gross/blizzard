@@ -5,6 +5,7 @@ built apps and their specs, so a model added later without the wire base fails h
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from typing import get_args
 
 import pytest
 from fastapi import FastAPI
@@ -87,17 +88,25 @@ def _api_routes(routes: Iterable[object]) -> Iterator[APIRoute]:
             yield from _api_routes(nested)
 
 
+def _named_classes(annotation: object) -> Iterator[type]:
+    """Every class an annotation names, looking through ``list[X]``, ``X | None`` and similar shapes."""
+    if isinstance(annotation, type) and not get_args(annotation):
+        yield annotation
+    for arg in get_args(annotation):
+        yield from _named_classes(arg)
+
+
 def _exclude_flagged(app: FastAPI, spec: dict) -> set[str]:
     """Schemas served by a route that drops fields from its reply (``response_model_exclude_*``)."""
     flagged = {
-        route.response_model.__name__
+        cls.__name__
         for route in _api_routes(app.routes)
         if (
             route.response_model_exclude_none
             or route.response_model_exclude_unset
             or route.response_model_exclude_defaults
         )
-        and isinstance(route.response_model, type)
+        for cls in _named_classes(route.response_model)
     }
     return _closure(flagged, spec["components"]["schemas"])
 
@@ -160,3 +169,23 @@ def test_a_model_that_is_sometimes_sent_without_a_field_does_not_subclass_the_wi
     ]
 
     assert not sometimes_partial, f"{name}: required fields the server can omit mislead the client: {sometimes_partial}"
+
+
+def test_exclude_flag_detection_looks_through_list_and_optional_response_models() -> None:
+    class InList(WireModel):
+        value: int
+
+    class InOptional(WireModel):
+        value: int
+
+    app = FastAPI()
+
+    @app.get("/api/many", response_model=list[InList], response_model_exclude_none=True)
+    def many() -> list[InList]:
+        return []
+
+    @app.get("/api/maybe", response_model=InOptional | None, response_model_exclude_unset=True)
+    def maybe() -> InOptional | None:
+        return None
+
+    assert _exclude_flagged(app, app.openapi()) == {"InList", "InOptional"}

@@ -648,8 +648,9 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         IReadFindingRepository,
         "distinct_classes",
         ("findings",),
-        "class options cover the entire tenant or project bucket, including unloaded pages; the distinct read walks "
-        "a covering findings index without reconstituting finding rows.",
+        "the tenant-wide class options read every class in the tenant, including unloaded pages; it searches the "
+        "tenant prefix of ix_findings_tenant_project_routine_class as a covering index, so no finding row is "
+        "reconstituted. A project-filtered read searches its full equality prefix and needs no allowance.",
     ),
     IndexWalkAllowance(IReadGardenProposalRepository, "counts_by_class", ("garden_proposals",), _ANALYTICS_REASON),
     IndexWalkAllowance(
