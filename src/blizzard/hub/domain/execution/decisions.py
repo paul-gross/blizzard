@@ -16,7 +16,7 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionCheck, GateDecision
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionCheck, GateDecision, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -188,9 +188,12 @@ class DecisionService:
     ) -> list[StoredArtifact]:
         return stored_artifacts(chunk.chunk_id, node, epoch, artifacts, artifact_ids=ids)
 
-    def resolve(self, decision: GateDecision, *, choice: str, resolved_by: str) -> ResolutionResult:
-        """Record a choice, first-write-wins. Takes the already-resolved decision
-        (``bzh:domain-takes-objects``), not a bare ``decision_id``.
+    def resolve(
+        self, decision: GateDecision, *, choice: str, resolved_by: str, note: str | None = None
+    ) -> ResolutionResult:
+        """Record a choice and the resolver's ``note``, first-write-wins — a losing resolve's note is dropped
+        with its choice. Takes the already-resolved decision (``bzh:domain-takes-objects``), not a bare
+        ``decision_id``.
         :meth:`GateDecision.require_resolvable` decides the refusals; the chunk's derived
         status is read here for it."""
         facts = ChunkFacts.or_default(self._facts.load_facts(decision.chunk_id))
@@ -201,6 +204,7 @@ class DecisionService:
             resolved_by=resolved_by,
             at=self._clock.now(),
             overrode_red_checks=decision.overrides_red_checks(choice),
+            note=person_note(note),
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
@@ -229,8 +233,9 @@ class RequeueService:
         self._exclusive = exclusive
         self._clock = clock
 
-    def requeue(self, chunk: Chunk) -> int:
-        """Supersede the open escalation and release the route so the chunk re-derives ready.
+    def requeue(self, chunk: Chunk, *, by: str, note: str | None = None) -> int:
+        """Supersede the open escalation, recording who requeued and their ``note``, and release the route so
+        the chunk re-derives ready.
         Takes the loaded chunk (``bzh:domain-takes-objects``). Raises :class:`NotEscalated`
         if the chunk is not ``needs_human`` — re-derived fresh under the row lock
         (``bzh:store-exclusive-write``), never from a pre-lock snapshot, so a concurrent
@@ -244,7 +249,9 @@ class RequeueService:
             if not facts.admits(ChunkVerb.REQUEUE):
                 raise NotEscalated(f"chunk {chunk.chunk_id} is not escalated (needs_human)")
             now = self._clock.now()
-            requeue_id = self._movement.record_requeue_locked(handle, chunk.chunk_id, at=now)  # supersedes escalation
+            requeue_id = self._movement.record_requeue_locked(  # supersedes escalation
+                handle, chunk.chunk_id, at=now, by=by, note=person_note(note)
+            )
             # A detached chunk holds no route: there is nothing to release.
             if handle.route_of(chunk.chunk_id) is not None:
                 self._route.record_route_released_locked(handle, chunk.chunk_id, at=now)  # -> ready, re-leasable

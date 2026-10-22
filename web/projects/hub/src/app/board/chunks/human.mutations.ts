@@ -116,6 +116,8 @@ export interface ResolveVars {
   readonly choice: string;
   /** The chunk this decision parks, so the detail re-reads on success. */
   readonly chunkId: string;
+  /** The operator's note, binding every later session on the chunk — omitted from the body when absent. */
+  readonly note?: string;
 }
 
 /**
@@ -131,7 +133,7 @@ export function injectResolveDecisionMutation() {
     mutationFn: async (vars: ResolveVars): Promise<DecisionResolutionResponse> => {
       const { data, error } = await resolveDecisionApiDecisionsDecisionIdResolutionsPost({
         path: { decision_id: vars.decisionId },
-        body: { choice: vars.choice, resolved_by: 'operator' },
+        body: { choice: vars.choice, resolved_by: 'operator', ...(vars.note ? { note: vars.note } : {}) },
         throwOnError: false,
       });
       if (error) throw error;

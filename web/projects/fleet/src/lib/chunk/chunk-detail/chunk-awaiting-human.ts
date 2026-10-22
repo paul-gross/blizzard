@@ -20,6 +20,8 @@ export interface ResolveDecisionEvent {
   readonly decisionId: string;
   readonly choice: string;
   readonly chunkId: string;
+  /** The operator's note, binding every later session on the chunk — absent when left blank. */
+  readonly note?: string;
 }
 
 /** How many recently answered questions the dock keeps a trail for. */
@@ -94,6 +96,9 @@ export class ChunkAwaitingHuman {
 
   /** Each open question's in-progress answer, keyed by `question_id`. */
   private readonly answerDrafts = signal<Readonly<Partial<Record<string, string>>>>({});
+
+  /** The open gate decision's in-progress note, sent with whichever choice is picked. */
+  protected readonly noteDraft = signal('');
 
   private readonly runnerHosts = injectRunnerHostNames();
 
@@ -180,12 +185,16 @@ export class ChunkAwaitingHuman {
     });
   }
 
-  /** Emit a resolution for the open gate decision. */
+  /** Emit a resolution for the open gate decision, with the note when one was typed, and
+   * clear the note draft. */
   protected resolve(decisionId: string, choice: string): void {
+    const note = this.noteDraft().trim();
     this.resolveDecision.emit({
       decisionId,
       choice,
       chunkId: this.detail().chunk_id,
+      ...(note ? { note } : {}),
     });
+    this.noteDraft.set('');
   }
 }

@@ -432,6 +432,65 @@ describe('ChunkAwaitingHuman', () => {
     });
   });
 
+  it('carries a typed note with the chosen gate choice, then clears the draft', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
+    const emitted: { note?: string }[] = [];
+    fixture.componentInstance.resolveDecision.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!;
+    input.value = '  fix the flaky test only  ';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[0].click();
+    await fixture.whenStable();
+
+    expect(emitted[0]).toEqual({
+      decisionId: 'de_01',
+      choice: 'approve',
+      chunkId: 'ch_01gate0000000000000000000000',
+      note: 'fix the flaky test only',
+    });
+    expect(input.value).toBe('');
+  });
+
+  it('sends no note when the note field is left blank', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
+    const emitted: { note?: string }[] = [];
+    fixture.componentInstance.resolveDecision.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="decision-note-input"]')!;
+    input.value = '   ';
+    input.dispatchEvent(new Event('input'));
+    el.querySelectorAll<HTMLButtonElement>('[data-testid="decision-choice"]')[0].click();
+
+    expect(emitted[0]).not.toHaveProperty('note');
+  });
+
+  it('shows a resolution’s note under the resolved line, and none without one', async () => {
+    const resolved = { resolved_choice: 'approve', resolved_by: 'alice', resolved_at: '2026-07-13T00:02:00Z' };
+    const render = async (note: string | null) => {
+      const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+      fixture.componentRef.setInput('detail', {
+        ...WAITING_DECISION_DETAIL,
+        decision: { ...WAITING_DECISION_DETAIL.decision!, ...resolved, note },
+      });
+      await fixture.whenStable();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    const noted = await render('fix the flaky test only');
+    expect(noted.querySelector('[data-testid="decision-resolved-note"]')?.textContent?.trim()).toBe('fix the flaky test only');
+    expect((await render(null)).querySelector('[data-testid="decision-resolved-note"]')).toBeNull();
+  });
+
   it('disables the gate choice chips while the resolve mutation is pending, re-enabling once it settles', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);

@@ -676,6 +676,14 @@ export type ChunkDetail = {
      */
     questions: Array<QuestionView>;
     /**
+     * Requeues
+     */
+    requeues: Array<RequeueView>;
+    /**
+     * Resolutions
+     */
+    resolutions: Array<ResolutionView>;
+    /**
      * Restarts
      */
     restarts: Array<RestartView>;
@@ -762,6 +770,39 @@ export type ChunkNeighborhoodView = {
      * Prerequisites
      */
     prerequisites: Array<ChunkNeighborView>;
+};
+
+/**
+ * ChunkNoteView
+ *
+ * One note a person left on a chunk. ``node`` and ``choice`` are the resolved gate's for a
+ * resolution and the landing node for a restart; a requeue has neither.
+ */
+export type ChunkNoteView = {
+    /**
+     * By
+     */
+    by: string | null;
+    /**
+     * Choice
+     */
+    choice: string | null;
+    /**
+     * Kind
+     */
+    kind: 'resolution' | 'requeue' | 'restart';
+    /**
+     * Node
+     */
+    node: string | null;
+    /**
+     * Note
+     */
+    note: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
 };
 
 /**
@@ -1085,6 +1126,10 @@ export type DecisionView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Note
+     */
+    note: string | null;
     /**
      * Overrode Red Checks
      */
@@ -1878,12 +1923,17 @@ export type HeartbeatResponse = {
 /**
  * HistoryRowView
  *
- * One row of a chunk's own timeline — a transition, a cross-graph migration, or a
- * delivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are
- * node labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``
- * is transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source.
+ * One row of a chunk's own timeline. ``from_node``/``to_node`` are node labels (a migration's
+ * is a ``graph/node`` hop); ``cause``/``detail`` carry a bounce's kick-back or a migration
+ * source; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.
+ * ``kind`` is ``transition``, ``migration``, ``bounce``, ``resolution``, ``requeue`` or ``restart`` —
+ * a plain string, so a new kind never breaks an older reader.
  */
 export type HistoryRowView = {
+    /**
+     * By
+     */
+    by: string | null;
     /**
      * Cause
      */
@@ -1911,7 +1961,11 @@ export type HistoryRowView = {
     /**
      * Kind
      */
-    kind: 'transition' | 'migration' | 'bounce';
+    kind: string;
+    /**
+     * Note
+     */
+    note: string | null;
     /**
      * Recorded At
      */
@@ -2967,6 +3021,70 @@ export type RequeueResponse = {
 };
 
 /**
+ * RequeueView
+ *
+ * One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.
+ */
+export type RequeueView = {
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Requeued At
+     */
+    requeued_at: string;
+    /**
+     * Requeued By
+     */
+    requeued_by: string | null;
+};
+
+/**
+ * ResolutionView
+ *
+ * One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note.
+ */
+export type ResolutionView = {
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Overrode Red Checks
+     */
+    overrode_red_checks: boolean;
+    /**
+     * Resolved At
+     */
+    resolved_at: string;
+    /**
+     * Resolved By
+     */
+    resolved_by: string;
+};
+
+/**
  * RestartView
  *
  * One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
@@ -3007,6 +3125,10 @@ export type RestartView = {
      * Graph Name
      */
     graph_name: string | null;
+    /**
+     * Note
+     */
+    note: string | null;
     /**
      * Recorded At
      */
@@ -5912,6 +6034,44 @@ export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses = {
 };
 
 export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponse = GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses[keyof GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetResponses];
+
+export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/notes';
+};
+
+export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetError = GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors[keyof GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors];
+
+export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponses = {
+    /**
+     * Response Get Chunk Notes Runners  Runner Id  Api Leases  Lease Id  Notes Get
+     *
+     * Successful Response
+     */
+    200: Array<ChunkNoteView>;
+};
+
+export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponse = GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponses[keyof GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetResponses];
 
 export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetData = {
     body?: never;

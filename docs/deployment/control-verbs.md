@@ -48,6 +48,16 @@ Detach is not requeue: no supersession fact is recorded and no epoch bumps, so a
 is still `needs_human` afterward — only the route is gone; detach is refused (409) when there is no live route left to
 release.
 
+## Notes to later sessions
+
+`decision resolve`, `chunk requeue`, and `chunk restart` each take an optional `--note <text>`, and their endpoints an
+optional `note` field: `POST /api/decisions/{id}/resolutions`, `POST /api/chunks/{id}/restart`, and
+`POST /api/chunks/{id}/requeues`, whose body is optional — sent with no body, requeue behaves as it always has. A note
+binds every later session on the chunk the way an answer to an ask does. A blank note counts as no note, and leaving one
+out changes nothing about the verb. `GET /api/chunks/{id}` carries each note back: `resolutions` lists the chunk's gate
+resolutions — node, epoch, choice, who and when — `requeues` its hub requeues with who requeued, and `restarts` its
+restarts, each with its `note`. A resolve that loses the race drops its note along with its choice.
+
 ## Restart
 
 `chunk restart [--to-graph <graph>] [--node <name>]` is CLI/API only (`POST /api/chunks/{id}/restart`): it forces the
@@ -219,10 +229,11 @@ An open gate decision shows wherever a waiting chunk does, derived from the deci
 - the Gate panel of a waiting chunk, which reads "gated by runner `R-XXXX.<name>` (runner config)" — the runner's
   compact id and name — or "declared by the graph" when the graph made the node human-judged. On a runner-configured
   gate the panel also lists the step's check results, each as its command and pass or red. Resolving to a choice that
-  requires green checks while one is red is accepted and recorded as an override, and the panel marks such a choice;
+  requires green checks while one is red is accepted and recorded as an override, and the panel marks such a choice.
+  A note field above the choices sends an optional note with whichever choice is picked; a blank field sends none;
 - the resolved line that replaces the Gate panel's choices once someone resolves it, "`<choice>` by `<who>`, `<when>`",
-  until the runner records the transition, noting an override when there was one. A resolve that loses the race to
-  another person shows the same line.
+  until the runner records the transition, noting an override when there was one, with the resolution's note beneath it
+  when there is one. A resolve that loses the race to another person shows the same line.
 
 `blizzard runner status` prints a `gates:` line too, which reads from the runner's own configuration and so works with
 the hub unreachable.

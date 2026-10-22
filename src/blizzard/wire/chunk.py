@@ -311,6 +311,30 @@ class RestartView(WireModel):
     restarted_by: str
     decision_id: str | None = None
     recorded_at: str
+    #: The restarter's note to every later session; null when none was left.
+    note: str | None = None
+
+
+class ResolutionView(WireModel):
+    """One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note."""
+
+    decision_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+    choice: str
+    resolved_by: str
+    resolved_at: str
+    overrode_red_checks: bool = False
+    note: str | None = None
+
+
+class RequeueView(WireModel):
+    """One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept."""
+
+    requeued_at: str
+    requeued_by: str | None = None
+    note: str | None = None
 
 
 class IntendedMigrationView(WireModel):
@@ -463,6 +487,15 @@ class ChunkRestartRequest(BaseModel):
     node: str | None = None
     to_graph: str | None = None
     by: str = "operator"
+    #: A note binding every later session on the chunk; a blank note is no note.
+    note: str | None = None
+
+
+class ChunkRequeueRequest(BaseModel):
+    """The optional body of ``POST /api/chunks/{id}/requeues`` — a ``note`` binding every later session on
+    the chunk. No body, or a blank note, is no note."""
+
+    note: str | None = None
 
 
 class ChunkPatchRequest(BaseModel):
@@ -600,6 +633,9 @@ class ChunkDetail(WireModel):
     # The chunk's operator restarts, oldest first — who moved the chunk, from
     # where, and to what.
     restarts: list[RestartView] = []
+    # The chunk's gate resolutions and hub requeues, oldest first — who resolved or requeued, and their note.
+    resolutions: list[ResolutionView] = []
+    requeues: list[RequeueView] = []
     artifacts: list[ArtifactView] = []
     # The chunk's questions, oldest first — open *and* answered, an answered one still
     # carrying its return trail.

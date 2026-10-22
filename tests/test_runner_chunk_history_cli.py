@@ -159,3 +159,19 @@ def test_chunk_asks_gets_the_lease_scoped_asks_route(monkeypatch: pytest.MonkeyP
     assert result.exit_code == 0, result.output
     assert calls == [("http://127.0.0.1:8431/api/leases/lease_9/asks", {"X-Blizzard-Lease-Token": "the-lease-token"})]
     assert result.output.strip() == "[]"
+
+
+@pytest.mark.unit
+def test_chunk_notes_gets_the_lease_scoped_notes_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    def fake_get(url: str, *, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+        calls.append((url, headers))
+        return _FakeResponse(text="[]")
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(runner_group, ["chunk", "notes"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("http://127.0.0.1:8431/api/leases/lease_9/notes", {"X-Blizzard-Lease-Token": "the-lease-token"})]
+    assert result.output.strip() == "[]"

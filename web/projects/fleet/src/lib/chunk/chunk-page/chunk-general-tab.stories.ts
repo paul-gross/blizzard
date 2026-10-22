@@ -57,3 +57,18 @@ export const AwaitingDecision: Story = {
     canResolve: true,
   },
 };
+export const ResolvedWithNote: Story = {
+  args: {
+    detail: chunkDetail({
+      status: 'needs_human',
+      history: HISTORY,
+      decision: decisionView({
+        resolved_choice: 'approve',
+        resolved_by: 'alice',
+        resolved_at: '2026-10-19T12:00:00.000Z',
+        note: 'Fix the flaky test only; leave the rest of the suite alone.',
+      }),
+    }),
+    canResolve: true,
+  },
+};

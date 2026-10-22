@@ -418,11 +418,13 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
 
 @chunk_group.command("requeue", cls=FleetCommand)
 @click.argument("chunk_id")
-def chunk_requeue(cli: CliContext, chunk_id: str) -> None:
+@click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
+def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
     """Close an escalation by supersession: requeue CHUNK at its current node."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/requeues",
         "POST /chunks/{id}/requeues",
+        json_body={"note": note} if note is not None else None,
         on_status={409: "chunk is not escalated", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"requeued {chunk_id} — re-leasable at its current node")
@@ -479,7 +481,10 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     "otherwise. Omit for its current node's name, or that graph's entry node if CHUNK has never moved.",
 )
 @click.option("--by", "by", default="operator", help="Who is restarting (recorded on the fact).")
-def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str) -> None:
+@click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
+def chunk_restart(
+    cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str, note: str | None
+) -> None:
     """Force CHUNK onto a node now, on a freshly minted session.
 
     A pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call
@@ -488,7 +493,7 @@ def chunk_restart(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
     resp = cli.post(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
-        json_body={"node": node, "to_graph": to_graph, "by": by},
+        json_body={"node": node, "to_graph": to_graph, "by": by, **({"note": note} if note is not None else {})},
         on_status={409: "chunk is not restartable there", 404: f"no such chunk {chunk_id}"},
     )
     body = resp.json()

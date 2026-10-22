@@ -57,9 +57,9 @@ def chunk_group() -> None:
 @chunk_group.command("history")
 def chunk_history() -> None:
     """Worker: read this chunk's own transition history as kind-discriminated JSON — the
-    merged, oldest-first timeline, one row per accepted transition, cross-graph migration, or delivery
-    bounce, each carrying its own ``kind``. The in-flight node-step this call is part of is not
-    there yet: a transition is recorded only once an attempt completes."""
+    merged, oldest-first timeline, one row per accepted transition, cross-graph migration, delivery
+    bounce, gate resolution, hub requeue, or restart, each carrying its own ``kind``. The in-flight
+    node-step this call is part of is not there yet: a transition is recorded only once an attempt completes."""
     worker = WorkerCall.of("chunk history")
     resp = worker.get(worker.leased("history"), failure="could not read the history")
     click.echo(resp.text)
@@ -72,6 +72,16 @@ def chunk_asks() -> None:
     session on the chunk: read this before asking again, and never contradict an answer."""
     worker = WorkerCall.of("chunk asks")
     resp = worker.get(worker.leased("asks"), failure="could not read the asks")
+    click.echo(resp.text)
+
+
+@chunk_group.command("notes")
+def chunk_notes() -> None:
+    """Worker: read every note a person left on this chunk resolving a gate, requeueing it, or
+    restarting it, as JSON — oldest-first, each row carrying its ``kind`` and who left it. A
+    person's note binds every later session on the chunk as an answer does: never contradict one."""
+    worker = WorkerCall.of("chunk notes")
+    resp = worker.get(worker.leased("notes"), failure="could not read the notes")
     click.echo(resp.text)
 
 

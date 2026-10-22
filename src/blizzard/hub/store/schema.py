@@ -1697,6 +1697,7 @@ decision_resolutions = Table(
     Column("resolved_at", UtcDateTime, nullable=False),
     # The choice was a `requires_checks` one taken over a red check — a person's override of the gate.
     Column("overrode_red_checks", Boolean, nullable=False, server_default=false()),
+    Column("note", Text, nullable=True),  # the resolver's note to every later session; null when none
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_decision_resolutions_tenant_id"), nullable=False
     ),
@@ -1719,6 +1720,8 @@ requeues = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
+    Column("requeued_by", String, nullable=True),  # null on rows predating the column
+    Column("note", Text, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_requeues_tenant_id"), nullable=False),
 )
 Index("ix_requeues_tenant_chunk_id", requeues.c.tenant_id, requeues.c.chunk_id)
@@ -1747,6 +1750,7 @@ chunk_restarts = Table(
     Column("decision_id", String, nullable=True),
     Column("restarted_by", String, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
+    Column("note", Text, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunk_restarts_tenant_id"), nullable=False),
 )
 Index("ix_chunk_restarts_tenant_chunk_id", chunk_restarts.c.tenant_id, chunk_restarts.c.chunk_id)

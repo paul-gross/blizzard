@@ -1,14 +1,17 @@
 """The worker-facing chunk-asks wire shapes.
 
 ``ChunkAskView`` is the row a later session reads for a question asked on its chunk, with its
-answer."""
+answer; ``ChunkNoteView`` is the row it reads for a note a person left resolving, requeueing or
+restarting it."""
 
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
-from blizzard.wire.chunk import MigrationView, TransitionView
+from blizzard.wire.chunk import MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
 from blizzard.wire.question import QuestionView
 
 
@@ -39,3 +42,24 @@ class ChunkAsksSource(BaseModel):
     migrations: list[MigrationView] = []
     current_node_id: str | None = None
     current_node_name: str | None = None
+
+
+class ChunkNoteView(WireModel):
+    """One note a person left on a chunk. ``node`` and ``choice`` are the resolved gate's for a
+    resolution and the landing node for a restart; a requeue has neither."""
+
+    kind: Literal["resolution", "requeue", "restart"]
+    note: str
+    by: str | None = None
+    node: str | None = None
+    choice: str | None = None
+    recorded_at: str
+
+
+class ChunkNotesSource(BaseModel):
+    """The resolutions, requeues and restarts slice of a hub ``ChunkDetail`` payload — never a
+    response model, and each list defaulted as the hub's own detail defaults it."""
+
+    resolutions: list[ResolutionView] = []
+    requeues: list[RequeueView] = []
+    restarts: list[RestartView] = []

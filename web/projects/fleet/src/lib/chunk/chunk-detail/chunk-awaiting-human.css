@@ -87,6 +87,17 @@
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
+.gate-note {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.note-input {
+  display: block;
+  margin: 6px 0 4px;
+}
 .gate-choice {
   color: var(--cyan);
 }

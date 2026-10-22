@@ -30,6 +30,7 @@ from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -98,6 +99,7 @@ from blizzard.wire.chunk import (
     ChunkPatchResponse,
     ChunkPauseRequest,
     ChunkPlacementRequest,
+    ChunkRequeueRequest,
     ChunkRestartRequest,
     ChunksPageView,
     ChunkStopRequest,
@@ -561,16 +563,23 @@ def record_review_findings_delivery(
     "/chunks/{chunk_id}/requeues",
     response_model=ChunkSummary,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
-def requeue_chunk(chunk_id: str, services: Services) -> ChunkSummary:
-    """Close an escalation by supersession: requeue at the current node."""
+def requeue_chunk(
+    chunk_id: str,
+    services: Services,
+    identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
+    request: ChunkRequeueRequest | None = None,
+) -> ChunkSummary:
+    """Close an escalation by supersession: requeue at the current node, recording who requeued and the
+    optional body's note."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        requeue_id = services.requeue.requeue(chunk)
+        requeue_id = services.requeue.requeue(
+            chunk, by=identity.username, note=request.note if request is not None else None
+        )
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except NotEscalated as exc:
@@ -601,7 +610,9 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        restart_id = services.restart.restart(chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph)
+        restart_id = services.restart.restart(
+            chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
+        )
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (

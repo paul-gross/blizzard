@@ -37,6 +37,13 @@ if TYPE_CHECKING:
 # --- Domain objects ---------------------------------------------------------
 
 
+def person_note(text: str | None) -> str | None:
+    """A person's note on a resolution, requeue or restart, as stored — a blank one is no note."""
+    if text is None or not text.strip():
+        return None
+    return text
+
+
 @domain_model
 @dataclass(frozen=True)
 class WorkRef:
@@ -459,6 +466,7 @@ class RestartFact:
     from_graph_id: str | None = None
     to_node_executor: Executor = Executor.RUNNER
     restarted_by: str = ""
+    note: str | None = None
     # The gate decision this move closed, or ``None`` — the restart is that decision's
     # resolving fact, the way an escalation's own ``decision_id`` closes one.
     decision_id: str | None = None
@@ -505,9 +513,12 @@ class Movement:
 @domain_model
 @dataclass(frozen=True)
 class RequeueFact:
-    """A ``requeue.recorded`` fact — closes an open escalation by supersession."""
+    """A ``requeue.recorded`` fact — closes an open escalation by supersession. ``requeued_by`` is
+    ``None`` on a row predating it."""
 
     requeued_at: datetime
+    requeued_by: str | None = None
+    note: str | None = None
 
 
 @domain_model
@@ -785,6 +796,22 @@ GATE_RESOLVE_LEGALITY: Mapping[GateState, GateVerdict] = MappingProxyType(
 
 @domain_model
 @dataclass(frozen=True)
+class GateResolution:
+    """A person's resolution of a gate decision — who chose what at the gate, and their note."""
+
+    decision_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+    choice: str
+    resolved_by: str
+    resolved_at: datetime
+    overrode_red_checks: bool = False
+    note: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
 class GateDecision:
     """A gate decision in full — the surfacing/read model.
 
@@ -811,6 +838,8 @@ class GateDecision:
     check_results: list[DecisionCheck] = field(default_factory=list)
     #: Whether the resolution took a ``requires_checks`` choice over a red check.
     overrode_red_checks: bool = False
+    #: The resolver's note to every later session; ``None`` when none was left.
+    note: str | None = None
 
     @property
     def resolved(self) -> bool:  # ast-grep-ignore: bzh:property-delegates

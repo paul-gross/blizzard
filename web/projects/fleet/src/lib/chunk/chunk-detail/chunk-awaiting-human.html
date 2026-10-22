@@ -58,6 +58,14 @@
           </ul>
         }
         @if (canResolve()) {
+          <fleet-kit-text-input
+            class="note-input"
+            testid="decision-note-input"
+            placeholder="Optional note for the next sessions…"
+            [ariaLabel]="'Note for gate ' + d.node_name"
+            [value]="noteDraft()"
+            (valueChange)="noteDraft.set($event)"
+          />
           <fleet-kit-chips class="decision-chips" [options]="decisionOptions(d)" [action]="true"
             [disabled]="resolvePending()" (choose)="resolve(d.decision_id, $event)" />
         }
@@ -73,6 +81,9 @@
         <p class="gate-resolved" data-testid="decision-resolved-line">
           <span class="gate-choice">{{ d.resolved_choice }}</span> by {{ d.resolved_by || 'operator' }}@if (d.resolved_at; as at) {, <fleet-when [iso]="at" />}@if (d.overrode_red_checks) { · <span class="gate-override" data-testid="decision-override">overrode red checks</span>}
         </p>
+        @if (d.note) {
+          <p class="gate-note" data-testid="decision-resolved-note">{{ d.note }}</p>
+        }
       </div>
     }
   </div>

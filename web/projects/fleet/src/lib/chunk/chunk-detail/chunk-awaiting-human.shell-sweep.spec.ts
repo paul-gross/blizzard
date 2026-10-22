@@ -7,7 +7,7 @@ import { chunkDetail, decisionView } from 'fleet/testing';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 /**
- * The Gate panel's origin line — the tooled half of `web:shell-sweep`: a real
+ * The Gate panel's origin line, note input and resolved line with its note — the tooled half of `web:shell-sweep`: a real
  * headless-Chromium proof that a long runner id in "gated by runner … (runner config)"
  * wraps inside the panel at ~390px rather than forcing horizontal scroll
  * (`bzh:narrow-viewport-tier-rule`). Excluded from the default `ng test fleet` run; run it
@@ -76,6 +76,9 @@ describe('gate panel origin line shell sweep (web:shell-sweep)', () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const origin = root.querySelector<HTMLElement>('[data-testid="decision-origin"]')!;
+      const noteInput = root.querySelector<HTMLElement>('[data-testid="decision-note-input"]');
+      expect(noteInput, 'the gate note input is not mounted').not.toBeNull();
+      expect(noteInput!.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
       expect(origin.textContent).toContain(text);
       expect(origin.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
       expect(
@@ -104,6 +107,7 @@ describe('gate panel resolved line shell sweep (web:shell-sweep)', () => {
       resolved_choice: 'approve-with-a-choice-name-long-enough-to-need-wrapping',
       resolved_by: 'an-operator-username-long-enough-to-need-wrapping@example.com',
       resolved_at: '2026-07-13T00:02:00Z',
+      note: 'fix-the-flaky-test-only-and-leave-the-rest-of-the-suite-alone-a-note-long-enough-to-wrap',
     });
 
     try {
@@ -114,6 +118,9 @@ describe('gate panel resolved line shell sweep (web:shell-sweep)', () => {
         const line = root.querySelector<HTMLElement>('[data-testid="decision-resolved-line"]');
         expect(line?.textContent, `${width}px: the resolved line is absent`).toContain(' by ');
         expect(root.querySelector('[data-testid="decision-choice"]'), `${width}px: choices still offered`).toBeNull();
+        const note = root.querySelector<HTMLElement>('[data-testid="decision-resolved-note"]');
+        expect(note?.textContent, `${width}px: the resolution note is absent`).toContain('flaky');
+        expect(note!.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
         expect(line!.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
         expect(
           root.scrollWidth,

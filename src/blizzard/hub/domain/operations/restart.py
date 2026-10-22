@@ -13,7 +13,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, person_note
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository, Node
@@ -183,9 +183,16 @@ class RestartService:
         self._exclusive = exclusive
 
     def restart(
-        self, chunk: Chunk, graph: Graph, *, node_name: str | None, by: str, to_graph: Graph | None = None
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        *,
+        node_name: str | None,
+        by: str,
+        to_graph: Graph | None = None,
+        note: str | None = None,
     ) -> int:
-        """Move ``chunk`` onto ``node_name`` — its current node when unnamed — at a fresh epoch.
+        """Move ``chunk`` onto ``node_name`` — its current node when unnamed — at a fresh epoch, with ``by``'s ``note``.
 
         ``to_graph`` makes it the eager cross-graph move: a migration fact and a restart fact in one
         write. :func:`plan_restart` decides against the facts and the record re-read under the row
@@ -224,4 +231,5 @@ class RestartService:
                 answered_question_ids=plan.answered_question_ids,
                 answer=plan.answer,
                 to_graph_id=plan.to_graph_id,
+                note=person_note(note),
             )

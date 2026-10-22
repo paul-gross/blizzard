@@ -1063,6 +1063,22 @@
             "title": "Questions",
             "type": "array"
           },
+          "requeues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RequeueView"
+            },
+            "title": "Requeues",
+            "type": "array"
+          },
+          "resolutions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResolutionView"
+            },
+            "title": "Resolutions",
+            "type": "array"
+          },
           "restarts": {
             "default": [],
             "items": {
@@ -1147,6 +1163,8 @@
           "history",
           "migrations",
           "restarts",
+          "resolutions",
+          "requeues",
           "artifacts",
           "questions",
           "awaiting_external_merge",
@@ -1268,6 +1286,71 @@
           "dependents"
         ],
         "title": "ChunkNeighborhoodView",
+        "type": "object"
+      },
+      "ChunkNoteView": {
+        "description": "One note a person left on a chunk. ``node`` and ``choice`` are the resolved gate's for a\nresolution and the landing node for a restart; a requeue has neither.",
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice"
+          },
+          "kind": {
+            "enum": [
+              "resolution",
+              "requeue",
+              "restart"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "note",
+          "by",
+          "node",
+          "choice",
+          "recorded_at"
+        ],
+        "title": "ChunkNoteView",
         "type": "object"
       },
       "ChunkStatus": {
@@ -1812,6 +1895,17 @@
             "title": "Node Name",
             "type": "string"
           },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
           "overrode_red_checks": {
             "default": false,
             "title": "Overrode Red Checks",
@@ -1911,7 +2005,8 @@
           "project_slug",
           "project_name",
           "check_results",
-          "overrode_red_checks"
+          "overrode_red_checks",
+          "note"
         ],
         "title": "DecisionView",
         "type": "object"
@@ -3082,8 +3177,19 @@
         "type": "object"
       },
       "HistoryRowView": {
-        "description": "One row of a chunk's own timeline \u2014 a transition, a cross-graph migration, or a\ndelivery bounce, merged oldest-first by ``recorded_at``. ``from_node``/``to_node`` are\nnode labels (a migration's is a ``graph/node`` hop), both null for a bounce; ``epoch``\nis transition-only; ``cause``/``detail`` carry a bounce's kick-back or a migration source.",
+        "description": "One row of a chunk's own timeline. ``from_node``/``to_node`` are node labels (a migration's\nis a ``graph/node`` hop); ``cause``/``detail`` carry a bounce's kick-back or a migration\nsource; ``by``/``note`` are the person behind a resolution, requeue or restart, and their note.\n``kind`` is ``transition``, ``migration``, ``bounce``, ``resolution``, ``requeue`` or ``restart`` \u2014\na plain string, so a new kind never breaks an older reader.",
         "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
           "cause": {
             "anyOf": [
               {
@@ -3151,13 +3257,19 @@
             "title": "Graph Name"
           },
           "kind": {
-            "enum": [
-              "transition",
-              "migration",
-              "bounce"
-            ],
             "title": "Kind",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "recorded_at": {
             "title": "Recorded At",
@@ -3184,6 +3296,8 @@
           "graph_name",
           "cause",
           "detail",
+          "by",
+          "note",
           "recorded_at"
         ],
         "title": "HistoryRowView",
@@ -4841,6 +4955,106 @@
         "title": "RequeueResponse",
         "type": "object"
       },
+      "RequeueView": {
+        "description": "One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "requeued_at": {
+            "title": "Requeued At",
+            "type": "string"
+          },
+          "requeued_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requeued By"
+          }
+        },
+        "required": [
+          "requeued_at",
+          "requeued_by",
+          "note"
+        ],
+        "title": "RequeueView",
+        "type": "object"
+      },
+      "ResolutionView": {
+        "description": "One gate resolution on the chunk: who chose what at the gate on ``node`` at ``epoch``, and their note.",
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "overrode_red_checks": {
+            "default": false,
+            "title": "Overrode Red Checks",
+            "type": "boolean"
+          },
+          "resolved_at": {
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "resolved_by": {
+            "title": "Resolved By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "choice",
+          "resolved_by",
+          "resolved_at",
+          "overrode_red_checks",
+          "note"
+        ],
+        "title": "ResolutionView",
+        "type": "object"
+      },
       "RestartView": {
         "description": "One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at\n``epoch``, tearing down whatever attempt was running. Its own step, never a transition \u2014 nothing\njudged it. ``graph_id`` is where it landed, a cross-graph move's target, and ``from_graph`` the graph\nit departed, null when it crossed none; ``decision_id`` names the gate decision it closed, or null.",
         "properties": {
@@ -4918,6 +5132,17 @@
             ],
             "title": "Graph Name"
           },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
@@ -4954,7 +5179,8 @@
           "epoch",
           "restarted_by",
           "decision_id",
-          "recorded_at"
+          "recorded_at",
+          "note"
         ],
         "title": "RestartView",
         "type": "object"
@@ -9602,7 +9828,7 @@
     },
     "/runners/{runner_id}/api/leases/{lease_id}/history": {
       "get": {
-        "description": "The worker's own chunk's timeline \u2014 transitions, migrations, and bounces merged\noldest-first into one kind-discriminated read. Excludes the in-flight node-step.",
+        "description": "The worker's own chunk's timeline \u2014 transitions, migrations, bounces, gate resolutions,\nrequeues, and restarts merged\noldest-first into one kind-discriminated read. Excludes the in-flight node-step.",
         "operationId": "get_history_runners__runner_id__api_leases__lease_id__history_get",
         "parameters": [
           {
@@ -9653,6 +9879,64 @@
           }
         },
         "summary": "Get History",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/leases/{lease_id}/notes": {
+      "get": {
+        "description": "Every note a person left on the worker's own chunk, oldest-first; a fact without one has no row.",
+        "operationId": "get_chunk_notes_runners__runner_id__api_leases__lease_id__notes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChunkNoteView"
+                  },
+                  "title": "Response Get Chunk Notes Runners  Runner Id  Api Leases  Lease Id  Notes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk Notes",
         "tags": [
           "runner"
         ]

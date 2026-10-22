@@ -59,6 +59,8 @@ from blizzard.wire.chunk import (
     PauseView,
     PendingView,
     PrView,
+    RequeueView,
+    ResolutionView,
     RestartView,
     RouteView,
     TransitionView,
@@ -401,6 +403,8 @@ class ChunkView:
             history=history.transitions(),
             migrations=history.migrations(),
             restarts=history.restarts(),
+            resolutions=self._resolutions(),
+            requeues=history.requeues(),
             artifacts=self._artifacts(artifacts),
             questions=[question_view(question, runner_names, project) for question in questions],
             **self._delivery_fields(self._delivery()),
@@ -421,6 +425,23 @@ class ChunkView:
             workspace_id=route.workspace_id,
             environment_ids=route.environment_ids,
         )
+
+    def _resolutions(self) -> list[ResolutionView]:
+        """The chunk's gate resolutions oldest-first — one per-chunk read, the single-chunk detail's own."""
+        return [
+            ResolutionView(
+                decision_id=d.decision_id,
+                node_id=d.node_id,
+                node_name=d.node_name,
+                epoch=d.epoch,
+                choice=d.choice,
+                resolved_by=d.resolved_by,
+                resolved_at=iso_utc(d.resolved_at),
+                overrode_red_checks=d.overrode_red_checks,
+                note=d.note,
+            )
+            for d in self.services.chunks.decisions.resolutions_for_chunk(self.chunk.chunk_id)
+        ]
 
     def _escalation(self) -> ChunkEscalationView | None:
         escalation = self.facts.open_escalation()
@@ -596,8 +617,16 @@ class ChunkHistoryView:
                 restarted_by=r.restarted_by,
                 decision_id=r.decision_id,
                 recorded_at=iso_utc(r.recorded_at),
+                note=r.note,
             )
             for r in self.facts.restart_history()
+        ]
+
+    def requeues(self) -> list[RequeueView]:
+        """The chunk's hub requeues oldest-first."""
+        return [
+            RequeueView(requeued_at=iso_utc(r.requeued_at), requeued_by=r.requeued_by, note=r.note)
+            for r in sorted(self.facts.requeues, key=lambda r: r.requeued_at)
         ]
 
     def migrations(self) -> list[MigrationView]:
