@@ -33,7 +33,7 @@ _RUNNER = JoinedRunner(runner_id="rn_01JX0000000000000000000REGS", runner_name="
 
 @contextlib.contextmanager
 def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> Iterator[tuple[RunnerConfig, Any]]:
-    """A live host whose one runner binds ``default`` (two agents) and ``web`` (one) in its workspace, naming the
+    """A live host whose one runner, with two agents, binds ``default`` and ``web`` in its workspace, naming the
     ``anthropic`` subscription when ``subscribed``; yields its config and a reader of the hub's own-runner view once
     the runner has registered."""
     config = init_runner_environment(root)
@@ -48,9 +48,10 @@ def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> I
             dataclasses.replace(w, max_environments=4) if w.id == config.home_workspace.id else w
             for w in config.workspaces
         ),
+        agents=2,
         bindings=(
-            ProjectBinding("default", config.home_workspace.id, 2),
-            ProjectBinding("web", config.home_workspace.id, 1),
+            ProjectBinding("default", config.home_workspace.id),
+            ProjectBinding("web", config.home_workspace.id),
         ),
         subscriptions=sampler_without_credentials(root) if subscribed else (),
     )
@@ -108,8 +109,9 @@ def test_the_hub_reads_back_a_runners_bindings_and_subscription_beside_its_regis
     assert [project["entry"] for project in runner["projects"]] == ["default", "web"]
     assert [(b["project"], b["workspace_id"], b["agents"]) for b in runner["bindings"]] == [
         ("default", config.home_workspace.id, 2),
-        ("web", config.home_workspace.id, 1),
+        ("web", config.home_workspace.id, 2),
     ]
+    assert runner["agents"] == 2
     assert (runner["subscription"], runner["subscription_unrostered"]) == ("anthropic", False)
     assert [subscription["slug"] for subscription in runner["subscriptions"]] == ["anthropic"], runner
 
