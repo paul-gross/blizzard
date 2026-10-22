@@ -19,7 +19,7 @@ from blizzard.wire.runner import VersionWindowView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
     CapacitiesView,
-    FloorClearView,
+    FloorClearStatusView,
     FloorHoldView,
     FloorStatusView,
     HubConnectivityView,
@@ -186,7 +186,7 @@ def _throttle_view(status) -> ThrottleStatusView:
             )
             if hold is not None
             else None,
-            clear=FloorClearView(cleared_at=iso_utc(clear.cleared_at).replace("+00:00", "Z"), by=clear.by)
+            clear=FloorClearStatusView(cleared_at=iso_utc(clear.cleared_at).replace("+00:00", "Z"), by=clear.by)
             if clear is not None
             else None,
         ),

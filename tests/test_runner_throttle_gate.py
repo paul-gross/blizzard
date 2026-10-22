@@ -165,6 +165,11 @@ def test_a_runner_naming_no_subscription_reads_its_own_mark() -> None:
     answer = ThrottleGate(ctx).floor()
     assert not answer.admits
     assert answer.slug is None
+    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx), braked=False))
+    assert view.state == "declining"
+    assert view.declining == ["floor"]
+    assert view.floor.subscription is None
+    assert "floor (runner): hold" in _throttle_lines(view.model_dump())[1]
 
 
 def test_an_unsampled_providers_mark_opens_at_its_reset_alone() -> None:

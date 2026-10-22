@@ -158,6 +158,7 @@ class GateContext(Protocol):
     def subscriptions(self) -> Sequence[GateSubscription]: ...
 
 
+@domain_model
 @dataclass(frozen=True)
 class GateReadConfig:
     subscription: str | None

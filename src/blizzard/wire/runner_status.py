@@ -40,7 +40,7 @@ class FloorHoldView(WireModel):
     grace_opens_at: str | None
 
 
-class FloorClearView(WireModel):
+class FloorClearStatusView(WireModel):
     cleared_at: str
     by: str
 
@@ -49,7 +49,7 @@ class FloorStatusView(WireModel):
     subscription: str | None
     admits: bool
     hold: FloorHoldView | None = None
-    clear: FloorClearView | None = None
+    clear: FloorClearStatusView | None = None
 
 
 class ThrottleLeverView(WireModel):

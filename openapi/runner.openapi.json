@@ -2740,6 +2740,55 @@
         "title": "FloorClearRequest",
         "type": "object"
       },
+      "FloorClearStatusView": {
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearStatusView",
+        "type": "object"
+      },
+      "FloorClearView": {
+        "description": "The clear just recorded.",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "slug",
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearView",
+        "type": "object"
+      },
       "FloorHoldView": {
         "properties": {
           "awaits_sample": {
@@ -2808,7 +2857,7 @@
           "clear": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/blizzard__wire__runner_status__FloorClearView"
+                "$ref": "#/components/schemas/FloorClearStatusView"
               },
               {
                 "type": "null"
@@ -7449,55 +7498,6 @@
         ],
         "title": "WorkspacePromptResponse",
         "type": "object"
-      },
-      "blizzard__runner__api__floor__FloorClearView": {
-        "description": "The clear just recorded.",
-        "properties": {
-          "by": {
-            "title": "By",
-            "type": "string"
-          },
-          "cleared_at": {
-            "title": "Cleared At",
-            "type": "string"
-          },
-          "slug": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Slug"
-          }
-        },
-        "required": [
-          "slug",
-          "cleared_at",
-          "by"
-        ],
-        "title": "FloorClearView",
-        "type": "object"
-      },
-      "blizzard__wire__runner_status__FloorClearView": {
-        "properties": {
-          "by": {
-            "title": "By",
-            "type": "string"
-          },
-          "cleared_at": {
-            "title": "Cleared At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "cleared_at",
-          "by"
-        ],
-        "title": "FloorClearView",
-        "type": "object"
       }
     }
   },
@@ -7768,7 +7768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/blizzard__runner__api__floor__FloorClearView"
+                  "$ref": "#/components/schemas/FloorClearView"
                 }
               }
             },
@@ -10629,7 +10629,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/blizzard__runner__api__floor__FloorClearView"
+                  "$ref": "#/components/schemas/FloorClearView"
                 }
               }
             },

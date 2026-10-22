@@ -1619,6 +1619,40 @@ export type FloorClearRequest = {
 };
 
 /**
+ * FloorClearStatusView
+ */
+export type FloorClearStatusView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+};
+
+/**
+ * FloorClearView
+ *
+ * The clear just recorded.
+ */
+export type FloorClearView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+    /**
+     * Slug
+     */
+    slug: string | null;
+};
+
+/**
  * FloorHoldView
  */
 export type FloorHoldView = {
@@ -1656,7 +1690,7 @@ export type FloorStatusView = {
      * Admits
      */
     admits: boolean;
-    clear: BlizzardWireRunnerStatusFloorClearView | null;
+    clear: FloorClearStatusView | null;
     hold: FloorHoldView | null;
     /**
      * Subscription
@@ -4458,40 +4492,6 @@ export type WorkspacePromptResponse = {
     source: 'override' | 'config';
 };
 
-/**
- * FloorClearView
- *
- * The clear just recorded.
- */
-export type BlizzardRunnerApiFloorFloorClearView = {
-    /**
-     * By
-     */
-    by: string;
-    /**
-     * Cleared At
-     */
-    cleared_at: string;
-    /**
-     * Slug
-     */
-    slug: string | null;
-};
-
-/**
- * FloorClearView
- */
-export type BlizzardWireRunnerStatusFloorClearView = {
-    /**
-     * By
-     */
-    by: string;
-    /**
-     * Cleared At
-     */
-    cleared_at: string;
-};
-
 export type CallbackApiAuthCallbackPostData = {
     body?: never;
     path?: never;
@@ -4695,7 +4695,7 @@ export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse
     /**
      * Successful Response
      */
-    200: BlizzardRunnerApiFloorFloorClearView;
+    200: FloorClearView;
 };
 
 export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses];
@@ -6482,7 +6482,7 @@ export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses = {
     /**
      * Successful Response
      */
-    200: BlizzardRunnerApiFloorFloorClearView;
+    200: FloorClearView;
 };
 
 export type ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponse = ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses[keyof ClearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPostResponses];
