@@ -16,12 +16,15 @@ from structlog.testing import capture_logs
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
+from blizzard.runner.api.control import _throttle_view
+from blizzard.runner.cli.control import _throttle_lines
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.node_steps.chunk_state import ChunkState
+from blizzard.runner.status.view import ThrottleStatus
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
@@ -102,6 +105,26 @@ def _ctx(
 
 def _hold_subscription(ctx: LoopContext) -> None:
     ctx.host_stores.usage_limits.record_usage_limit_mark(_SLUG, usage_limit_mark(_NOW - timedelta(minutes=1)))
+
+
+def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() -> None:
+    _store, _hub, ctx = _ctx()
+    gate = ThrottleGate(ctx)
+    assert _throttle_view(ThrottleStatus.of(gate, braked=False)).state == "admitting"
+    _hold_subscription(ctx)
+    view = _throttle_view(ThrottleStatus.of(gate, braked=True))
+    assert view.state == "braked"
+    assert view.declining == ["floor"]
+    assert view.floor.subscription == _SLUG
+    assert view.floor.hold is not None
+    assert view.floor.hold.expected_reset.endswith("Z")
+    assert view.levers == []
+    assert "declining: floor" in _throttle_lines(view.model_dump())[0]
+    ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW, by="operator"))
+    cleared = _throttle_view(ThrottleStatus.of(gate, braked=False))
+    assert cleared.floor.admits
+    assert cleared.floor.clear is not None
+    assert cleared.floor.clear.cleared_at.endswith("Z")
 
 
 def _brake(store: Any) -> None:

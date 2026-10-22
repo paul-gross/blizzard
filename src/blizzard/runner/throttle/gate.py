@@ -25,6 +25,8 @@ __all__ = [
     "GateConfig",
     "GateContext",
     "GateHostStores",
+    "GateReadConfig",
+    "GateReadContext",
     "GateStores",
     "GateSubscription",
     "GateVerdict",
@@ -154,6 +156,22 @@ class GateContext(Protocol):
     def clock(self) -> IClock: ...
     @property
     def subscriptions(self) -> Sequence[GateSubscription]: ...
+
+
+@dataclass(frozen=True)
+class GateReadConfig:
+    subscription: str | None
+
+
+@dataclass(frozen=True)
+class GateReadContext:
+    """The status reader's narrow, runner-scoped assembly of the gate's existing seams."""
+
+    stores: GateStores
+    host_stores: GateHostStores
+    config: GateConfig
+    clock: IClock
+    subscriptions: Sequence[GateSubscription]
 
 
 @dataclass(frozen=True)

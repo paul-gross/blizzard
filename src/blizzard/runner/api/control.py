@@ -14,16 +14,21 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE
 from blizzard.wire.runner import VersionWindowView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
     CapacitiesView,
+    FloorClearView,
+    FloorHoldView,
+    FloorStatusView,
     HubConnectivityView,
     IdentityVerdictView,
     PauseStateView,
     RoutingConflictView,
     RunnerStatusView,
     ServedProjectStatusView,
+    ThrottleStatusView,
     UnmatchedBindingView,
 )
 
@@ -96,6 +101,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             effective=summary.pause.effective,
             local_reason=summary.pause.local_reason,
         ),
+        throttle=_throttle_view(summary.throttle) if summary.throttle is not None else None,
         capacities=CapacitiesView(
             used=summary.capacities.used,
             agents=summary.capacities.agents,
@@ -155,6 +161,38 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
         routing_conflicts=[
             RoutingConflictView(project_id=c.project_id, entries=list(c.entries)) for c in summary.routing_conflicts
         ],
+    )
+
+
+def _throttle_view(status) -> ThrottleStatusView:
+    floor = status.verdict.floor
+    hold = floor.hold
+    clear = floor.clear
+    return ThrottleStatusView(
+        state=status.state,
+        declining=["floor"] if not floor.admits else [],
+        floor=FloorStatusView(
+            subscription=floor.slug,
+            admits=floor.admits,
+            hold=FloorHoldView(
+                kind=hold.kind,
+                harness_id=hold.harness_id,
+                window=hold.window,
+                expected_reset=iso_utc(hold.expected_reset).replace("+00:00", "Z"),
+                awaits_sample=hold.awaits_sample,
+                grace_opens_at=iso_utc(hold.expected_reset + FLOOR_UNCONFIRMED_GRACE).replace("+00:00", "Z")
+                if hold.awaits_sample
+                else None,
+            )
+            if hold is not None
+            else None,
+            clear=FloorClearView(cleared_at=iso_utc(clear.cleared_at).replace("+00:00", "Z"), by=clear.by)
+            if clear is not None
+            else None,
+        ),
+        levers=[],
+        on_decline=status.on_decline,
+        on_usage_limit=status.on_usage_limit,
     )
 
 

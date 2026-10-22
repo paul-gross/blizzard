@@ -89,6 +89,34 @@ def _tenant_part(view: dict) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
+def _throttle_lines(throttle: dict | None) -> list[str]:
+    if throttle is None:
+        return []
+    declining = ", ".join(throttle.get("declining", [])) or "none"
+    floor = throttle["floor"]
+    target = floor.get("subscription") or "runner"
+    hold = floor.get("hold")
+    answer = "admit" if floor["admits"] else "hold"
+    if hold is not None:
+        until = hold.get("grace_opens_at") or hold["expected_reset"]
+        detail = f"{hold['kind']} ({hold.get('window') or hold.get('harness_id') or 'usage limit'}), until {until}"
+        if hold["awaits_sample"]:
+            detail += f"; reset {hold['expected_reset']}, awaiting sample"
+    elif floor.get("clear") is not None:
+        clear = floor["clear"]
+        detail = f"hand clear by {clear['by']} at {clear['cleared_at']}"
+    else:
+        detail = "open"
+    lines = [f"  throttle: {throttle['state']} (declining: {declining})", f"    floor ({target}): {answer} — {detail}"]
+    for lever in throttle.get("levers", []):
+        lines.append(
+            f"    {lever.get('name', 'lever')}: {lever.get('answer', 'unknown')}"
+            f" — {lever.get('reading', 'no reading')}; until {lever.get('until') or 'none'}"
+        )
+    lines.append(f"    on_decline: {throttle['on_decline']}; on_usage_limit: {throttle['on_usage_limit']}")
+    return lines
+
+
 @dto
 @dataclass(frozen=True)
 class SessionLabel:
@@ -162,6 +190,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
     reason = f" — {pause['local_reason']}" if pause.get("local_reason") else ""
     click.echo(f"  {brake_state}{reason}")
+    for line in _throttle_lines(view.get("throttle")):
+        click.echo(line)
     cap = view["capacities"]
     bindings = cap.get("bindings", [])
     click.echo(f"  capacity: {cap['used']}/{cap['agents']} used")

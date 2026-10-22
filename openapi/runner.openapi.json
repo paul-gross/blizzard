@@ -2740,18 +2740,17 @@
         "title": "FloorClearRequest",
         "type": "object"
       },
-      "FloorClearView": {
-        "description": "The clear just recorded.",
+      "FloorHoldView": {
         "properties": {
-          "by": {
-            "title": "By",
+          "awaits_sample": {
+            "title": "Awaits Sample",
+            "type": "boolean"
+          },
+          "expected_reset": {
+            "title": "Expected Reset",
             "type": "string"
           },
-          "cleared_at": {
-            "title": "Cleared At",
-            "type": "string"
-          },
-          "slug": {
+          "grace_opens_at": {
             "anyOf": [
               {
                 "type": "string"
@@ -2760,15 +2759,91 @@
                 "type": "null"
               }
             ],
-            "title": "Slug"
+            "title": "Grace Opens At"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
           }
         },
         "required": [
-          "slug",
-          "cleared_at",
-          "by"
+          "kind",
+          "harness_id",
+          "window",
+          "expected_reset",
+          "awaits_sample",
+          "grace_opens_at"
         ],
-        "title": "FloorClearView",
+        "title": "FloorHoldView",
+        "type": "object"
+      },
+      "FloorStatusView": {
+        "properties": {
+          "admits": {
+            "title": "Admits",
+            "type": "boolean"
+          },
+          "clear": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/blizzard__wire__runner_status__FloorClearView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FloorHoldView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          }
+        },
+        "required": [
+          "subscription",
+          "admits",
+          "hold",
+          "clear"
+        ],
+        "title": "FloorStatusView",
         "type": "object"
       },
       "GardenProposalClosureKind": {
@@ -3712,6 +3787,16 @@
             "title": "State",
             "type": "string",
             "x-blizzard-open": true
+          },
+          "throttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThrottleStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3721,6 +3806,7 @@
           "served",
           "halted_reasons",
           "pause",
+          "throttle",
           "bindings",
           "agents_in_use",
           "max_agents"
@@ -5543,6 +5629,16 @@
             ],
             "title": "Tenant Name"
           },
+          "throttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThrottleStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "unmatched_bindings": {
             "default": [],
             "items": {
@@ -5563,6 +5659,7 @@
           "tenant_name",
           "workspace_id",
           "pause",
+          "throttle",
           "capacities",
           "hub",
           "last_tick_at",
@@ -6253,6 +6350,92 @@
           }
         },
         "title": "TakeoverRequest",
+        "type": "object"
+      },
+      "ThrottleLeverView": {
+        "description": "One configured lever in gate order, with its setting, reading and answer.",
+        "properties": {
+          "admits": {
+            "title": "Admits",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reading": {
+            "title": "Reading",
+            "type": "string"
+          },
+          "setting": {
+            "title": "Setting",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "name",
+          "setting",
+          "reading",
+          "admits",
+          "until"
+        ],
+        "title": "ThrottleLeverView",
+        "type": "object"
+      },
+      "ThrottleStatusView": {
+        "properties": {
+          "declining": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Declining",
+            "type": "array"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorStatusView"
+          },
+          "levers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ThrottleLeverView"
+            },
+            "title": "Levers",
+            "type": "array"
+          },
+          "on_decline": {
+            "title": "On Decline",
+            "type": "string"
+          },
+          "on_usage_limit": {
+            "title": "On Usage Limit",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "declining",
+          "floor",
+          "levers",
+          "on_decline",
+          "on_usage_limit"
+        ],
+        "title": "ThrottleStatusView",
         "type": "object"
       },
       "ToolCallSegmentView": {
@@ -7266,6 +7449,55 @@
         ],
         "title": "WorkspacePromptResponse",
         "type": "object"
+      },
+      "blizzard__runner__api__floor__FloorClearView": {
+        "description": "The clear just recorded.",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "slug",
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearView",
+        "type": "object"
+      },
+      "blizzard__wire__runner_status__FloorClearView": {
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearView",
+        "type": "object"
       }
     }
   },
@@ -7536,7 +7768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FloorClearView"
+                  "$ref": "#/components/schemas/blizzard__runner__api__floor__FloorClearView"
                 }
               }
             },
@@ -10397,7 +10629,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FloorClearView"
+                  "$ref": "#/components/schemas/blizzard__runner__api__floor__FloorClearView"
                 }
               }
             },

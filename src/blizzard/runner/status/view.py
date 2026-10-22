@@ -37,6 +37,7 @@ from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessReposit
 from blizzard.runner.lifecycle.model import SlotBinding, binding_usage, free_slots, open_lease_count
 from blizzard.runner.lifecycle.routing import RoutingConflict, RoutingMap, routing_map
 from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository
+from blizzard.runner.throttle.gate import GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
 __all__ = [
@@ -210,6 +211,23 @@ class RunnerStatusSummary:
     unmatched_bindings: tuple[EnvBinding, ...] = ()
     #: Each project two or more bindings resolve to; while any stands, the runner claims nothing.
     routing_conflicts: tuple[RoutingConflict, ...] = ()
+    throttle: ThrottleStatus | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class ThrottleStatus:
+    """A fresh gate verdict even when the separate brake refuses starts."""
+
+    state: str
+    verdict: GateVerdict
+    on_decline: str = "hold"
+    on_usage_limit: str = "hold"
+
+    @classmethod
+    def of(cls, gate: ThrottleGate, *, braked: bool) -> ThrottleStatus:
+        verdict = gate.verdict()
+        return cls(state="braked" if braked else "admitting" if verdict.admits_claim else "declining", verdict=verdict)
 
 
 @domain_model
@@ -279,6 +297,7 @@ class RunnerStatusService:
         gates: tuple[str, ...] = (),
         runner_dir: str = "",
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
+        throttle_gate: ThrottleGate | None = None,
     ) -> None:
         self._pause = pause
         self._daemon_liveness = daemon_liveness
@@ -304,6 +323,7 @@ class RunnerStatusService:
         self._gates = gates
         self._runner_dir = runner_dir
         self._contact_staleness = contact_staleness
+        self._throttle_gate = throttle_gate
 
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._pause.local_paused()
@@ -334,6 +354,9 @@ class RunnerStatusService:
             served_projects=served_projects_status(self._projects, answer),
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
             routing_conflicts=routing.conflicts,
+            throttle=ThrottleStatus.of(self._throttle_gate, braked=local_paused or hub_paused)
+            if self._throttle_gate is not None
+            else None,
         )
 
     def open_asks(self) -> list[OpenAsk]:

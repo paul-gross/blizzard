@@ -120,6 +120,7 @@ from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
+from blizzard.runner.throttle.gate import GateReadConfig, GateReadContext, ThrottleGate
 from blizzard.runner.throttle.pause import PauseService
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.platform import identity_stamp
@@ -756,6 +757,17 @@ def _wire_runner(
         workspaces=workspaces,
         gates=config.gates,
         runner_dir=str(config.root),
+        throttle_gate=ThrottleGate(
+            GateReadContext(
+                stores=read_stores,
+                host_stores=graph.host.host_stores,
+                config=GateReadConfig(
+                    subscription=config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None
+                ),
+                clock=clock,
+                subscriptions=host.subscriptions,
+            )
+        ),
     )
     takeover = TakeoverService(
         clock,
