@@ -1,6 +1,5 @@
-"""The runner's child-process launch seam against its real driver: a timeout or any raise mid-run kills the whole
-group, stdin is closed unless input is given, a spawned child leads its own group, a child that cannot start raises
-the seam's launch error, and the tool profile carries no hub token."""
+"""The runner's child-process launch seam against its real driver: a timeout or raise kills the whole group,
+stdin closes unless input is given, a child leads its own group, a failed start raises, and the tool env has no hub token."""
 
 from __future__ import annotations
 

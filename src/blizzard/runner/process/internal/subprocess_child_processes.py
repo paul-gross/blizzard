@@ -26,7 +26,6 @@ from blizzard.runner.process.groups import terminate_group
 
 # A timed-out child's group gets this long after SIGTERM before SIGKILL.
 _TIMEOUT_GRACE_SECONDS = 2.0
-# After the SIGKILL, the pipes get this long to reach EOF before they are abandoned.
 _DRAIN_SECONDS = 1.0
 
 _STREAMS = {
@@ -97,8 +96,7 @@ def _communicated(process: subprocess.Popen[str]) -> Callable[[float], tuple[str
 
 
 def _killed(process: subprocess.Popen[str]) -> tuple[str, str]:
-    """Kill the child's whole group and collect what it wrote. A descendant that left the group can still hold a
-    pipe open after the kill, so the drain is bounded too: past it the pipes are closed and the output is empty."""
+    """Kill the child's group and collect its output; the drain is bounded, as a descendant may hold a pipe open."""
     output = terminate_group(process.pid, grace=_TIMEOUT_GRACE_SECONDS, wait=_communicated(process))
     if output is None:
         output = _communicated(process)(_DRAIN_SECONDS)
@@ -152,7 +150,6 @@ class SubprocessChildProcesses:
             out, err = _killed(process)
             return ChildRun(exit_code=None, stdout=out, stderr=err, timed_out=True)
         except BaseException:
-            # An interrupt or any other failure while the child runs must not strand its group.
             _killed(process)
             raise
         return ChildRun(exit_code=process.returncode, stdout=out or "", stderr=err or "", timed_out=False)

@@ -23,9 +23,8 @@ class VersionProbe:
         self._env = env
 
     def binary_present(self, binary: str) -> bool:
-        """Whether ``binary`` resolves right now on the tool profile's ``PATH`` — the one its child launches
-        under, not the daemon's — bounded and non-raising, the standalone half of :meth:`observe_version`'s own
-        presence check, for a caller (the health-probe seam) that needs presence without a version probe."""
+        """Whether ``binary`` resolves right now on the tool profile's ``PATH`` — the one its child launches under,
+        not the daemon's — for a caller that needs presence without a version probe."""
         return shutil.which(binary, path=self._env.variables.get("PATH", "")) is not None
 
     def observe_version(self, binary: str) -> str | None:

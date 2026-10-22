@@ -702,8 +702,7 @@ def _stop_process_group(process: _ProcessHandle, grace_seconds: float = 0.5) -> 
 
 
 def _child_env(env: Mapping[str, str]) -> ChildEnv:
-    """The tool profile with ``env`` as its explicit additions — ``env`` is already built over the allowlist, so
-    the layering only ever adds or overrides, and never admits an ambient variable the profile would drop."""
+    """The tool profile with ``env`` (already built over the allowlist) as additions; no ambient variable enters."""
     return AllowlistedEnv.of(()).tool().adding(env)
 
 
