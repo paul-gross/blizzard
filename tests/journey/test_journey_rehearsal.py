@@ -46,7 +46,7 @@ pytestmark = [
 
 FIXTURE_ENV = "journey"
 # A fleet of envs so parked / escalated chunks (which retain their env for resume /
-# takeover) never starve the chunks still building; each binding's agents caps its concurrent workers.
+# takeover) never starve the chunks still building; the runner's agents caps its concurrent workers.
 MAX_ENVIRONMENTS = 4
 MAX_AGENTS = 2
 
@@ -481,9 +481,7 @@ def _widen_runner_pool(runner_dir: Path) -> None:
 
     config = load_runner_config(runner_dir)
     config = with_workspace(config, max_environments=MAX_ENVIRONMENTS)
-    config = dataclasses.replace(
-        config, bindings=tuple(dataclasses.replace(binding, agents=MAX_AGENTS) for binding in config.bindings or ())
-    )
+    config = dataclasses.replace(config, agents=MAX_AGENTS)
     write_host_file(config)
 
 
