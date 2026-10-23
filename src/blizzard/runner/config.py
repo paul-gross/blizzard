@@ -16,7 +16,6 @@ from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.flags import FlagRegistry, FlagResolution, HeldKey
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.auth.roles import RolePolicy
 from blizzard.runner.auth.session import CALLBACK_PATH
@@ -32,6 +31,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.route_paths import runner_prefix
+from blizzard.runner.tracing.config import RunnerTracingConfig
 
 #: Winter's own exporter variables; only the runner sets them, and only under `worker_programs`.
 _WINTER_OTEL_PREFIX = "WINTER_OTEL_"
@@ -592,7 +592,7 @@ class RunnerConfig:
     #: independent of lease release, which leaves them in place.
     worker_stdout_retention_days: int = DEFAULT_WORKER_STDOUT_RETENTION_DAYS
     #: Lease-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
-    tracing: TracingConfig = field(default_factory=TracingConfig)
+    tracing: RunnerTracingConfig = field(default_factory=RunnerTracingConfig)
     #: The host's ``[flags]`` overrides — flag name to on or off; matched to the registry at composition.
     flags: Mapping[str, bool] = field(default_factory=dict)
     #: The ``[flags]`` as the host's load resolved them, applied by composition.

@@ -319,7 +319,7 @@
     },
     {
       "default": false,
-      "deprecated": false,
+      "deprecated": true,
       "path": "tracing.harness_telemetry",
       "replaced_by": null,
       "required": false,
@@ -375,7 +375,7 @@
     },
     {
       "default": null,
-      "deprecated": false,
+      "deprecated": true,
       "path": "tracing.worker_program_services",
       "replaced_by": null,
       "required": false,
@@ -383,7 +383,7 @@
     },
     {
       "default": false,
-      "deprecated": false,
+      "deprecated": true,
       "path": "tracing.worker_programs",
       "replaced_by": null,
       "required": false,

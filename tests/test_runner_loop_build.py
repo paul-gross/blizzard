@@ -22,7 +22,6 @@ import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import (
@@ -56,6 +55,7 @@ from blizzard.runner.subscriptions.internal.openai_credential_renewer import Ope
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from tests.config_inputs import create_runner_app
 from tests.harness_sections import sections
 from tests.host_files import load_runner_config, one_workspace, write_minimal_host
@@ -840,7 +840,7 @@ def _harness_telemetry_env(
     """The identity env of the Claude Code adapter the production route builds from ``[tracing]``."""
     settings = tmp_path / "worker-settings.json"
     settings.write_text(json.dumps({"env": settings_env or {}}))
-    tracing = TracingConfig(platform=platform, harness_telemetry=harness_telemetry)
+    tracing = RunnerTracingConfig(platform=platform, harness_telemetry=harness_telemetry)
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -921,7 +921,7 @@ def test_process_graph_builds_the_trace_sweep_over_the_configured_tracing(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        tracing=TracingConfig(sweep_seconds=7),
+        tracing=RunnerTracingConfig(sweep_seconds=7),
     )
     exporter = InMemoryTraceExporter()
     graph = build_runner_process(

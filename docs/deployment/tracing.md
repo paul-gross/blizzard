@@ -482,9 +482,9 @@ token), so `winter` command spans nest under the step. With it off, no `WINTER_O
   scope `blizzard.cli` stays `blizzard-cli`. The sender's own resource is never read. The runner refuses to start on an
   empty scope or name, a `blizzard.cli` key, a non-string name, or a name that is `blizzard-hub`, `blizzard-runner`,
   `blizzard-chunk` or `blizzard-cli`. The table has no effect unless `worker_programs = true` or
-  `harness_telemetry = true`, and none on the hub, which has no receiver. A bad entry is a config-load failure and the
-  runner does not start, unlike the OpenTelemetry environment settings, which are reported and leave the runner running
-  with tracing off.
+  `harness_telemetry = true`. The hub refuses these keys: they belong in `blizzard-host.toml`. A bad entry is a
+  config-load failure and the runner does not start, unlike the OpenTelemetry environment settings, which are reported
+  and leave the runner running with tracing off.
 - **Risk.** Blizzard cannot control what a third-party program puts in its spans; one may record request bodies or query
   parameters. Turn this on only for programs you trust with that.
 - **The harness reads these variables too.** An agent harness that honors `OTEL_EXPORTER_*` exports its traces to the

@@ -50,6 +50,7 @@ from blizzard.runner.host_layout import (
     RUNNERS_DIRNAME,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
 HOST_REGISTRY_NAME = "host"
 
@@ -138,6 +139,7 @@ _HOST_KEYS = (
     ConfigKey("auth.hub_role_default", STRING, default=DEFAULT_AUTH_HUB_ROLE),
     ConfigKey("auth.users", OPEN_TABLE),
     *TRACING_KEYS,
+    *RUNNER_TRACING_KEYS,
     ConfigKey("transcripts", TABLE),
     ConfigKey("transcripts.ship", BOOLEAN, default=DEFAULT_TRANSCRIPTS_SHIP),
     ConfigKey("transcripts.record_max_bytes", INTEGER),

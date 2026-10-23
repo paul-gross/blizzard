@@ -174,7 +174,8 @@ class CloseIntentDrainer:
         record no longer holds is absent."""
         if not chunk_ids:
             return {}
-        return {chunk_id: chunk.project_id for chunk_id, chunk in self._chunks.get_many(sorted(chunk_ids)).items()}
+        chunks = self._chunks.get_many(sorted(chunk_ids))
+        return {chunk_id: chunk.project_id for chunk_id, chunk in chunks.items() if chunk.project_id is not None}
 
     def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
         """Attempt each of ``due`` — this tenant's due intents, in intent order — counting each

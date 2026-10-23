@@ -18,7 +18,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
@@ -29,6 +28,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.attributes import RUNNER_ID
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -84,7 +84,7 @@ def _host(tmp_path: Path, exports: _Exports) -> HostProcess:
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
         hub_url="http://127.0.0.1:9",
-        tracing=TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True),
+        tracing=RunnerTracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True),
     )
     config.data_dir.mkdir(parents=True, exist_ok=True)
     migrated_store_at(config.db_url)

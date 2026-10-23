@@ -44,7 +44,6 @@ from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcom
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, trace_id
 from blizzard.runner.config import RunnerConfig
@@ -60,6 +59,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
 from blizzard.runner.tracing.attributes import RUNNER_ID, RUNNER_NAME
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE,
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
@@ -121,7 +121,7 @@ def _handle(
     exporter: InMemorySpanExporter, identity: ICurrentRunnerIdentity | None = None, *, by_context: bool = False
 ) -> IPlatformTracing:
     return build_platform_tracing(
-        TracingConfig(platform=True, platform_sample_ratio=1.0),
+        RunnerTracingConfig(platform=True, platform_sample_ratio=1.0),
         _ENDPOINT,
         resource={"service.name": "blizzard-runner"},
         scope=PLATFORM_INSTRUMENTATION_SCOPE,
@@ -188,7 +188,7 @@ def _app(  # type: ignore[no-untyped-def]
         root=tmp_path,
         db_url=f"sqlite:///{tmp_path / 'runner.db'}",
         hub_url="http://hub.local:8421",
-        tracing=TracingConfig(
+        tracing=RunnerTracingConfig(
             worker_programs=worker_programs,
             worker_program_services=services or {},
             harness_telemetry=harness_telemetry,
@@ -722,7 +722,7 @@ def test_an_unsupported_or_malformed_request_is_refused(
 
 
 def test_the_receiver_is_404_while_platform_tracing_is_off(tmp_path: Path) -> None:
-    disabled = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
+    disabled = build_platform_tracing(RunnerTracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
     with runner_client(_app(tmp_path, disabled, [])) as client:
         assert _post_json(client, _export(_own_trace())).status_code == 404
 
@@ -951,7 +951,7 @@ class _Telemetry:
         self.metrics = _CapturingMetricExporter()
         self.logs = InMemoryLogRecordExporter()
         self.handle = build_received_telemetry_export(
-            TracingConfig(platform=True, harness_telemetry=harness_telemetry),
+            RunnerTracingConfig(platform=True, harness_telemetry=harness_telemetry),
             _ENDPOINT,
             resource={"service.name": "blizzard-runner"},
             metric_exporter=self.metrics,
@@ -1150,7 +1150,7 @@ def test_the_new_receivers_refuse_a_closed_leases_token_403(tmp_path: Path, path
 
 @pytest.mark.parametrize("path", _NEW_PATHS)
 def test_the_new_receivers_are_404_while_either_switch_is_off(tmp_path: Path, path: str) -> None:
-    off = build_platform_tracing(TracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
+    off = build_platform_tracing(RunnerTracingConfig(), {}, resource=_RESOURCE_OFF, scope="s", scope_version="1")
     with runner_client(_app(tmp_path, off, [], harness_telemetry=True)) as client:
         assert _post(client, path, _body_for(path)).status_code == 404
     (tmp_path / "second").mkdir()
@@ -1412,7 +1412,7 @@ def test_a_slow_destination_does_not_hold_the_receivers_response(tmp_path: Path)
     metrics = _HeldMetricExporter(release)
     logs = _HeldLogExporter(release)
     received = build_received_telemetry_export(
-        TracingConfig(platform=True, harness_telemetry=True),
+        RunnerTracingConfig(platform=True, harness_telemetry=True),
         _ENDPOINT,
         resource={"service.name": "blizzard-runner"},
         metric_exporter=metrics,

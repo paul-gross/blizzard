@@ -28,7 +28,7 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, ChunkFacts, NodeQuestion, QuestionDelivery
+from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -44,7 +44,6 @@ from blizzard.hub.domain.execution.usage_facts import (
     subscription_identity,
     usage_miss_reason,
 )
-from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
@@ -168,7 +167,7 @@ class FactIngestService:
         route_ended: list[int] = []
         row_id_by_seq: dict[int, int] = {}
 
-        projects = self._event_projects([fact for fact in pushed if fact.seq > mark])
+        chunks = self._event_chunks([fact for fact in pushed if fact.seq > mark])
         for fact in sorted(pushed, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
@@ -179,7 +178,7 @@ class FactIngestService:
                 fact.payload,
                 route_token_mode=route_token_mode,
                 runner_name=runner_name,
-                projects=projects,
+                chunks=chunks,
             )
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
@@ -213,8 +212,8 @@ class FactIngestService:
             row_id_by_seq=row_id_by_seq,
         )
 
-    def _event_projects(self, fresh: Sequence[PushedFact]) -> dict[str, ProjectId]:
-        """The project of each chunk the push's fresh ``event.recorded`` facts name, in one batched read
+    def _event_chunks(self, fresh: Sequence[PushedFact]) -> Mapping[str, Chunk]:
+        """The chunk each of the push's fresh ``event.recorded`` facts names, in one batched read
         (``bzh:bulk-reconstitution``); a chunk the record no longer holds is absent."""
         chunk_ids = {
             chunk_id
@@ -223,7 +222,7 @@ class FactIngestService:
         }
         if not chunk_ids:
             return {}
-        return {chunk_id: chunk.project_id for chunk_id, chunk in self._chunks.get_many(sorted(chunk_ids)).items()}
+        return self._chunks.get_many(sorted(chunk_ids))
 
     def _route_ended(self, fact: PushedFact) -> bool:
         """Whether a rejected fact was refused because its chunk has no live route: a route-token-gated
@@ -248,7 +247,7 @@ class FactIngestService:
         payload: dict[str, object],
         *,
         route_token_mode: str,
-        projects: Mapping[str, ProjectId],
+        chunks: Mapping[str, Chunk],
         runner_name: str | None = None,
     ) -> tuple[bool, int | None]:
         """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
@@ -334,12 +333,13 @@ class FactIngestService:
             if wire_kind is None:
                 _log.warning("event fact not admitted to the log", kind=fact.require_text("kind"))
                 return False, None
+            chunk = chunks.get(fact.text("chunk_id") or "")
             event_id = self._events.record(
                 kind=wire_kind,
                 runner_id=runner_id,
                 runner_name=runner_name,
                 chunk_id=fact.text("chunk_id"),
-                project_id=projects.get(fact.text("chunk_id") or ""),
+                project_id=chunk.project_id if chunk is not None else None,
                 lease_id=fact.text("lease_id"),
                 node_name=fact.text("node_name"),
                 message=fact.string("message"),

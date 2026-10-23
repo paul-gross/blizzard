@@ -15,10 +15,10 @@ import httpx
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from tests import claude_code_telemetry
 from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, runner_config
@@ -62,7 +62,7 @@ def _hub(hub_dir: Path, port: int, env: dict[str, str], *, platform: bool) -> su
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     config = load_hub_config(hub_dir)
-    tracing = TracingConfig(platform=platform, platform_sample_ratio=1.0)
+    tracing = RunnerTracingConfig(platform=platform, platform_sample_ratio=1.0)
     config = dataclasses.replace(config, tracing=tracing)
     config.config_path.write_text(config.to_toml())
     return subprocess.Popen(
@@ -110,7 +110,7 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
+        config = dataclasses.replace(config, tracing=RunnerTracingConfig(platform=True, platform_sample_ratio=1.0))
         write_host_file(config)
         env = runner_spawn_env(
             config.hub_url,
@@ -173,7 +173,7 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, tracing=TracingConfig(platform=True, platform_sample_ratio=1.0))
+        config = dataclasses.replace(config, tracing=RunnerTracingConfig(platform=True, platform_sample_ratio=1.0))
         write_host_file(config)
         env = runner_spawn_env(
             config.hub_url, {"BLIZZARD_MOCK_HARNESS_FENCE": "1", "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
@@ -228,7 +228,7 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
     token = "service-lease-token"
     with mock_hub(bin_dir, hub_port), otlp_sink() as sink:
         config: RunnerConfig = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        tracing = TracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
+        tracing = RunnerTracingConfig(platform=True, platform_sample_ratio=1.0, harness_telemetry=True)
         config = dataclasses.replace(config, tracing=tracing)
         write_host_file(config)
         env = runner_spawn_env(

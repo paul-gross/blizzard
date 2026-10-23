@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
+from blizzard.hub.domain.projects.model import ProjectId
 
 pytestmark = pytest.mark.unit
 
@@ -80,7 +81,7 @@ def test_record_derives_severity_from_the_closed_vocabulary() -> None:
         kind="worker-lost",
         runner_id="r1",
         chunk_id="ch_1",
-        project_id="prj_1",
+        project_id=ProjectId("prj_1"),
         lease_id="lease_1",
         node_name="build",
         message="lost",
@@ -95,7 +96,7 @@ def test_the_frame_carries_the_project_the_caller_passed_and_a_row_naming_a_gone
     events, publisher = _FakeEvents(), _FakePublisher()
     service = _service(events, publisher)
 
-    for project_id in ("prj_1", None):
+    for project_id in (ProjectId("prj_1"), None):
         service.record(
             kind="worker-lost",
             runner_id="r1",
@@ -108,5 +109,5 @@ def test_the_frame_carries_the_project_the_caller_passed_and_a_row_naming_a_gone
             at=_AT,
         )
 
-    assert publisher.projects == ["prj_1", None]
+    assert publisher.projects == [ProjectId("prj_1"), None]
     assert [row.kind for row in events.rows] == ["worker-lost", "worker-lost"]
