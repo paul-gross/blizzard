@@ -5,6 +5,7 @@ to one tenant — against a real hub holding two."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -172,3 +173,34 @@ def test_a_cli_sign_in_belongs_to_the_person_and_no_tenant(tmp_path: Path) -> No
     assert unnamed.json()["detail"]["code"] == "tenant_required"
     for tenant in (default_tenant(hub.engine), bravo.tenant):
         assert hub.client.get("/api/chunks", headers={**bearer, TENANT_HEADER: tenant}).status_code == 200
+
+
+def test_the_tenant_variable_names_the_tenant_and_the_flag_overrides_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    bravo = hub.add_tenant("bravo")
+    sent = _cli_against(hub)
+    monkeypatch.setenv("BZ_HUB_TENANT", bravo.tenant)
+
+    from_variable = _runner_list()
+    from_flag = _runner_list("--tenant", default_tenant(hub.engine))
+
+    assert from_variable.exit_code == 0, from_variable.output
+    assert from_flag.exit_code == 0, from_flag.output
+    assert [headers[TENANT_HEADER] for headers in sent] == [bravo.tenant, default_tenant(hub.engine)]
+
+
+def test_an_empty_tenant_variable_sends_no_tenant_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    sent = _cli_against(hub)
+    monkeypatch.setenv("BZ_HUB_TENANT", "")
+
+    result = _runner_list()
+
+    assert result.exit_code == 0, result.output
+    assert sent and all(TENANT_HEADER not in headers for headers in sent)
+
+
+def test_a_tenant_variable_in_the_developers_shell_does_not_reach_a_test(tmp_path: Path) -> None:
+    assert "BZ_HUB_TENANT" not in os.environ

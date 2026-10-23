@@ -24,6 +24,8 @@ class View(Protocol):
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the colocated default (band +2).
 ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
+# The tenant the tenant-scoped verbs act in: ``--tenant`` overrides it; an empty value counts as unset.
+ENV_HUB_TENANT = "BZ_HUB_TENANT"
 CLIENT_TIMEOUT = 15.0
 
 #: The actionable hint a verb's own unnamed 401 maps to.

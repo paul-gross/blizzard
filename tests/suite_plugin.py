@@ -13,6 +13,7 @@ import pytest
 from blizzard.cli.config_inputs import STRICT_CONFIG_ENVIRONMENT_VARIABLE
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
+from blizzard.hub.cli.context import ENV_HUB_TENANT
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
 from blizzard.hub.store.tenant_guard import GUARD_ENVIRONMENT_VARIABLE, install_tenant_guard
 from blizzard.runner.config import ENV_HUB_URL
@@ -129,9 +130,10 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _strip_hub_coordinates_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the hub URL and every runner token variable — the pre-host unsuffixed one included — so a developer's
-    shell never leaks them into an in-process host config load."""
+    """Unset the hub URL, the hub tenant and every runner token variable — the pre-host unsuffixed one included — so
+    a developer's shell never leaks them into an in-process host config load."""
     monkeypatch.delenv(ENV_HUB_URL, raising=False)
+    monkeypatch.delenv(ENV_HUB_TENANT, raising=False)
     for name in list(os.environ):
         if name == HUB_TOKEN_VARIABLE_PREFIX.rstrip("_") or name.startswith(HUB_TOKEN_VARIABLE_PREFIX):
             monkeypatch.delenv(name, raising=False)
