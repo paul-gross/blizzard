@@ -300,7 +300,9 @@ class Throttle:
             on_usage_limit,
         ):
             return None
-        return ThrottleSettings(pace, utilization, budget, schedule, on_decline=on_decline, on_usage_limit=on_usage_limit)
+        return ThrottleSettings(
+            pace, utilization, budget, schedule, on_decline=on_decline, on_usage_limit=on_usage_limit
+        )
 
     def _hold_or_release(self, key: str) -> HoldOrRelease:
         if key not in self.view:
