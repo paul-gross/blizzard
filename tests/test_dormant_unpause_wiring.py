@@ -28,6 +28,7 @@ from blizzard.runner.lifecycle.spawn import Spawner, Suppression, SuppressionCau
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
+from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -280,6 +281,8 @@ def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(  # type:
     tmp_path, monkeypatch, paused, ask_parked, suppression, operator_holds, declined
 ):
     rig = _rig(tmp_path)
+    throttle = ThrottleSettings(on_usage_limit=HoldOrRelease.RELEASE)
+    rig.ctx = replace(rig.ctx, config=replace(rig.ctx.config, throttle=throttle))
     if paused:
         rig.hub.chunks["ch_1"] = replace(
             rig.hub.chunks["ch_1"], pause=ChunkPause(by="operator", set_at="2026-07-16T12:00:00Z")
@@ -290,7 +293,7 @@ def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(  # type:
 
     _unpause(rig, ask_parked=ask_parked)
 
-    assert release == [((rig.ctx.config.throttle, rig.park), {"operator_holds": operator_holds, "declined": declined})]
+    assert release == [((throttle, rig.park), {"operator_holds": operator_holds, "declined": declined})]
 
 
 def test_a_chunk_routed_elsewhere_is_never_offered_back(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
@@ -553,3 +556,25 @@ def test_a_cleared_elicitation_logs_its_chunk_lease_and_epoch(tmp_path, monkeypa
             "epoch": 1,
         }
     ]
+
+
+def test_a_standing_elicitation_does_not_relaunch_the_judge_unless_the_move_says_so(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    rig = _moving(tmp_path, monkeypatch, UnpauseMove.WAKE)
+    _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
+    relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
+
+    _unpause(rig, elicitation=_elicitation(rig))
+
+    assert relaunch == []
+    assert len(rig.wake) == 1
+
+
+def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the_wake(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    rig = _moving(tmp_path, monkeypatch, UnpauseMove.RELAUNCH_JUDGE)
+    _spy(monkeypatch, DormantSession, "_resolve_harness", rig.harness, bound=True)
+    relaunch = _spy(monkeypatch, DormantSession, "_resume_judge_usage_limit_park", bound=True)
+
+    _unpause(rig, elicitation=None)
+
+    assert relaunch == []
+    assert len(rig.wake) == 1
