@@ -25,11 +25,11 @@ import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
 
-import blizzard.runner.process.internal.subprocess_child_processes as child_driver
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.compatibility import (
     PROBE_ROSTER,
@@ -71,6 +71,7 @@ from blizzard.runner.harness.opencode.compatibility.scratch_config import (
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
 from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_run_jsonl
+from blizzard.runner.process.child_processes import ChildLaunchError, IPtyChild
 from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = pytest.mark.component
@@ -291,18 +292,18 @@ def test_interactive_start_reaps_process_group_when_setup_is_interrupted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     spawned: list[int] = []
-    real_fork = child_driver.pty.fork
+    real_spawn_pty = CHILDREN.spawn_pty
 
-    def recording_fork() -> tuple[int, int]:
-        child_pid, master_fd = real_fork()
-        spawned.append(child_pid)
-        return child_pid, master_fd
+    def recording_spawn_pty(*args: Any, **kwargs: Any) -> IPtyChild:
+        child = real_spawn_pty(*args, **kwargs)
+        spawned.append(child.pid)
+        return child
 
     def interrupt_setup(fd: int) -> None:
         del fd
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(child_driver.pty, "fork", recording_fork)
+    monkeypatch.setattr(CHILDREN, "spawn_pty", recording_spawn_pty)
     monkeypatch.setattr(opencode_process, "_set_interactive_terminal_size", interrupt_setup)
 
     with pytest.raises(KeyboardInterrupt):
@@ -316,6 +317,11 @@ def test_interactive_start_reaps_process_group_when_setup_is_interrupted(
     assert spawned[0] > 0
     with pytest.raises(ProcessLookupError):
         os.killpg(spawned[0], 0)
+
+
+def test_a_pty_child_that_cannot_exec_is_a_launch_error(tmp_path: Path) -> None:
+    with pytest.raises(ChildLaunchError):
+        CHILDREN.spawn_pty(["/nonexistent/opencode"], cwd=tmp_path, env=tool_env())
 
 
 @requires_landlock

@@ -79,14 +79,12 @@ class ISpawnedChild(Protocol):
         ...
 
 
-@domain_model
-@dataclass(frozen=True)
-class PtyChild:
-    """A child attached to a new pseudo-terminal it leads as its session; the caller reads and writes
-    ``master_fd`` and reaps ``pid`` itself."""
+class IPtyChild(ISpawnedChild, Protocol):
+    """A long-lived child attached to a new pseudo-terminal it leads as its session; the caller reads and writes
+    ``master_fd`` and owns closing it. It has no pipe streams: its stdio is the terminal."""
 
-    pid: int
-    master_fd: int
+    @property
+    def master_fd(self) -> int: ...
 
 
 class IChildProcesses(Protocol):
@@ -133,8 +131,9 @@ class IChildProcesses(Protocol):
         cwd: Path | str,
         env: ChildEnv,
         child_setup: Callable[[], None] | None = None,
-    ) -> PtyChild:
-        """Start a long-lived child with a controlling pseudo-terminal; a failed exec exits the child with 127."""
+    ) -> IPtyChild:
+        """Start a long-lived child with a controlling pseudo-terminal, ``child_setup`` running in it between fork
+        and exec. Raises :class:`ChildLaunchError` when it cannot be started."""
         ...
 
     def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
