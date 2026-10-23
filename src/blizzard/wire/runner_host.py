@@ -13,7 +13,7 @@ from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
-from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView
+from blizzard.wire.runner_status import EnvironmentView, PauseStateView, SubscriptionView, ThrottleStatusView
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -43,6 +43,7 @@ class HostRunnerView(HostRunnerStateView):
     halted_reasons: list[str] = Field(default_factory=list)
     #: ``None`` for a halted runner, which holds no brake.
     pause: PauseStateView | None = None
+    throttle: ThrottleStatusView | None = None
     bindings: list[HostRunnerBindingView] = Field(default_factory=list)
     agents_in_use: int = 0
     #: The sum of its bindings' ``agents``.

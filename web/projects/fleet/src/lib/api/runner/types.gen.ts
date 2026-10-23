@@ -1619,6 +1619,20 @@ export type FloorClearRequest = {
 };
 
 /**
+ * FloorClearStatusView
+ */
+export type FloorClearStatusView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Cleared At
+     */
+    cleared_at: string;
+};
+
+/**
  * FloorClearView
  *
  * The clear just recorded.
@@ -1636,6 +1650,52 @@ export type FloorClearView = {
      * Slug
      */
     slug: string | null;
+};
+
+/**
+ * FloorHoldView
+ */
+export type FloorHoldView = {
+    /**
+     * Awaits Sample
+     */
+    awaits_sample: boolean;
+    /**
+     * Expected Reset
+     */
+    expected_reset: string;
+    /**
+     * Grace Opens At
+     */
+    grace_opens_at: string | null;
+    /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Window
+     */
+    window: string | null;
+};
+
+/**
+ * FloorStatusView
+ */
+export type FloorStatusView = {
+    /**
+     * Admits
+     */
+    admits: boolean;
+    clear: FloorClearStatusView | null;
+    hold: FloorHoldView | null;
+    /**
+     * Subscription
+     */
+    subscription: string | null;
 };
 
 /**
@@ -2213,6 +2273,7 @@ export type HostRunnerView = {
      * State
      */
     state: 'serving' | 'halted';
+    throttle: ThrottleStatusView | null;
 };
 
 /**
@@ -3353,6 +3414,7 @@ export type RunnerStatusView = {
      * Tenant Name
      */
     tenant_name: string | null;
+    throttle: ThrottleStatusView | null;
     /**
      * Unmatched Bindings
      */
@@ -3782,6 +3844,61 @@ export type TakeoverRequest = {
      * Force
      */
     force?: boolean;
+};
+
+/**
+ * ThrottleLeverView
+ *
+ * One configured lever in gate order, with its setting, reading and answer.
+ */
+export type ThrottleLeverView = {
+    /**
+     * Admits
+     */
+    admits: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Reading
+     */
+    reading: string;
+    /**
+     * Setting
+     */
+    setting: string;
+    /**
+     * Until
+     */
+    until: string | null;
+};
+
+/**
+ * ThrottleStatusView
+ */
+export type ThrottleStatusView = {
+    /**
+     * Declining
+     */
+    declining: Array<string>;
+    floor: FloorStatusView;
+    /**
+     * Levers
+     */
+    levers: Array<ThrottleLeverView>;
+    /**
+     * On Decline
+     */
+    on_decline: string;
+    /**
+     * On Usage Limit
+     */
+    on_usage_limit: string;
+    /**
+     * State
+     */
+    state: string;
 };
 
 /**

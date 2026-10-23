@@ -14,7 +14,11 @@
       [tone]="row().tone"
       [blink]="row().tone === 'green' ? 'pulse' : 'hold'"
     />
-    <span class="name" data-testid="host-runner-name">{{ row().name }}</span>
+    @if (row().runnerId; as id) {
+      <a class="name" data-testid="host-runner-name" [routerLink]="['/machine', id]">{{ row().name }}</a>
+    } @else {
+      <span class="name" data-testid="host-runner-name">{{ row().name }}</span>
+    }
     @if (row().ref; as ref) {
       <span class="ref" [title]="row().runnerId">{{ ref }}</span>
     }
@@ -94,6 +98,16 @@
       <span class="sub">{{ name }}</span>
     }
   </span>
+</ng-template>
+<ng-template #throttle>
+  @if (row().throttle; as throttle) {
+    <span>{{ throttle.summary }}</span>
+    <ul class="lines">
+      @for (line of throttle.lines; track line.label) {
+        <li>{{ line.label }} · {{ line.text }}</li>
+      }
+    </ul>
+  }
 </ng-template>
 <ng-template #harness>
   @if (row().harnesses.length === 0) {

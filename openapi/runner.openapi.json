@@ -2740,6 +2740,24 @@
         "title": "FloorClearRequest",
         "type": "object"
       },
+      "FloorClearStatusView": {
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "cleared_at": {
+            "title": "Cleared At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleared_at",
+          "by"
+        ],
+        "title": "FloorClearStatusView",
+        "type": "object"
+      },
       "FloorClearView": {
         "description": "The clear just recorded.",
         "properties": {
@@ -2769,6 +2787,112 @@
           "by"
         ],
         "title": "FloorClearView",
+        "type": "object"
+      },
+      "FloorHoldView": {
+        "properties": {
+          "awaits_sample": {
+            "title": "Awaits Sample",
+            "type": "boolean"
+          },
+          "expected_reset": {
+            "title": "Expected Reset",
+            "type": "string"
+          },
+          "grace_opens_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grace Opens At"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
+          }
+        },
+        "required": [
+          "kind",
+          "harness_id",
+          "window",
+          "expected_reset",
+          "awaits_sample",
+          "grace_opens_at"
+        ],
+        "title": "FloorHoldView",
+        "type": "object"
+      },
+      "FloorStatusView": {
+        "properties": {
+          "admits": {
+            "title": "Admits",
+            "type": "boolean"
+          },
+          "clear": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FloorClearStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FloorHoldView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          }
+        },
+        "required": [
+          "subscription",
+          "admits",
+          "hold",
+          "clear"
+        ],
+        "title": "FloorStatusView",
         "type": "object"
       },
       "GardenProposalClosureKind": {
@@ -3712,6 +3836,16 @@
             "title": "State",
             "type": "string",
             "x-blizzard-open": true
+          },
+          "throttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThrottleStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3721,6 +3855,7 @@
           "served",
           "halted_reasons",
           "pause",
+          "throttle",
           "bindings",
           "agents_in_use",
           "max_agents"
@@ -5543,6 +5678,16 @@
             ],
             "title": "Tenant Name"
           },
+          "throttle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThrottleStatusView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "unmatched_bindings": {
             "default": [],
             "items": {
@@ -5563,6 +5708,7 @@
           "tenant_name",
           "workspace_id",
           "pause",
+          "throttle",
           "capacities",
           "hub",
           "last_tick_at",
@@ -6253,6 +6399,92 @@
           }
         },
         "title": "TakeoverRequest",
+        "type": "object"
+      },
+      "ThrottleLeverView": {
+        "description": "One configured lever in gate order, with its setting, reading and answer.",
+        "properties": {
+          "admits": {
+            "title": "Admits",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reading": {
+            "title": "Reading",
+            "type": "string"
+          },
+          "setting": {
+            "title": "Setting",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "name",
+          "setting",
+          "reading",
+          "admits",
+          "until"
+        ],
+        "title": "ThrottleLeverView",
+        "type": "object"
+      },
+      "ThrottleStatusView": {
+        "properties": {
+          "declining": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Declining",
+            "type": "array"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorStatusView"
+          },
+          "levers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ThrottleLeverView"
+            },
+            "title": "Levers",
+            "type": "array"
+          },
+          "on_decline": {
+            "title": "On Decline",
+            "type": "string"
+          },
+          "on_usage_limit": {
+            "title": "On Usage Limit",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "declining",
+          "floor",
+          "levers",
+          "on_decline",
+          "on_usage_limit"
+        ],
+        "title": "ThrottleStatusView",
         "type": "object"
       },
       "ToolCallSegmentView": {

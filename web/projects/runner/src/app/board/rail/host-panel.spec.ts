@@ -16,6 +16,7 @@ const RUNNERS: runnerApi.HostRunnerView[] = [
     served: true,
     halted_reasons: [],
     pause: { local: false, hub: false, effective: false, local_reason: null },
+    throttle: null,
     bindings: [
       { project: 'console', workspace_id: 'workspace-web', agents: 4 },
       { project: 'ops', workspace_id: 'workspace-local', agents: 2 },
@@ -30,6 +31,7 @@ const RUNNERS: runnerApi.HostRunnerView[] = [
     served: true,
     halted_reasons: [],
     pause: { local: true, hub: false, effective: true, local_reason: 'OpenCode is not installed' },
+    throttle: null,
     bindings: [{ project: 'winter', workspace_id: 'workspace-local', agents: 2 }],
     agents_in_use: 0,
     max_agents: 2,

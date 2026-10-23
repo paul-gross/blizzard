@@ -3,6 +3,7 @@ import { type BeaconTone, compactRef, harnessName, type runnerApi, type Tone } f
 import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { PanelProject } from '../core/panel-reads.model';
 import { slugForEntry } from '../core/panel-reads.model';
+import { throttleLines, throttleSummary, type ThrottleLine } from '../core/throttle.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
 export interface HostRunnerBinding {
@@ -76,6 +77,7 @@ export interface HostRunnerRow {
   readonly spends: readonly string[];
   readonly harnesses: readonly HostRunnerHarness[];
   readonly gates: readonly string[];
+  readonly throttle: { readonly summary: string; readonly lines: readonly ThrottleLine[] } | null;
   readonly hub: HostRunnerHub | null;
   /** What the runner cannot act on — entries naming one project twice, environments held under no binding. */
   readonly problems: readonly string[];
@@ -202,6 +204,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
     const id = runner.runner_id;
     const dashboard = id === null ? undefined : reads.dashboards.get(id);
     const status = dashboard?.runner;
+    const throttle = status?.throttle ?? runner.throttle;
     const health = harnesses(dashboard?.harness_health?.items ?? []);
     const held = reads.chunks
       .filter((chunk) => chunk.lease.owner.runnerId === id && chunk.lane !== 'done')
@@ -226,6 +229,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
       spends: id === null ? [] : reads.subscriptions.filter((sub) => sub.spenders?.includes(id)).map((sub) => sub.name),
       harnesses: health,
       gates: status?.gates ?? [],
+      throttle: throttle ? { summary: throttleSummary(throttle), lines: throttleLines(throttle) } : null,
       hub: status
         ? {
             endpoint: status.hub.endpoint,

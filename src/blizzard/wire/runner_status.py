@@ -31,6 +31,46 @@ class PauseStateView(WireModel):
     local_reason: str | None = None
 
 
+class FloorHoldView(WireModel):
+    kind: str
+    harness_id: str | None
+    window: str | None
+    expected_reset: str
+    awaits_sample: bool
+    grace_opens_at: str | None
+
+
+class FloorClearStatusView(WireModel):
+    cleared_at: str
+    by: str
+
+
+class FloorStatusView(WireModel):
+    subscription: str | None
+    admits: bool
+    hold: FloorHoldView | None = None
+    clear: FloorClearStatusView | None = None
+
+
+class ThrottleLeverView(WireModel):
+    """One configured lever in gate order, with its setting, reading and answer."""
+
+    name: str
+    setting: str
+    reading: str
+    admits: bool
+    until: str | None = None
+
+
+class ThrottleStatusView(WireModel):
+    state: str
+    declining: list[str] = []
+    floor: FloorStatusView
+    levers: list[ThrottleLeverView] = []
+    on_decline: str
+    on_usage_limit: str
+
+
 class BindingCapacityView(WireModel):
     """One binding's view of the runner's shared agents: ``agents`` is the binding's declared value, or the runner's
     count when it declares none; ``used`` the agents working its project; ``free`` the runner's free agents, any of
@@ -136,6 +176,7 @@ class RunnerStatusView(WireModel):
     tenant_name: str | None = None
     workspace_id: str
     pause: PauseStateView
+    throttle: ThrottleStatusView | None = None
     capacities: CapacitiesView
     hub: HubConnectivityView
     last_tick_at: str | None

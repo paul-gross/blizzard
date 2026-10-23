@@ -1,0 +1,18 @@
+<fleet-kit-async-state [state]="state()" placement="inline" loadingText="LOADING…" errorText="THROTTLE UNAVAILABLE" emptyText="NO THROTTLE REPORTED">
+  @if (throttle(); as status) {
+    <div data-testid="throttle-state">{{ summary() }}</div>
+    <dl data-testid="throttle-lines">
+      @for (line of lines(); track line.label) {
+        <dt>{{ line.label }}</dt><dd>{{ line.text }}</dd>
+      }
+    </dl>
+    @if (!status.floor.admits) {
+      <fleet-kit-button testid="clear-floor" [disabled]="pending() || !scopeReady()" (click)="confirming.set(true)">Clear floor</fleet-kit-button>
+    }
+  }
+</fleet-kit-async-state>
+<fleet-kit-error-line [message]="error()" />
+@if (confirming()) {
+  <fleet-kit-confirm-dialog [open]="true" heading="Clear floor" [message]="prompt()" confirmLabel="Clear" variant="primary" testid="confirm-clear-floor"
+    (confirmed)="confirming.set(false); clearFloor.emit()" (cancelled)="confirming.set(false)" />
+}

@@ -1,0 +1,10 @@
+<main data-testid="machine-page">
+  <a routerLink="/host">← Host</a>
+  <h1>Runner {{ runnerId() }}</h1>
+  <fleet-kit-panel label="Pause" [bodyScroll]="false">
+    <app-pause-control [runnerId]="runnerId()" />
+  </fleet-kit-panel>
+  <fleet-kit-panel label="Throttle" [bodyScroll]="false">
+    <app-local-throttle [runnerId]="runnerId()" />
+  </fleet-kit-panel>
+</main>

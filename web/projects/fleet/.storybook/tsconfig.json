@@ -4,6 +4,6 @@
     "outDir": "../../../out-tsc/storybook",
     "types": []
   },
-  "include": ["../src/**/*.stories.ts", "../../hub/src/app/shell/**/*.stories.ts", "./*.ts", "../src/lib/testing/**/*.ts"],
+  "include": ["../src/**/*.stories.ts", "../../hub/src/app/shell/**/*.stories.ts", "../../runner/src/app/runners/**/*.stories.ts", "./*.ts", "../src/lib/testing/**/*.ts"],
   "exclude": ["../src/**/*.spec.ts"]
 }

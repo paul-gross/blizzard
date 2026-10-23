@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
 
-import { localPauseMutationKey } from './mutation-keys';
+import { floorClearMutationKey, localPauseMutationKey } from './mutation-keys';
 import { hostKey, runnerDashboardKey } from './query-keys';
 
 /**
@@ -89,5 +89,34 @@ export function injectLocalPauseMutation(runnerId: () => string) {
         queryClient.invalidateQueries({ queryKey: runnerDashboardKey(vars.runnerId) }),
         queryClient.invalidateQueries({ queryKey: hostKey }),
       ]),
+  }));
+}
+
+export interface FloorClearVars {
+  readonly runnerId: string;
+  readonly subscription: string | null;
+}
+
+export function injectFloorClearMutation(runnerId: () => string) {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: floorClearMutationKey(runnerId()),
+    mutationFn: async ({ runnerId: id, subscription }: FloorClearVars) => {
+      const result = subscription === null
+        ? await runnerApi.clearRunnerFloorRunnersRunnerIdApiRunnerFloorClearPost({
+            path: { runner_id: id }, body: {}, throwOnError: false,
+          })
+        : await runnerApi.clearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPost({
+            path: { slug: subscription }, body: {}, throwOnError: false,
+          });
+      if (result.error) throw result.error;
+      return result.data;
+    },
+    onSettled: (_data, _error, vars) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: hostKey }),
+      queryClient.invalidateQueries(vars.subscription === null
+        ? { queryKey: runnerDashboardKey(vars.runnerId) }
+        : { predicate: (query) => query.queryKey[1] === 'dashboard' }),
+    ]),
   }));
 }

@@ -32,6 +32,8 @@
   font-size: var(--fs-md);
   overflow-wrap: anywhere;
 }
+a.name { text-decoration: none; }
+a.name:hover, a.name:focus-visible { text-decoration: underline; }
 .runner.halted .name {
   color: var(--label);
 }

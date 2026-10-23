@@ -5,7 +5,7 @@ import { runnerClient } from 'fleet';
 import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
-import { injectLocalPauseMutation } from './status.query';
+import { injectFloorClearMutation, injectLocalPauseMutation } from './status.query';
 import { hostKey, runnerDashboardKey } from './query-keys';
 
 /** A minimal host so the mutation — a `Component` field initializer concern —
@@ -19,7 +19,32 @@ import { hostKey, runnerDashboardKey } from './query-keys';
 })
 class PauseMutationHost {
   readonly mutation = injectLocalPauseMutation(() => 'rn_1');
+  readonly floorMutation = injectFloorClearMutation(() => 'rn_1');
 }
+
+describe('injectFloorClearMutation', () => {
+  let stub: RequestClientStub;
+  beforeEach(() => {
+    stub = stubRequestClient(runnerClient, () => ({ cleared_at: '2026-10-22T09:14:00Z', by: 'operator' }));
+  });
+  afterEach(() => stub.restore());
+
+  it('clears a shared floor through the host and an unshared floor through the runner; refetches host and dashboards', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidated = vi.spyOn(client, 'invalidateQueries');
+    await TestBed.configureTestingModule({
+      imports: [PauseMutationHost], providers: [provideZonelessChangeDetection(), provideTanStackQuery(client)],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PauseMutationHost);
+    fixture.detectChanges();
+    await fixture.componentInstance.floorMutation.mutateAsync({ runnerId: 'rn_1', subscription: 'anthropic' });
+    await fixture.componentInstance.floorMutation.mutateAsync({ runnerId: 'rn_1', subscription: null });
+    expect(stub.forRoute('/api/host/subscriptions/anthropic/floor/clear', 'POST')).toHaveLength(1);
+    expect(stub.forRoute('/runners/rn_1/api/runner/floor/clear', 'POST')).toHaveLength(1);
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: hostKey });
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: runnerDashboardKey('rn_1') });
+  });
+});
 
 describe('injectLocalPauseMutation', () => {
   let stub: RequestClientStub;
