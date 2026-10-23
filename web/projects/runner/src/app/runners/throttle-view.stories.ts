@@ -19,6 +19,14 @@ const held: runnerApi.ThrottleStatusView = {
   } },
 };
 
+const pacing: runnerApi.ThrottleStatusView = {
+  ...open, state: 'declining', declining: ['pace'],
+  levers: [{
+    name: 'pace', setting: '7d, lead 5 points', reading: '7d: 86% spent, 71% elapsed, lead 5',
+    admits: false, until: '2026-10-24T08:00:00Z',
+  }],
+};
+
 const meta: Meta<ThrottleView> = {
   title: 'Runner/Throttle',
   component: ThrottleView,
@@ -30,6 +38,7 @@ type Story = StoryObj<ThrottleView>;
 
 export const Open: Story = {};
 export const Held: Story = { args: { throttle: held } };
+export const LeverDeclining: Story = { args: { throttle: pacing } };
 export const Cleared: Story = { args: { throttle: {
   ...open, floor: { ...open.floor, clear: { by: 'paul', cleared_at: '2026-10-22T09:14:00Z' } },
 } } };

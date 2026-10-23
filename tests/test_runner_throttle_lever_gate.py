@@ -12,9 +12,11 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.api.control import _throttle_view
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.steps import Fill
+from blizzard.runner.status.view import ThrottleStatus
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
 from blizzard.runner.throttle.levers import LeverAnswer, LeverName
@@ -115,6 +117,20 @@ def test_the_verdict_holds_the_configured_levers_in_gate_order_and_declines_in_t
         LeverName.SCHEDULE,
     ]
     assert not verdict.admits_claim and not verdict.admits_step
+
+
+def test_the_status_view_maps_each_lever_in_gate_order_and_names_every_declining_throttle() -> None:
+    ctx = _ctx(_ALL)
+    _sample(ctx, 96.0, resets_in_h=3.0)
+
+    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
+
+    assert [lever.name for lever in view.levers] == ["pace", "utilization", "schedule"]
+    assert view.declining == ["pace", "utilization", "schedule"]
+    utilization = view.levers[1]
+    assert not utilization.admits
+    assert utilization.until is not None and utilization.until.endswith("Z")
+    assert utilization.setting and utilization.reading
 
 
 def test_a_floor_holding_is_declined_first_ahead_of_the_levers() -> None:
