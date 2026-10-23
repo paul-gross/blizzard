@@ -21,7 +21,7 @@ const summary: ChunkSummary = {
   current_node_id: null, work_refs: [], open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
   blocked: null, closed_prs: [], completed_at: null, cost: chunkUsageTotalView(), current_node_name: null,
   default_effort: null, default_harnesses: [], default_model: [], environment_count: 0, landed: false,
-  project_id: null, project_name: null, project_slug: null, promotable: false, runner_id: null, runner_name: null,
+  project_id: null, project_name: null, project_slug: null, promotable: false, runner_id: null, runner_name: null, workspace_id: null,
   terminal: false,
 };
 

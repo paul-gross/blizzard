@@ -27,6 +27,7 @@ describe('BoardShell unknown status lane', () => {
     promotable: false,
     runner_id: null,
     runner_name: null,
+    workspace_id: null,
     terminal: false,
     chunk_id: `ch_01${suffix}`,
     graph_id: 'gr_1',

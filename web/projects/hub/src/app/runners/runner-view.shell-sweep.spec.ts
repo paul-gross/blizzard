@@ -163,7 +163,7 @@ describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
       const first = rows[0];
       const l1 = first.querySelector<HTMLElement>('.r1')!.getBoundingClientRect();
       const bars = first.querySelectorAll<HTMLElement>('[data-testid="runner-agents"]');
-      expect(bars, 'one agents bar per binding').toHaveLength(2);
+      expect(bars, 'one agents bar per runner, across its bindings').toHaveLength(1);
       const l2 = bars[bars.length - 1].getBoundingClientRect();
       expect(l2.top, 'agents line sits below the name line').toBeGreaterThanOrEqual(l1.bottom);
       for (const mark of first.querySelectorAll<HTMLElement>('fleet-kit-glyph')) {

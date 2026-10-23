@@ -100,26 +100,26 @@ export interface HostGroups<Row extends RunnerRegistryView> {
   readonly hostless: readonly Row[];
 }
 
-/** Whether `chunk` works the project a binding names — the binding names its project as
- * the runner's declaration entry, so it matches the chunk's id or slug, or the project the
- * hub resolved that entry to. */
-function chunkWorksBinding(chunk: ChunkSummary, project: string, resolvedId: string | null): boolean {
+/** Whether `chunk` was claimed for a binding: in the binding's workspace, on the project the
+ * binding names. The binding names its project as the runner's declaration entry, so it matches
+ * the chunk's id or slug, or the project the hub resolved that entry to. */
+function chunkWorksBinding(chunk: ChunkSummary, workspaceId: string, project: string, resolvedId: string | null): boolean {
+  if (chunk.workspace_id !== workspaceId) return false;
   if (chunk.project_id === project || chunk.project_slug === project) return true;
   return resolvedId !== null && chunk.project_id === resolvedId;
 }
 
-/** Each of `runner`'s bindings joined to the board's live chunks it holds on that binding's
- * project — a chunk counts toward the first binding it matches, never two. */
+/** Each of `runner`'s bindings joined to the board's live chunks it holds on that binding — the
+ * chunks the runner holds, claimed in the binding's workspace, on its project. A chunk whose
+ * workspace matches no binding counts toward none. */
 function bindingUses(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]): readonly BindingUse[] {
   const held = chunks.filter((chunk) => chunk.runner_id === runner.runner_id);
-  const claimed = new Set<string>();
   const served = servedProjects(runner);
   return (runner.bindings ?? []).map((binding) => {
     const entry = served.find((s) => s.entry === binding.project);
-    const matched = held.filter(
-      (chunk) => !claimed.has(chunk.chunk_id) && chunkWorksBinding(chunk, binding.project, entry?.project_id ?? null),
+    const matched = held.filter((chunk) =>
+      chunkWorksBinding(chunk, binding.workspace_id, binding.project, entry?.project_id ?? null),
     );
-    for (const chunk of matched) claimed.add(chunk.chunk_id);
     return {
       project: entry?.name ?? entry?.slug ?? binding.project,
       workspaceId: binding.workspace_id,

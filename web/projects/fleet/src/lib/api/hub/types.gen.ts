@@ -1798,7 +1798,7 @@ export type ChunkStopRequest = {
  *
  * One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
  * the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
- * ``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
+ * ``runner_id``/``workspace_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
  * unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.
  */
 export type ChunkSummary = {
@@ -1893,6 +1893,10 @@ export type ChunkSummary = {
      * Work Refs
      */
     work_refs: Array<WorkRefView>;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string | null;
 };
 
 /**

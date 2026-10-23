@@ -34,6 +34,7 @@ const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
   promotable: false,
   runner_id: null,
   runner_name: null,
+  workspace_id: null,
 });
 
 const ZERO_COUNTS: ChunkCountsView = chunkCountsView({

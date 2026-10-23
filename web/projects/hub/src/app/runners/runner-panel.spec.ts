@@ -285,7 +285,7 @@ describe('RunnerPanel host cards', () => {
       },
     ],
   };
-  const LIVE = [{ chunk_id: 'ch_live', graph_id: 'gr_1', status: 'running', runner_id: 'rA', project_id: 'pj_default', environment_count: 2 }];
+  const LIVE = [{ chunk_id: 'ch_live', graph_id: 'gr_1', status: 'running', runner_id: 'rA', workspace_id: 'ws-1', project_id: 'pj_default', environment_count: 2 }];
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {

@@ -311,6 +311,7 @@ class ChunkView:
             default_effort=self.chunk.default_effort,
             default_harnesses=list(self.chunk.default_harnesses),
             runner_id=runner_id,
+            workspace_id=route.workspace_id if route is not None else None,
             runner_name=self._runner_names([runner_id]).get(runner_id) if runner_id is not None else None,
             environment_count=len(route.environment_ids) if route is not None else 0,
             cost=self.usage_total(),
