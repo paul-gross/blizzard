@@ -187,15 +187,19 @@ The writes require the `runner:retire` permission and the reads `fleet:view`.
 
 The board's runner panel is a glance: a pace line per subscription, then one compact row per runner, each name a link to
 the Fleet tab, then one environment strip per workspace. It carries no host cards and no actions. The host cards, and
-the verbs below, live on the Fleet tab and the mobile Fleet screen. To an identity holding `runner:retire`, a host's
-card carries retire, revoke-token and enroll. Retire and revoke-token each ask for confirmation first. A retire the hub
-refuses shows the refusal and asks again before forcing it. Enroll shows the new token once. Releasing a runner back to
-standing alone is a CLI and API verb (`blizzard hub runner-host release`, `POST /api/hosts/{host_id}/releases`), not a
-button.
+the verbs below, live on the desktop Fleet tab. To an identity holding `runner:retire`, a host's card carries retire,
+revoke-token and enroll. Retire and revoke-token each ask for confirmation first. A retire the hub refuses shows the
+refusal and asks again before forcing it. Enroll shows the new token once. Releasing a runner back to standing alone is
+a CLI and API verb (`blizzard hub runner-host release`, `POST /api/hosts/{host_id}/releases`), not a button.
 
 On a desktop-width screen the Fleet tab lists the hosts, then the runners under no host, and shows the selected one
 beside the list. A host's detail carries the same retire, revoke-token and enroll in its title bar, with the same
 confirmations, over its connection facts, workspaces, subscription usage and runners.
+
+On a phone the Fleet tab is the board's runner panel, each runner also carrying a full-width hub pause/resume toggle to
+an identity holding `runner:pause`. A runner's name opens its host's detail — or its own, standing alone — behind a back
+bar: the same connection facts, workspaces, subscription usage and runners, each held chunk opening its chunk page, but
+no host verbs. Retire, revoke-token and enroll are desktop-only.
 
 ### A registered host
 

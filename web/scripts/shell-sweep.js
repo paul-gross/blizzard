@@ -58,7 +58,13 @@
  *   - projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts — the
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
- *     horizontal overflow, at the board right rail's ~390px width.
+ *     horizontal overflow, at the board right rail's ~390px width; a long runner
+ *     name holds to one ellipsised line, and the phone Fleet tab's pause/resume
+ *     toggle spans each runner, at 390/320px.
+ *   - projects/hub/src/app/runners/host-detail.shell-sweep.spec.ts — the host
+ *     detail the phone's Fleet tab opens full-screen: its `@container` breakpoint
+ *     stacks connection facts, environment lines and each runner's facts over its
+ *     finger-sized held-chunk links, with no horizontal overflow at 390/320px.
  *   - projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts — the desktop
  *     Fleet tab: the host list and detail sit side by side at 1280px, the
  *     title-bar host actions are on screen and hit-testable, a selected
@@ -268,12 +274,6 @@
  *     graph detail header's lifecycle badge, for a retired and an enabled graph: a
  *     text-variant kit badge whose computed colour is the lifecycle tone's red/cyan,
  *     right-aligned in the panel's header bar ahead of the retire/re-enable control.
- *   - projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts — the hub's mobile
- *     Fleet screen (the bottom-nav Fleet tab): each runner card genuinely stacks below
- *     the last with no horizontal overflow at 390/320px, and a card carrying claims, a
- *     slot bar, and a grouped subscription pace bar with a long name stays inside its
- *     own width; and a two-runner host card above a host-less row stays inside the
- *     panel at 390/320px.
  *   - projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts — the
  *     `KitMasterDetail` shell's collapse rule: the list pane sits beside the detail
  *     pane, sized to `--master-list-col`, at 1024px, and genuinely stacks above it with
@@ -333,6 +333,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/runners/host-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/core/identity/session-recovery-view.shell-sweep.spec.ts' },
@@ -381,7 +382,6 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-explorer-list.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-session-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail-header.shell-sweep.spec.ts' },
-  { project: 'hub', spec: 'projects/hub/src/app/runners/runners-view.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/kit/kit-master-detail.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/transcripts/chunk-transcripts-provenance.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/shell/mobile-chrome/mobile-tab-bar.shell-sweep.spec.ts' },

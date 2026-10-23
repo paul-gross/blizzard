@@ -336,4 +336,56 @@ describe('RunnerPanelView', () => {
       expect(seen?.getAttribute('title')).toBe('offline');
     });
   });
+
+  /*
+   * The hub brake the phone's Fleet tab turns on (`canPause`) — off by default, so the board
+   * rail stays a glance with no buttons (above).
+   */
+  describe('pause/resume toggle', () => {
+    async function renderToggles(over: Partial<Record<'pendingRunnerIds' | 'actionError', unknown>> = {}) {
+      const fixture = TestBed.createComponent(RunnerPanelView);
+      fixture.componentRef.setInput('state', 'ready');
+      fixture.componentRef.setInput('rows', [row('rn_live'), row('rn_held', { hub_paused: true })]);
+      fixture.componentRef.setInput('canPause', true);
+      for (const [name, value] of Object.entries(over)) fixture.componentRef.setInput(name, value);
+      await fixture.whenStable();
+      return { fixture, el: fixture.nativeElement as HTMLElement };
+    }
+
+    const toggle = (el: HTMLElement, id: string) =>
+      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="runner-toggle"]`);
+
+    it("labels each runner's toggle by its hub brake — Pause while it runs, Resume once held", async () => {
+      const { el } = await renderToggles();
+
+      expect(toggle(el, 'rn_live')?.textContent?.trim()).toBe('Pause');
+      expect(toggle(el, 'rn_live')?.getAttribute('aria-label')).toBe('Pause rn_live-name (rn_live) at the hub');
+      expect(toggle(el, 'rn_held')?.textContent?.trim()).toBe('Resume');
+    });
+
+    it('emits togglePause with the tapped runner\'s row', async () => {
+      const { fixture, el } = await renderToggles();
+      const emitted: RunnerRow[] = [];
+      fixture.componentInstance.togglePause.subscribe((r) => emitted.push(r));
+
+      toggle(el, 'rn_held')?.click();
+
+      expect(emitted.map((r) => r.runner_id)).toEqual(['rn_held']);
+    });
+
+    it('disables only a runner whose pause/resume is in flight', async () => {
+      const { el } = await renderToggles({ pendingRunnerIds: ['rn_live'] });
+
+      expect(toggle(el, 'rn_live')?.disabled).toBe(true);
+      expect(toggle(el, 'rn_held')?.disabled).toBe(false);
+    });
+
+    it('reports a failure in a visible notice above the runners, and none without one', async () => {
+      const failed = await renderToggles({ actionError: 'runner already paused' });
+      expect(failed.el.querySelector('[data-testid="runner-action-error"]')?.textContent).toBe('runner already paused');
+
+      const quiet = await renderToggles();
+      expect(quiet.el.querySelector('[data-testid="runner-action-error"]')).toBeNull();
+    });
+  });
 });

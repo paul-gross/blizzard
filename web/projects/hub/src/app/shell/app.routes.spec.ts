@@ -173,11 +173,11 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
     expect(router.url).toBe('/fleet');
   });
 
-  it('renders the mobile Fleet screen at /fleet/<id> when forced to mobile', async () => {
+  it('renders the mobile Fleet detail at /fleet/<id> when forced to mobile', async () => {
     TestBed.inject(ViewportService).setOverride('mobile');
     const fixture = TestBed.createComponent(App);
     const router = TestBed.inject(Router);
@@ -186,7 +186,7 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="fleet-split"]')).toBeNull();
   });
 
@@ -202,7 +202,8 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
 
       expect(router.url).toBe(url);
       expect(el.querySelector('[data-testid="fleet-split"]')).toBeTruthy();
-      expect(el.querySelector('[data-testid="mobile-fleet-panel"]')).toBeNull();
+      expect(el.querySelector('[data-testid="runner-panel"]')).toBeNull();
+      expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeNull();
     });
   }
 });

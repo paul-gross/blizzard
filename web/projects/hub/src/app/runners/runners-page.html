@@ -1,13 +1,44 @@
-<app-runners-view
-  [rows]="rows()"
-  [cards]="cards()"
-  [state]="state()"
-  [canPause]="canPause()"
-  [pendingRunnerIds]="pendingRunnerIds()"
-  [actionError]="actionError()"
-  [hostVerbs]="hostVerbsVm()"
-  (hostVerb)="runHostVerb($event)"
-  [showRetired]="showRetired()"
-  (toggleShowRetired)="toggleShowRetired()"
-  (togglePause)="toggle($event)"
-/>
+@if (selectedId() === null) {
+  <app-runner-view
+    [rows]="rows()"
+    [cards]="cards()"
+    [state]="state()"
+    [canPause]="canPause()"
+    [pendingRunnerIds]="pendingRunnerIds()"
+    [actionError]="actionError()"
+    (togglePause)="toggle($event)"
+  />
+} @else {
+  <a class="back-row" [routerLink]="['/fleet'] | lensLink" data-testid="mobile-fleet-back">
+    <fleet-kit-back-bar label="Fleet" />
+  </a>
+  <div class="detail" data-testid="mobile-fleet-detail">
+    @if (actionError(); as error) {
+      <p class="notice" role="alert" data-testid="mobile-fleet-action-error">{{ error }}</p>
+    }
+    @if (selection(); as sel) {
+      @switch (sel.kind) {
+        @case ('host') {
+          <app-host-detail
+            [detail]="sel"
+            [canPause]="canPause()"
+            [pendingRunnerIds]="pendingRunnerIds()"
+            (togglePause)="toggle($event)"
+          />
+        }
+        @case ('runner') {
+          <app-hostless-runner-detail
+            [detail]="sel"
+            [canPause]="canPause()"
+            [pausePending]="pendingRunnerIds().includes(sel.row.runner_id)"
+            (togglePause)="toggle($event)"
+          />
+        }
+        @case ('not-found') {
+          <p class="not-found" data-testid="mobile-fleet-not-found">No host or runner {{ sel.id }}.</p>
+        }
+        @default {}
+      }
+    }
+  </div>
+}

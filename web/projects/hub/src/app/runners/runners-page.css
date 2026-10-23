@@ -1,5 +1,35 @@
+/* A routed page fills the router outlet area, same as `GlanceBoard`'s own `:host`: the overview
+   scrolls inside its panel, the detail inside its own column under the back bar. */
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
+  box-sizing: border-box;
+  padding: 6px;
+}
+app-runner-view {
+  flex: 1;
+  min-height: 0;
+}
+.back-row {
+  flex: none;
+  text-decoration: none;
+}
+.detail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.notice {
+  margin: 8px 8px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--red-dim);
+  border-left-width: 2px;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+.not-found {
+  padding: 14px 12px;
+  color: var(--label);
 }

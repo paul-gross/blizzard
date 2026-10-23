@@ -23,6 +23,9 @@
         }
       </div>
     }
+    @if (actionError(); as error) {
+      <p class="notice" role="alert" data-testid="runner-action-error">{{ error }}</p>
+    }
     <ul class="runners" data-testid="runner-list">
       @for (entry of rail().rows; track entry.row.runner_id) {
         <li
@@ -71,6 +74,22 @@
               [used]="agents.used"
               [total]="agents.total"
             />
+          }
+          <!-- The hub's brake, spanning the runner — big enough to hit on a phone. -->
+          @if (canPause()) {
+            <div class="toggle">
+              <fleet-kit-button
+                testid="runner-toggle"
+                size="cta"
+                [variant]="entry.row.hub_paused ? 'primary' : 'default'"
+                [ariaLabel]="(entry.row.hub_paused ? 'Resume ' : 'Pause ') + entry.row.runner_name + ' (' + entry.row.runner_id + ') at the hub'"
+                [title]="toggleHint(entry.row)"
+                [disabled]="pendingRunnerIds().includes(entry.row.runner_id)"
+                (click)="togglePause.emit(entry.row)"
+              >
+                {{ entry.row.hub_paused ? 'Resume' : 'Pause' }}
+              </fleet-kit-button>
+            </div>
           }
         </li>
       }
