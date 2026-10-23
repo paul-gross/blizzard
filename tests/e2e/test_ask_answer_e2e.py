@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.composition import RunnerProcess
@@ -124,7 +124,7 @@ def _graph_yaml(harness: MockHarness) -> str:
 
 def _tick_until(
     config: RunnerConfig,
-    hub: httpx.Client,
+    hub: httpx2.Client,
     chunk_id: str,
     fenced: dict[str, str],
     targets: set[str],

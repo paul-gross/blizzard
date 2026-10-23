@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.config import RunnerConfig
@@ -105,7 +105,7 @@ def _reset_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     return bin_dir, workspace, origins, origin_bare
 
 
-def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, *, poll_timeout: int = 600) -> str:
+def _ingest_and_promote(hub: httpx2.Client, forge: httpx2.Client, *, poll_timeout: int = 600) -> str:
     assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml(poll_timeout)}).status_code == 201
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pr-ci", "body": "the PR+CI chunk"})
     assert issue.status_code == 201, issue.text
@@ -116,7 +116,7 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, *, poll_timeout:
     return chunk_id
 
 
-def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
+def _drive_until(config: RunnerConfig, hub: httpx2.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
     """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
 
     Wrapped in :func:`runner_api` so the build node's scripted push+declare has a live

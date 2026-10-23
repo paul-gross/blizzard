@@ -14,7 +14,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
@@ -72,7 +72,7 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
+def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
     """File a forge issue (work-source seam) and ingest its pointer into a ready chunk."""
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
     assert issue.status_code == 201, issue.text
@@ -189,13 +189,13 @@ def test_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_path: P
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     exit_code: int | None = None
     try:
         await_http(proc, client, "/api/health", log=log)
         # The server dies mid-stream by design; closing our own end of a now-dead
         # connection is expected to raise, not a failure of what this test asserts.
-        with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
+        with contextlib.suppress(httpx2.HTTPError), client.stream("GET", "/api/events/stream") as resp:
             assert resp.status_code == 200
             next(resp.iter_text())  # block for the reserved comment — the subscriber is live
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
@@ -44,7 +44,7 @@ _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1
 
 
 def _app_with_status(
-    tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_proxy_client: httpx.Client | None = None
+    tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_proxy_client: httpx2.Client | None = None
 ) -> tuple[TestClient, object]:  # type: ignore[type-arg]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=hub_url or "")
@@ -138,10 +138,10 @@ def _seed_all_sections(store) -> None:  # type: ignore[no-untyped-def]
 
 @pytest.mark.component
 def test_the_composed_payload_includes_all_seven_sections_with_real_data(tmp_path: Path) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=_COUNTS)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
     _seed_all_sections(store)
 
@@ -164,10 +164,10 @@ def test_the_composed_payload_includes_all_seven_sections_with_real_data(tmp_pat
 
 @pytest.mark.component
 def test_fleet_summary_is_none_on_a_hub_outage_and_the_local_sections_still_populate(tmp_path: Path) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
     _seed_all_sections(store)
 
@@ -188,12 +188,12 @@ def test_fleet_summary_is_none_when_the_runner_is_unwired_to_a_hub_and_the_local
 ) -> None:
     attempted = False
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         nonlocal attempted
         attempted = True
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client, store = _app_with_status(tmp_path, hub_url=None, hub_proxy_client=client)
     _seed_all_sections(store)
 
@@ -216,11 +216,11 @@ def test_the_dashboards_own_hub_call_carries_the_bounded_timeout(tmp_path: Path)
     module default (proven by ``tests/test_fleet_summary_proxy.py``)."""
     seen_timeouts: list[float] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_timeouts.append(request.extensions.get("timeout", {}).get("pool"))
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
     _seed_all_sections(store)
 
@@ -239,10 +239,10 @@ def test_the_dashboards_own_unreachable_hub_line_logs_below_error(tmp_path: Path
     default ``error``, distinct from ``/api/fleet-summary``'s own call, which keeps it
     (proven by ``tests/test_fleet_summary_proxy.py``)."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client, store = _app_with_status(tmp_path, hub_proxy_client=client)
     _seed_all_sections(store)
 

@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -32,7 +32,7 @@ _RUNNER = JoinedRunner(runner_id="rn_01JX0000000000000000000REGS", runner_name="
 
 
 @contextlib.contextmanager
-def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> Iterator[tuple[RunnerConfig, Any]]:
+def _host(root: Path, hub: httpx2.Client, hub_url: str, *, subscribed: bool) -> Iterator[tuple[RunnerConfig, Any]]:
     """A live host whose one runner, with two agents, binds ``default`` and ``web`` in its workspace, naming the
     ``anthropic`` subscription when ``subscribed``; yields its config and a reader of the hub's own-runner view once
     the runner has registered."""
@@ -65,9 +65,9 @@ def _host(root: Path, hub: httpx.Client, hub_url: str, *, subscribed: bool) -> I
         stderr=subprocess.STDOUT,
         text=True,
     )
-    local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+    local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
 
-    def view() -> httpx.Response:
+    def view() -> httpx2.Response:
         return hub.get(f"/api/fleet/runners/{_RUNNER.runner_id}", headers=_RUNNER.bearer)
 
     try:
@@ -89,7 +89,7 @@ def _sampled_slugs(config: RunnerConfig) -> list[str]:
         engine.dispose()
 
 
-def _seed_world(hub: httpx.Client) -> None:
+def _seed_world(hub: httpx2.Client) -> None:
     assert hub.post("/_seed/projects", json={"slug": "web", "name": "Web"}).status_code == 201
     seed_pinned_runner(hub, _RUNNER)
 

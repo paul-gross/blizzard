@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from google.protobuf.json_format import MessageToDict, Parse
@@ -171,7 +171,7 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
 def _app(  # type: ignore[no-untyped-def]
     tmp_path: Path,
     handle: IPlatformTracing,
-    seen: list[httpx.Request],
+    seen: list[httpx2.Request],
     counter: ReceiverCounter | None = None,
     limiter: SpanRateLimiter | None = None,
     worker_programs: bool = False,
@@ -195,12 +195,12 @@ def _app(  # type: ignore[no-untyped-def]
         ),
     )
 
-    def hub(request: httpx.Request) -> httpx.Response:
+    def hub(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        return httpx.Response(200, json={"history": [], "migrations": [], "bounces": []})
+        return httpx2.Response(200, json={"history": [], "migrations": [], "bounces": []})
 
-    proxy = httpx.Client(
-        transport=httpx.MockTransport(hub),
+    proxy = httpx2.Client(
+        transport=httpx2.MockTransport(hub),
         base_url=config.hub_url,
         headers={"Authorization": f"Bearer {_HUB_TOKEN}"},
     )
@@ -245,7 +245,7 @@ def _app(  # type: ignore[no-untyped-def]
     return app
 
 
-def _history(client: TestClient) -> httpx.Response:
+def _history(client: TestClient) -> httpx2.Response:
     return client.get(
         f"/api/leases/lease_1/history?route={_ROUTE_TOKEN}&note={_BODY}",
         headers={"X-Blizzard-Lease-Token": _LEASE_TOKEN},
@@ -255,7 +255,7 @@ def _history(client: TestClient) -> httpx.Response:
 def test_a_lease_scoped_request_is_a_worker_server_span_and_a_hub_call_propagates_traceparent(tmp_path: Path) -> None:
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
     with runner_client(_app(tmp_path, handle, seen)) as client:
         assert _history(client).status_code == 200
     spans = _finished(handle, exporter)
@@ -354,7 +354,7 @@ def test_no_planted_secret_reaches_any_span(tmp_path: Path) -> None:
 class _CallingHub:
     """Delegates to a fake hub, first making one traced call whose path names the method — a stand-in for the hub client."""
 
-    def __init__(self, inner: FakeHub, client: httpx.Client) -> None:
+    def __init__(self, inner: FakeHub, client: httpx2.Client) -> None:
         self._inner = inner
         self._client = client
 
@@ -374,7 +374,7 @@ def test_a_tick_is_a_root_with_one_child_per_step_and_hub_calls_under_their_step
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(200, json={})))
     handle.instrument_client(client)
     ctx = make_context(
         store,
@@ -764,7 +764,7 @@ def _ticked(
     exporter = InMemorySpanExporter()
     handle = _handle(exporter)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(200, json={})))
     handle.instrument_client(client)
     ctx = make_context(
         store,

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import quote, unquote
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.config import AuthConfig, OAuthProviderConfig
@@ -42,11 +42,11 @@ _RUNNER_NAME = "runner-svc-a"
 class _FederatedRunner(NamedTuple):
     """A joined runner's HTTP client and the cookie names its hub-minted id keys."""
 
-    client: httpx.Client
+    client: httpx2.Client
     names: CookieNames
 
 
-def _replay_bounce_cookies(runner: _FederatedRunner, login_resp: httpx.Response) -> None:
+def _replay_bounce_cookies(runner: _FederatedRunner, login_resp: httpx2.Response) -> None:
     """Re-set the bounce cookies on ``runner`` so the callback POST carries them, as a
     browser's would — ``http.cookiejar`` withholds any ``Secure`` cookie from an ``http``
     request, so the jar alone never returns them here."""
@@ -57,7 +57,7 @@ def _replay_bounce_cookies(runner: _FederatedRunner, login_resp: httpx.Response)
 @contextlib.contextmanager
 def _oauth_hub(
     hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` — mirrors
     ``tests/service/test_auth_login_service.py``'s own fixture of the same name."""
     env = {**os.environ, _SECRET_ENV: _SECRET}
@@ -74,7 +74,7 @@ def _oauth_hub(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -93,7 +93,7 @@ def _federated_runner(
     profile must be the hub's superuser) and adds it; the token lands in the runner's ``.env``."""
     public_url = f"http://127.0.0.1:{port}"
     hub_url = f"http://127.0.0.1:{hub_port}"
-    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+    with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
         operator.get(f"/api/auth/{sign_in}/authorize", follow_redirects=True)
         runner_id, token = add_runner(operator, name)
     adopt_runner(runner_dir, hub_url, token)
@@ -117,12 +117,12 @@ def _federated_runner(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=public_url, timeout=15.0)
+    client = httpx2.Client(base_url=public_url, timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
         # daemon's first registration — the one that declares this federation identity.
-        with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+        with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
             operator.get(f"/api/auth/{sign_in}/authorize", follow_redirects=True)
             assert poll_until(lambda: operator.get(f"/api/runners/{runner_id}").json()["registered_at"] is not None), (
                 "the runner never registered at its hub"
@@ -133,7 +133,7 @@ def _federated_runner(
         terminate(proc)
 
 
-def _bounce_once(hub: httpx.Client, runner: _FederatedRunner) -> None:
+def _bounce_once(hub: httpx2.Client, runner: _FederatedRunner) -> None:
     """Drive one federation round trip: the runner mints its own bounce ``state``
     (``GET /api/auth/login``), the hub (already carrying a session cookie in ``hub``'s
     own jar) mints+delivers a token for it, and the runner's callback consumes it."""
@@ -284,14 +284,14 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
             bounce_state = login_resp.cookies[runner.names.bounce_state]
 
             # User B joined through an invitation earlier; the bounce signs in a person the hub knows.
-            with httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0) as joining:
+            with httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0) as joining:
                 token = invite(tmp_path / "hub", "user-b@example.com")
                 joining.get(f"/api/auth/oidc-b/authorize?invite={token}", follow_redirects=True)
                 assert "bz_session" in joining.cookies
 
             # 2. A fresh browser hits authorize. Two providers means no single dance to
             #    auto-run, so it is handed to the /login chooser as return_to.
-            browser = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
+            browser = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
             try:
                 chooser = browser.get(authorize_url, follow_redirects=False)
                 assert chooser.status_code in (302, 307), chooser.text

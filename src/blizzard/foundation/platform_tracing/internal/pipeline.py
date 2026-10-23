@@ -6,13 +6,13 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 
-import httpx
+import httpx2
 from fastapi.telemetry import TelemetryConfig
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPX2ClientInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import __version__ as sqlalchemy_instrumentation_version
 from opentelemetry.instrumentation.sqlalchemy.engine import EngineTracer
 from opentelemetry.instrumentation.utils import suppress_instrumentation
@@ -258,8 +258,8 @@ class EnabledPlatformTracing:
         usage = NoOpMeterProvider().get_meter(_SQLALCHEMY_SCOPE).create_up_down_counter("db.client.connections.usage")
         self._engine_tracers.append(EngineTracer(tracer, engine, usage, enable_commenter=False))
 
-    def instrument_client(self, client: httpx.Client | httpx.AsyncClient) -> None:
-        HTTPXClientInstrumentor.instrument_client(client, tracer_provider=self._provider)
+    def instrument_client(self, client: httpx2.Client | httpx2.AsyncClient) -> None:
+        HTTPX2ClientInstrumentor.instrument_client(client, tracer_provider=self._provider)
 
     def suppressed(self) -> AbstractContextManager[object]:
         return suppress_instrumentation()

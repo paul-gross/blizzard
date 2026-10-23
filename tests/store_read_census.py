@@ -989,7 +989,7 @@ RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
     (IReadHarnessHealth, "admitted_range"): _HARNESS_HEALTH_EXEMPTION,
     (IReadArchivedTranscriptRepository, "read_turns"): (
         "blizzard.runner.transcripts.internal.http_archived_transcript_repository."
-        "HttpArchivedTranscriptRepository implements this over httpx against the hub's "
+        "HttpArchivedTranscriptRepository implements this over httpx2 against the hub's "
         "HTTP API — no SQL, and not part of blizzard.runner.composition.build_stores's "
         "bundle."
     ),

@@ -3,7 +3,7 @@ stubbed)."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
@@ -12,8 +12,8 @@ from tests.worker_http import bind_stubs
 pytestmark = pytest.mark.unit
 
 
-def _ok(body: object) -> httpx.Response:
-    return httpx.Response(200, json=body, request=httpx.Request("GET", "http://hub.test"))
+def _ok(body: object) -> httpx2.Response:
+    return httpx2.Response(200, json=body, request=httpx2.Request("GET", "http://hub.test"))
 
 
 def _decision(checks: list[dict[str, object]]) -> dict[str, object]:

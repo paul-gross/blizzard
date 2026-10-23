@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from structlog.testing import capture_logs
 
@@ -31,7 +31,7 @@ pytestmark = pytest.mark.unit
 _NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
-def _unreachable_client() -> httpx.Client:
+def _unreachable_client() -> httpx2.Client:
     """Every test in this file exercises a path that never reaches the network (a missing
     credentials file, or an unknown provider) — passing this in place of a real client
     proves no HTTP client is ever built along the way."""

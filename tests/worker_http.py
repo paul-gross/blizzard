@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+import httpx2
 from click.testing import CliRunner
 
 from blizzard.cli.collaborators import CliCollaborators
@@ -16,7 +16,7 @@ from blizzard.foundation.span_clock import Clock
 
 
 class StubClient:
-    """A client whose verbs are the callables a test supplies, each answering as ``httpx.<verb>(url, **kwargs)``.
+    """A client whose verbs are the callables a test supplies, each answering as ``httpx2.<verb>(url, **kwargs)``.
 
     ``request`` and ``stream`` take the method first; without a ``request`` callable, a request routes to its method's own."""
 
@@ -149,8 +149,8 @@ def bind_stubs(
     return Bound(collaborators, _BoundRunner(collaborators), factory.built)
 
 
-def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock: Clock | None = None) -> Bound:
-    """Answer worker commands' requests through an ``httpx.MockTransport``."""
+def bind_transport(handler: Callable[[httpx2.Request], httpx2.Response], *, clock: Clock | None = None) -> Bound:
+    """Answer worker commands' requests through an ``httpx2.MockTransport``."""
     built: list[Any] = []
 
     def factory(
@@ -159,10 +159,10 @@ def bind_transport(handler: Callable[[httpx.Request], httpx.Response], *, clock:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
         uds: str | None = None,
-    ) -> httpx.Client:
-        client = httpx.Client(transport=httpx.MockTransport(handler), base_url=base_url, headers=headers)
+    ) -> httpx2.Client:
+        client = httpx2.Client(transport=httpx2.MockTransport(handler), base_url=base_url, headers=headers)
         if timeout is not None:
-            client.timeout = httpx.Timeout(timeout)
+            client.timeout = httpx2.Timeout(timeout)
         built.append(client)
         return client
 
@@ -180,7 +180,7 @@ def bind_local_only(*, allow_base_urls: tuple[str, ...] = ()) -> Bound:
         timeout: float | None = None,
         headers: Mapping[str, str] | None = None,
         uds: str | None = None,
-    ) -> httpx.Client:
+    ) -> httpx2.Client:
         if uds is None and base_url not in allow_base_urls:
             raise AssertionError(
                 f"a local verb contacted {base_url or 'a remote host'}; it must only reach the local API"

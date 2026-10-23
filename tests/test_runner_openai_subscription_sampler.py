@@ -1,6 +1,6 @@
 """``OpenAISubscriptionSampler.sample``.
 
-Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and an injected
+Driven with an injected ``httpx2.Client`` (an ``httpx2.MockTransport``-backed fake) and an injected
 ``FixedClock`` — no real credential file location, no real network. Every failure path returns
 ``None`` and logs exactly one warning, never raises; the credential file is asserted read-only."""
 
@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from structlog.testing import capture_logs
 
@@ -71,11 +71,11 @@ def _sampler(
     *,
     clock: FixedClock | None = None,
 ) -> OpenAISubscriptionSampler:
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     return OpenAISubscriptionSampler(
         credentials_path=str(credentials_path),
         usage_api_base="https://chatgpt.test/backend-api",
-        http_client=lambda: httpx.Client(transport=transport),
+        http_client=lambda: httpx2.Client(transport=transport),
         clock=clock or FixedClock(_NOW),
     )
 
@@ -97,8 +97,8 @@ def _window(*, used_percent: object, window_seconds: object, reset_at: object) -
     return {"used_percent": used_percent, "limit_window_seconds": window_seconds, "reset_at": reset_at}
 
 
-def _ok_handler(request: httpx.Request) -> httpx.Response:
-    return httpx.Response(
+def _ok_handler(request: httpx2.Request) -> httpx2.Response:
+    return httpx2.Response(
         200,
         json=_usage_body(
             primary=_window(used_percent=16.0, window_seconds=_FIVE_HOURS, reset_at=_NOW.timestamp() + _FIVE_HOURS),
@@ -107,7 +107,7 @@ def _ok_handler(request: httpx.Request) -> httpx.Response:
     )
 
 
-def _unreachable_handler(request: httpx.Request) -> httpx.Response:
+def _unreachable_handler(request: httpx2.Request) -> httpx2.Response:
     raise AssertionError("the usage endpoint should not have been called")
 
 
@@ -134,7 +134,7 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
     creds = _live_credentials(tmp_path / "auth.json", clock)
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/backend-api/codex/usage"
         assert request.headers["Authorization"].startswith("Bearer ")
         assert request.headers["chatgpt-account-id"] == _ACCOUNT_ID
@@ -163,12 +163,12 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
 
 @pytest.mark.unit
 def test_the_request_does_not_carry_the_default_client_user_agent(tmp_path: Path) -> None:
-    """The request's ``User-Agent`` is not httpx's default."""
+    """The request's ``User-Agent`` is not httpx2's default."""
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
     seen: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request.headers["User-Agent"])
         return _ok_handler(request)
 
@@ -181,8 +181,8 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=16.0, window_seconds=_FIVE_HOURS, reset_at=_NOW.timestamp() + 60),
@@ -200,8 +200,8 @@ def test_the_window_label_is_derived_from_the_reported_length_not_the_response_k
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=1.0, window_seconds=3_600, reset_at=_NOW.timestamp() + 60),
@@ -220,8 +220,8 @@ def test_a_window_missing_its_length_is_skipped_rather_than_labelled_from_nothin
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=16.0, window_seconds=None, reset_at=_NOW.timestamp() + 60),
@@ -341,8 +341,8 @@ def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(tmp_path:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, json={"detail": "Unauthorized"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(401, json={"detail": "Unauthorized"})
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -356,8 +356,8 @@ def test_timeout_returns_endpoint_unreachable_and_warns_once(tmp_path: Path) -> 
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ReadTimeout("timed out", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ReadTimeout("timed out", request=request)
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -371,8 +371,8 @@ def test_connection_error_returns_endpoint_unreachable_and_warns_once(tmp_path: 
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("unreachable", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("unreachable", request=request)
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -386,8 +386,8 @@ def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(t
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=["not", "a", "mapping"])
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=["not", "a", "mapping"])
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -401,8 +401,8 @@ def test_unparseable_response_body_returns_response_unparseable_and_warns_once(t
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=b"<html>not json</html>", headers={"Content-Type": "application/json"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=b"<html>not json</html>", headers={"Content-Type": "application/json"})
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -416,8 +416,8 @@ def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(tmp_
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=_usage_body())
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=_usage_body())
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -431,8 +431,8 @@ def test_an_absent_rate_limit_block_returns_response_unparseable_and_warns_once(
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"plan_type": "plus", "rate_limit": None})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"plan_type": "plus", "rate_limit": None})
 
     with capture_logs() as logs:
         result = _sampler(creds, handler, clock=clock).sample()
@@ -446,8 +446,8 @@ def test_a_window_length_arriving_as_a_float_still_yields_an_integer_window(tmp_
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=5.0, window_seconds=18_000.0, reset_at=_NOW.timestamp() + 60),
@@ -469,9 +469,9 @@ def test_a_non_finite_window_length_skips_its_window_instead_of_raising(tmp_path
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         # Built as raw text: `json=` would refuse to serialize a non-finite float.
-        return httpx.Response(
+        return httpx2.Response(
             200,
             content=(
                 '{"rate_limit": {'
@@ -493,8 +493,8 @@ def test_two_windows_reporting_one_length_yield_a_single_labelled_window(tmp_pat
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=10.0, window_seconds=_FIVE_HOURS, reset_at=_NOW.timestamp() + 60),
@@ -515,8 +515,8 @@ def test_reset_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(tmp_pat
     creds = _live_credentials(tmp_path / "auth.json", clock)
     expected = _NOW + timedelta(seconds=_FIVE_HOURS)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200,
             json=_usage_body(
                 primary=_window(used_percent=1.0, window_seconds=_FIVE_HOURS, reset_at=expected.timestamp()),

@@ -1,14 +1,14 @@
 """Selects the sampler binding for one declared provider subscription.
 
 A ``provider -> binding`` map, confined to ``internal/`` (``bzh:dependency-inversion``) so
-the seam root stays free of both ``httpx`` and any one provider's binding. A provider with
+the seam root stays free of both ``httpx2`` and any one provider's binding. A provider with
 no known binding selects ``None`` — declared, but unsampled, never a config-load failure."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-import httpx
+import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
@@ -25,7 +25,7 @@ def select_sampler(
     declaration: SubscriptionSource,
     *,
     clock: IClock,
-    http_client: Callable[[], httpx.Client],
+    http_client: Callable[[], httpx2.Client],
 ) -> ISubscriptionSampler | None:
     """The sampler ``declaration.provider`` binds to, or ``None`` for an unknown provider."""
     if declaration.provider == PROVIDER_ANTHROPIC:

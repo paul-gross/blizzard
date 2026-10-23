@@ -123,8 +123,8 @@ def _accept_mint(hub, proposal_id: str, *, at: datetime) -> None:  # type: ignor
         )
 
 
-def _params(**overrides: object) -> dict[str, object]:
-    params: dict[str, object] = {"since": iso_utc(_SINCE), "until": iso_utc(_UNTIL)}
+def _params(**overrides: str) -> dict[str, str]:
+    params: dict[str, str] = {"since": iso_utc(_SINCE), "until": iso_utc(_UNTIL)}
     params.update(overrides)
     return params
 

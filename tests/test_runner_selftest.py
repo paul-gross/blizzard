@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from click.testing import CliRunner
@@ -745,13 +745,13 @@ def _serve_local_api(root: Path) -> Iterator[Path]:
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
-    transport = httpx.HTTPTransport(uds=str(path))
-    with httpx.Client(transport=transport, base_url="http://runner") as client:
+    transport = httpx2.HTTPTransport(uds=str(path))
+    with httpx2.Client(transport=transport, base_url="http://runner") as client:
         while time.monotonic() < deadline:
             try:
                 if client.get("/api/health").status_code == 200:
                     return
-            except httpx.HTTPError:
+            except httpx2.HTTPError:
                 pass
             time.sleep(0.05)
     raise AssertionError(f"runner local API never came up on {path}")

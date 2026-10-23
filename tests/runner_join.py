@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX, hub_token_variable
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, ENV_HUB_URL
@@ -43,7 +43,7 @@ class JoinedRunner:
         return {"Authorization": f"Bearer {self.token}"}
 
 
-def add_runner(hub: httpx.Client, name: str) -> tuple[str, str]:
+def add_runner(hub: httpx2.Client, name: str) -> tuple[str, str]:
     """Add a runner at ``hub`` through ``POST /api/runners`` — no sign-in on ``auth.mode = "none"`` or
     blizzard-mock's hub, else ``hub`` must carry an operator session allowed to add runners — and
     answer its minted id and the token issued with it."""
@@ -53,10 +53,10 @@ def add_runner(hub: httpx.Client, name: str) -> tuple[str, str]:
 
 
 #: The tokens :func:`fleet_headers` added runners for, per hub client and runner name.
-_FLEET_DRIVER_TOKENS: weakref.WeakKeyDictionary[httpx.Client, dict[str, str]] = weakref.WeakKeyDictionary()
+_FLEET_DRIVER_TOKENS: weakref.WeakKeyDictionary[httpx2.Client, dict[str, str]] = weakref.WeakKeyDictionary()
 
 
-def fleet_headers(hub: httpx.Client, name: str = "fleet-driver") -> dict[str, str]:
+def fleet_headers(hub: httpx2.Client, name: str = "fleet-driver") -> dict[str, str]:
     """The bearer a test presents to drive ``/api/fleet/*`` straight against ``hub`` — the fleet
     answers only a runner — for the runner added there under ``name`` on first use and reused for the
     client's lifetime, so each name a test drives the fleet as is one runner."""
@@ -100,9 +100,9 @@ def held_token(runner_dir: Path) -> str:
     return HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).held()
 
 
-def token_identity(hub_url: str, token: str) -> httpx.Response:
+def token_identity(hub_url: str, token: str) -> httpx2.Response:
     """``GET /api/fleet/identity`` under ``token`` — side-effect free, so a probe never registers."""
-    return httpx.get(f"{hub_url}/api/fleet/identity", headers={"Authorization": f"Bearer {token}"}, timeout=15.0)
+    return httpx2.get(f"{hub_url}/api/fleet/identity", headers={"Authorization": f"Bearer {token}"}, timeout=15.0)
 
 
 def join_runner(runner_dir: Path, hub_url: str, *, allow_readd: bool = False) -> JoinedRunner:
@@ -137,7 +137,7 @@ def pin_runner(runner_dir: Path, *, runner_id: str, name: str) -> JoinedRunner:
     return pinned
 
 
-def seed_pinned_runner(hub: httpx.Client, runner: JoinedRunner) -> None:
+def seed_pinned_runner(hub: httpx2.Client, runner: JoinedRunner) -> None:
     """Add ``runner`` at a blizzard-mock ``hub`` under its pinned id and token (``POST /_seed/runners``)."""
     seeded = hub.post(
         "/_seed/runners", json={"name": runner.runner_name, "runner_id": runner.runner_id, "token": runner.token}

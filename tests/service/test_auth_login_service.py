@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.auth_core import Role
@@ -38,7 +38,7 @@ _SECRET = "test-secret"
 @contextlib.contextmanager
 def _oauth_hub(
     hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
     configured providers — mirrors ``tests/fleet_launchers.py``'s own ``run_hub``,
     minus the work-source wiring this scenario does not need (login/`` /api/me`` alone).
@@ -58,7 +58,7 @@ def _oauth_hub(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client

@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from click.testing import CliRunner
@@ -124,13 +124,13 @@ def _serve_local_api(
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
-    transport = httpx.HTTPTransport(uds=str(path))
-    with httpx.Client(transport=transport, base_url="http://runner") as client:
+    transport = httpx2.HTTPTransport(uds=str(path))
+    with httpx2.Client(transport=transport, base_url="http://runner") as client:
         while time.monotonic() < deadline:
             try:
                 if client.get("/api/health").status_code == 200:
                     return
-            except httpx.HTTPError:
+            except httpx2.HTTPError:
                 pass
             time.sleep(0.05)
     raise AssertionError(f"runner local API never came up on {path}")
@@ -563,7 +563,7 @@ def _record_daemon_paths(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     paths: list[str] = []
     original = RunnerDaemon.get
 
-    def recording(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
+    def recording(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx2.Response:
         paths.append(path)
         return original(self, path, params=params)
 
@@ -581,8 +581,8 @@ def test_status_prints_harness_health_under_a_no_acceptable_harness_escalation(
     paths = _record_daemon_paths(monkeypatch)
 
     with _serve_local_api(root) as (_, tcp_url):
-        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
-        health = httpx.get(f"{tcp_url}/runners/{runner['runner_id']}/api/harness-health").json()["items"]
+        (runner,) = httpx2.get(f"{tcp_url}/api/host/runners").json()["items"]
+        health = httpx2.get(f"{tcp_url}/runners/{runner['runner_id']}/api/harness-health").json()["items"]
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
@@ -660,7 +660,7 @@ def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbu
     bound = _no_hub()
     with _serve_host_of_halted_runners(root):
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
-        health = httpx.Client(transport=httpx.HTTPTransport(uds=str(root / "host.sock")), base_url="http://host")
+        health = httpx2.Client(transport=httpx2.HTTPTransport(uds=str(root / "host.sock")), base_url="http://host")
         served = health.get("/api/health").status_code
 
     assert served == 200  # the host serves while its only runner is halted
@@ -675,8 +675,8 @@ def test_status_fails_on_any_runner_read_status_but_the_one_a_runnerless_host_an
     answered: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Only the 503 of a host that built no runner reads as "serves no runner"; any other refusal surfaces as it is."""
-    client = httpx.Client(
-        transport=httpx.MockTransport(lambda request: httpx.Response(answered, json={"detail": "refused"})),
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda request: httpx2.Response(answered, json={"detail": "refused"})),
         base_url="http://host",
     )
     monkeypatch.setattr(RunnerDaemon, "reach", classmethod(lambda cls, *_args: RunnerDaemon("status", client, "host")))
@@ -693,7 +693,7 @@ def test_status_selects_a_host_of_ones_runner_by_name_by_id_or_unnamed(tmp_path:
     root = _init_runner(tmp_path)
     bound = _no_hub()
     with _serve_local_api(root) as (_, tcp_url):
-        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        (runner,) = httpx2.get(f"{tcp_url}/api/host/runners").json()["items"]
         results = [
             bound.runner.invoke(runner_group, ["status", "--dir", str(root), *selector])
             for selector in ([], ["--runner", runner["name"]], ["--runner", runner["runner_id"]])
@@ -709,7 +709,7 @@ def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path) -> N
     root = _init_runner(tmp_path)
     bound = _no_hub()
     with _serve_local_api(root) as (_, tcp_url):
-        (runner,) = httpx.get(f"{tcp_url}/api/host/runners").json()["items"]
+        (runner,) = httpx2.get(f"{tcp_url}/api/host/runners").json()["items"]
         result = bound.runner.invoke(runner_group, ["pause", "--dir", str(root), "--runner", "nope"])
 
     assert result.exit_code != 0
@@ -720,16 +720,16 @@ def test_an_unmatched_runner_fails_naming_the_hosts_runners(tmp_path: Path) -> N
 def _host_of(items: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch, paths: list[str]) -> None:
     """Every verb reaches a mock host whose runner list is ``items`` and which answers any other call as runner ``beta``."""
 
-    def answer(request: httpx.Request) -> httpx.Response:
+    def answer(request: httpx2.Request) -> httpx2.Response:
         paths.append(request.url.path)
         if request.url.path == "/api/host/runners":
-            return httpx.Response(200, json={"items": items})
-        return httpx.Response(200, json={"runner_name": "beta"})
+            return httpx2.Response(200, json={"items": items})
+        return httpx2.Response(200, json={"runner_name": "beta"})
 
     def reach(
         cls: type[RunnerDaemon], verb: str, _dir: str, _url: str | None, _trace: object, runner: str | None = None
     ) -> RunnerDaemon:
-        client = httpx.Client(transport=httpx.MockTransport(answer), base_url="http://host")
+        client = httpx2.Client(transport=httpx2.MockTransport(answer), base_url="http://host")
         return RunnerDaemon(verb, client, "host", runner)
 
     monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.fleet_launchers import REPO, run_forge, run_hub
@@ -19,7 +19,7 @@ from tests.support import free_port
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _forge_labels(forge: httpx.Client, number: int) -> set[str]:
+def _forge_labels(forge: httpx2.Client, number: int) -> set[str]:
     resp = forge.get(f"/repos/{REPO}/issues/{number}")
     assert resp.status_code == 200, resp.text
     return {label["name"] for label in resp.json()["labels"]}

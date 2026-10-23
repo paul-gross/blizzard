@@ -7,7 +7,7 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.component
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 
 
-def _reset(hub: HubHarness, dataset: str, to: object) -> httpx.Response:
+def _reset(hub: HubHarness, dataset: str, to: object) -> httpx2.Response:
     return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})  # type: ignore[arg-type]
 
 

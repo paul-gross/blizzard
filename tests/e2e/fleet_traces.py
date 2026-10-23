@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy
 
@@ -897,7 +897,7 @@ class RunnerSweep:
         if self.process is None or self._sweep is None:
             return
         config = self._config
-        with httpx.Client(base_url=config.hub_url, headers=config.auth_headers(), timeout=30.0) as client:
+        with httpx2.Client(base_url=config.hub_url, headers=config.auth_headers(), timeout=30.0) as client:
             ctx = LoopWiring.of(config).context(HttpHubClient(client), self.process)
             IdentityCheck(ctx).run()
             Registration(ctx).run()

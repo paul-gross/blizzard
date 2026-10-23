@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.auth.pkce import Pkce
@@ -37,7 +37,7 @@ _CHALLENGE = Pkce(_VERIFIER).challenge
 
 
 @contextlib.contextmanager
-def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...]) -> Iterator[httpx.Client]:
+def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...]) -> Iterator[httpx2.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` — mirrors
     ``tests/service/test_auth_login_service.py``'s own fixture of the same name."""
     env = {**os.environ, _SECRET_ENV: _SECRET}
@@ -54,7 +54,7 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -63,14 +63,14 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
         terminate(proc)
 
 
-def _establish_hub_session(hub: httpx.Client, hub_dir: Path, email: str) -> None:
+def _establish_hub_session(hub: httpx2.Client, hub_dir: Path, email: str) -> None:
     """The provider dance of a person invited as ``email``, driven exactly like
     ``tests/service/test_auth_login_service.py``'s own scenarios — ``hub`` ends carrying a ``bz_session`` cookie."""
     hub.get(f"/api/auth/oidc-svc/authorize?invite={invite(hub_dir, email)}", follow_redirects=True)
     assert "bz_session" in hub.cookies
 
 
-def _mint_cli_code(hub: httpx.Client, *, redirect_uri: str) -> tuple[str, str]:
+def _mint_cli_code(hub: httpx2.Client, *, redirect_uri: str) -> tuple[str, str]:
     """Drive ``client=cli`` authorize (as the already-hub-session'd browser would) and
     return ``(code, state)``."""
     state = "svc-outer-state"
@@ -131,7 +131,7 @@ def test_the_loopback_form_ends_in_a_working_bearer_session(tmp_path: Path) -> N
 
             # A bare bearer client, no cookie jar at all — proves the token alone
             # authenticates, exactly what `blizzard hub status` would send.
-            bearer_only = httpx.Client(base_url=hub.base_url, timeout=15.0)
+            bearer_only = httpx2.Client(base_url=hub.base_url, timeout=15.0)
             try:
                 me = bearer_only.get("/api/me", headers={"Authorization": f"Bearer {token}"})
                 assert me.status_code == 200, me.text
@@ -178,7 +178,7 @@ def test_logout_revokes_the_bearer_session_server_side(tmp_path: Path) -> None:
             ).json()["token"]
 
             # A bare bearer client — the CLI's own shape, no cookie jar at all.
-            bearer_only = httpx.Client(base_url=hub.base_url, timeout=15.0)
+            bearer_only = httpx2.Client(base_url=hub.base_url, timeout=15.0)
             try:
                 auth = {"Authorization": f"Bearer {token}"}
                 assert bearer_only.get("/api/me", headers=auth).status_code == 200
@@ -226,7 +226,7 @@ def test_the_paste_code_form_completes_the_same_login_with_no_loopback_listener(
             assert token_resp.status_code == 200, token_resp.text
             token = token_resp.json()["token"]
 
-            bearer_only = httpx.Client(base_url=hub.base_url, timeout=15.0)
+            bearer_only = httpx2.Client(base_url=hub.base_url, timeout=15.0)
             try:
                 me = bearer_only.get("/api/me", headers={"Authorization": f"Bearer {token}"})
                 assert me.status_code == 200, me.text

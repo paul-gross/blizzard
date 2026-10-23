@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -36,8 +36,8 @@ DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".codex" / "auth.json")
 _USAGE_PATH = "/codex/usage"
 _USAGE_TIMEOUT_SECONDS = 5.0
 
-# Load-bearing, not cosmetic: the edge in front of this endpoint 403s httpx's default
-# `python-httpx/*` agent, so leaving it unset fails every sample. Pinned by a test.
+# Load-bearing, not cosmetic: the edge in front of this endpoint 403s httpx2's default
+# `python-httpx2/*` agent, so leaving it unset fails every sample. Pinned by a test.
 _CLIENT_USER_AGENT = "blizzard-runner"
 
 # The response nests each window under `rate_limit`; the label is derived from the
@@ -53,7 +53,7 @@ class OpenAISubscriptionSampler:
         *,
         credentials_path: str | None = None,
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
-        http_client: Callable[[], httpx.Client],
+        http_client: Callable[[], httpx2.Client],
         clock: IClock,
     ) -> None:
         # `credentials_path` is read-only here; the caller supplies the (shared) client.
@@ -79,7 +79,7 @@ class OpenAISubscriptionSampler:
                 },
                 timeout=_USAGE_TIMEOUT_SECONDS,
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             # Covers both a timeout and a connection failure: a best-effort diagnostic
             # sample, never a spawn/resume failure.
             _log.warning(

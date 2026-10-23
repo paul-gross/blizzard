@@ -1,6 +1,6 @@
 """The span a CLI command records, and how it is sent — stdlib only.
 
-A command is a short-lived process, so this module imports neither ``httpx`` nor
+A command is a short-lived process, so this module imports neither ``httpx2`` nor
 ``opentelemetry``: the span is a plain record, encoded by hand as OTLP/JSON, and posted through a
 client the caller hands in. Contract: ``blizzard-product:/delivered/tracing/platform-spans/spec/instrumentation.md``
 §The CLI never pays for it."""

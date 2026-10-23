@@ -11,7 +11,7 @@ import sys
 import time
 from collections.abc import Mapping
 
-import httpx
+import httpx2
 import pytest
 from google.protobuf.json_format import Parse
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
@@ -39,19 +39,19 @@ _ENV = {
 
 class _Recorder:
     def __init__(self, status: int = 200) -> None:
-        self.requests: list[httpx.Request] = []
+        self.requests: list[httpx2.Request] = []
         self.status = status
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         if request.url.path == "/v1/traces":
-            return httpx.Response(self.status)
-        return httpx.Response(200, json=[])
+            return httpx2.Response(self.status)
+        return httpx2.Response(200, json=[])
 
-    def traces(self) -> list[httpx.Request]:
+    def traces(self) -> list[httpx2.Request]:
         return [r for r in self.requests if r.url.path == "/v1/traces"]
 
-    def others(self) -> list[httpx.Request]:
+    def others(self) -> list[httpx2.Request]:
         return [r for r in self.requests if r.url.path != "/v1/traces"]
 
 
@@ -186,11 +186,11 @@ def test_the_unprefixed_traceparent_is_never_read(monkeypatch: pytest.MonkeyPatc
 def test_a_failing_command_records_its_exit_code_and_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
     posted: list[dict] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/v1/traces":
             posted.append(json.loads(request.content))
-            return httpx.Response(200)
-        return httpx.Response(500, json={"detail": "boom"})
+            return httpx2.Response(200)
+        return httpx2.Response(500, json={"detail": "boom"})
 
     bound = bind_transport(handler)
 

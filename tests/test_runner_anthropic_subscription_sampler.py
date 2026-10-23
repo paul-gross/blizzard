@@ -1,6 +1,6 @@
 """``AnthropicSubscriptionSampler.sample``.
 
-Driven with an injected ``httpx.Client`` (an ``httpx.MockTransport``-backed fake) and an injected
+Driven with an injected ``httpx2.Client`` (an ``httpx2.MockTransport``-backed fake) and an injected
 ``FixedClock`` — no real credential file location, no real network. Each failure path returns a
 ``SampleMiss`` and logs exactly one warning, never raising; the credential file is asserted read-only."""
 
@@ -10,7 +10,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from structlog.testing import capture_logs
 
@@ -57,16 +57,16 @@ def _sampler(
     *,
     clock: FixedClock | None = None,
 ) -> AnthropicSubscriptionSampler:
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     return AnthropicSubscriptionSampler(
         credentials_path=str(credentials_path),
         usage_api_base="https://api.anthropic.test",
-        http_client=lambda: httpx.Client(transport=transport),
+        http_client=lambda: httpx2.Client(transport=transport),
         clock=clock or FixedClock(_NOW),
     )
 
 
-def _unreachable_handler(request: httpx.Request) -> httpx.Response:
+def _unreachable_handler(request: httpx2.Request) -> httpx2.Response:
     raise AssertionError("the usage endpoint should not have been called")
 
 
@@ -93,12 +93,12 @@ def test_happy_path_parses_both_windows_with_correct_scale_and_units(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/oauth/usage"
         assert request.headers["Authorization"] == "Bearer tok-live"
         assert request.headers["anthropic-beta"] == "oauth-2025-04-20"
         assert request.headers["Content-Type"] == "application/json"
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "five_hour": {"utilization": 42.0, "resets_at": "2026-08-01T18:00:00Z"},
@@ -140,8 +140,8 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             200, json={"five_hour": {"utilization": 10.0, "resets_at": "2026-08-01T18:00:00Z"}, "seven_day": None}
         )
 
@@ -163,11 +163,11 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
     _guard_against_writes(monkeypatch, creds)
     instant = datetime(2026, 8, 1, 18, 0, 0, tzinfo=UTC)
 
-    def handler_epoch(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"five_hour": {"utilization": 1.0, "resets_at": instant.timestamp()}})
+    def handler_epoch(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"five_hour": {"utilization": 1.0, "resets_at": instant.timestamp()}})
 
-    def handler_iso(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"five_hour": {"utilization": 1.0, "resets_at": instant.isoformat()}})
+    def handler_iso(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"five_hour": {"utilization": 1.0, "resets_at": instant.isoformat()}})
 
     snap_epoch = _sampler(creds, handler_epoch, clock=clock).sample()
     snap_iso = _sampler(creds, handler_iso, clock=clock).sample()
@@ -255,8 +255,8 @@ def test_non_2xx_401_response_returns_credential_lapsed_and_warns_once(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, json={"error": "invalid token"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(401, json={"error": "invalid token"})
 
     sampler = _sampler(creds, handler, clock=clock)
 
@@ -274,8 +274,8 @@ def test_timeout_returns_endpoint_unreachable_and_warns_once(tmp_path: Path, mon
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.TimeoutException("timed out", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.TimeoutException("timed out", request=request)
 
     sampler = _sampler(creds, handler, clock=clock)
 
@@ -295,8 +295,8 @@ def test_connection_error_returns_endpoint_unreachable_and_warns_once(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused", request=request)
 
     sampler = _sampler(creds, handler, clock=clock)
 
@@ -316,8 +316,8 @@ def test_unexpected_response_shape_returns_response_unparseable_and_warns_once(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=["not", "an", "object"])
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=["not", "an", "object"])
 
     sampler = _sampler(creds, handler, clock=clock)
 
@@ -337,8 +337,8 @@ def test_unparseable_response_body_returns_response_unparseable_and_warns_once(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=b"not json at all")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=b"not json at all")
 
     sampler = _sampler(creds, handler, clock=clock)
 
@@ -358,10 +358,10 @@ def test_zero_parseable_windows_returns_response_unparseable_and_warns_once(
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
     _guard_against_writes(monkeypatch, creds)
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         # Both windows null, and a null utilization inside an otherwise-present entry —
         # neither carries usable data, so the parse yields zero windows.
-        return httpx.Response(
+        return httpx2.Response(
             200, json={"five_hour": None, "seven_day": {"utilization": None, "resets_at": "2026-08-01T18:00:00Z"}}
         )
 

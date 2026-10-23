@@ -1,14 +1,14 @@
 """The ``github`` conformer — plain OAuth2 code flow, ``GET /user`` + ``GET /user/emails`` for the
 primary email and every verified address on the account (package-private).
 
-All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/``api_base`` default
+All ``httpx2`` usage is confined here (``bzh:dependency-inversion``). ``web_base``/``api_base`` default
 to real GitHub's split hosts but are overridable to point at a stub IdP."""
 
 from __future__ import annotations
 
 from urllib.parse import urlencode
 
-import httpx
+import httpx2
 
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.models import ProviderIdentity
@@ -37,7 +37,7 @@ class GithubProvider:
         display_name: str,
         client_id: str,
         client_secret: str,
-        http_client: httpx.Client,
+        http_client: httpx2.Client,
         web_base: str = _DEFAULT_WEB_BASE,
         api_base: str = _DEFAULT_API_BASE,
     ) -> None:
@@ -77,7 +77,7 @@ class GithubProvider:
             user_resp.raise_for_status()
             user = user_resp.json()
             emails = self._emails(headers)
-        except (httpx.HTTPError, KeyError) as exc:
+        except (httpx2.HTTPError, KeyError) as exc:
             _log.warning("github exchange failed", provider=self.name, detail=str(exc))
             raise OAuthExchangeError(f"github exchange failed for provider {self.name!r}") from exc
         subject = user.get("id")

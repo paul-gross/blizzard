@@ -20,7 +20,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Protocol
 
-import httpx
+import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
@@ -1264,9 +1264,9 @@ def build_services(
     hub_workdir_root: Path | None = None,
     hub_marker_callback_base_url: str = "",
     public_url: str | None = None,
-    forge_http_client: httpx.Client | None = None,
+    forge_http_client: httpx2.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
-    oauth_http_client: httpx.Client | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
     trusted_proxies: TrustedProxies | None = None,
@@ -1307,7 +1307,7 @@ def build_services(
         system_artifacts=system_artifacts,
         # Bound as `.for_project` per tenant (a project to a plain `delivery.validation.CommitResolver`
         # callable), so `TenantServices.commit_resolver_for` carries no dependency on the concrete class.
-        commit_forge=GitHubCommitResolver(forge_http_client or httpx.Client(timeout=10.0)),
+        commit_forge=GitHubCommitResolver(forge_http_client or httpx2.Client(timeout=10.0)),
         hub_command_runner=hub_command_runner or SubprocessHubCommandRunner(),
         hub_workdir=hub_workdir
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),

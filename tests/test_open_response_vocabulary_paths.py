@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -118,7 +118,7 @@ def test_the_runner_chunk_proxy_passes_unknown_values_through_raw(tmp_path: Path
             {"key": "a.1", "kind": "gained-kind", "name": "a", "node_id": "nd_1", "node_name": "n", "epoch": 1}
         ],
     }
-    hub = httpx.Client(transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=detail)))
+    hub = httpx2.Client(transport=httpx2.MockTransport(lambda _request: httpx2.Response(200, json=detail)))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
     app = create_runner_app(config, hub_proxy_client=hub, hub_retry_clock=no_retry_clock())
 

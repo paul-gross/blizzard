@@ -11,7 +11,7 @@ import os
 import re
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
@@ -28,7 +28,7 @@ pytestmark = [
 ]
 
 
-def _ingest_promote_claim(forge: httpx.Client, hub: httpx.Client, title: str) -> tuple[str, str]:
+def _ingest_promote_claim(forge: httpx2.Client, hub: httpx2.Client, title: str) -> tuple[str, str]:
     """File an issue, ingest it, promote it, and claim a route straight through the hub API.
 
     Returns ``(chunk_id, node_id)`` for a chunk that derives ``running`` (a live route) and
@@ -57,7 +57,7 @@ def _ingest_promote_claim(forge: httpx.Client, hub: httpx.Client, title: str) ->
 
 
 def _push_usage(
-    hub: httpx.Client,
+    hub: httpx2.Client,
     *,
     chunk_id: str,
     node_id: str,

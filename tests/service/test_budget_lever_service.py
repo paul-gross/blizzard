@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -61,13 +61,13 @@ def _spend(root: Path, runner_id: str, usd: float) -> None:
         engine.dispose()
 
 
-def _locally_paused(local: httpx.Client, runner_id: str) -> bool:
+def _locally_paused(local: httpx2.Client, runner_id: str) -> bool:
     view = local.get(f"/runners/{runner_id}/api/runner")
     assert view.status_code == 200, view.text
     return bool(view.json()["pause"]["local"])
 
 
-def _declining_once_registered(hub: httpx.Client, runner: _Added) -> list[str] | None:
+def _declining_once_registered(hub: httpx2.Client, runner: _Added) -> list[str] | None:
     """The levers the hub holds ``runner`` declining on, or ``None`` while it has not yet registered."""
     view = hub.get(f"/api/fleet/runners/{runner.runner_id}", headers={"Authorization": f"Bearer {runner.token}"})
     return _declining(hub, runner) if view.status_code == 200 else None

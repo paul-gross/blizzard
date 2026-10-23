@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner, Result
 
@@ -70,8 +70,8 @@ def _credentials(tmp_path: Path, name: str, expires_at_millis: int) -> Path:
     return path
 
 
-def _unreachable(request: httpx.Request) -> httpx.Response:
-    raise httpx.ConnectError("refused", request=request)
+def _unreachable(request: httpx2.Request) -> httpx2.Response:
+    raise httpx2.ConnectError("refused", request=request)
 
 
 @pytest.mark.parametrize(
@@ -89,11 +89,11 @@ def test_a_miss_prints_its_own_distinguishable_reason(tmp_path: Path, reason: Sa
     credentials, handler = {
         SampleMissReason.CREDENTIAL_LAPSED: (
             _credentials(tmp_path, "lapsed.json", 1_000),
-            lambda request: httpx.Response(200),
+            lambda request: httpx2.Response(200),
         ),
-        SampleMissReason.CREDENTIAL_UNREADABLE: (tmp_path / "absent.json", lambda request: httpx.Response(200)),
+        SampleMissReason.CREDENTIAL_UNREADABLE: (tmp_path / "absent.json", lambda request: httpx2.Response(200)),
         SampleMissReason.ENDPOINT_UNREACHABLE: (live, _unreachable),
-        SampleMissReason.RESPONSE_UNPARSEABLE: (live, lambda request: httpx.Response(200, content=b"not json")),
+        SampleMissReason.RESPONSE_UNPARSEABLE: (live, lambda request: httpx2.Response(200, content=b"not json")),
     }[reason]
     _declare_credentials(root, credentials)
 

@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
+import httpx2
 import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
@@ -115,15 +115,15 @@ _OPEN: set[tuple[str, str]] = {
 _RUNNER_ID = "runner-guard"
 
 
-def _oauth_hub_client() -> httpx.Client:
+def _oauth_hub_client() -> httpx2.Client:
     """A hermetic hub double whose ``jwks.json`` answers ``200`` — the runner reads that
     as "the hub runs an IdP surface" (``IHubAuthMode.enabled()``), engaging the
     human-lane gate exactly as a real oauth-mode hub would."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"keys": []})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"keys": []})
 
-    return httpx.Client(transport=httpx.MockTransport(handler), base_url="http://hub.example")
+    return httpx2.Client(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
 
 
 def _oauth_app() -> TestClient:

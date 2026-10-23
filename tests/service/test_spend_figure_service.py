@@ -12,7 +12,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -68,7 +68,7 @@ def _priced_config(tmp_path: Path, workspace: Path, bin_dir: Path, hub_port: int
     )
 
 
-def _seed(hub: httpx.Client, **extra: object) -> str:
+def _seed(hub: httpx2.Client, **extra: object) -> str:
     spec = mock_hub_opencode_chunk_spec(_WORK_REF_URL)
     for node in spec["nodes"].values():
         node["session_model"] = [f"{_PROVIDER}/{_MODEL}"]
@@ -88,7 +88,7 @@ def _tick(config: RunnerConfig, fenced: dict[str, str]) -> None:
         os.environ.update(prior)
 
 
-def _detail(hub: httpx.Client, chunk_id: str) -> dict:
+def _detail(hub: httpx2.Client, chunk_id: str) -> dict:
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()
 
 
@@ -104,7 +104,7 @@ def test_runner_ceiling_pauses_on_an_estimated_spend_with_a_tilde_led_reason(tmp
         _seed(hub)
         config = _priced_config(tmp_path, workspace, bin_dir, hub_port, runner_ceiling_usd=0.0001)
 
-        with runner_api(config), httpx.Client(base_url=config.local_api_url, timeout=10.0) as runner:
+        with runner_api(config), httpx2.Client(base_url=config.local_api_url, timeout=10.0) as runner:
 
             def paused() -> bool:
                 _tick(config, fenced)

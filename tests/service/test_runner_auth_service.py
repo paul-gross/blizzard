@@ -1,6 +1,6 @@
 """Runner presents its bearer token on every hub call — service tier.
 
-Every outbound ``httpx.Client`` and the work-items proxy fold in the same
+Every outbound ``httpx2.Client`` and the work-items proxy fold in the same
 ``Authorization: Bearer`` header, assertable against a real mock-hub subprocess via
 ``GET /_captured``. Covers a token-bearing runner (every call carries it) and a runner no
 hub has added (no header; the hub refuses it, so it never registers)."""
@@ -11,7 +11,7 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.config import RunnerConfig
@@ -36,14 +36,14 @@ _TOKEN = "svc-auth-token"
 _PROBE_HEADER = "X-Test-Probe"
 
 
-def _captured_from_the_runner(hub: httpx.Client) -> list[dict[str, Any]]:
+def _captured_from_the_runner(hub: httpx2.Client) -> list[dict[str, Any]]:
     """The capture log, with the test's own probed status-poll calls filtered out."""
     resp = hub.get("/_captured")
     assert resp.status_code == 200, resp.text
     return [e for e in resp.json()["requests"] if _PROBE_HEADER.lower() not in e["headers"]]
 
 
-def _status(hub: httpx.Client, chunk_id: str) -> str:
+def _status(hub: httpx2.Client, chunk_id: str) -> str:
     """The test's own out-of-band status read, marked so it never masquerades as a runner
     call."""
     resp = hub.get(f"/api/fleet/chunks/{chunk_id}", headers={_PROBE_HEADER: "1", "Authorization": f"Bearer {_TOKEN}"})
@@ -81,11 +81,11 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         assert "/api/fleet/runners" in paths
         assert f"/api/fleet/chunks/{chunk_id}/completions" in paths
 
-        # The work-items proxy path — a separately-constructed httpx call in
+        # The work-items proxy path — a separately-constructed httpx2 call in
         # `src/blizzard/runner/api/work_items.py` — carries the same credential, not a patched one.
         api_config = dataclasses.replace(config, host="127.0.0.1", port=free_port())
         with runner_api(api_config):
-            runner_client = httpx.Client(base_url=api_config.local_api_url, timeout=10.0)
+            runner_client = httpx2.Client(base_url=api_config.local_api_url, timeout=10.0)
             try:
                 proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:
@@ -133,7 +133,9 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
         assert make_store(config.db_url).runner_identity() is None
 
 
-def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
+def _run_and_check(
+    config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
+) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
 

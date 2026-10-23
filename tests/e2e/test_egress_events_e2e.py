@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -168,8 +168,8 @@ def _answer_script() -> str:
 
 @dataclasses.dataclass
 class World:
-    hub: httpx.Client
-    forge: httpx.Client
+    hub: httpx2.Client
+    forge: httpx2.Client
     hub_url: str
     config: RunnerConfig
     fenced: dict[str, str]

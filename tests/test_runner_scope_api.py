@@ -9,7 +9,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
 
@@ -30,11 +30,11 @@ _SCOPES = [{"slug": "blizzard", "description": "", "created_at": "2026-01-01T00:
 
 class _HubRouter:
     def __init__(self) -> None:
-        self.handler: Callable[[httpx.Request], httpx.Response] = lambda request: httpx.Response(
+        self.handler: Callable[[httpx2.Request], httpx2.Response] = lambda request: httpx2.Response(
             500, json={"detail": f"hub not stubbed for {request.url}"}
         )
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         return self.handler(request)
 
 
@@ -46,7 +46,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
-        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(router)),
         hub_retry_clock=no_retry_clock(),
     )
     app.state.hub_router = router
@@ -70,10 +70,10 @@ def _seed_lease(store, **overrides: object) -> None:  # type: ignore[no-untyped-
 
 
 def _stub_hub(app: FastAPI, status_code: int, payload: object, seen: list[str] | None = None) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if seen is not None:
             seen.append(str(request.url))
-        return httpx.Response(status_code, json=payload)
+        return httpx2.Response(status_code, json=payload)
 
     app.state.hub_router.handler = handler
 

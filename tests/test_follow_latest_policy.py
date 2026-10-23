@@ -11,7 +11,7 @@ import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.migration_source import MigrationSource
@@ -97,7 +97,7 @@ def _mint(hub: HubHarness, yaml_text: str) -> str:
     return str(resp.json()["graph_id"])
 
 
-def _set_policy(hub: HubHarness, graph_id: str, follow_latest: bool | None) -> httpx.Response:
+def _set_policy(hub: HubHarness, graph_id: str, follow_latest: bool | None) -> httpx2.Response:
     resp = hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": follow_latest})
     assert resp.status_code == 202, resp.text
     return resp
@@ -116,7 +116,7 @@ def _claimed_chunk(hub: HubHarness) -> tuple[str, str]:
     return chunk_id, node_id
 
 
-def _complete(hub: HubHarness, chunk_id: str, node_id: str, *, choice: str = "pass") -> httpx.Response:
+def _complete(hub: HubHarness, chunk_id: str, node_id: str, *, choice: str = "pass") -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={"choice": choice, "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},

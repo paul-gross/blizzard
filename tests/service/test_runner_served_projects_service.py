@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from pydantic import BaseModel
 
@@ -41,7 +41,7 @@ def _pre_slice_reading(body: dict[str, Any]) -> str:
     return "conflict"
 
 
-def _add(hub: httpx.Client, name: str, *, projects: list[str] | None = None) -> tuple[str, dict[str, str]]:
+def _add(hub: httpx2.Client, name: str, *, projects: list[str] | None = None) -> tuple[str, dict[str, str]]:
     """Add a runner, naming ``projects`` only when given, and answer its id and bearer headers."""
     body: dict[str, object] = {"name": name}
     if projects is not None:
@@ -51,7 +51,7 @@ def _add(hub: httpx.Client, name: str, *, projects: list[str] | None = None) -> 
     return added.json()["runner_id"], {"Authorization": f"Bearer {added.json()['token']}"}
 
 
-def _register(hub: httpx.Client, bearer: dict[str, str], **declared: list[str]) -> dict[str, Any]:
+def _register(hub: httpx2.Client, bearer: dict[str, str], **declared: list[str]) -> dict[str, Any]:
     """Register as the runner ``bearer`` names; the body carries ``projects`` only when ``declared`` names it."""
     body: dict[str, object] = {"workspace_id": "w1", "capabilities": _CAPABILITIES, **declared}
     registered = hub.post("/api/fleet/runners", json=body, headers=bearer)
@@ -63,27 +63,27 @@ def _served_ids(views: list[dict[str, Any]]) -> list[str | None]:
     return [view["project_id"] for view in views]
 
 
-def _registry_served(hub: httpx.Client, runner_id: str) -> list[dict[str, Any]]:
+def _registry_served(hub: httpx2.Client, runner_id: str) -> list[dict[str, Any]]:
     listed = hub.get("/api/runners")
     assert listed.status_code == 200, listed.text
     (runner,) = [r for r in listed.json()["runners"] if r["runner_id"] == runner_id]
     return runner["projects"]
 
 
-def _offered(hub: httpx.Client, bearer: dict[str, str]) -> list[str]:
+def _offered(hub: httpx2.Client, bearer: dict[str, str]) -> list[str]:
     peek = hub.post("/api/fleet/queue/peek", json={"capabilities": _CAPABILITIES}, headers=bearer)
     assert peek.status_code == 200, peek.text
     return [entry["chunk_id"] for entry in peek.json()["entries"]]
 
 
-def _project(hub: httpx.Client, slug: str) -> str:
+def _project(hub: httpx2.Client, slug: str) -> str:
     listed = hub.get("/api/projects")
     assert listed.status_code == 200, listed.text
     (project,) = [p for p in listed.json()["projects"] if p["slug"] == slug]
     return project["project_id"]
 
 
-def _create_project(hub: httpx.Client, slug: str) -> str:
+def _create_project(hub: httpx2.Client, slug: str) -> str:
     created = hub.post("/api/projects", json={"slug": slug, "name": slug.title()})
     assert created.status_code == 201, created.text
     return created.json()["project_id"]

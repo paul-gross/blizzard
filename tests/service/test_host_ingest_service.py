@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -44,13 +44,13 @@ _PROMPT_FILE = "standing.md"
 _PROMPT_FILE_TEXT = "the standing prompt\n"
 
 
-def _added(hub: httpx.Client, path: str, body: dict[str, Any]) -> dict[str, Any]:
+def _added(hub: httpx2.Client, path: str, body: dict[str, Any]) -> dict[str, Any]:
     added = hub.post(path, json=body)
     assert added.status_code == 201, added.text
     return dict(added.json())
 
 
-def _runner(hub: httpx.Client, name: str, host_id: str) -> JoinedRunner:
+def _runner(hub: httpx2.Client, name: str, host_id: str) -> JoinedRunner:
     body = _added(hub, "/api/runners", {"name": name, "host_id": host_id})
     return JoinedRunner(runner_id=body["runner_id"], runner_name=name, token=body["token"])
 
@@ -156,14 +156,14 @@ def _seed(root: Path, runner: JoinedRunner, tag: str) -> None:
         engine.dispose()
 
 
-def _hub_mark(hub: httpx.Client, runner: JoinedRunner) -> int:
+def _hub_mark(hub: httpx2.Client, runner: JoinedRunner) -> int:
     """``runner``'s fact mark at the hub, read by an empty push under its token."""
     ack = hub.post("/api/fleet/events", json={"facts": []}, headers=runner.bearer)
     assert ack.status_code == 200, ack.text
     return int(ack.json()["high_water"])
 
 
-def _deliver_acked(hub: httpx.Client, runner: JoinedRunner, tag: str) -> None:
+def _deliver_acked(hub: httpx2.Client, runner: JoinedRunner, tag: str) -> None:
     delivered = [
         {"seq": seq, "kind": "event.recorded", "payload": {"event": f"ingest-{tag}-{seq}"}}
         for seq in range(1, _ACKED + 1)
@@ -239,7 +239,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
             stderr=subprocess.STDOUT,
             text=True,
         )
-        local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+        local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
             await_http(proc, local, "/api/health", log=log)
             for runner, tag in ((staying, "a"), (moving, "b")):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.runners.version_window import VersionWindow
@@ -22,7 +22,7 @@ def _hub(tmp_path: Path) -> HubHarness:
     return build_hub(tmp_path, hub_version="0.3", version_window=_WINDOW)
 
 
-def _register(hub: HubHarness, runner_id: str, version: str | None) -> httpx.Response:
+def _register(hub: HubHarness, runner_id: str, version: str | None) -> httpx2.Response:
     body: dict[str, object] = {"runner_id": runner_id, "workspace_id": "w1", "capabilities": _CAPABILITIES}
     if version is not None:
         body["version"] = version

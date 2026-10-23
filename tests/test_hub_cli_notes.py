@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
@@ -20,9 +20,9 @@ _SUMMARY = {"chunk_id": "ch_1", "status": "ready", "current_node_name": "build"}
 def _posting(status: int, body: object) -> tuple[Bound, list[dict[str, Any]]]:
     calls: list[dict[str, Any]] = []
 
-    def fake_post(url: str, **kwargs: Any) -> httpx.Response:
+    def fake_post(url: str, **kwargs: Any) -> httpx2.Response:
         calls.append({"url": url, "json": kwargs.get("json")})
-        return httpx.Response(status, json=body, request=httpx.Request("POST", url))
+        return httpx2.Response(status, json=body, request=httpx2.Request("POST", url))
 
     return bind_stubs(post=fake_post), calls
 

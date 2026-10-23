@@ -80,8 +80,8 @@ def _seed_fact(hub, finding_id: str, *, kind: str, recorded_at: datetime) -> Non
         )
 
 
-def _params(**overrides: object) -> dict[str, object]:
-    params: dict[str, object] = {
+def _params(**overrides: str | int) -> dict[str, str | int]:
+    params: dict[str, str | int] = {
         "routine": "nightly",
         "since": iso_utc(_SINCE),
         "until": iso_utc(_UNTIL),

@@ -156,55 +156,6 @@ class _ProcessHandle(Protocol):
     def wait(self, timeout: float | None) -> int | None: ...
 
 
-class _PtyProcess:
-    """A small process handle around the child the seam forked onto a pseudo-terminal."""
-
-    @property
-    def stdout(self) -> None:
-        return None
-
-    @property
-    def stderr(self) -> None:
-        return None
-
-    def __init__(self, pid: int) -> None:
-        self._pid = pid
-        self.returncode: int | None = None
-
-    @property
-    def pid(self) -> int:
-        return self._pid
-
-    def poll(self) -> int | None:
-        if self.returncode is not None:
-            return self.returncode
-        try:
-            waited_pid, status = os.waitpid(self.pid, os.WNOHANG)
-        except ChildProcessError:
-            return self.returncode
-        if waited_pid == 0:
-            return None
-        self.returncode = os.waitstatus_to_exitcode(status)
-        return self.returncode
-
-    def wait(self, timeout: float | None) -> int | None:
-        if self.returncode is not None:
-            return self.returncode
-        if timeout is None:
-            _, status = os.waitpid(self.pid, 0)
-            self.returncode = os.waitstatus_to_exitcode(status)
-            return self.returncode
-        deadline = time.monotonic() + timeout
-        while True:
-            result = self.poll()
-            if result is not None:
-                return result
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return None
-            time.sleep(min(0.01, remaining))
-
-
 @collaborator
 @dataclass
 class _SubprocessStartedProcess:
@@ -643,23 +594,22 @@ class SubprocessOpenCodeProcess:
         cwd: Path,
         env: Mapping[str, str],
     ) -> OpenCodeStartedProcess:
-        """Start an OpenCode TUI with a controlling terminal established by ``forkpty``."""
+        """Start an OpenCode TUI with a controlling terminal on a pseudo-terminal."""
 
         _require_landlock()
         policy = LandlockPolicy(argv, cwd, env)
         try:
             child = self._children.spawn_pty(argv, cwd=cwd, env=_child_env(env), child_setup=policy.apply)
-        except (AttributeError, OSError) as exc:
-            raise OpenCodeProcessError("OpenCode interactive attach needs a POSIX pseudo-terminal") from exc
+        except OSError as exc:
+            raise OpenCodeProcessError("OpenCode interactive process could not be started") from exc
         master_fd = child.master_fd
-        process = _PtyProcess(child.pid)
-        started = _SubprocessStartedProcess(process, interactive_fd=master_fd)
+        started = _SubprocessStartedProcess(child, interactive_fd=master_fd)
         try:
             os.set_blocking(master_fd, False)
             _set_interactive_terminal_size(master_fd)
             return started
         except BaseException:
-            _stop_process_group(process)
+            _stop_process_group(child)
             started.close_streams()
             raise
 

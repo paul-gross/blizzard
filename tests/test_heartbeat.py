@@ -2,7 +2,7 @@
 
 Two tiers, no live socket: **component** drives the endpoint over a real store
 (TestClient); **unit** covers the verb's identity handling and soft-fail
-(``httpx.post`` stubbed).
+(``httpx2.post`` stubbed).
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
@@ -149,7 +149,7 @@ def test_heartbeat_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest.M
     """An unreachable runner is reported and swallowed — exit 0, tool call unbroken."""
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
-        raise httpx.ConnectError("connection refused")
+        raise httpx2.ConnectError("connection refused")
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(

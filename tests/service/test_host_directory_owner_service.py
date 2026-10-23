@@ -20,7 +20,7 @@ from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -167,7 +167,7 @@ def _running_host(root: Path, hub_url: str) -> Iterator[subprocess.Popen[str]]:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield proc

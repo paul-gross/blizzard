@@ -13,7 +13,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import Result
 
@@ -189,13 +189,13 @@ def test_status_shows_the_hubs_answer_to_a_config_naming_none_and_nothing_before
 
 
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
-    return HttpHubClient(httpx.Client(base_url="http://hub.test", transport=httpx.MockTransport(handler)))
+    return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)))
 
 
 def _registration(seen: dict[str, object], answer: object = None):  # type: ignore[no-untyped-def]
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.update(json.loads(request.content))
-        return httpx.Response(
+        return httpx2.Response(
             200, json={"runner_id": "rn_1", "runner_name": "r", "first_registration": False, "projects": answer}
         )
 
@@ -240,7 +240,7 @@ def test_an_incompatible_claim_denial_with_or_without_a_reason_is_never_a_lost_r
     extra: dict[str, str], reason: ClaimDenialReason
 ) -> None:
     body = {"chunk_id": "ch_1", "incompatible_runner_id": "rn_1", "detail": "runner does not serve blizzard", **extra}
-    outcome = _client(lambda _request: httpx.Response(409, json=body)).claim_route(
+    outcome = _client(lambda _request: httpx2.Response(409, json=body)).claim_route(
         ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert outcome.conflict is None

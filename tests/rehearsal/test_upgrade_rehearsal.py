@@ -17,7 +17,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 import yaml
 
@@ -267,7 +267,7 @@ class _Rehearsal:
 
     def keep_the_old_runner(self) -> None:
         step = "3 keep the old runner"
-        client = self._client(httpx.Client(base_url=self.hub.url, timeout=30.0))
+        client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
         assert self.forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
         self._await_landed(client, self._ingest(client, "the baseline runner against the candidate hub"), step)
         self._await_landed(client, self.held, step)
@@ -278,7 +278,7 @@ class _Rehearsal:
         for host in (self.work, self.seed):
             self._migrate(step, host.migrate(self.candidate), f"runner migrate {host.dir.name}")
         self.work.start(self.candidate, self.hub.url)
-        client = self._client(httpx.Client(base_url=self.hub.url, timeout=30.0))
+        client = self._client(httpx2.Client(base_url=self.hub.url, timeout=30.0))
         self._await_landed(client, self._ingest(client, "the candidate runner"), step)
 
     # ------------------------------------------------------------------ the store walk
@@ -318,7 +318,7 @@ class _Rehearsal:
 
     # ------------------------------------------------------------------ helpers
 
-    def _stand_up_the_project(self, client: httpx.Client) -> None:
+    def _stand_up_the_project(self, client: httpx2.Client) -> None:
         """The journey's own project, source, and repository, so the working runner never claims a seeded chunk."""
         created = client.post("/api/projects", json={"name": "Rehearsal", "slug": _PROJECT})
         assert created.status_code == 201, created.text
@@ -332,7 +332,7 @@ class _Rehearsal:
         minted = client.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
         assert minted.status_code == 201, minted.text
 
-    def _ingest(self, client: httpx.Client, title: str) -> str:
+    def _ingest(self, client: httpx2.Client, title: str) -> str:
         issue = self.forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": title})
         assert issue.status_code == 201, issue.text
         ingested = client.post(
@@ -344,7 +344,7 @@ class _Rehearsal:
         return chunk_id
 
     def _await(
-        self, client: httpx.Client, chunk_id: str, step: str, what: str, done: Callable[[dict[str, Any]], bool]
+        self, client: httpx2.Client, chunk_id: str, step: str, what: str, done: Callable[[dict[str, Any]], bool]
     ) -> dict[str, Any]:
         deadline = time.monotonic() + _TIMEOUT
         detail: dict[str, Any] = {}
@@ -357,11 +357,11 @@ class _Rehearsal:
             time.sleep(0.5)
         raise self._fail(step, f"chunk {chunk_id} never reached {what}; last status {detail.get('status')!r}")
 
-    def _await_landed(self, client: httpx.Client, chunk_id: str, step: str) -> None:
+    def _await_landed(self, client: httpx2.Client, chunk_id: str, step: str) -> None:
         self._await(client, chunk_id, step, "done and landed", lambda d: d["status"] == "done" and d["landed"] is True)
         self.landed.append(chunk_id)
 
-    def _views(self, client: httpx.Client) -> dict[str, Any]:
+    def _views(self, client: httpx2.Client) -> dict[str, Any]:
         schema = response_schema(self.openapi, _CHUNK_VIEW)
         views = {}
         for chunk_id in self.seeded_chunks:
@@ -369,7 +369,7 @@ class _Rehearsal:
             views[chunk_id] = project(response.json(), schema, self.openapi) if response.status_code == 200 else None
         return views
 
-    def _hold_views(self, client: httpx.Client, step: str) -> None:
+    def _hold_views(self, client: httpx2.Client, step: str) -> None:
         mismatches = view_mismatches(self.fingerprints, self._views(client))
         if mismatches:
             raise self._fail(step, "seeded chunk views changed:\n" + "\n".join(mismatches))
@@ -385,7 +385,7 @@ class _Rehearsal:
         if done.returncode != 0:
             raise self._fail(step, f"{what} failed:\n{done.stdout}\n{done.stderr}")
 
-    def _client(self, client: httpx.Client) -> httpx.Client:
+    def _client(self, client: httpx2.Client) -> httpx2.Client:
         self.stack.callback(client.close)
         return client
 

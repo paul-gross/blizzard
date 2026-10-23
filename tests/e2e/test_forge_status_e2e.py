@@ -11,7 +11,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.loop_wiring import LoopWiring
@@ -37,13 +37,13 @@ def _poll_until(predicate, *, timeout: float = 20.0, interval: float = 0.2) -> b
     return False
 
 
-def _labels(forge: httpx.Client, number: int) -> set[str]:
+def _labels(forge: httpx2.Client, number: int) -> set[str]:
     resp = forge.get(f"/repos/{REPO}/issues/{number}")
     assert resp.status_code == 200, resp.text
     return {label["name"] for label in resp.json()["labels"]}
 
 
-def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, title: str) -> tuple[str, int]:
+def _ingest_and_promote(hub: httpx2.Client, forge: httpx2.Client, title: str) -> tuple[str, int]:
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
     assert issue.status_code == 201, issue.text
     number = issue.json()["number"]
@@ -55,7 +55,7 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client, title: str) -> t
 
 
 def _drive_recording_labels(
-    config, hub: httpx.Client, forge: httpx.Client, chunk_id: str, number: int, fenced_env: dict[str, str]
+    config, hub: httpx2.Client, forge: httpx2.Client, chunk_id: str, number: int, fenced_env: dict[str, str]
 ) -> tuple[str, list[set[str]]]:
     """:func:`~tests.fleet_launchers.drive_until_done`'s loop, plus a label
     snapshot per tick — the projection updates asynchronously (the hub's own background

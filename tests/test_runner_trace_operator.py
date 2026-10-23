@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 from fastapi import FastAPI
@@ -28,7 +28,7 @@ from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests import runner_trace_fixtures as fx
 from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
+from tests.runner_client import UntimedTestClient, runner_client
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
@@ -95,7 +95,7 @@ def _app(runner: _Runner, tmp_path: Path) -> FastAPI:
 
 def _client(runner: _Runner, tmp_path: Path) -> TestClient:
     """A client at the host's root — the door an operator verb reaches through."""
-    return TestClient(_app(runner, tmp_path))
+    return UntimedTestClient(_app(runner, tmp_path))
 
 
 def _routes(runner: _Runner, tmp_path: Path) -> TestClient:
@@ -362,10 +362,10 @@ def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
     runner = _Runner(tmp_path)
     client = _client(runner, tmp_path)
 
-    def post(url: str, **kwargs: object) -> httpx.Response:
+    def post(url: str, **kwargs: object) -> httpx2.Response:
         if failure == "timeout":
-            raise httpx.ReadTimeout("timed out")
-        return httpx.Response(500, json={}, request=httpx.Request("POST", url))
+            raise httpx2.ReadTimeout("timed out")
+        return httpx2.Response(500, json={}, request=httpx2.Request("POST", url))
 
     def reach(
         verb: str, directory: str, runner_url: str | None, trace: object, selector: str | None = None

@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from click.testing import CliRunner
@@ -34,7 +34,7 @@ from tests.worker_http import Bound, bind_local_only, bind_stubs
 
 
 class _FakeResponse:
-    """A stand-in for ``httpx.Response`` on a client verb's outbound POST."""
+    """A stand-in for ``httpx2.Response`` on a client verb's outbound POST."""
 
     def __init__(self, status_code: int, payload: object | None = None) -> None:
         self.status_code = status_code
@@ -47,7 +47,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
 # --------------------------------------------------------------------------- #
@@ -616,13 +616,13 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
 
 def _await_socket(path: Path, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
-    transport = httpx.HTTPTransport(uds=str(path))
-    with httpx.Client(transport=transport, base_url="http://runner") as client:
+    transport = httpx2.HTTPTransport(uds=str(path))
+    with httpx2.Client(transport=transport, base_url="http://runner") as client:
         while time.monotonic() < deadline:
             try:
                 if client.get("/api/health").status_code == 200:
                     return
-            except httpx.HTTPError:
+            except httpx2.HTTPError:
                 pass
             time.sleep(0.05)
     raise AssertionError(f"runner local API never came up on {path}")
@@ -709,10 +709,10 @@ def test_start_reports_the_resume_upward(tmp_path: Path) -> None:
 def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) -> None:
     """Every verb's local API answers ``PATCH /api/runner`` with ``view`` — no daemon behind it — on a host of one."""
 
-    def answer(request: httpx.Request) -> httpx.Response:
+    def answer(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/host/runners":
-            return httpx.Response(200, json={"items": [{"runner_id": "rn_1", "name": "r", "state": "serving"}]})
-        return httpx.Response(200, json=view)
+            return httpx2.Response(200, json={"items": [{"runner_id": "rn_1", "name": "r", "state": "serving"}]})
+        return httpx2.Response(200, json=view)
 
     def reach(
         _cls: type[RunnerDaemon],
@@ -722,8 +722,8 @@ def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) 
         _trace: ITraceHeaders,
         _runner: str | None = None,
     ) -> RunnerDaemon:
-        transport = httpx.MockTransport(answer)
-        return RunnerDaemon(verb, httpx.Client(transport=transport, base_url="http://runner"), "runner.sock")
+        transport = httpx2.MockTransport(answer)
+        return RunnerDaemon(verb, httpx2.Client(transport=transport, base_url="http://runner"), "runner.sock")
 
     monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
 

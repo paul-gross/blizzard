@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.config import RunnerConfig
@@ -98,7 +98,7 @@ def _graph_yaml() -> str:
 
 
 def _tick_until(
-    config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
+    config: RunnerConfig, hub: httpx2.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
 ) -> str:
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status.
 

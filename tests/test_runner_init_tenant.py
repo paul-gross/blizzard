@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner, Result
 from fastapi import FastAPI
@@ -146,9 +146,9 @@ def test_an_unknown_token_is_asked_about_first_then_the_runner_is_added_in_its_h
 # --- the wire ---------------------------------------------------------------------------------------
 
 
-def _admin(handler: httpx.MockTransport, operator_token: str | None = None) -> HttpHubRunnerAdmin:
+def _admin(handler: httpx2.MockTransport, operator_token: str | None = None) -> HttpHubRunnerAdmin:
     return HttpHubRunnerAdmin(
-        httpx.Client(base_url="http://hub.test", transport=handler), operator_token=operator_token
+        httpx2.Client(base_url="http://hub.test", transport=handler), operator_token=operator_token
     )
 
 
@@ -173,22 +173,22 @@ def test_the_runner_reads_its_tenants_from_the_answer_the_hub_gives_me() -> None
 
 @pytest.mark.unit
 def test_the_operators_tenants_are_read_from_me_under_their_session() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert (request.method, request.url.path) == ("GET", "/api/me")
         assert request.headers.get("Authorization") == "Bearer op-session"
         tenants = [
             {"tenant_id": t.tenant_id, "name": t.name, "role": "admin", "permissions": []} for t in (_ALPHA, _BRAVO)
         ]
-        return httpx.Response(200, json={"user_id": "u", "username": "op", "tenants": tenants})
+        return httpx2.Response(200, json={"user_id": "u", "username": "op", "tenants": tenants})
 
-    assert _admin(httpx.MockTransport(handler), "op-session").tenants() == [_ALPHA, _BRAVO]
+    assert _admin(httpx2.MockTransport(handler), "op-session").tenants() == [_ALPHA, _BRAVO]
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("answer", [httpx.Response(401, json={"detail": "not authenticated"}), httpx.Response(200)])
-def test_an_unread_tenant_listing_raises(answer: httpx.Response) -> None:
+@pytest.mark.parametrize("answer", [httpx2.Response(401, json={"detail": "not authenticated"}), httpx2.Response(200)])
+def test_an_unread_tenant_listing_raises(answer: httpx2.Response) -> None:
     with pytest.raises(HubClientError):
-        _admin(httpx.MockTransport(lambda _request: answer)).tenants()
+        _admin(httpx2.MockTransport(lambda _request: answer)).tenants()
 
 
 # --- the command's words ----------------------------------------------------------------------------

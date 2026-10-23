@@ -11,7 +11,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
-import httpx
+import httpx2
 from fastapi import Path, Request, status
 from fastapi.exceptions import HTTPException
 from starlette.datastructures import State
@@ -191,8 +191,8 @@ class RunnerWiring:
         proxies: TrustedProxies | None = self._seam("trusted_proxies")
         return proxies if proxies is not None else self._refuse("trusted proxies")
 
-    def hub_proxy_client(self) -> httpx.Client:
-        client: httpx.Client | None = self._seam("hub_proxy_client")
+    def hub_proxy_client(self) -> httpx2.Client:
+        client: httpx2.Client | None = self._seam("hub_proxy_client")
         return client if client is not None else self._refuse("hub proxy client")
 
     def hub_retry_clock(self) -> IMonotonicClock:

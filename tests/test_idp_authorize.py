@@ -10,7 +10,7 @@ from typing import cast
 
 import jwt
 import pytest
-from httpx import Response
+from httpx2 import Response
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.auth_core import Role

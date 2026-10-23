@@ -1,6 +1,6 @@
 """``GitHubCommitResolver`` — the real forge check behind `garden_delivery.CommitResolver`, and
-``RepositoryCommitResolver`` — its binding to the repository records (unit tier). Stubs the ``httpx`` transport
-(``tests/test_auth_oauth_factory.py``'s own ``httpx.MockTransport`` shape) — never a real
+``RepositoryCommitResolver`` — its binding to the repository records (unit tier). Stubs the ``httpx2`` transport
+(``tests/test_auth_oauth_factory.py``'s own ``httpx2.MockTransport`` shape) — never a real
 network call, and never a raise, whatever the transport does."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.config.repositories import (
@@ -33,19 +33,19 @@ _OWNER = "acme"
 _SHA = "deadbeef"
 
 
-def _client(handler) -> httpx.Client:  # type: ignore[no-untyped-def]
-    return httpx.Client(transport=httpx.MockTransport(handler))
+def _client(handler) -> httpx2.Client:  # type: ignore[no-untyped-def]
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
 
 
 _FORGE = {"forge_url": _FORGE_URL, "owner": _OWNER, "token": _TOKEN}
 
 
 def test_a_200_resolves_true() -> None:
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        return httpx.Response(200, json={"sha": _SHA})
+        return httpx2.Response(200, json={"sha": _SHA})
 
     resolver = GitHubCommitResolver(_client(handler))
 
@@ -57,7 +57,7 @@ def test_a_200_resolves_true() -> None:
 def test_a_200_with_a_commit_body_resolves_the_authored_instant() -> None:
     resolver = GitHubCommitResolver(
         _client(
-            lambda request: httpx.Response(
+            lambda request: httpx2.Response(
                 200, json={"sha": _SHA, "commit": {"author": {"date": "2026-01-02T03:04:05Z"}}}
             )
         )
@@ -69,31 +69,31 @@ def test_a_200_with_a_commit_body_resolves_the_authored_instant() -> None:
 
 
 def test_a_404_resolves_false() -> None:
-    resolver = GitHubCommitResolver(_client(lambda request: httpx.Response(404)))
+    resolver = GitHubCommitResolver(_client(lambda request: httpx2.Response(404)))
 
     assert resolver.resolve("widget", _SHA, **_FORGE) == CommitResolution(exists=False)
 
 
 @pytest.mark.parametrize("status_code", [401, 403, 500, 503])
 def test_any_other_status_degrades_to_none(status_code: int) -> None:
-    resolver = GitHubCommitResolver(_client(lambda request: httpx.Response(status_code)))
+    resolver = GitHubCommitResolver(_client(lambda request: httpx2.Response(status_code)))
 
     assert resolver.resolve("widget", _SHA, **_FORGE) is None
 
 
 def test_a_transport_error_degrades_to_none_never_raises() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("boom", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("boom", request=request)
 
     assert GitHubCommitResolver(_client(handler)).resolve("widget", _SHA, **_FORGE) is None
 
 
 def test_a_malformed_url_component_degrades_to_none_never_raises() -> None:
-    """A control character in the repo raises ``httpx.InvalidURL`` at request
-    construction, outside the ``httpx.HTTPError`` hierarchy — so this passes only if
+    """A control character in the repo raises ``httpx2.InvalidURL`` at request
+    construction, outside the ``httpx2.HTTPError`` hierarchy — so this passes only if
     the catch is broad enough to honor the never-raise contract."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         pytest.fail("must not reach the transport when the URL fails to construct")
 
     assert GitHubCommitResolver(_client(handler)).resolve("a\nb", _SHA, **_FORGE) is None
@@ -174,11 +174,11 @@ def _bound(rows, values, handler, *, linked: set[str] | None = None) -> CommitRe
 
 
 def test_a_cited_repository_resolves_against_its_record_each_call() -> None:
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     values = {"tok": "first"}
     resolver = _bound([_row("widget")], values, handler)
@@ -192,7 +192,7 @@ def test_a_cited_repository_resolves_against_its_record_each_call() -> None:
 
 
 def test_a_repository_no_record_names_degrades_to_none_without_a_request() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         pytest.fail("must not contact a forge for a repository no record names")
 
     resolver = _bound([_row("widget"), _row("old", retired=True)], {"tok": "t"}, handler)
@@ -203,18 +203,18 @@ def test_a_repository_no_record_names_degrades_to_none_without_a_request() -> No
 
 
 def test_an_unrevealable_secret_degrades_to_none_without_a_request() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         pytest.fail("must not contact the forge without a token")
 
     assert _bound([_row("widget")], {}, handler)("widget", _SHA) is None
 
 
 def test_only_the_projects_linked_repositories_reach_the_forge() -> None:
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     resolver = _bound([_row("widget"), _row("gadget")], {"tok": "t"}, handler, linked={"widget"})
 
@@ -225,7 +225,7 @@ def test_only_the_projects_linked_repositories_reach_the_forge() -> None:
 
 def test_the_projects_links_are_read_on_each_call() -> None:
     linked = {"widget"}
-    bound = _bound([_row("widget")], {"tok": "t"}, lambda request: httpx.Response(200), linked=linked)
+    bound = _bound([_row("widget")], {"tok": "t"}, lambda request: httpx2.Response(200), linked=linked)
 
     assert bound("widget", _SHA) is not None
     linked.clear()
@@ -233,11 +233,11 @@ def test_the_projects_links_are_read_on_each_call() -> None:
 
 
 def test_a_name_ambiguous_across_the_tenant_resolves_to_the_record_the_project_links() -> None:
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     fork = _row("widget-fork", owner="other")
     rows = [_row("widget"), replace(fork, fields=replace(fork.fields, repo="widget"))]

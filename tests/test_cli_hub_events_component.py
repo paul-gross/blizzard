@@ -7,7 +7,7 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import Result
 
@@ -25,7 +25,7 @@ _HUB_URL = "http://hub.local:8421"
 def _relay(hub: HubHarness, token: str | None) -> Bound:
     headers = {"Cookie": f"bz_session={token}"} if token is not None else {}
 
-    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx.Response:
+    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
         return hub.client.get(url, params=params, headers=headers)
 
     return bind_stubs(get=fake_get)

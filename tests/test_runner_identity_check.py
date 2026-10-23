@@ -14,7 +14,7 @@ import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from pytest import MonkeyPatch
 from structlog.testing import capture_logs
@@ -392,44 +392,44 @@ def test_the_check_reads_the_token_runner_from_a_real_hub(
     assert (verdict.state, verdict.store_runner_id, verdict.token_runner_id) == (expected, "rn_store", token_runner)
 
 
-def _identity(runner_id: str) -> httpx.Response:
-    return httpx.Response(200, json={"runner_id": runner_id, "runner_name": "runner-local"})
+def _identity(runner_id: str) -> httpx2.Response:
+    return httpx2.Response(200, json={"runner_id": runner_id, "runner_name": "runner-local"})
 
 
 def _proxied(
     tmp_path: Path,
     forwarded: list[str],
     *,
-    identity: httpx.Response | None = None,
+    identity: httpx2.Response | None = None,
     verdict: IdentityVerdictHolder | None = None,
     silent_reads: int = 0,
-) -> tuple[httpx.Response, IdentityVerdictHolder, list[str]]:
+) -> tuple[httpx2.Response, IdentityVerdictHolder, list[str]]:
     """A fleet-summary read through the hub proxy of a runner whose store names ``r1``; the hub answers the
     identity read with ``identity`` (the token naming ``r1`` unless a test says otherwise), or is
     unreachable when it is a ``503``, or for its first ``silent_reads`` reads. Returns the response, the loop's verdict, and the identity reads."""
     asked: list[str] = []
     answer = identity if identity is not None else _identity("r1")
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/fleet/identity":
             asked.append(str(request.url))
             if len(asked) <= silent_reads:
-                return httpx.Response(503, json={"detail": "the hub is unreachable"})
+                return httpx2.Response(503, json={"detail": "the hub is unreachable"})
             return answer
         forwarded.append(str(request.url))
-        return httpx.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
+        return httpx2.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
 
     ctx = _ctx(tmp_path, FakeHub(default_runner_id="r1"))
     held = verdict or ctx.identity_verdict
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     app = create_runner_app(
         config,
-        hub_proxy_client=httpx.Client(transport=transport),
+        hub_proxy_client=httpx2.Client(transport=transport),
         hub_retry_clock=no_retry_clock(),
         identity_verdict=held,
         identity_check=ProxyIdentityCheck("r1", held, ctx.clock),
-        token_identity=HttpHubClient(httpx.Client(base_url=config.hub_url, transport=transport)),
+        token_identity=HttpHubClient(httpx2.Client(base_url=config.hub_url, transport=transport)),
     )
     client = runner_client(app)
     resp = client.get("/api/fleet-summary")
@@ -466,7 +466,7 @@ def test_an_unchecked_hub_proxy_fails_as_an_outage_does_while_the_hub_does_not_a
     """An unchecked runner behaves exactly as during an outage: the forward answers the hub's own failure,
     which a route serving from the runner's pin falls back on — not an identity refusal."""
     forwarded: list[str] = []
-    down = httpx.Response(503, json={"detail": "the hub is unreachable"})
+    down = httpx2.Response(503, json={"detail": "the hub is unreachable"})
     resp, _, _ = _proxied(tmp_path, forwarded, identity=down)
 
     assert resp.status_code == 503
@@ -479,13 +479,13 @@ def test_a_hub_proxy_wired_with_an_identity_check_but_no_token_reader_forwards_n
     ctx = _ctx(tmp_path, FakeHub(default_runner_id="r1"))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url="http://hub.local:8421")
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         forwarded.append(str(request.url))
-        return httpx.Response(200, json={})
+        return httpx2.Response(200, json={})
 
     app = create_runner_app(
         config,
-        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
         identity_verdict=ctx.identity_verdict,
         identity_check=ProxyIdentityCheck("r1", ctx.identity_verdict, ctx.clock),
@@ -498,7 +498,7 @@ def test_a_hub_proxy_wired_with_an_identity_check_but_no_token_reader_forwards_n
 
 def test_the_hub_proxy_forwards_nothing_while_the_hub_has_no_identity_read(tmp_path: Path) -> None:
     forwarded: list[str] = []
-    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx.Response(404, json={"detail": "Not Found"}))
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx2.Response(404, json={"detail": "Not Found"}))
 
     assert resp.status_code == 503
     assert resp.json()["detail"].startswith("runner_identity_unverified")
@@ -507,7 +507,7 @@ def test_the_hub_proxy_forwards_nothing_while_the_hub_has_no_identity_read(tmp_p
 
 def test_the_hub_proxy_names_the_hubs_typed_refusal_of_the_token_and_forwards_nothing(tmp_path: Path) -> None:
     forwarded: list[str] = []
-    refused = httpx.Response(401, json={"reason": "revoked", "runner_id": "r1"})
+    refused = httpx2.Response(401, json={"reason": "revoked", "runner_id": "r1"})
     resp, verdict, _ = _proxied(tmp_path, forwarded, identity=refused)
 
     assert resp.status_code == 503
@@ -518,7 +518,7 @@ def test_the_hub_proxy_names_the_hubs_typed_refusal_of_the_token_and_forwards_no
 
 def test_the_hub_proxy_takes_an_untyped_401_for_an_outage(tmp_path: Path) -> None:
     forwarded: list[str] = []
-    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx.Response(401, text="proxy auth required"))
+    resp, _, _ = _proxied(tmp_path, forwarded, identity=httpx2.Response(401, text="proxy auth required"))
 
     assert resp.status_code == 503
     assert resp.json()["detail"] == "the hub is unreachable"
@@ -672,17 +672,17 @@ def test_the_hub_clients_present_the_token_taken_up_from_env(tmp_path: Path, mon
     held = held_hub_token(config, ResolvedToken(_WRONG, TokenSource.DOTENV))
     presented: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         presented.append(request.headers.get("Authorization", ""))
         if request.url.path == "/api/fleet/identity":
-            return httpx.Response(200, json={"runner_id": "r1", "runner_name": "runner-local"})
-        return httpx.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
+            return httpx2.Response(200, json={"runner_id": "r1", "runner_name": "runner-local"})
+        return httpx2.Response(200, json={"ready": 1, "running": 0, "waiting": 0, "needs": 0})
 
-    transport = httpx.MockTransport(handler)
-    loop_client = HttpHubClient(httpx.Client(base_url=config.hub_url, transport=transport, auth=HeldTokenAuth(held)))
+    transport = httpx2.MockTransport(handler)
+    loop_client = HttpHubClient(httpx2.Client(base_url=config.hub_url, transport=transport, auth=HeldTokenAuth(held)))
     app = create_runner_app(
         config,
-        hub_proxy_client=httpx.Client(transport=transport),
+        hub_proxy_client=httpx2.Client(transport=transport),
         hub_retry_clock=no_retry_clock(),
         identity_verdict=IdentityVerdictHolder(_RESET, state=IdentityState.MATCHED),
         hub_token=held,

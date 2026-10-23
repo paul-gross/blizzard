@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
@@ -80,7 +80,7 @@ def _drive_hub(tmp_path: Path, *, platform: bool) -> list[tuple[dict[str, str], 
     with otlp_sink() as sink:
         env = {**os.environ, "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
         proc = _hub(hub_dir, port, env, platform=platform)
-        client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+        client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
         try:
             await_http(proc, client, "/api/health", log=hub_dir / "daemon.log")
             client.get("/api/chunks/ch_service?token=planted-secret")
@@ -128,9 +128,9 @@ def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_sp
             stderr=subprocess.STDOUT,
             text=True,
         )
-        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
-        uds = httpx.Client(
-            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        tcp = httpx2.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx2.Client(
+            base_url="http://runner", transport=httpx2.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
         )
         try:
             await_http(proc, tcp, "/api/health", log=log)
@@ -186,9 +186,9 @@ def test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter(
             stderr=subprocess.STDOUT,
             text=True,
         )
-        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
-        uds = httpx.Client(
-            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        tcp = httpx2.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx2.Client(
+            base_url="http://runner", transport=httpx2.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
         )
         headers = {"Content-Type": "application/json", "X-Blizzard-Lease-Token": token}
         try:
@@ -242,9 +242,9 @@ def test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_r
             stderr=subprocess.STDOUT,
             text=True,
         )
-        tcp = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
-        uds = httpx.Client(
-            base_url="http://runner", transport=httpx.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
+        tcp = httpx2.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        uds = httpx2.Client(
+            base_url="http://runner", transport=httpx2.HTTPTransport(uds=str(config.socket_path)), timeout=10.0
         )
         try:
             await_http(proc, tcp, "/api/health", log=log)

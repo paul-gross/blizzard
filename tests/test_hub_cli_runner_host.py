@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
@@ -22,19 +22,19 @@ _ENV = {"BZ_HUB_URL": _HUB_URL}
 _ADDED = {"host_id": "hs_01JC4Z8Q3XKQ1V5W2M7N9P0R6T", "host_name": "box", "token": "sekrit-token", "adopted": []}
 
 
-def _respond(status_code: int, payload: object) -> httpx.Response:
-    return httpx.Response(status_code, json=payload, request=httpx.Request("GET", _HUB_URL))
+def _respond(status_code: int, payload: object) -> httpx2.Response:
+    return httpx2.Response(status_code, json=payload, request=httpx2.Request("GET", _HUB_URL))
 
 
-def _recording(calls: list[dict[str, Any]], response: httpx.Response) -> Callable[..., httpx.Response]:
-    def fake(url: str, **kwargs: Any) -> httpx.Response:
+def _recording(calls: list[dict[str, Any]], response: httpx2.Response) -> Callable[..., httpx2.Response]:
+    def fake(url: str, **kwargs: Any) -> httpx2.Response:
         calls.append({"url": url, **kwargs})
         return response
 
     return fake
 
 
-def _stub(verb: str, response: httpx.Response) -> tuple[Bound, list[dict[str, Any]]]:
+def _stub(verb: str, response: httpx2.Response) -> tuple[Bound, list[dict[str, Any]]]:
     calls: list[dict[str, Any]] = []
     return bind_stubs(**{verb: _recording(calls, response)}), calls
 
@@ -207,7 +207,7 @@ def test_the_daemon_launcher_keeps_the_host_name() -> None:
 def _against(hub: HubHarness) -> Bound:
     """Bind the CLI's requests to ``hub``'s app."""
 
-    def forward(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    def forward(method: str, url: str, **kwargs: Any) -> httpx2.Response:
         kwargs.pop("timeout", None)
         return hub.client.request(method, url.removeprefix(_HUB_URL), **kwargs)
 

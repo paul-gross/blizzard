@@ -29,7 +29,7 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from sqlalchemy import Engine, and_, select
 
@@ -417,8 +417,8 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
 
     hub_proc = None
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    runner_client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=15.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    runner_client = httpx2.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=15.0)
     daemon_log = runner_dir / "daemon.log"
     otel_env = {"OTEL_EXPORTER_OTLP_ENDPOINT": fleet_traces.endpoint} if fleet_traces.available else {}
     try:

@@ -11,7 +11,7 @@ import os
 import re
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
@@ -35,7 +35,7 @@ def _mint(bin_dir: Path, scratch: Path) -> Path:
     return scratch / FIXTURE_ENV / "origins"
 
 
-def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
+def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
     assert issue.status_code == 201, issue.text
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})

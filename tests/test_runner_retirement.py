@@ -259,7 +259,7 @@ def test_every_fleet_route_is_gated_or_a_named_exception(tmp_path: Path) -> None
     routes, which a host credential gates instead."""
     ungated = {
         (method, route.path)
-        for route in _api_routes(build_hub(tmp_path).client.app)
+        for route in _api_routes(build_hub(tmp_path).wired_app)
         if route.path.startswith("/api/fleet/") and _GATE not in _dependency_names(route)
         for method in (route.methods or set()) - {"HEAD"}
     }
@@ -289,7 +289,7 @@ def test_a_retired_runner_whose_token_still_resolves_is_refused_on_every_gated_f
     hub.clock.advance(timedelta(seconds=5))
     before = _store_rows(hub)
 
-    gated = [route for route in _api_routes(hub.client.app) if _GATE in _dependency_names(route)]
+    gated = [route for route in _api_routes(hub.wired_app) if _GATE in _dependency_names(route)]
     assert gated, "no route carries the fleet gate"
     refused = []
     for route in gated:

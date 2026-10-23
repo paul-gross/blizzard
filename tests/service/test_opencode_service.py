@@ -11,7 +11,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -56,16 +56,18 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
         os.environ.update(prior)
 
 
-def _status(hub: httpx.Client, chunk_id: str) -> str:
+def _status(hub: httpx2.Client, chunk_id: str) -> str:
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
-def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
+def _run_and_check(
+    config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
+) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
 
 
-def _seed_opencode(hub: httpx.Client) -> str:
+def _seed_opencode(hub: httpx2.Client) -> str:
     resp = hub.post("/_seed/chunk", json=mock_hub_opencode_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
@@ -124,9 +126,9 @@ def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: P
         assert composed["permission"] == {"bash": "deny", "question": "deny"}
 
         with runner_api(config):
-            client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+            client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                assert httpx.get(f"http://{config.host}:{config.port}/api/health", timeout=10.0).status_code == 200
+                assert httpx2.get(f"http://{config.host}:{config.port}/api/health", timeout=10.0).status_code == 200
                 minted = poll_until(lambda: _tick_and_check_lease(config, fenced, client, chunk_id), timeout=60.0)
                 assert minted
                 lease = next(item for item in client.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id)
@@ -143,7 +145,7 @@ def test_runner_serves_a_mock_opencode_lease_with_a_published_bundle(tmp_path: P
                 client.close()
 
 
-def _tick_and_check_lease(config: RunnerConfig, fenced: dict[str, str], client: httpx.Client, chunk_id: str) -> bool:
+def _tick_and_check_lease(config: RunnerConfig, fenced: dict[str, str], client: httpx2.Client, chunk_id: str) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return any(item["chunk_id"] == chunk_id for item in client.get("/api/leases").json()["items"])
 
@@ -252,7 +254,7 @@ def test_opencode_transcript_is_read_back_through_the_runner_http_api(tmp_path: 
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
-                runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+                runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
                 try:
                     leases = runner_client.get("/api/leases")
                     assert leases.status_code == 200, leases.text
@@ -331,7 +333,7 @@ def test_opencode_transcript_segment_carries_opencode_provenance_through_the_run
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
                 assert landed, f"chunk did not land under OpenCode (status {_status(hub, chunk_id)!r})"
 
-                runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+                runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
                 try:
                     index = runner_client.get(f"/api/chunks/{chunk_id}/transcripts")
                     assert index.status_code == 200, index.text

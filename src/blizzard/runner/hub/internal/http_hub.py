@@ -1,10 +1,10 @@
-"""httpx adapter for the hub-client seam (package-private).
+"""httpx2 adapter for the hub-client seam (package-private).
 
 The reference :class:`~blizzard.runner.hub.client.IHubClient` and
 :class:`~blizzard.runner.hub.client.ITokenIdentityReader` binding, the
 :class:`~blizzard.runner.hub.client.IHubRunnerAdmin` one, the
 :class:`~blizzard.runner.hub.client.IHostHubClient` one, and the auth presenting the runner's held
-token. All httpx usage is confined here; a
+token. All httpx2 usage is confined here; a
 transport failure or unexpected status is wrapped once into
 :class:`~blizzard.runner.hub.client.HubClientError` (``bzh:structlog-logging``).
 """
@@ -16,7 +16,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+import httpx2
 from pydantic import BaseModel, TypeAdapter
 
 from blizzard import __version__
@@ -155,26 +155,26 @@ TENANT_HEADER = "X-Blizzard-Tenant"
 
 #: The statuses a host add is refused with, each a reason the caller acts on rather than retries.
 _HOST_ADD_REFUSALS: dict[int, HostAddRefusalReason] = {
-    httpx.codes.UNAUTHORIZED: HostAddRefusalReason.SIGN_IN_REQUIRED,
-    httpx.codes.FORBIDDEN: HostAddRefusalReason.FORBIDDEN,
-    httpx.codes.NOT_FOUND: HostAddRefusalReason.UNSUPPORTED,
-    httpx.codes.METHOD_NOT_ALLOWED: HostAddRefusalReason.UNSUPPORTED,
-    httpx.codes.CONFLICT: HostAddRefusalReason.NAME_TAKEN,
+    httpx2.codes.UNAUTHORIZED: HostAddRefusalReason.SIGN_IN_REQUIRED,
+    httpx2.codes.FORBIDDEN: HostAddRefusalReason.FORBIDDEN,
+    httpx2.codes.NOT_FOUND: HostAddRefusalReason.UNSUPPORTED,
+    httpx2.codes.METHOD_NOT_ALLOWED: HostAddRefusalReason.UNSUPPORTED,
+    httpx2.codes.CONFLICT: HostAddRefusalReason.NAME_TAKEN,
 }
 
-type _Refusal = Callable[[str, httpx.Response], HubClientError | None]
+type _Refusal = Callable[[str, httpx2.Response], HubClientError | None]
 
 
-def _retire_held(operation: str, resp: httpx.Response) -> HubClientError | None:
+def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None:
     """A retire under the host refused while the runner still holds chunks (409)."""
-    if resp.status_code != httpx.codes.CONFLICT:
+    if resp.status_code != httpx2.codes.CONFLICT:
         return None
     return HostRunnerRetireRefused(f"{operation} -> {resp.status_code}", detail=_detail(resp))
 
 
-def _no_such_project(operation: str, resp: httpx.Response) -> HubClientError | None:
+def _no_such_project(operation: str, resp: httpx2.Response) -> HubClientError | None:
     """An add under the host refused for a named project the tenant does not hold (422 with the hub's text)."""
-    if resp.status_code != httpx.codes.UNPROCESSABLE_ENTITY or not _text_detail(resp):
+    if resp.status_code != httpx2.codes.UNPROCESSABLE_CONTENT or not _text_detail(resp):
         return None
     return RunnerAddRefused(
         f"{operation} -> {resp.status_code}", reason=RunnerAddRefusalReason.NO_SUCH_PROJECT, detail=_detail(resp)
@@ -183,9 +183,9 @@ def _no_such_project(operation: str, resp: httpx.Response) -> HubClientError | N
 
 #: The statuses a call under the host's own token is refused with, typed for the caller to branch on.
 _HOST_REFUSALS: dict[int, HostRefusalReason] = {
-    httpx.codes.UNAUTHORIZED: HostRefusalReason.CREDENTIAL_REFUSED,
-    httpx.codes.FORBIDDEN: HostRefusalReason.RETIRED,
-    httpx.codes.NOT_FOUND: HostRefusalReason.NOT_FOUND,
+    httpx2.codes.UNAUTHORIZED: HostRefusalReason.CREDENTIAL_REFUSED,
+    httpx2.codes.FORBIDDEN: HostRefusalReason.RETIRED,
+    httpx2.codes.NOT_FOUND: HostRefusalReason.NOT_FOUND,
 }
 
 #: The hub's refusal text for a named tenant the caller cannot enter — one text for an unknown, a
@@ -196,20 +196,20 @@ _NO_SUCH_TENANT = "no such tenant"
 _TENANT_REQUIRED = "tenant_required"
 
 
-class HeldTokenAuth(httpx.Auth):
+class HeldTokenAuth(httpx2.Auth):
     """Authorizes each request with the token ``token`` holds when it is sent, so a client built once
     presents a token the runner takes up later."""
 
     def __init__(self, token: ICurrentHubToken) -> None:
         self._token = token
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response, None]:
         request.headers.update(self._token.auth_headers())
         yield request
 
 
 class HttpHubClient:
-    def __init__(self, client: httpx.Client, *, version: str = __version__) -> None:
+    def __init__(self, client: httpx2.Client, *, version: str = __version__) -> None:
         self._client = client
         self._version = version
 
@@ -238,9 +238,9 @@ class HttpHubClient:
         ).model_dump(mode="json")
         try:
             resp = self._client.post(f"{_FLEET_API}/routes", json=body)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise self._wrap(exc, "POST /fleet/routes") from exc
-        if resp.status_code == httpx.codes.CONFLICT:
+        if resp.status_code == httpx2.codes.CONFLICT:
             body = resp.json()
             # Four distinct 409 shapes share the status code — race loss, terminal,
             # dependency, and incompatibility denials — told apart by which field is in body.
@@ -253,7 +253,7 @@ class HttpHubClient:
                     denied_incompatible=_incompatible(RouteClaimIncompatibleDenial.model_validate(body))
                 )
             return RouteClaimOutcome(conflict=_conflict(RouteClaimConflict.model_validate(body)))
-        if resp.status_code == httpx.codes.FORBIDDEN:
+        if resp.status_code == httpx2.codes.FORBIDDEN:
             return RouteClaimOutcome(denied_paused=_paused(RouteClaimPausedDenial.model_validate(resp.json())))
         self._raise_for_status(resp, "POST /fleet/routes")
         return RouteClaimOutcome(claimed=_claimed(RouteClaimResponse.model_validate(resp.json())))
@@ -316,7 +316,7 @@ class HttpHubClient:
         path = f"{_FLEET_API}/chunks/{chunk_id}/hub-advance"
         try:
             resp = self._client.post(path)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         self._raise_for_status(resp, f"POST {path}")
         return HubAdvanceResponse.model_validate(resp.json())
@@ -405,9 +405,9 @@ class HttpHubClient:
         operation = f"GET {_FLEET_API}/identity"
         try:
             resp = self._client.get(f"{_FLEET_API}/identity")
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise self._wrap(exc, operation) from exc
-        if resp.status_code == httpx.codes.UNAUTHORIZED:
+        if resp.status_code == httpx2.codes.UNAUTHORIZED:
             refusal = _identity_refusal(resp)
             if refusal is not None:
                 _log.info("hub call refused", operation=operation, status=resp.status_code, reason=str(refusal.reason))
@@ -440,10 +440,10 @@ class HttpHubClient:
         params: dict[str, list[str]] | None = None,
         not_found_as: type[HubClientError] | None = None,
         ended_on_conflict: bool = False,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         try:
             resp = self._client.get(path, params=params)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"GET {path}") from exc
         self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as, ended_on_conflict=ended_on_conflict)
         return resp
@@ -456,14 +456,14 @@ class HttpHubClient:
         timeout: float | None = None,
         ended_on_conflict: bool = False,
         ended_on_not_found: bool = False,
-        refused: Callable[[httpx.Response], HubClientError | None] | None = None,
-    ) -> httpx.Response:
+        refused: Callable[[httpx2.Response], HubClientError | None] | None = None,
+    ) -> httpx2.Response:
         try:
             if timeout is not None:
                 resp = self._client.post(path, **_body_kwargs(body), timeout=timeout)
             else:
                 resp = self._client.post(path, **_body_kwargs(body))
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         if refused is not None and not resp.is_success and (error := refused(resp)) is not None:
             _log.info("hub call refused", operation=f"POST {path}", status=resp.status_code)
@@ -475,7 +475,7 @@ class HttpHubClient:
 
     def _raise_for_status(
         self,
-        resp: httpx.Response,
+        resp: httpx2.Response,
         operation: str,
         *,
         not_found_as: type[HubClientError] | None = None,
@@ -487,29 +487,29 @@ class HttpHubClient:
         message = f"{operation} -> {resp.status_code}: {resp.text[:200]}"
         # A status decoded to a typed terminal outcome is expected: the caller owns its handling and
         # its log level. Only a status left unclassified is a hub-call failure worth an error.
-        if not_found_as is not None and resp.status_code == httpx.codes.NOT_FOUND:
+        if not_found_as is not None and resp.status_code == httpx2.codes.NOT_FOUND:
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise not_found_as(message)
-        if ended_on_not_found and resp.status_code == httpx.codes.NOT_FOUND:
+        if ended_on_not_found and resp.status_code == httpx2.codes.NOT_FOUND:
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise ChunkEndedError(message, detail=_detail(resp))
-        if ended_on_conflict and resp.status_code == httpx.codes.CONFLICT:
+        if ended_on_conflict and resp.status_code == httpx2.codes.CONFLICT:
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise ChunkEndedError(message, detail=_detail(resp))
         _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
         raise HubClientError(message)
 
     @staticmethod
-    def _wrap(exc: httpx.HTTPError, operation: str) -> HubClientError:
+    def _wrap(exc: httpx2.HTTPError, operation: str) -> HubClientError:
         _log.error("hub unreachable", operation=operation, detail=str(exc))
         return HubClientError(f"{operation} failed: {exc}")
 
 
 class HttpHubRunnerAdmin:
-    """Host add and the operator's tenants over an injected ``httpx.Client``, sending
+    """Host add and the operator's tenants over an injected ``httpx2.Client``, sending
     ``operator_token`` as a Bearer credential when set and no credential otherwise."""
 
-    def __init__(self, client: httpx.Client, *, operator_token: str | None) -> None:
+    def __init__(self, client: httpx2.Client, *, operator_token: str | None) -> None:
         self._client = client
         self._operator_token = operator_token
 
@@ -517,7 +517,7 @@ class HttpHubRunnerAdmin:
         operation = f"GET {_ME_API}"
         try:
             resp = self._client.get(_ME_API, headers=self._headers())
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc
         if not resp.is_success:
@@ -540,7 +540,7 @@ class HttpHubRunnerAdmin:
                 json=HostAddRequest(name=name, adopt=list(adopt)).model_dump(mode="json", exclude_defaults=True),
                 headers=headers,
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc
         reason = _host_add_refusal(resp)
@@ -560,23 +560,23 @@ class HttpHubRunnerAdmin:
         return {"Authorization": f"Bearer {self._operator_token}"} if self._operator_token else {}
 
 
-def _host_add_refusal(resp: httpx.Response) -> HostAddRefusalReason | None:
+def _host_add_refusal(resp: httpx2.Response) -> HostAddRefusalReason | None:
     """The reason a host add's answer refuses it, or ``None`` when it is no refusal the caller acts on.
     A ``404`` carrying the hub's tenant text is the tenant refusal, and a ``409`` carrying the
     tenant-required code is that one; any other ``404`` is a hub that predates hosts, and any other
     ``409`` a name a live host holds."""
-    if resp.status_code == httpx.codes.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
+    if resp.status_code == httpx2.codes.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
         return HostAddRefusalReason.NO_SUCH_TENANT
-    if resp.status_code == httpx.codes.CONFLICT and _refusal_code(resp) == _TENANT_REQUIRED:
+    if resp.status_code == httpx2.codes.CONFLICT and _refusal_code(resp) == _TENANT_REQUIRED:
         return HostAddRefusalReason.TENANT_REQUIRED
     return _HOST_ADD_REFUSALS.get(resp.status_code)
 
 
 class HttpHostHubClient:
-    """The host's own hub calls over an injected ``httpx.Client``, presenting ``token`` — the host's
+    """The host's own hub calls over an injected ``httpx2.Client``, presenting ``token`` — the host's
     bearer token — on each, whatever credential the client itself carries."""
 
-    def __init__(self, client: httpx.Client, *, token: str, version: str = __version__) -> None:
+    def __init__(self, client: httpx2.Client, *, token: str, version: str = __version__) -> None:
         self._client = client
         self._headers = {"Authorization": f"Bearer {token}"}
         self._version = version
@@ -638,13 +638,13 @@ class HttpHostHubClient:
         *,
         refused: _Refusal | None = None,
         version_checked: bool = False,
-    ) -> httpx.Response | HostRefused:
+    ) -> httpx2.Response | HostRefused:
         operation = f"{method} {path}"
         try:
             kwargs = _body_kwargs(body)
             headers = {**self._headers, **kwargs.pop("headers", {})}
             resp = self._client.request(method, path, **kwargs, headers=headers)
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("hub unreachable", operation=operation, detail=str(exc))
             raise HubClientError(f"{operation} failed: {exc}") from exc
         if resp.is_success:
@@ -679,14 +679,14 @@ class _FactBatchBody:
 
 
 def _body_kwargs(body: object) -> dict[str, Any]:
-    """The httpx request arguments sending ``body``: a pre-built fact batch as raw JSON content, anything else
-    through httpx's own JSON encoding."""
+    """The httpx2 request arguments sending ``body``: a pre-built fact batch as raw JSON content, anything else
+    through httpx2's own JSON encoding."""
     if isinstance(body, _FactBatchBody):
         return {"content": body.content, "headers": {"Content-Type": "application/json"}}
     return {"json": body}
 
 
-def _validated[T: BaseModel](model: type[T], resp: httpx.Response, path: str) -> T:
+def _validated[T: BaseModel](model: type[T], resp: httpx2.Response, path: str) -> T:
     try:
         return model.model_validate(resp.json())
     except ValueError as exc:
@@ -702,7 +702,7 @@ def _host_record(wire: HostRecordResponse) -> HostRecord:
     )
 
 
-def _refusal_code(resp: httpx.Response) -> str | None:
+def _refusal_code(resp: httpx2.Response) -> str | None:
     """The ``detail.code`` of a structured FastAPI refusal, or ``None`` when it carries none."""
     try:
         body = resp.json()
@@ -745,7 +745,7 @@ def _conforms_host_runner_adder(x: HttpHostHubClient) -> IHostRunnerAdder:
     return x
 
 
-def _identity_refusal(resp: httpx.Response) -> TokenRefusal | None:
+def _identity_refusal(resp: httpx2.Response) -> TokenRefusal | None:
     """The identity route's typed ``401``, or ``None`` for a ``401`` that is not one — a proxy's,
     say — which the caller treats as any other failed call."""
     try:
@@ -760,9 +760,9 @@ def _malformed(operation: str, exc: ValueError) -> HubClientError:
     return HubClientError(f"{operation}: malformed reply: {exc}")
 
 
-def _version_refusal(resp: httpx.Response) -> VersionRefusal | None:
+def _version_refusal(resp: httpx2.Response) -> VersionRefusal | None:
     """The window's refusal a ``409`` carries, or ``None`` for any other answer."""
-    if resp.status_code != httpx.codes.CONFLICT:
+    if resp.status_code != httpx2.codes.CONFLICT:
         return None
     try:
         body = RunnerVersionRefusal.model_validate(resp.json())
@@ -777,12 +777,12 @@ def _version_refusal(resp: httpx.Response) -> VersionRefusal | None:
     )
 
 
-def _version_refused(resp: httpx.Response) -> RunnerVersionRefused | None:
+def _version_refused(resp: httpx2.Response) -> RunnerVersionRefused | None:
     refusal = _version_refusal(resp)
     return RunnerVersionRefused(refusal) if refusal is not None else None
 
 
-def _detail(resp: httpx.Response) -> str:
+def _detail(resp: httpx2.Response) -> str:
     """A FastAPI refusal's ``detail`` text, or the raw body when it carries none."""
     try:
         body = resp.json()
@@ -792,7 +792,7 @@ def _detail(resp: httpx.Response) -> str:
     return str(detail) if detail is not None else resp.text[:200]
 
 
-def _text_detail(resp: httpx.Response) -> bool:
+def _text_detail(resp: httpx2.Response) -> bool:
     """Whether a refusal's ``detail`` is the hub's own text, as opposed to a list of field errors."""
     try:
         body = resp.json()

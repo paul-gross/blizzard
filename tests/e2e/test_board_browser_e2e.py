@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 
@@ -131,11 +131,11 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
     thread.start()
-    client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
     try:
         deadline = time.monotonic() + 30.0
         while time.monotonic() < deadline:
-            with contextlib.suppress(httpx.HTTPError):
+            with contextlib.suppress(httpx2.HTTPError):
                 if client.get("/api/health").status_code == 200:
                     break
             time.sleep(0.1)
@@ -149,7 +149,7 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
 
 
 def _tick_until(
-    config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
+    config: RunnerConfig, hub: httpx2.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
 ) -> str:
     """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status."""
     prior = dict(os.environ)
@@ -200,7 +200,7 @@ def _drag_ready_card_to_top(page: Page, dragged: Locator, top: Locator) -> None:
     page.mouse.up()
 
 
-def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
+def _ingest_chunk(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
     """File a forge issue and ingest its pointer into a not-ready chunk; return the chunk id.
 
     Ingest rests the chunk not-ready. The scenario promotes it from the **board**

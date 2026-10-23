@@ -12,7 +12,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -66,11 +66,13 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
             time.sleep(pause)
 
 
-def _status(hub: httpx.Client, chunk_id: str) -> str:
+def _status(hub: httpx2.Client, chunk_id: str) -> str:
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
-def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
+def _run_and_check(
+    config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
+) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
 
@@ -80,7 +82,7 @@ def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
     return bool(check())
 
 
-def _seed(hub: httpx.Client, spec: dict) -> str:
+def _seed(hub: httpx2.Client, spec: dict) -> str:
     resp = hub.post("/_seed/chunk", json=spec)
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
@@ -228,7 +230,7 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
         for key, value in fenced.items():
             monkeypatch.setenv(key, value)
         with (
-            httpx.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client,
+            httpx2.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client,
             loop_graph(config) as graph,
         ):
             wiring = LoopWiring.of(config)
@@ -471,7 +473,7 @@ def _opencode_task_chunk_spec(work_ref: str) -> dict:
     }
 
 
-def _segment_turns(runner_client: httpx.Client, chunk_id: str, segments: list[dict]) -> list[dict]:
+def _segment_turns(runner_client: httpx2.Client, chunk_id: str, segments: list[dict]) -> list[dict]:
     turns: list[dict] = []
     for segment in segments:
         content = runner_client.get(f"/api/chunks/{chunk_id}/transcripts/{segment['segment_id']}")
@@ -553,7 +555,7 @@ def test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_talk
             assert {u["lease_id"] for u in opencode_usage} <= opencode_lease_ids
 
             # --- transcript pumping produced segments, correctly attributed, per lineage ---
-            runner_client = httpx.Client(base_url=config.local_api_url, timeout=15.0)
+            runner_client = httpx2.Client(base_url=config.local_api_url, timeout=15.0)
             try:
                 claude_segments = runner_client.get(f"/api/chunks/{claude_id}/transcripts").json()["segments"]
                 opencode_segments = runner_client.get(f"/api/chunks/{opencode_id}/transcripts").json()["segments"]

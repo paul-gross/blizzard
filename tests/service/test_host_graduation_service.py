@@ -12,7 +12,7 @@ import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -179,7 +179,7 @@ def _graduate(root: Path) -> None:
     layout.legacy_config_path.unlink()
 
 
-def _hub_mark(hub: httpx.Client) -> int:
+def _hub_mark(hub: httpx2.Client) -> int:
     """The runner's fact mark at the hub, read by an empty push under its token."""
     ack = hub.post("/api/fleet/events", json={"facts": []}, headers=_RUNNER.bearer)
     assert ack.status_code == 200, ack.text
@@ -224,7 +224,7 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
             stderr=subprocess.STDOUT,
             text=True,
         )
-        local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+        local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
             await_http(proc, local, "/api/health", log=log)
             assert poll_until(lambda: _hub_mark(hub) >= _ACKED + _BACKLOG, timeout=30.0), read_daemon_log(log)

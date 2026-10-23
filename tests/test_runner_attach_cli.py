@@ -1,12 +1,12 @@
 """``blizzard runner attach`` — the verb's identity handling and rejection surfacing
-(unit tier). ``httpx.post`` stubbed, no live socket.
+(unit tier). ``httpx2.post`` stubbed, no live socket.
 
 Unlike the heartbeat/session-end hooks, ``attach`` does not soft-fail: a rejection
 must reach the worker as a non-zero exit so it learns the submission was not durable."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
@@ -89,10 +89,10 @@ def test_attach_verb_surfaces_a_rejection_as_a_nonzero_exit(monkeypatch: pytest.
 
     class _RejectingResponse:
         def raise_for_status(self) -> None:
-            raise httpx.HTTPStatusError(
+            raise httpx2.HTTPStatusError(
                 "403 forbidden",
-                request=httpx.Request("POST", "http://runner/"),
-                response=httpx.Response(403, json={"detail": "could not record"}),
+                request=httpx2.Request("POST", "http://runner/"),
+                response=httpx2.Response(403, json={"detail": "could not record"}),
             )
 
     def fake_post(*args: object, **kwargs: object) -> _RejectingResponse:

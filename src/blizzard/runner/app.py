@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -234,7 +234,7 @@ def runner_seams(
     pause: PauseService | None = None,
     lease_liveness: LeaseLivenessService | None = None,
     lease_sessions: LeaseSessionService | None = None,
-    hub_proxy_client: httpx.Client | None = None,
+    hub_proxy_client: httpx2.Client | None = None,
     identity_verdict: ICurrentIdentityVerdict | None = None,
     identity_check: IIdentityOnContact | None = None,
     token_identity: ITokenIdentityReader | None = None,
@@ -301,8 +301,8 @@ def runner_seams(
     seams.harness_health = harness_health
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
-    seams.hub_proxy_client = hub_proxy_client or httpx.Client(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+    seams.hub_proxy_client = hub_proxy_client or httpx2.Client(
+        transport=httpx2.MockTransport(lambda _request: httpx2.Response(404)),
         base_url="http://runner-hub-proxy-client-hermetic-default.invalid",
     )
     return ServedRunner(runner_id, config.name, seams)
@@ -339,8 +339,8 @@ def create_app(
     lease_liveness: LeaseLivenessService | None = None,
     lease_sessions: LeaseSessionService | None = None,
     workspace_prompts: WorkspacePromptService | None = None,
-    hub_http_client: httpx.Client | None = None,
-    hub_proxy_client: httpx.Client | None = None,
+    hub_http_client: httpx2.Client | None = None,
+    hub_proxy_client: httpx2.Client | None = None,
     hub_retry_clock: IMonotonicClock | None = None,
     jti_cache: IJtiCache | None = None,
     events: EventBroker | None = None,
@@ -465,8 +465,8 @@ def create_app(
     )
     # This default must **not** reach the network — pinned by
     # tests/test_pin_runner_misc.py::test_the_default_hub_client_never_reaches_the_configured_hub_url
-    hub_http_client = hub_http_client or httpx.Client(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+    hub_http_client = hub_http_client or httpx2.Client(
+        transport=httpx2.MockTransport(lambda _request: httpx2.Response(404)),
         # A fixed placeholder: `config.hub_url` may be empty or not a valid absolute
         # base, and every request here is answered locally by the transport above.
         base_url="http://runner-hub-client-hermetic-default.invalid",
@@ -584,8 +584,8 @@ class HostedApp:
     #: when the host built no runner.
     harness_health: HarnessHealthCache | None
     #: The authenticated hub clients each runner's routes own — its archived-transcript reads and its hub proxy.
-    runner_clients: tuple[httpx.Client, ...]
-    hub_http_client: httpx.Client
+    runner_clients: tuple[httpx2.Client, ...]
+    hub_http_client: httpx2.Client
     owned_host: HostProcess | None = None
 
     @property
@@ -642,7 +642,7 @@ def _wire_hosted_app(
     ]
     first = host.runners[0]
     # The real, network-reaching hub client — only `host` wires one.
-    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
+    hub_http_client = startup.enter_context(httpx2.Client(base_url=config.hub_url, timeout=5.0))
     host.platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         replace(config, runner_id=first.runner_id),
@@ -681,7 +681,7 @@ class _WiredRunner:
 
     served: ServedRunner
     harness_health: HarnessHealthCache
-    clients: tuple[httpx.Client, ...]
+    clients: tuple[httpx2.Client, ...]
 
 
 def _wire_runner(
@@ -717,7 +717,7 @@ def _wire_runner(
     # The archived-transcript seam needs its own authenticated client:
     # `hub_http_client` below carries no auth headers (JWKS/hub-auth-mode reads only).
     archived_transcript_client = startup.enter_context(
-        httpx.Client(base_url=config.hub_url, timeout=15.0, auth=HeldTokenAuth(graph.hub_token))
+        httpx2.Client(base_url=config.hub_url, timeout=15.0, auth=HeldTokenAuth(graph.hub_token))
     )
     platform_tracing.instrument_client(archived_transcript_client)
     archived_transcripts = HttpArchivedTranscriptRepository(archived_transcript_client)
@@ -725,7 +725,7 @@ def _wire_runner(
     # from `hub_http_client` (no auth headers) and from `archived_transcript_client` (its own
     # lifetime/timeout concerns).
     hub_proxy_client = startup.enter_context(
-        httpx.Client(base_url=config.hub_url, timeout=15.0, auth=HeldTokenAuth(graph.hub_token))
+        httpx2.Client(base_url=config.hub_url, timeout=15.0, auth=HeldTokenAuth(graph.hub_token))
     )
     platform_tracing.instrument_client(hub_proxy_client)
     transcripts = TranscriptService(
@@ -845,7 +845,7 @@ def _wire_runnerless_app(
 ) -> HostedApp:
     """The app of a host that built no runner: what answers for the host itself — its health, and its readiness,
     which names each halted runner. A halted runner's routes answer 503 naming its reasons."""
-    hub_http_client = startup.enter_context(httpx.Client(base_url=config.hub_url, timeout=5.0))
+    hub_http_client = startup.enter_context(httpx2.Client(base_url=config.hub_url, timeout=5.0))
     host.platform_tracing.instrument_client(hub_http_client)
     app = create_app(
         config,

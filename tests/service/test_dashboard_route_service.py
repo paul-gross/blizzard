@@ -1,7 +1,7 @@
 """Dashboard route service tier — the real runner against a real mock hub.
 
 The component tier (`tests/test_dashboard_route.py`) proves this route in-process, against
-a monkeypatched `httpx.request`. This proves it over a genuinely running daemon: a real
+a monkeypatched `httpx2.request`. This proves it over a genuinely running daemon: a real
 `uvicorn`-served runner and a real mock-hub *process*, reached over actual TCP."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -110,7 +110,7 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
             engine.dispose()
 
         with runner_api(config):
-            client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+            client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 dashboard = client.get("/api/dashboard")
                 assert dashboard.status_code == 200, dashboard.text
@@ -146,7 +146,7 @@ def test_dashboard_matches_the_individual_reads_over_a_real_running_daemon(tmp_p
             # A genuine hub outage (503 via the mock's own lever) — a second, distinct
             # real-HTTP failure mode than the "route not implemented" case above.
             assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
-            client2 = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+            client2 = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 degraded = client2.get("/api/dashboard")
                 assert degraded.status_code == 200, degraded.text

@@ -4,7 +4,7 @@ The token reaches the host's own routes and nothing else, and a runner's token r
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from tests.service.support import mock_hub, require_mock_fleet, service_gate
@@ -26,7 +26,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _added_host(hub: httpx.Client) -> dict[str, str]:
+def _added_host(hub: httpx2.Client) -> dict[str, str]:
     resp = hub.post("/api/hosts", json={"name": "box"})
     assert resp.status_code == 201, resp.text
     return resp.json()

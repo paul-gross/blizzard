@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from sqlalchemy import Engine, Row, insert, select
 
@@ -406,7 +406,7 @@ def _assert_invariants(runner_dir: Path, hub_dir: Path, *, when: str, after_reco
     assert not violations, f"invariant violations {when}:\n" + "\n".join(str(v) for v in violations)
 
 
-def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Pre-mint the sweep graph, file a fresh issue, and ingest it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -437,7 +437,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point if on_hub else None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         # For a `claim.*` point, ingest+promote alone leaves the chunk ready; the runner's
@@ -479,7 +479,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         terminate(hub_proc)
 
 
-def _ingest_migrate_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> tuple[str, str]:
+def _ingest_migrate_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> tuple[str, str]:
     """Mint the migrate target + source graphs, file a fresh issue, ingest + promote a
     chunk pinned to the source. Returns (chunk_id, target_graph_id)."""
     target = hub.post("/api/graphs", json={"definition_yaml": migrate_target_yaml(landed_file)})
@@ -509,7 +509,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_migrate_chunk(hub, crash_env.forge, landed_file)
@@ -557,7 +557,7 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-def _ingest_intended_migrate_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> tuple[str, str]:
+def _ingest_intended_migrate_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> tuple[str, str]:
     """Mint the (plain, single-graph) source and its migration target, file a fresh
     issue, ingest + promote a chunk pinned to the source, then PATCH a ``forced``
     migration intent onto it — the intent's window is open at ``ready`` (before any
@@ -599,7 +599,7 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_intended_migrate_chunk(hub, crash_env.forge, landed_file)
@@ -660,7 +660,7 @@ def test_kill9_at_migrate_crash_point_for_an_intended_migration(
         terminate(hub_proc)
 
 
-def _ingest_migrate_hub_chunk(hub: httpx.Client, forge: httpx.Client, title: str) -> tuple[str, str]:
+def _ingest_migrate_hub_chunk(hub: httpx2.Client, forge: httpx2.Client, title: str) -> tuple[str, str]:
     """Mint the hub-landing migrate target + source graphs, file a fresh
     issue, ingest + promote a chunk pinned to the source. Returns (chunk_id, target_graph_id)."""
     target = hub.post("/api/graphs", json={"definition_yaml": migrate_hub_target_yaml()})
@@ -690,7 +690,7 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
     # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, target_graph_id = _ingest_migrate_hub_chunk(hub, crash_env.forge, title)
@@ -801,7 +801,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
         # The runner records the attachment durably, then self-SIGKILLs before the response —
         # the client sees the killed connection, never a 200.
-        with pytest.raises(httpx.HTTPError):
+        with pytest.raises(httpx2.HTTPError):
             runner.post(
                 "/api/leases/lease_attach/attachments",
                 json={"name": _ATTACH_NAME, "content": _ATTACH_CONTENT},
@@ -937,7 +937,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
 
         # The runner records the declaration durably, then self-SIGKILLs before the
         # response — the client sees the killed connection, never a 200.
-        with pytest.raises(httpx.HTTPError):
+        with pytest.raises(httpx2.HTTPError):
             runner.post(
                 "/api/leases/lease_declare_commit/git-commits",
                 json={
@@ -1002,7 +1002,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         terminate(runner_proc)
 
 
-def _ingest_nudge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_nudge_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """:func:`_ingest_chunk`'s twin, minting :func:`nudge_graph_yaml` instead of
     :func:`graph_yaml` — the one unattached ``produces:`` name is what opens the
     `nudge.*` windows this scenario arms."""
@@ -1029,7 +1029,7 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_nudge_chunk(hub, crash_env.forge, landed_file)
@@ -1061,7 +1061,7 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         terminate(hub_proc)
 
 
-def _ingest_checks_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_checks_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """:func:`_ingest_chunk`'s twin, minting :func:`checks_graph_yaml` — the one green
     ``checks:`` command on ``build`` is what opens the `checks.*` windows this scenario arms."""
     minted = hub.post("/api/graphs", json={"definition_yaml": checks_graph_yaml(landed_file)})
@@ -1087,7 +1087,7 @@ def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_checks_chunk(hub, crash_env.forge, landed_file)
@@ -1159,7 +1159,7 @@ def _pre_declare_graph_yaml(landed_file: str, pushed_marker: Path, go_marker: Pa
 
 
 def _ingest_pre_declare_chunk(
-    hub: httpx.Client, forge: httpx.Client, landed_file: str, pushed_marker: Path, go_marker: Path
+    hub: httpx2.Client, forge: httpx2.Client, landed_file: str, pushed_marker: Path, go_marker: Path
 ) -> str:
     """Mint the pre-declaration-window graph and ingest a fresh issue against it to a ready chunk."""
     minted = hub.post(
@@ -1187,7 +1187,7 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_chunk(hub, crash_env.forge, landed_file)
@@ -1252,7 +1252,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_pre_declare_chunk(hub, crash_env.forge, landed_file, pushed_marker, go_marker)
@@ -1346,7 +1346,7 @@ def _hanging_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_hanging_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Mint the hanging graph and ingest a fresh issue against it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _hanging_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -1402,7 +1402,7 @@ def _sigint_drain_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_sigint_drain_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_sigint_drain_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Mint the SIGINT-trapping graph and ingest a fresh issue against it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _sigint_drain_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -1550,7 +1550,7 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_sigint_drain_chunk(hub, crash_env.forge, landed_file)
@@ -1624,7 +1624,7 @@ def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: P
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
@@ -1689,7 +1689,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
@@ -1736,7 +1736,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 # --- The same generic/resume windows, reached under an OpenCode lineage ---------------
 
 
-def _ingest_opencode_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_opencode_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """:func:`_ingest_chunk`'s twin, minting :func:`opencode_graph_yaml` instead of
     :func:`graph_yaml` — an OpenCode-lineage ``build`` node opens the SAME
     harness-neutral ``spawn.*``/``advance.*`` windows under that lineage."""
@@ -1778,7 +1778,7 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
     # Every named point here fires in the RUNNER's loop (`src/blizzard/runner/lifecycle/`), never the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_opencode_chunk(hub, crash_env.forge, landed_file)
@@ -1865,7 +1865,7 @@ def _opencode_hanging_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_opencode_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_opencode_hanging_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """:func:`_ingest_hanging_chunk`'s twin, minting :func:`_opencode_hanging_graph_yaml`."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _opencode_hanging_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -1891,7 +1891,7 @@ def test_kill9_at_resume_crash_point_under_opencode(crash_env: CrashEnv, tmp_pat
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_opencode_hanging_chunk(hub, crash_env.forge, landed_file)
@@ -2024,7 +2024,7 @@ def _abandon_graph_yaml(landed_file: str, marker: Path) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_abandon_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+def _ingest_abandon_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str, marker: Path) -> str:
     """Mint the hang-once graph and ingest a fresh issue against it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _abandon_graph_yaml(landed_file, marker)})
     assert minted.status_code == 201, minted.text
@@ -2096,7 +2096,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_abandon_chunk(hub, crash_env.forge, landed_file, marker)
@@ -2182,7 +2182,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         # The hanging graph: the worker commits, then hangs — real in-flight work to pause.
@@ -2252,7 +2252,7 @@ def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, po
 # --- Usage-limit park — the usagelimit.* crash points ---
 
 
-def _ingest_usage_limited_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_usage_limited_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Mint the worker-side usage-limit graph and ingest a fresh issue against it to a ready
     chunk — the entry node's own generation exits usage-limited, never reaching a judge."""
     minted = hub.post("/api/graphs", json={"definition_yaml": usage_limited_graph_yaml(landed_file)})
@@ -2268,7 +2268,7 @@ def _ingest_usage_limited_chunk(hub: httpx.Client, forge: httpx.Client, landed_f
     return chunk_id
 
 
-def _ingest_usage_limited_judge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+def _ingest_usage_limited_judge_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str, marker: Path) -> str:
     """Mint the judge-side usage-limit graph and ingest a fresh issue against it to a ready
     chunk — the worker commits and exits cleanly; its judge elicitation is the one that exits
     usage-limited, on its first call only (``marker`` gates the resumed elicitation's verdict)."""
@@ -2294,7 +2294,7 @@ def _usage_limit_mark_count(runner_dir: Path) -> int:
 def _clear_subscription_floor(runner_dir: Path, port: int) -> None:
     """Open the floor of the subscription the runner spends through the host's clear route."""
     slug = load_runner_config(runner_dir).subscriptions[0].slug
-    with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+    with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
         host.post(f"/api/host/subscriptions/{slug}/floor/clear", json={"by": "crash-sweep"}).raise_for_status()
 
 
@@ -2316,8 +2316,8 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    runner: httpx.Client | None = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    runner: httpx2.Client | None = None
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         if is_judge:
@@ -2446,7 +2446,7 @@ def _hub_command_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_hub_command_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_hub_command_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Mint the hub-command graph, file a fresh issue, and ingest it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _hub_command_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -2478,7 +2478,7 @@ def _live_exec_slots(hub_dir: Path) -> int:
         engine.dispose()
 
 
-def _count_pulls(forge: httpx.Client) -> int:
+def _count_pulls(forge: httpx2.Client) -> int:
     """Every PR the mock forge holds for the sweep repo, any state (the origins are
     session-shared, so callers compare a before/after delta, never the absolute count)."""
     resp = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"})
@@ -2498,7 +2498,7 @@ def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Pa
     # A hubnode.* point fires inside the hub's synchronous executor — arm the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_hub_command_chunk(hub, crash_env.forge, landed_file)
@@ -2631,7 +2631,7 @@ def _pending_graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_pending_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+def _ingest_pending_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
     """Mint the poll-then-land graph, file a fresh issue, and ingest it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _pending_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
@@ -2658,7 +2658,7 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
     # A hubnode.* point fires inside the hub's synchronous executor — arm the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_pending_chunk(hub, crash_env.forge, landed_file)
@@ -2775,19 +2775,19 @@ def _default_graph_two_repo_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _merged_markers(hub: httpx.Client, chunk_id: str) -> list[str]:
+def _merged_markers(hub: httpx2.Client, chunk_id: str) -> list[str]:
     """The chunk's durable ``merged/<repo>`` marker artifact names, read through the hub API."""
     detail = hub.get(f"/api/chunks/{chunk_id}")
     detail.raise_for_status()
     return sorted(a["name"] for a in detail.json()["artifacts"] if a["name"].startswith("merged/"))
 
 
-def _create_web_repository(hub: httpx.Client, forge_port: int) -> None:
+def _create_web_repository(hub: httpx2.Client, forge_port: int) -> None:
     """The second repository the two-repo land resolves its ``toy-web`` commit against."""
     create_repositories(hub, [fixture_repository(_WEB_REPO_NAME, f"http://127.0.0.1:{forge_port}", owner=OWNER)])
 
 
-def _repo_pull_count(forge: httpx.Client, repo: str) -> int:
+def _repo_pull_count(forge: httpx2.Client, repo: str) -> int:
     resp = forge.get(f"/repos/{OWNER}/{repo}/pulls", params={"state": "all"})
     resp.raise_for_status()
     return len(resp.json())
@@ -2814,7 +2814,7 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         extra_env={"BZ_HUB_LAND_TEST_PAUSE_SECONDS": "30"},
     )
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         _create_web_repository(hub, crash_env.forge_port)
@@ -2960,7 +2960,7 @@ def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Pa
         extra_env={"BZ_HUB_LAND_TEST_PAUSE_SECONDS": "30"},
     )
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         _create_web_repository(hub, crash_env.forge_port)
@@ -3093,7 +3093,7 @@ def _preempt_graph_yaml(landed_file: str, marker: Path) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_preempt_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+def _ingest_preempt_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str, marker: Path) -> str:
     """Mint the hang-first graph and ingest a fresh issue against it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _preempt_graph_yaml(landed_file, marker)})
     assert minted.status_code == 201, minted.text
@@ -3119,7 +3119,7 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id = _ingest_preempt_chunk(hub, crash_env.forge, landed_file, marker)
@@ -3213,7 +3213,7 @@ def _close_intent_graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_close_intent_chunk(hub: httpx.Client) -> tuple[str, str]:
+def _ingest_close_intent_chunk(hub: httpx2.Client) -> tuple[str, str]:
     """Mint the close-intent graph as the packaged default's own name, then create a
     hub-owned work item — no forge issue, no configured work source at
     all. Returns ``(chunk_id, ref)``."""
@@ -3228,7 +3228,7 @@ def _ingest_close_intent_chunk(hub: httpx.Client) -> tuple[str, str]:
     return chunk_id, ref
 
 
-def _wait_item_delivered(hub: httpx.Client, ref: str, *, timeout: float) -> dict | None:
+def _wait_item_delivered(hub: httpx2.Client, ref: str, *, timeout: float) -> dict | None:
     """Poll the hub-owned item until its closure is durable — the drain sweep's own
     cadence, not a request/response round trip (unconditional, no config knob to
     shorten). Returns the last-read item, or ``None`` if it never answered."""
@@ -3256,7 +3256,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
     # always-seated built-in `hub` source is the only one.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, work_sources=())
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, ref = _ingest_close_intent_chunk(hub)
@@ -3372,7 +3372,7 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
             hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, extra_env=otel_env
         )
         runner_proc = None
-        hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+        hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
             chunk_id, _ = _ingest_close_intent_chunk(hub)
@@ -3505,7 +3505,7 @@ def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     # On from the first start: the cursor anchors at enable time.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         chunk_id, _ = _ingest_close_intent_chunk(hub)
@@ -3612,7 +3612,7 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         otel_env = {"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": sink.traces_endpoint}
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
         runner_proc = None
-        hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+        hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
             chunk_id, _ = _ingest_close_intent_chunk(hub)
@@ -3709,7 +3709,7 @@ def test_kill9_at_host_lane_crash_point(crash_env: CrashEnv, tmp_path: Path, poi
     hub_port, runner_port = free_port(), free_port()
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
     runner_proc = None
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         write_runner_config(
@@ -3866,7 +3866,7 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
     finished by the restarted hub's ``tenant_teardown`` sweep: nothing of the tenant is left, its deletion counts
     every row it removed exactly once, and the other tenant keeps every row it had."""
     hub_dir, hub_port = tmp_path / "hub", free_port()
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
     try:
         await_http(hub, "/api/health", proc=hub_proc)
@@ -3887,7 +3887,7 @@ def test_kill9_at_teardown_crash_point(crash_env: CrashEnv, tmp_path: Path, poin
         # Restart armed: the delete request's own inline drain reaches the point and the hub dies mid-request.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
         await_http(hub, "/api/health", proc=hub_proc)
-        with contextlib.suppress(httpx.HTTPError):
+        with contextlib.suppress(httpx2.HTTPError):
             hub.delete(f"/api/admin/tenants/{doomed}")
         code = wait_death(hub_proc, timeout=60.0)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
@@ -3948,7 +3948,7 @@ def _cli_ok(hub_url: str, *args: str) -> subprocess.CompletedProcess[str]:
     return done
 
 
-def _host_id(hub: httpx.Client, root: Path) -> str:
+def _host_id(hub: httpx2.Client, root: Path) -> str:
     token = assigned_token((root / ".env").read_text(), HOST_TOKEN_VARIABLE)
     assert token, f"{root} holds no host token"
     record = hub.get("/api/fleet/host", headers={"Authorization": f"Bearer {token}"})
@@ -3956,7 +3956,7 @@ def _host_id(hub: httpx.Client, root: Path) -> str:
     return str(record.json()["host_id"])
 
 
-def _ingest_world(hub: httpx.Client, hub_url: str, here: Path, there: Path) -> str:
+def _ingest_world(hub: httpx2.Client, hub_url: str, here: Path, there: Path) -> str:
     """``here`` and ``there``, each a host registered at the hub, ``there`` holding ``r2`` beside its own runner with
     one row in every runner table, and the hub holding ``r2`` under ``here`` — as `blizzard hub runner-host release`
     then `adopt` leave it. Answers ``r2``'s id."""
@@ -4026,7 +4026,7 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     hub_url = f"http://127.0.0.1:{hub_port}"
     here, there = tmp_path / "here", tmp_path / "there"
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
-    hub = httpx.Client(base_url=hub_url, timeout=30.0)
+    hub = httpx2.Client(base_url=hub_url, timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
         moving_id = _ingest_world(hub, hub_url, here, there)

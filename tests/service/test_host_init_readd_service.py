@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -112,7 +112,7 @@ def test_init_with_allow_readd_sets_a_pre_host_store_aside_adds_a_runner_and_the
             stderr=subprocess.STDOUT,
             text=True,
         )
-        local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+        local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
         try:
             await_http(proc, local, "/api/health", log=log)
             own_read = f"/api/fleet/runners/{config.runner_id}"
@@ -135,7 +135,7 @@ def _runner_verb(root: Path, hub_url: str, *args: str) -> subprocess.CompletedPr
 
 
 @contextlib.contextmanager
-def _running_host(root: Path, hub_url: str, port: int, log: Path) -> Iterator[httpx.Client]:
+def _running_host(root: Path, hub_url: str, port: int, log: Path) -> Iterator[httpx2.Client]:
     proc = subprocess.Popen(
         [str(RUNNER_BIN), "host", "--dir", str(root)],
         env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
@@ -143,7 +143,7 @@ def _running_host(root: Path, hub_url: str, port: int, log: Path) -> Iterator[ht
         stderr=subprocess.STDOUT,
         text=True,
     )
-    local = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+    local = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
         await_http(proc, local, "/api/health", log=log)
         yield local
@@ -152,7 +152,7 @@ def _running_host(root: Path, hub_url: str, port: int, log: Path) -> Iterator[ht
         terminate(proc)
 
 
-def _identity_state(local: httpx.Client, runner_id: str) -> str | None:
+def _identity_state(local: httpx2.Client, runner_id: str) -> str | None:
     view = local.get(f"/runners/{runner_id}/api/runner")
     return view.json()["identity"]["state"] if view.status_code == 200 else None
 

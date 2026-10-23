@@ -3,14 +3,14 @@
 The hub side is real: a chunk is driven through a gate resolution, a hub requeue and a restart on
 the hub's API, and the runner route is fed the ``ChunkDetail`` the hub's own projection then
 serves on ``/api/fleet/chunks/{id}``. The runner reaches that payload through a stubbed
-``httpx.Client`` carrying it verbatim."""
+``httpx2.Client`` carrying it verbatim."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
@@ -118,15 +118,15 @@ def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict):  # type: ignor
     db_url = f"sqlite:///{tmp_path / 'runner.db'}"
     store = make_store(db_url)
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == f"/api/fleet/chunks/{chunk_id}"
-        return httpx.Response(200, json=detail)
+        return httpx2.Response(200, json=detail)
 
     app = create_runner_app(
         RunnerConfig(root=tmp_path, db_url=db_url, hub_url=_HUB_URL),
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
-        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
     )
     store.record_lease(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
@@ -145,7 +145,7 @@ def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARG
     return chunk_id, node_id
 
 
-def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx.Response:  # type: ignore[no-untyped-def]
+def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx2.Response:  # type: ignore[no-untyped-def]
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -182,7 +182,7 @@ def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[s
 
 def _migrate_with_token(  # type: ignore[no-untyped-def]
     hub, chunk_id: str, node_id: str, *, epoch: int = 1, route_token: str
-) -> httpx.Response:
+) -> httpx2.Response:
     """Like ``_migrate``, but carries a ``route_token`` — for driving the
     completion under ``route_token_mode=enforce``."""
     return hub.client.post(

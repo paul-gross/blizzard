@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
@@ -58,7 +58,7 @@ def _limited_spec(work_ref: str, resets_at: datetime) -> dict:
     return spec
 
 
-def _seed(hub: httpx.Client, project_id: str, spec: dict | None = None) -> str:
+def _seed(hub: httpx2.Client, project_id: str, spec: dict | None = None) -> str:
     seeded = hub.post(
         "/_seed/chunk", json={**(spec or mock_hub_chunk_spec(f"{REPO}/issues/1")), "project_id": project_id}
     )
@@ -97,7 +97,7 @@ def _two_plan_host(
     plans: tuple[SubscriptionDeclaration, ...],
     throttle: ThrottleSettings | None = None,
     spend: dict[str, float] | None = None,
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token`` and declaring ``plans``, one ``[[runner]]`` per
     ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots, with any ``spend`` fields (the ceiling and its window) set;
     yields a client to its port once it answers ``/api/health``."""
@@ -138,7 +138,7 @@ def _two_plan_host(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{base.port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{base.port}", timeout=10.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -168,14 +168,14 @@ def _woke(root: Path, lease_id: str) -> bool:
     return bool(_rows(root, "SELECT 1 FROM pause_park_resumes WHERE lease_id = ?", lease_id))
 
 
-def _assert_unbraked(local: httpx.Client, runners: tuple[_Added, ...]) -> None:
+def _assert_unbraked(local: httpx2.Client, runners: tuple[_Added, ...]) -> None:
     for runner in runners:
         view = local.get(f"/runners/{runner.runner_id}/api/runner")
         assert view.status_code == 200, view.text
         assert view.json()["pause"]["local"] is False, (runner.name, view.json()["pause"])
 
 
-def _declining(hub: httpx.Client, runner: _Added) -> list[str]:
+def _declining(hub: httpx2.Client, runner: _Added) -> list[str]:
     """The levers the hub holds ``runner`` declining on, as its own read of itself serves them."""
     view = hub.get(f"/api/fleet/runners/{runner.runner_id}", headers={"Authorization": f"Bearer {runner.token}"})
     assert view.status_code == 200, view.text

@@ -135,13 +135,17 @@ def test_a_tenant_admin_reaches_no_other_tenant(tmp_path: Path) -> None:
     seed_membership(hub.engine, guest_there.tenant, grace.user_id, Role.GUEST)
     seed_membership(hub.engine, stranger_there.tenant, grace.user_id, Role.GUEST)
 
-    put = {"json": {"role": "contributor"}}
+    role = {"role": "contributor"}
     assert (
-        hub.client.put(f"/api/members/{grace.user_id}", headers=_as(hub, ada, guest_there.tenant), **put).status_code
+        hub.client.put(
+            f"/api/members/{grace.user_id}", headers=_as(hub, ada, guest_there.tenant), json=role
+        ).status_code
         == 403
     )
     assert (
-        hub.client.put(f"/api/members/{grace.user_id}", headers=_as(hub, ada, stranger_there.tenant), **put).status_code
+        hub.client.put(
+            f"/api/members/{grace.user_id}", headers=_as(hub, ada, stranger_there.tenant), json=role
+        ).status_code
         == 404
     )
     assert hub.client.get("/api/members", headers=_as(hub, ada, stranger_there.tenant)).status_code == 404

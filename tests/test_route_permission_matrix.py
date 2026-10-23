@@ -168,8 +168,7 @@ def test_guest_reads_every_fleet_view_route_and_is_refused_every_mutation(tmp_pa
         assert resp.status_code == expected, f"{method} {path} -> {resp.status_code}: {resp.text}"
 
     for method, path, body in _mutations(ids):
-        kwargs = {"headers": _cookie(token)} if method == "GET" else {"json": body, "headers": _cookie(token)}
-        resp = hub.client.request(method, path, **kwargs)
+        resp = hub.client.request(method, path, json=None if method == "GET" else body, headers=_cookie(token))
         assert resp.status_code == 403, f"{method} {path} -> {resp.status_code}: {resp.text}"
 
 
@@ -189,6 +188,5 @@ def test_pending_is_refused_every_route_but_me(tmp_path: Path) -> None:
         assert resp.status_code == _pending_refusal(path), f"{method} {path} -> {resp.status_code}: {resp.text}"
 
     for method, path, body in _mutations(ids):
-        kwargs = {"headers": _cookie(token)} if method == "GET" else {"json": body, "headers": _cookie(token)}
-        resp = hub.client.request(method, path, **kwargs)
+        resp = hub.client.request(method, path, json=None if method == "GET" else body, headers=_cookie(token))
         assert resp.status_code == _pending_refusal(path), f"{method} {path} -> {resp.status_code}: {resp.text}"

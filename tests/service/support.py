@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.config import RunnerConfig
@@ -123,7 +123,7 @@ def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
 
 
 @contextlib.contextmanager
-def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
+def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx2.Client]:
     """Run ``blizzard-mock-idp`` as a real subprocess and yield a client to it."""
     log = _mock_daemon_log("mock-idp", port, log_dir)
     proc = subprocess.Popen(
@@ -132,7 +132,7 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/healthz", log=log)
         yield client
@@ -333,7 +333,7 @@ def mock_hub_usage_limited_chunk_spec(work_ref: str) -> dict:
 
 
 @contextlib.contextmanager
-def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
+def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx2.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
     log = _mock_daemon_log("mock-hub", port, log_dir)
     proc = subprocess.Popen(
@@ -342,7 +342,7 @@ def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -360,7 +360,7 @@ def mock_runner(
     name: str = "runner-mock",
     token: str | None = None,
     log_dir: Path | None = None,
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it. With no
     ``token`` the driver adds itself at the hub on start, as ``runner init`` does; the id the hub minted
     reads back from its ``POST /_drive/register`` (:func:`registered_runner_id`)."""
@@ -386,7 +386,7 @@ def mock_runner(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -395,7 +395,7 @@ def mock_runner(
         terminate(proc)
 
 
-def registered_runner_id(runner: httpx.Client, body: dict[str, object] | None = None) -> str:
+def registered_runner_id(runner: httpx2.Client, body: dict[str, object] | None = None) -> str:
     """Drive the mock runner's registration (``POST /_drive/register``) and answer the id the hub
     resolved its token to."""
     registered = runner.post("/_drive/register", json=body) if body is not None else runner.post("/_drive/register")
@@ -403,7 +403,7 @@ def registered_runner_id(runner: httpx.Client, body: dict[str, object] | None = 
     return str(registered.json()["response"]["runner_id"])
 
 
-def runner_fleet_view(hub: httpx.Client, config: RunnerConfig) -> dict[str, Any]:
+def runner_fleet_view(hub: httpx2.Client, config: RunnerConfig) -> dict[str, Any]:
     """The hub's fleet view of the runner ``config`` names, read as that runner — under its own token,
     at the id the hub resolves it to — since the fleet answers a runner only about itself."""
     who = hub.get("/api/fleet/identity", headers=config.auth_headers())
@@ -422,9 +422,9 @@ def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-
     under ``name``, since the hub answers every tokenless fleet call ``401``."""
     base_url = f"http://127.0.0.1:{port}"
     if token is None:
-        with httpx.Client(base_url=base_url, timeout=15.0) as operator:
+        with httpx2.Client(base_url=base_url, timeout=15.0) as operator:
             _runner_id, token = add_runner(operator, name)
-    client = httpx.Client(base_url=base_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"})
+    client = httpx2.Client(base_url=base_url, timeout=15.0, headers={"Authorization": f"Bearer {token}"})
     try:
         yield HttpHubClient(client)
     finally:
@@ -442,7 +442,7 @@ class SseTap:
         self._headers = {} if last_event_id is None else {"Last-Event-ID": str(last_event_id)}
         self._ready = threading.Event()
         self._stop = threading.Event()
-        self._response: httpx.Response | None = None
+        self._response: httpx2.Response | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self) -> None:
@@ -451,7 +451,7 @@ class SseTap:
 
     def _run(self) -> None:
         with (
-            httpx.Client(base_url=self.base_url, timeout=None) as client,
+            httpx2.Client(base_url=self.base_url, timeout=None) as client,
             client.stream("GET", "/api/events/stream", headers=self._headers) as resp,
         ):
             self._response = resp

@@ -1,5 +1,5 @@
 """``blizzard runner chunk history`` (unit tier), mirroring
-``tests/test_runner_artifact_cli.py``'s shape: ``httpx`` stubbed, no live socket. The
+``tests/test_runner_artifact_cli.py``'s shape: ``httpx2`` stubbed, no live socket. The
 route itself (store round-trip, hub forward, 403/404/503) is the component tier's
 ``tests/test_runner_chunk_history_api.py``.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -45,7 +45,7 @@ class _RejectingResponse:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
-        raise httpx.HTTPStatusError("403 forbidden", request=object(), response=self)  # type: ignore[arg-type]
+        raise httpx2.HTTPStatusError("403 forbidden", request=object(), response=self)  # type: ignore[arg-type]
 
     def json(self) -> object:
         return self._detail

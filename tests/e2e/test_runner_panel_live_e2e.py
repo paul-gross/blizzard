@@ -96,9 +96,9 @@ def test_runner_panel_updates_live_over_sse_with_no_reload(tmp_path: Path, chrom
         )
         runner_client = None
         try:
-            import httpx
+            import httpx2
 
-            runner_client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
+            runner_client = httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=15.0)
             await_http(proc, runner_client, "/api/health", log=log)
             # The panel's board, across every runner the host serves — this one alone.
             board_url = f"http://{config.host}:{config.port}/board"

@@ -17,7 +17,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.route_paths import runner_prefix
@@ -61,7 +61,7 @@ class CrashEnv:
     workspace: Path
     origins: Path
     forge_port: int
-    forge: httpx.Client
+    forge: httpx2.Client
 
 
 # Workspace-layout discovery
@@ -736,13 +736,13 @@ def git_bare(bare: Path, *args: str) -> str:
 
 
 def await_http(
-    client: httpx.Client, path: str, *, proc: subprocess.Popen[str] | None = None, timeout: float = 40.0
+    client: httpx2.Client, path: str, *, proc: subprocess.Popen[str] | None = None, timeout: float = 40.0
 ) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc is not None and proc.poll() is not None:
             raise AssertionError(f"process exited early ({proc.returncode}) before answering {path}")
-        with contextlib.suppress(httpx.HTTPError):
+        with contextlib.suppress(httpx2.HTTPError):
             if client.get(path).status_code == 200:
                 return
         time.sleep(0.1)
@@ -774,7 +774,7 @@ def wait_death(proc: subprocess.Popen[str], *, timeout: float = 60.0) -> int:
 
 
 @contextlib.contextmanager
-def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
+def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx2.Client]:
     log = daemon_log_sink(origins.parent / "forge.log")
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
@@ -782,7 +782,7 @@ def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Clie
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(client, "/healthz", proc=proc)
         yield client
@@ -826,7 +826,7 @@ def start_hub(
         start_new_session=new_session,
     )
     if first_start:
-        with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as hub:
+        with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as hub:
             await_http(hub, "/api/health", proc=proc)
             seeded = work_sources if work_sources is not None else default_work_sources(forge_port)
             create_work_sources(hub, seeded)
@@ -879,15 +879,15 @@ def write_runner_config(
     return config
 
 
-def runner_api(runner_dir: Path, port: int) -> httpx.Client:
+def runner_api(runner_dir: Path, port: int) -> httpx2.Client:
     """A client addressing the runner ``runner_dir`` configures, under its prefix on the host at ``port``."""
     prefix = runner_prefix(load_runner_config(runner_dir).served_id())
-    return httpx.Client(base_url=f"http://127.0.0.1:{port}{prefix}", timeout=30.0)
+    return httpx2.Client(base_url=f"http://127.0.0.1:{port}{prefix}", timeout=30.0)
 
 
 def await_host(port: int, proc: subprocess.Popen[str]) -> None:
     """Wait until the host at ``port`` answers its root health probe."""
-    with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
+    with httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0) as host:
         await_http(host, "/api/health", proc=proc)
 
 
@@ -918,12 +918,12 @@ def _apply_crash_env(env: dict[str, str], crash_point: str | None) -> None:
         env.pop(ENV_CRASH_POINT, None)
 
 
-def wait_status(client: httpx.Client, chunk_id: str, targets: set[str], *, timeout: float = 90.0) -> str:
+def wait_status(client: httpx2.Client, chunk_id: str, targets: set[str], *, timeout: float = 90.0) -> str:
     """Poll the hub for the chunk's derived status until it is one of ``targets``."""
     deadline = time.monotonic() + timeout
     status = "unknown"
     while time.monotonic() < deadline:
-        with contextlib.suppress(httpx.HTTPError):
+        with contextlib.suppress(httpx2.HTTPError):
             resp = client.get(f"/api/chunks/{chunk_id}")
             if resp.status_code == 200:
                 status = resp.json()["status"]

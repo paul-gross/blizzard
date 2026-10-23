@@ -10,7 +10,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from blizzard.tools.release_install import Installation
 from tests.fleet_launchers import await_http, terminate
@@ -77,7 +77,7 @@ class Hub:
         ]
         return installation.run(*args, env=installation.env(self._db_env()))
 
-    def start(self, installation: Installation) -> httpx.Client:
+    def start(self, installation: Installation) -> httpx2.Client:
         """Host the directory under ``installation`` and answer a client once ``/api/ready`` does."""
         log = self.dir / "daemon.log"
         self.proc = subprocess.Popen(
@@ -85,7 +85,7 @@ class Hub:
              "--port", str(self.port), *self._db_flags()],
             env=installation.env(self._db_env()), stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
         )  # fmt: skip
-        client = httpx.Client(base_url=self.url, timeout=30.0)
+        client = httpx2.Client(base_url=self.url, timeout=30.0)
         await_http(self.proc, client, "/api/ready", log=log)
         return client
 
@@ -134,7 +134,7 @@ class Host:
             [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir)],
             env=env, stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
         )  # fmt: skip
-        with httpx.Client(base_url=f"http://127.0.0.1:{self.port}", timeout=30.0) as client:
+        with httpx2.Client(base_url=f"http://127.0.0.1:{self.port}", timeout=30.0) as client:
             await_http(self.proc, client, "/api/ready", log=log)
 
     def stop(self) -> None:

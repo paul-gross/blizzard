@@ -1,11 +1,12 @@
-"""The ``subprocess``/``pty`` driver behind :class:`~blizzard.runner.process.child_processes.IChildProcesses` — the
-only runner module outside the group helpers that touches either."""
+"""The ``subprocess`` driver behind :class:`~blizzard.runner.process.child_processes.IChildProcesses` — the
+only runner module outside the group helpers that touches it."""
 
 from __future__ import annotations
 
+import fcntl
 import os
-import pty
 import subprocess
+import termios
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -16,8 +17,8 @@ from blizzard.runner.process.child_processes import (
     ChildLaunchError,
     ChildRun,
     IChildProcesses,
+    IPtyChild,
     ISpawnedChild,
-    PtyChild,
     ShellCommand,
     Stream,
     StreamTarget,
@@ -70,6 +71,30 @@ class _PopenChild:
             return self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             return None
+
+
+class _PtyPopenChild(_PopenChild):
+    """:class:`IPtyChild`: a ``Popen`` whose stdio is the pseudo-terminal's slave, so the master is its only channel."""
+
+    def __init__(self, process: subprocess.Popen[bytes], master_fd: int) -> None:
+        super().__init__(process)
+        self._master_fd = master_fd
+
+    @property
+    def master_fd(self) -> int:
+        return self._master_fd
+
+
+def _claim_controlling_terminal(child_setup: Callable[[], None] | None) -> Callable[[], None]:
+    """The child-side setup of a pty child: the slave it holds as stdin becomes its session's controlling terminal,
+    then ``child_setup`` runs."""
+
+    def setup() -> None:
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        if child_setup is not None:
+            child_setup()
+
+    return setup
 
 
 def _write_unclosed(process: subprocess.Popen[str], text: str) -> None:
@@ -189,18 +214,25 @@ class SubprocessChildProcesses:
         cwd: Path | str,
         env: ChildEnv,
         child_setup: Callable[[], None] | None = None,
-    ) -> PtyChild:
-        variables = env.variables
-        child_pid, master_fd = pty.fork()
-        if child_pid == 0:
-            try:
-                os.chdir(cwd)
-                if child_setup is not None:
-                    child_setup()
-                os.execvpe(str(argv[0]), list(argv), variables)
-            except BaseException:
-                os._exit(127)
-        return PtyChild(pid=child_pid, master_fd=master_fd)
+    ) -> IPtyChild:
+        master_fd, slave_fd = os.openpty()
+        try:
+            process = subprocess.Popen(
+                list(argv),
+                cwd=cwd,
+                env=env.variables,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                start_new_session=True,
+                preexec_fn=_claim_controlling_terminal(child_setup),
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            os.close(master_fd)
+            raise ChildLaunchError(str(exc)) from exc
+        finally:
+            os.close(slave_fd)
+        return _PtyPopenChild(process, master_fd)
 
     def run_foreground(self, command: ShellCommand, *, cwd: Path | str, env: ChildEnv) -> int:
         return subprocess.call(command.script, shell=True, cwd=cwd, env=env.variables)

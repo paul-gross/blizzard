@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 import click
-import httpx
+import httpx2
 import pytest
 from click.testing import Result
 
@@ -38,12 +38,12 @@ class _Collector:
     """The span post's far end: records every request it is handed."""
 
     def __init__(self, status: int = 200) -> None:
-        self.requests: list[httpx.Request] = []
+        self.requests: list[httpx2.Request] = []
         self.status = status
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
-        return httpx.Response(self.status)
+        return httpx2.Response(self.status)
 
     def spans(self) -> list[dict]:
         return [json.loads(r.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0] for r in self.requests]
@@ -56,9 +56,9 @@ class _HubCalls:
         self.headers: list[dict[str, str]] = []
         self.status = status
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         self.headers.append(dict(request.headers))
-        return httpx.Response(self.status, json={"chunks": [], "next_cursor": None}, request=request)
+        return httpx2.Response(self.status, json={"chunks": [], "next_cursor": None}, request=request)
 
 
 def _bind(
@@ -66,13 +66,13 @@ def _bind(
 ) -> Bound:
     """Collaborators answering the collector and the hub from the doubles given; any other host is refused."""
 
-    def route(request: httpx.Request) -> httpx.Response:
+    def route(request: httpx2.Request) -> httpx2.Response:
         if request.url.host == "collector.local" and collector is not None:
             return collector(request)
         if request.url.host == "hub.local" and hub is not None:
             return hub(request)
         if reach_the_network:
-            return httpx.HTTPTransport().handle_request(request)
+            return httpx2.HTTPTransport().handle_request(request)
         raise AssertionError(f"unexpected request to {request.url}")
 
     return bind_transport(route)
@@ -183,13 +183,13 @@ def test_a_command_run_through_the_hyphenated_alias_is_still_rooted_at_hub() -> 
 
 def test_a_runner_operator_verb_is_a_span_and_its_requests_carry_the_context() -> None:
     collector = _Collector()
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def answer(request: httpx.Request) -> httpx.Response:
+    def answer(request: httpx2.Request) -> httpx2.Response:
         if request.url.host == "collector.local":
             return collector(request)
         seen.append(request)
-        return httpx.Response(200, json={})
+        return httpx2.Response(200, json={})
 
     bound = bind_transport(answer)
 

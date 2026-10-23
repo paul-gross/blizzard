@@ -13,7 +13,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -315,7 +315,7 @@ def test_the_hosts_usage_http_client_is_not_built_merely_by_composing_the_host(t
 
 @pytest.mark.unit
 def test_the_hosts_usage_http_client_owner_closes_a_client_it_actually_built(tmp_path: Path) -> None:
-    """Closing the host's shared client closes the real ``httpx.Client`` a sampler built."""
+    """Closing the host's shared client closes the real ``httpx2.Client`` a sampler built."""
     config = RunnerConfig(
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
@@ -542,7 +542,7 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
     )
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     ticked: list[object] = []
-    instrumented: list[httpx.Client | httpx.AsyncClient] = []
+    instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
     monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.append(ctx.tracer))
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
@@ -551,8 +551,8 @@ def test_tick_once_over_a_supplied_graph_traces_through_it_and_leaves_it_open(
         assert ticked == [graph.platform_tracing.tracer] * 2
         assert len(instrumented) == 2
         for client in instrumented:
-            assert type(client) is httpx.Client
-            assert client.base_url == httpx.URL(config.hub_url)
+            assert type(client) is httpx2.Client
+            assert client.base_url == httpx2.URL(config.hub_url)
         assert graph.executor.submit(lambda: "open").result() == "open"
     finally:
         graph.close()
@@ -571,7 +571,7 @@ def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
     )
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
     ticked = threading.Event()
-    instrumented: list[httpx.Client | httpx.AsyncClient] = []
+    instrumented: list[httpx2.Client | httpx2.AsyncClient] = []
     monkeypatch.setattr(loop_wiring, "tick", lambda ctx: ticked.set())
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
@@ -580,8 +580,8 @@ def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
         assert ticked.wait(10)
         driver.stop()
         assert len(instrumented) == 1
-        assert type(instrumented[0]) is httpx.Client
-        assert instrumented[0].base_url == httpx.URL(config.hub_url)
+        assert type(instrumented[0]) is httpx2.Client
+        assert instrumented[0].base_url == httpx2.URL(config.hub_url)
     finally:
         graph.close()
 
@@ -663,8 +663,8 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
 
     monkeypatch.setattr(graph.engine, "dispose", dispose)
     monkeypatch.setattr(runner_app, "build_runner_process", lambda *_args, **_kwargs: graph)
-    original_client = httpx.Client
-    clients: list[httpx.Client] = []
+    original_client = httpx2.Client
+    clients: list[httpx2.Client] = []
 
     def client(*args, **kwargs):  # type: ignore[no-untyped-def]
         result = original_client(*args, **kwargs)
@@ -674,7 +674,7 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
     def fail(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("app wiring failed")
 
-    monkeypatch.setattr(runner_app.httpx, "Client", client)
+    monkeypatch.setattr(runner_app.httpx2, "Client", client)
     monkeypatch.setattr(runner_app, "create_app", fail)
     try:
         with pytest.raises(RuntimeError, match="app wiring failed"):

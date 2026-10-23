@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-import httpx
+import httpx2
 import pytest
 from sqlalchemy import func, select
 
@@ -88,12 +88,12 @@ nodes:
 class _RecordingClient:
     """The hub's test client, keeping every body the runner posts through it."""
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(self, client: httpx2.Client) -> None:
         self._client = client
         self.posts: list[tuple[str, Any]] = []
         self.outcomes: list[Any] = []
 
-    def post(self, path: str, **kwargs: Any) -> httpx.Response:
+    def post(self, path: str, **kwargs: Any) -> httpx2.Response:
         # A fact batch rides as raw JSON content, not a `json=` body.
         raw = kwargs.get("content")
         self.posts.append((path, json.loads(raw) if raw is not None else kwargs.get("json")))
@@ -127,7 +127,7 @@ class _RealRunner:
         self.recording = _RecordingClient(
             RunnerFleetClient(hub.app, services=hub.services, default_runner_id=runner_id)
         )
-        hub_client = HttpHubClient(cast(httpx.Client, self.recording))
+        hub_client = HttpHubClient(cast(httpx2.Client, self.recording))
         provider = FakeProvider({"e1": "/ws/e1"})
         harness = FakeHarness(handle=_HANDLE, verdict=None)
         harnesses = HarnessRegistry(

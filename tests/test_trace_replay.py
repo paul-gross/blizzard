@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 
@@ -280,17 +280,17 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
 
 
 def _relay(
-    hub: HubHarness, *, post: Callable[..., httpx.Response] | None = None
+    hub: HubHarness, *, post: Callable[..., httpx2.Response] | None = None
 ) -> tuple[Bound, list[dict[str, object]]]:
     """Route the CLI's requests to the hub's test client; returns the collaborators and each replay request's body."""
     bodies: list[dict[str, object]] = []
 
-    def relayed_post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> httpx.Response:
+    def relayed_post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> httpx2.Response:
         assert timeout == 600.0
         bodies.append(json)
         return hub.client.post(url, json=json)
 
-    def get(url: str, **_: object) -> httpx.Response:
+    def get(url: str, **_: object) -> httpx2.Response:
         return hub.client.get(url)
 
     return bind_stubs(post=post or relayed_post, get=get), bodies
@@ -375,10 +375,10 @@ def test_the_cli_stops_on_a_failing_window_and_names_where_to_resume(tmp_path: P
 def test_the_cli_names_where_to_resume_when_a_window_request_itself_fails(tmp_path: Path, failure: str) -> None:
     hub, _ = _hub(tmp_path)
 
-    def post(url: str, **_: object) -> httpx.Response:
+    def post(url: str, **_: object) -> httpx2.Response:
         if failure == "transport":
-            raise httpx.ReadTimeout("timed out")
-        return httpx.Response(500, json={}, request=httpx.Request("POST", url))
+            raise httpx2.ReadTimeout("timed out")
+        return httpx2.Response(500, json={}, request=httpx2.Request("POST", url))
 
     bound, _bodies = _relay(hub, post=post)
     end = hub.clock.now() + timedelta(seconds=1)
