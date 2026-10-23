@@ -3,6 +3,7 @@ the tier-marker record, store-revision retirement, sharding, the statement guard
 
 from __future__ import annotations
 
+import json
 import os
 import zlib
 from datetime import UTC, datetime
@@ -10,14 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.cli.config_inputs import STRICT_CONFIG_ENVIRONMENT_VARIABLE
 from blizzard.foundation.operator_sessions.internal import session_file
-from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
-from blizzard.hub.cli.context import ENV_HUB_TENANT
-from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
-from blizzard.hub.store.tenant_guard import GUARD_ENVIRONMENT_VARIABLE, install_tenant_guard
-from blizzard.runner.config import ENV_HUB_URL
-from blizzard.runner.store.runner_guard import GUARD_ENVIRONMENT_VARIABLE as RUNNER_GUARD_ENVIRONMENT_VARIABLE
+from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.head_replay_guard import install_head_replay_guard
 from tests.repo_files import install_repo_read_guard
@@ -105,86 +100,40 @@ def shard_of(nodeid: str, count: int) -> int:
     return zlib.crc32(nodeid.encode()) % count + 1
 
 
-# Identity vars a runner injects into worker spawn (``ClaudeCodeAdapter._spawn_env``);
-# kept in sync by ``tests/test_runner_harness_adapter.py``.
-_WORKER_IDENTITY_ENV = (
-    "BLIZZARD_ENV_IDS",
-    "BLIZZARD_ENV_WORKDIRS",
-    "BLIZZARD_SESSION_ID",
-    "BLIZZARD_CHUNK_ID",
-    "BLIZZARD_LEASE_ID",
-    "BLIZZARD_RUNNER_URL",
-    "BLIZZARD_LEASE_TOKEN",
-    "BLIZZARD_RUNNER_ASK_CMD",
-    "BLIZZARD_ELICITATION",
-    "BLIZZARD_TMPDIR",
-)
+#: The environment every daemon the suite spawns inherits, declared once so the Playwright harness reads the same file.
+DAEMON_ENV_PATH = Path(__file__).with_name("daemon-env.json")
+DAEMON_ENV = json.loads(DAEMON_ENV_PATH.read_text())
+
+
+def _contract_names_present() -> list[str]:
+    """Every environ name the contract unsets, by exact name or prefix, as the environ stands now."""
+    prefixes = tuple(DAEMON_ENV["unsetPrefixes"])
+    exact = set(DAEMON_ENV["unset"])
+    # A prefix ending in ``_`` also names the bare, unsuffixed variable (``BZ_HUB_TOKEN_`` -> ``BZ_HUB_TOKEN``).
+    bare = {prefix.rstrip("_") for prefix in prefixes}
+    return [name for name in os.environ if name in exact or name in bare or name.startswith(prefixes)]
 
 
 @pytest.fixture(autouse=True)
-def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the worker identity vars so the suite is green inside a blizzard worker."""
-    for name in _WORKER_IDENTITY_ENV:
-        monkeypatch.delenv(name, raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _strip_hub_coordinates_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the hub URL, the hub tenant and every runner token variable — the pre-host unsuffixed one included — so
-    a developer's shell never leaks them into an in-process host config load."""
-    monkeypatch.delenv(ENV_HUB_URL, raising=False)
-    monkeypatch.delenv(ENV_HUB_TENANT, raising=False)
-    for name in list(os.environ):
-        if name == HUB_TOKEN_VARIABLE_PREFIX.rstrip("_") or name.startswith(HUB_TOKEN_VARIABLE_PREFIX):
-            monkeypatch.delenv(name, raising=False)
-
-
-# What switches operator tracing on: a configured OTLP endpoint, absent a worker's own trace context.
-_OPERATOR_TRACING_ENV = (
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_HEADERS",
-    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
-    "OTEL_SDK_DISABLED",
-    "OTEL_TRACES_EXPORTER",
-    "BLIZZARD_TRACEPARENT",
-)
-
-
-@pytest.fixture(autouse=True)
-def _isolated_operator_tracing_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the OTLP and trace-context vars so a developer's shell never switches operator tracing on."""
-    for name in _OPERATOR_TRACING_ENV:
+def _strip_daemon_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset what the contract unsets — worker identity (kept in sync with ``ClaudeCodeAdapter._spawn_env`` by
+    ``tests/test_runner_harness_adapter.py``), hub coordinates, runner tokens, tracing — so a developer's shell or a
+    blizzard worker's never leaks into an in-process config load."""
+    for name in _contract_names_present():
         monkeypatch.delenv(name, raising=False)
 
 
 def pytest_configure() -> None:
-    """Unsign every git commit the suite spawns: parallel workers overload a host's gpg-agent.
+    """Apply the daemon environment contract to the suite's environ: every hub and runner subprocess inherits it.
 
-    Also drop the legacy forge variables a feature-env shell carries: every hub the suite
-    spawns inherits this environ, and a hub refuses to start while one is set.
-
-    Switch the tenant and runner statement guards on for every engine the suite opens: in process here, and in every
-    hub and runner subprocess, which inherits the variables and installs its guard as it opens its engine.
-
-    Switch strict config reads on the same way: an undeclared key read through a daemon's config registry raises, in
-    process and in every spawned daemon."""
-    for name in LEGACY_FORGE_VARIABLES:
+    That unsigns every git commit the suite spawns (parallel workers overload a host's gpg-agent), drops the legacy
+    forge variables a hub refuses to start with, and switches the statement guards and strict config reads on; the
+    guards also install in process here, as each daemon installs its own as it opens its engine."""
+    for name in DAEMON_ENV["unset"]:
         os.environ.pop(name, None)
-    os.environ.update(
-        {
-            "GIT_CONFIG_COUNT": "2",
-            "GIT_CONFIG_KEY_0": "commit.gpgsign",
-            "GIT_CONFIG_VALUE_0": "false",
-            "GIT_CONFIG_KEY_1": "tag.gpgsign",
-            "GIT_CONFIG_VALUE_1": "false",
-        }
-    )
-    os.environ[GUARD_ENVIRONMENT_VARIABLE] = "1"
+    os.environ.update(DAEMON_ENV["set"])
     install_tenant_guard()
-    os.environ[RUNNER_GUARD_ENVIRONMENT_VARIABLE] = "1"
     install_runner_guard()
-    os.environ[STRICT_CONFIG_ENVIRONMENT_VARIABLE] = "1"
 
 
 @pytest.fixture(autouse=True)
@@ -192,7 +141,7 @@ def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """Point the CLI's session-token file at a per-test temp dir.
 
     Without isolation, a real on-disk ``blizzard hub login`` token leaks into any test —
-    the same ambient-host-state hazard :func:`_strip_worker_identity_env` closes for env vars.
+    the same ambient-host-state hazard :func:`_strip_daemon_env` closes for env vars.
     """
     monkeypatch.setattr(
         session_file.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")

@@ -1,0 +1,35 @@
+{
+  "set": {
+    "BLIZZARD_TENANT_GUARD": "1",
+    "BLIZZARD_RUNNER_GUARD": "1",
+    "BLIZZARD_STRICT_CONFIG": "1",
+    "BZ_LOG_FORMAT": "json",
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "commit.gpgsign",
+    "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "tag.gpgsign",
+    "GIT_CONFIG_VALUE_1": "false"
+  },
+  "unset": [
+    "BZ_FORGE_BASE_BRANCH",
+    "BZ_FORGE_OWNER",
+    "BZ_FORGE_TOKEN",
+    "BZ_FORGE_URL",
+    "BLIZZARD_TRACEPARENT",
+    "BZ_HUB_URL",
+    "BZ_HUB_TENANT",
+    "BLIZZARD_ENV_IDS",
+    "BLIZZARD_ENV_WORKDIRS",
+    "BLIZZARD_SESSION_ID",
+    "BLIZZARD_CHUNK_ID",
+    "BLIZZARD_LEASE_ID",
+    "BLIZZARD_RUNNER_URL",
+    "BLIZZARD_LEASE_TOKEN",
+    "BLIZZARD_RUNNER_ASK_CMD",
+    "BLIZZARD_ELICITATION",
+    "BLIZZARD_TMPDIR"
+  ],
+  "unsetPrefixes": ["OTEL_", "BZ_HUB_TOKEN"],
+  "isolatedConfigHome": true,
+  "refusals": ["UnscopedTenantStatement", "UnscopedRunnerStatement"]
+}

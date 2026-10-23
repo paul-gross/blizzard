@@ -32,7 +32,7 @@ from blizzard.runner.process.child_processes import ChildRun
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests import transcript_fixtures
 from tests.runner_fakes import FakeProbe, make_envelope
-from tests.suite_plugin import _WORKER_IDENTITY_ENV
+from tests.suite_plugin import DAEMON_ENV
 from tests.support_child_launch import CHILDREN, tool_env, version_probe
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
@@ -685,7 +685,7 @@ def test_the_suites_worker_identity_strip_list_covers_every_var_the_adapter_can_
         k for k in adapter.identity_env(preamble, "ch_1", "sess-1", elicitation=True) if k.startswith("BLIZZARD_")
     }
 
-    assert (spawn_injected | judge_injected) - set(_WORKER_IDENTITY_ENV) == set()
+    assert (spawn_injected | judge_injected) - set(DAEMON_ENV["unset"]) == set()
 
 
 _ENV_DUMP_HARNESS = """#!/usr/bin/env python3
