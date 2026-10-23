@@ -89,6 +89,36 @@ jobs:
           RESULT: ${{ needs.python-tests.result }}
         run: test "$RESULT" = success || { echo "::error::a pytest shard finished '$RESULT'"; exit 1; }
 
+  # Playwright runs TypeScript without checking its types, so the gate does: tsc, eslint (with the bans a service
+  # spec keeps), and a regenerate-and-diff of the committed wire types (bzh:generated-client). Starts no daemon and
+  # checks out no blizzard-mock.
+  playwright-static:
+    name: playwright static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: true
+      - name: npm ci
+        working-directory: tests
+        run: npm ci
+      - name: typecheck
+        working-directory: tests
+        run: npm run typecheck
+      - name: lint
+        working-directory: tests
+        run: npm run lint
+      - name: wire types drift
+        working-directory: tests
+        run: |
+          npm run generate:wire
+          git diff --exit-code -- harness/client/wire/ \
+            || { echo "::error::tests/harness/client/wire/ is stale — run 'npm run generate:wire' in tests/ and commit."; exit 1; }
+
   openapi-drift:
     name: OpenAPI spec drift
     runs-on: ubuntu-latest

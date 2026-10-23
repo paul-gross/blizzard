@@ -1,7 +1,7 @@
 [tools]
 uv = "0.11.21"
 vale = "3.22.0"
-node = "22"
+node = "22.23.3"
 
 [tasks.install]
 description = "Install dependencies"
@@ -48,8 +48,17 @@ description = "Run the winter-binding tier (blizzard:winter-binding) — the win
 run = "BLIZZARD_WINTER_BINDING=1 uv run pytest -m winter_binding tests/winter/"
 
 [tasks.service-test]
-description = "Run the service tier — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, the SSE contract + live fan-out to a connected subscriber). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
+description = "Run the service tier's pytest half — the cases whose subject is Python itself; the Playwright half is `mise run playwright`. A running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, the SSE contract + live fan-out to a connected subscriber). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"
+
+[tasks.playwright]
+description = "Run the Playwright package (tests/) — the service projects, and later the UI project; arguments after -- pass to playwright test"
+dir = "tests"
+run = "npx playwright test"
+
+[tasks.playwright-check]
+description = "Run the Playwright package's static checks (the gate's `playwright static` job): npm ci when node_modules is stale, tsc, eslint, and the wire-type regenerate-and-diff"
+run = "scripts/playwright-check.sh"
 
 [tasks.sse-contract]
 description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235, broadened to the runner in blizzard#317): the Python producer+parse suite against contracts/sse/'s golden corpus (hub top-level + runner/ scope), then fleet's contract spec driving the same goldens through the real SseService/FetchEventSource transport"

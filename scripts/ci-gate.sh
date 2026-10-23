@@ -5,7 +5,7 @@
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · dprint check · Vale prose lint ·
 #   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
-#   spec drift · compatibility against supported releases · change notes · flag lifecycle · eslint · vitest · web
+#   spec drift · compatibility against supported releases · change notes · flag lifecycle · playwright static · eslint · vitest · web
 #   structural gate · bundle composition · story render · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
@@ -42,6 +42,10 @@ uv run ast-grep scan --error=unused-suppression .
 
 step "structural gate (blizzard:structural-gate): ast-grep test"
 uv run ast-grep test
+
+# --- Playwright package: tsc + eslint + wire-type drift (blizzard:playwright-check) ------
+step "playwright static: mise run playwright-check"
+mise run playwright-check
 
 # --- Python tests: unit + component tiers -----------------------------------
 step "pytest (unit + component tiers, parallel)"

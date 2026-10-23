@@ -158,6 +158,9 @@ testpaths = [
 # The exemplar tests import the `exemplar` package beside them and `tests.support`.
 pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
+# pytest's default list with `node_modules` written out, so the Playwright package's dependencies stay unwalked even if a
+# later edit to this setting drops the default.
+norecursedirs = ["*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}"]
 # A deprecation or ORM-misuse warning is a failure, not noise. StarletteDeprecationWarning subclasses
 # UserWarning, so DeprecationWarning does not cover it; ResourceWarning is deliberately left out.
 filterwarnings = [
@@ -270,6 +273,7 @@ also_copy = [
 
 [tool.pyright]
 include = ["src", "tests", "exemplars/python"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tests/node_modules"]
 extraPaths = ["exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"

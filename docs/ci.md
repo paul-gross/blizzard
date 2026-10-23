@@ -13,14 +13,17 @@ every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gat
 (unit + component), OpenAPI spec drift, contract document drift (`gate / contract drift`), compatibility against the
 supported releases (`gate / compatibility against supported releases`, every trigger but a tag — see below), the change
 notes under `changes/` (`gate / change notes`, every trigger — see below), flag lifecycle (`gate / flag lifecycle`,
-PR-only), the `web/` frontend checks (eslint, vitest, structural gate, bundle composition, story render,
-generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
-`styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
-`styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown,
-configured Python and `src/` YAML, and web TypeScript/CSS; generated API clients are excluded and `.html` templates are
-outside Vale's configured extensions. The change-history rule flags the change-history phrases its own token list names,
-which is the one statement of what it catches. Every gate check is seams-mocked and token-free, needing no real forge,
-no tokens, and no network beyond package installs.
+PR-only), the Playwright package's static checks (`gate / playwright static`, `mise run playwright-check`: `tsc`, eslint
+with the bans a service spec keeps, and a regenerate-and-diff of the committed wire types; no daemon starts), the `web/`
+frontend checks (eslint, vitest, structural gate, bundle composition, story render, generated-client drift), and the
+Vale prose lint (`gate / process-reference and change-history lint`, `styles/Blizzard/ProcessReference.yml`,
+`styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and `styles/Blizzard/ShortFormPointer.yml`
+against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and
+web TypeScript/CSS; generated API clients are excluded and `.html` templates are outside Vale's configured extensions.
+The change-history rule flags the change-history phrases its own token list names, which is the one statement of what it
+catches. Every gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond
+package installs. `gate / playwright static` is a required check of its own; an operator adds it to branch protection
+once the job exists on `master`.
 
 The pytest tier runs as four parallel shard jobs, and the service tier below as three.
 `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite, chosen
