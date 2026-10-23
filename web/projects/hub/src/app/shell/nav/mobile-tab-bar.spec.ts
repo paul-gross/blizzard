@@ -1,80 +1,39 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { MobileTabBar } from './mobile-tab-bar';
 
 describe('MobileTabBar', () => {
-  let stub: RequestClientStub;
-
-  afterEach(() => stub.restore());
-
-  async function render(questions: readonly unknown[]) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/questions') return questions;
-      return {};
-    });
+  async function render() {
     await TestBed.configureTestingModule({
       imports: [MobileTabBar],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideRouter([]),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(MobileTabBar);
-    await settle(fixture);
-    return fixture;
+    await fixture.whenStable();
+    return fixture.nativeElement as HTMLElement;
   }
 
-  it('renders Board and Asks, with Asks inert', async () => {
-    const fixture = await render([]);
-    const el = fixture.nativeElement as HTMLElement;
+  it('renders Board, Fleet, Events and Gardening, in that order, and no Asks tab', async () => {
+    const el = await render();
 
-    expect(el.querySelector('[data-testid="tab-board"]')?.textContent).toContain('Board');
-    const asks = el.querySelector('[data-testid="tab-asks"]');
-    expect(asks?.textContent).toContain('Asks');
-    expect(asks?.hasAttribute('disabled')).toBe(true);
-    expect(asks?.classList.contains('inert')).toBe(true);
+    const tabs = Array.from(el.querySelectorAll('[data-testid^="tab-"]')).map((tab) => tab.getAttribute('data-testid'));
+    expect(tabs).toEqual(['tab-board', 'tab-fleet', 'tab-events', 'tab-gardening']);
   });
 
-  it('renders a routed Fleet tab', async () => {
-    const fixture = await render([]);
-    const el = fixture.nativeElement as HTMLElement;
+  it('routes every tab', async () => {
+    const el = await render();
 
-    const fleetTab = el.querySelector('[data-testid="tab-fleet"]');
-    expect(fleetTab?.textContent).toContain('Fleet');
-    expect(fleetTab?.hasAttribute('disabled')).toBe(false);
-    expect(fleetTab?.classList.contains('inert')).toBe(false);
-    expect(fleetTab?.getAttribute('href')).toBe('/fleet');
-  });
-
-  it('omits the Asks badge when there are no open questions', async () => {
-    const fixture = await render([]);
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="tab-asks-badge"]')).toBeNull();
-  });
-
-  it('shows the live open-asks count on the Asks tab', async () => {
-    const fixture = await render([
-      { question_id: 'qn_1', chunk_id: 'ch_1', runner_id: 'r1', question: 'a?', options: [] },
-      { question_id: 'qn_2', chunk_id: 'ch_2', runner_id: 'r2', question: 'b?', options: [] },
-    ]);
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="tab-asks-badge"]')?.textContent).toBe('2');
-  });
-
-  it('renders a routed Gardening tab (blizzard#397)', async () => {
-    const fixture = await render([]);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const gardening = el.querySelector('[data-testid="tab-gardening"]');
-    expect(gardening?.textContent).toContain('Gardening');
-    expect(gardening?.hasAttribute('disabled')).toBe(false);
+    for (const [testid, href] of [
+      ['tab-board', '/board'],
+      ['tab-fleet', '/fleet'],
+      ['tab-events', '/events'],
+      ['tab-gardening', '/gardening'],
+    ]) {
+      const tab = el.querySelector(`[data-testid="${testid}"]`);
+      expect(tab?.getAttribute('href')).toBe(href);
+      expect(tab?.classList.contains('inert')).toBe(false);
+    }
   });
 });

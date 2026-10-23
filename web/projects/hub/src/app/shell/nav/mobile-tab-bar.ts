@@ -1,5 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { injectHubQuestionsQuery } from '../../board/questions/questions.query';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/shell';
 
 /**
@@ -9,9 +8,8 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
  * mobile screen rather than being a per-page fixture.
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar}. This layer builds the hub's
- * {@link MobileTabItem}s: Board, Events, Gardening
- * and Fleet (`/fleet`) are routed (`routerLink`/`routerLinkActive`); Asks renders
- * dimmed and inert, carrying an open-count badge off {@link injectHubQuestionsQuery}.
+ * {@link MobileTabItem}s: Board, Fleet, Events and Gardening, each routed
+ * (`routerLink`/`routerLinkActive`).
  */
 @Component({
   selector: 'app-mobile-tab-bar',
@@ -20,23 +18,10 @@ import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/she
   templateUrl: './mobile-tab-bar.html',
 })
 export class MobileTabBar {
-  private readonly questionsQuery = injectHubQuestionsQuery();
-
-  /** The open-ask count for the Asks tab's badge — the same read the glance
-   * board's "Needs you" bucket folds an open ask in from. */
-  protected readonly askCount = computed(() => (this.questionsQuery.data() ?? []).length);
-
-  protected readonly items = computed<readonly MobileTabItem[]>(() => [
+  protected readonly items: readonly MobileTabItem[] = [
     { testid: 'tab-board', label: 'Board', route: '/board' },
-    {
-      testid: 'tab-asks',
-      label: 'Asks',
-      inert: true,
-      badge: this.askCount(),
-      badgeTestid: 'tab-asks-badge',
-    },
     { testid: 'tab-fleet', label: 'Fleet', route: '/fleet' },
     { testid: 'tab-events', label: 'Events', route: '/events' },
     { testid: 'tab-gardening', label: 'Gardening', route: '/gardening' },
-  ]);
+  ];
 }
