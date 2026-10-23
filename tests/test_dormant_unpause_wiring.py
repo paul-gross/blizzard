@@ -2,7 +2,7 @@
 
 Unit tier over a real store, with recording spies at the decision and effect seams the two methods call
 (`unpause_move`, `releases_usage_limited`, the suppression read, `_wake`, the usage recorder, the elicitation
-files): the pause-park scenarios in `test_chunk_pause.py` and `test_elicitation_launch_collect.py` prove the
+files): the pause-park scenarios in `tests/test_chunk_pause.py` and `tests/test_elicitation_launch_collect.py` prove the
 outcomes, and this pins what is *passed*, so a dropped, swapped or defaulted argument fails here."""
 
 from __future__ import annotations

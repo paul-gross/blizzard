@@ -1,6 +1,6 @@
 """`Judgement._launch` — which standing record it sweeps, and every value it opens the judge boundary with.
 
-Unit tier over a real store: `test_elicitation_launch_collect.py` proves the launch/collect shape, and this pins
+Unit tier over a real store: `tests/test_elicitation_launch_collect.py` proves the launch/collect shape, and this pins
 what the launch *passes* — the standing record's sweep bound, the boundary's start, kind and generation."""
 
 from __future__ import annotations

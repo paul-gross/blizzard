@@ -1,7 +1,7 @@
 """`SessionResolver._rotation_breach` — every argument it hands its collaborators, and every threshold's own breach.
 
 Unit tier over recording stubs at the registry, lease-repository and transcript-source seams: the
-component tests in `test_runner_session_pools.py` prove the resume-or-rotate outcome, and this pins what
+component tests in `tests/test_runner_session_pools.py` prove the resume-or-rotate outcome, and this pins what
 the resolver *asks* of each collaborator, so a dropped, swapped or defaulted argument fails here."""
 
 from __future__ import annotations
