@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, FenceRefusal
 from blizzard.hub.domain.runners.route import Route
@@ -54,10 +55,19 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         never as a column on the route fact. Returns the minted ``route_id``."""
         ...
 
-    def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
+    def record_route_released_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        at: datetime,
+        cause: RouteReleaseCause | None = None,
+        reason: str | None = None,
+    ) -> int:
         """Append the ``route.released`` fact, on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``). Returns the freshly-written
-        ``route_released.id`` (the activity-feed's key)."""
+        (``bzh:store-exclusive-write``), recording which write gave tenure back and, on a
+        release, the caller's reason. Returns the freshly-written ``route_released.id`` (the
+        activity-feed's key)."""
         ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:

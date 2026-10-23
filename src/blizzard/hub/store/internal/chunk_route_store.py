@@ -14,6 +14,7 @@ from sqlalchemy import Connection
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
@@ -141,13 +142,27 @@ class ChunkRouteStore:
         record_epoch_owner(conn, route.chunk_id, reserved, EpochOwner.runner(route.runner_id), at=at)
         return route_id
 
-    def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> int:
-        return self._record_route_released_conn(conn_of(handle), chunk_id, at=at)
+    def record_route_released_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        at: datetime,
+        cause: RouteReleaseCause | None = None,
+        reason: str | None = None,
+    ) -> int:
+        return self._record_route_released_conn(conn_of(handle), chunk_id, at=at, cause=cause, reason=reason)
 
-    def _record_route_released_conn(self, conn: Connection, chunk_id: str, *, at: datetime) -> int:
+    def _record_route_released_conn(
+        self, conn: Connection, chunk_id: str, *, at: datetime, cause: RouteReleaseCause | None, reason: str | None
+    ) -> int:
         result = conn.execute(
             self._store.insert(s.route_released).values(
-                chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
+                chunk_id=chunk_id,
+                released_at=at,
+                seq=next_route_seq(conn, chunk_id),
+                cause=None if cause is None else cause.value,
+                reason=reason,
             )
         )
         key = result.inserted_primary_key

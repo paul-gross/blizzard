@@ -4,7 +4,7 @@ so every emit site enriches the frame the same way."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
@@ -28,6 +28,8 @@ class ChunkFrameState:
     from_graph: Graph | None
     route: Route | None
     runner_name: str | None = None
+    #: The runner a release freed the route of — the frame's runner when no route is left to name one.
+    released_by: str | None = None
 
     @classmethod
     def load(cls, services: TenantServices, chunk_id: str) -> ChunkFrameState:
@@ -131,13 +133,20 @@ class ChunkChanged:
         status: str | None = None,
         by: str | None = None,
         key: str | None = None,
+        released_by: str | None = None,
+        reason: str | None = None,
     ) -> ChunkFacts:
         """Publish the fully enriched frame, loading the post-write facts, chunk, and pinned
         graph, and return those facts. ``key`` names the durable fact just written, or
         ``None``. ``by`` (delete-route-only) still degrades a gone chunk to a bare
-        ``{chunk_id, status}`` frame rather than raising."""
+        ``{chunk_id, status}`` frame rather than raising. ``released_by`` names the runner a
+        release just freed the route of, since the post-write state holds no route to name it;
+        ``reason`` is that release's own."""
         state = ChunkFrameState.load(self.services, self.chunk_id)
-        return self.publish_from(state, cause=cause, status=status, by=by, key=key)
+        if released_by is not None and state.route is None:
+            names = self.services.registry.names_for([released_by])
+            state = replace(state, released_by=released_by, runner_name=names.get(released_by))
+        return self.publish_from(state, cause=cause, status=status, by=by, key=key, reason=reason)
 
     def publish_from(
         self,
@@ -147,6 +156,7 @@ class ChunkChanged:
         status: str | None = None,
         by: str | None = None,
         key: str | None = None,
+        reason: str | None = None,
     ) -> ChunkFacts:
         """`publish`'s sibling for a caller already holding the post-write state — a batch
         that loaded every touched chunk's state once through `load_frame_states`."""
@@ -165,7 +175,7 @@ class ChunkChanged:
             )
             return facts
 
-        runner_id = state.route.runner_id if state.route is not None else None
+        runner_id = state.route.runner_id if state.route is not None else state.released_by
         change = ChunkChange.of(
             state.chunk,
             state.graph,
@@ -188,6 +198,7 @@ class ChunkChanged:
             graph_id=change.graph_id,
             by=by,
             key=key,
+            reason=reason,
             project_id=project_id,
         )
         return facts

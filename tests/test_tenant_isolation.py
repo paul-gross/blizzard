@@ -415,6 +415,9 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/proposals/page"): _f(ids=_RUN),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"): _f(),
     ("POST", "/api/fleet/chunks/{chunk_id}/pause"): _f(),
+    ("POST", "/api/fleet/chunks/{chunk_id}/release"): _f(
+        {"epoch": 1, "route_token": "{route_token}", "reason": "throttled"}
+    ),
     ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"): _f(),
     ("POST", "/api/fleet/chunks/{chunk_id}/resume"): _f(),
     ("POST", "/api/fleet/chunks/{chunk_id}/route-token"): _f(),

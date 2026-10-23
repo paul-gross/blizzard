@@ -19,7 +19,12 @@ from blizzard.foundation.event_log import (
     narrow_event_log_kind,
     narrow_event_log_severity,
 )
-from blizzard.hub.domain.chunk.model import DEFAULT_EVENT_LIST_LIMIT, ActivityEntry, OperationalEvent
+from blizzard.hub.domain.chunk.model import (
+    DEFAULT_EVENT_LIST_LIMIT,
+    ActivityEntry,
+    OperationalEvent,
+    RouteReleaseCause,
+)
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IWriteChunkEventsRepository
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
@@ -215,13 +220,52 @@ def _requeues_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Se
 
 
 def _route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+    """Each release with the runner whose route it released: the chunk's ``route_created`` with the
+    greatest ``seq`` below the release's, resolved per row inside the bounded page statement."""
+    released, created = s.route_released, s.route_created
+    holder = (
+        stmts.select(created, created.c.runner_id)
+        .where(created.c.chunk_id == released.c.chunk_id, created.c.seq < released.c.seq)
+        # (created_at, seq) is the route history's own order, and the chunk-keyed index's: no sort.
+        .order_by(created.c.created_at.desc(), created.c.seq.desc())
+        .limit(1)
+        .correlate(released)
+        .scalar_subquery()
+    )
     return stmts.select(
-        stmts.scope_join(s.route_released, s.chunks, s.chunks.c.chunk_id == s.route_released.c.chunk_id),
-        s.route_released.c.id,
-        s.route_released.c.chunk_id,
-        s.route_released.c.released_at,
+        stmts.scope_join(released, s.chunks, s.chunks.c.chunk_id == released.c.chunk_id),
+        released.c.id,
+        released.c.chunk_id,
+        released.c.released_at,
+        released.c.cause,
+        released.c.reason,
+        holder.label("holder_runner_id"),
         s.chunks.c.graph_id,
-    ).where(s.route_released.c.chunk_id.not_in(deleted))
+    ).where(released.c.chunk_id.not_in(deleted))
+
+
+def _route_released_entry(r: Any) -> ActivityEntry:
+    """A ``route_released`` row as its feed entry: a release reads ``released``, naming its holder and its
+    reason; every other cause, a null one included, reads ``detached``."""
+    if r.cause == RouteReleaseCause.RELEASE:
+        return ActivityEntry(
+            type="chunk-changed",
+            key=f"route_released:{r.id}",
+            at=r.released_at,
+            chunk_id=r.chunk_id,
+            runner_id=r.holder_runner_id,
+            cause="released",
+            graph_id=r.graph_id,
+            reason=r.reason,
+        )
+    return ActivityEntry(
+        type="chunk-changed",
+        key=f"route_released:{r.id}",
+        at=r.released_at,
+        chunk_id=r.chunk_id,
+        cause="detached",
+        graph_id=r.graph_id,
+    )
 
 
 def _chunk_pause_facts_activity_stmt(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
@@ -606,14 +650,7 @@ class ChunkEventsStore:
                 since=since,
                 limit=limit,
                 chunks=chunks,
-                builder=lambda r: ActivityEntry(
-                    type="chunk-changed",
-                    key=f"route_released:{r.id}",
-                    at=r.released_at,
-                    chunk_id=r.chunk_id,
-                    cause="detached",
-                    graph_id=r.graph_id,
-                ),
+                builder=_route_released_entry,
             )
             rows += self._bounded(
                 conn,

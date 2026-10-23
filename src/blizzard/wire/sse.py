@@ -56,6 +56,8 @@ class ChunkChangedPayload(SseFramePayload):
     #: :attr:`RunnerChangedPayload.by`; omitted on every other cause.
     by: str | None = None
     key: str | None = None
+    #: The releasing runner's own reason — rides the ``released`` cause; omitted on every other.
+    reason: str | None = None
     #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
     project_id: str | None = None
 

@@ -42,6 +42,20 @@ describe('summarizeChunkChange', () => {
     expect(summarizeChunkChange(nameless, hosts).runner).toBe('atlas/R-ABF3');
   });
 
+  it('reads a release as released with its reason, the releasing runner on line 2', () => {
+    const released: ChunkChangedData = {
+      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1',
+      cause: 'released',
+      status: 'ready',
+      node: 'build',
+      runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
+      runner_name: 'r-claude',
+      reason: 'throttled',
+    };
+    expect(summarizeChunkChange(released, NO_HOSTS)).toEqual({ transition: 'C-1RJ1 released (throttled)', runner: 'R-ABF3.r-claude' });
+    expect(summarizeChunkChange({ ...released, reason: undefined }, NO_HOSTS).transition).toBe('C-1RJ1 released');
+  });
+
   it('omits the runner line entirely when the frame names no runner', () => {
     const data: ChunkChangedData = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', status: 'ready' };
     expect(summarizeChunkChange(data, NO_HOSTS).runner).toBeUndefined();

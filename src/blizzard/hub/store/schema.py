@@ -1198,6 +1198,11 @@ route_released = Table(
     # tied on timestamp is still totally ordered by real write order.
     Column("seq", Integer, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_route_released_tenant_id"), nullable=False),
+    # Which write gave tenure back — `detach`, `retirement`, or `release`; null for every other
+    # writer and for a row written before the column.
+    Column("cause", String, nullable=True),
+    # The releasing runner's own reason, recorded uninterpreted; null on every cause but `release`.
+    Column("reason", String, nullable=True),
 )
 # One chunk's releases, already in release order.
 Index(

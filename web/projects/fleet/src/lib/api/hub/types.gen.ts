@@ -20,6 +20,7 @@ export const ActivityChunkChangeCause = {
     REQUEUED: 'requeued',
     RESTARTED: 'restarted',
     DETACHED: 'detached',
+    RELEASED: 'released',
     PAUSED: 'paused',
     RESUMED: 'resumed',
     STOPPED: 'stopped',
@@ -990,6 +991,7 @@ export const ChunkChangeCause = {
     REQUEUED: 'requeued',
     RESTARTED: 'restarted',
     DETACHED: 'detached',
+    RELEASED: 'released',
     PAUSED: 'paused',
     RESUMED: 'resumed',
     STOPPED: 'stopped',
@@ -1012,7 +1014,7 @@ export type ChunkChangedPayload = {
     /**
      * Cause
      */
-    cause?: 'minted' | 'promoted' | 'demoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited' | null;
+    cause?: 'minted' | 'promoted' | 'demoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'released' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited' | null;
     /**
      * Chunk Id
      */
@@ -1041,6 +1043,10 @@ export type ChunkChangedPayload = {
      * Project Id
      */
     project_id?: string | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
     /**
      * Runner Id
      */
@@ -6505,6 +6511,69 @@ export type RecordRefView = {
      * Label
      */
     label: string | null;
+};
+
+/**
+ * ReleaseRefusal
+ *
+ * The ``409`` body: the chunk's state refuses the release.
+ */
+export type ReleaseRefusal = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    reason: ReleaseRefusalReason;
+};
+
+/**
+ * ReleaseRefusalReason
+ */
+export const ReleaseRefusalReason = { STALE: 'stale', NOT_RUNNING: 'not-running' } as const;
+
+/**
+ * ReleaseRefusalReason
+ */
+export type ReleaseRefusalReason = typeof ReleaseRefusalReason[keyof typeof ReleaseRefusalReason];
+
+/**
+ * ReleaseRequest
+ *
+ * Give the chunk's route back. ``reason`` is the caller's own, recorded and never interpreted.
+ */
+export type ReleaseRequest = {
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Route Token
+     */
+    route_token?: string | null;
+};
+
+/**
+ * ReleaseResponse
+ *
+ * The accepted release: the ``route_released`` row it wrote.
+ */
+export type ReleaseResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Released Id
+     */
+    released_id: number;
 };
 
 /**
@@ -13879,6 +13948,40 @@ export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetRespons
 };
 
 export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponse = FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses[keyof FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses];
+
+export type ReleaseChunkApiFleetChunksChunkIdReleasePostData = {
+    body: ReleaseRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/release';
+};
+
+export type ReleaseChunkApiFleetChunksChunkIdReleasePostErrors = {
+    /**
+     * Conflict
+     */
+    409: ReleaseRefusal;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReleaseChunkApiFleetChunksChunkIdReleasePostError = ReleaseChunkApiFleetChunksChunkIdReleasePostErrors[keyof ReleaseChunkApiFleetChunksChunkIdReleasePostErrors];
+
+export type ReleaseChunkApiFleetChunksChunkIdReleasePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReleaseResponse;
+};
+
+export type ReleaseChunkApiFleetChunksChunkIdReleasePostResponse = ReleaseChunkApiFleetChunksChunkIdReleasePostResponses[keyof ReleaseChunkApiFleetChunksChunkIdReleasePostResponses];
 
 export type ResumeChunkApiFleetChunksChunkIdResumePostData = {
     body?: never;

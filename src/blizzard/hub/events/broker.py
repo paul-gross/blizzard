@@ -45,13 +45,15 @@ class EventBroker(_EventBroker):
         graph_id: str | None = None,
         by: str | None = None,
         key: str | None = None,
+        reason: str | None = None,
         project_id: str | None = None,
     ) -> int:
         """A chunk's derived status changed.
 
         Optionals are added to the payload only when supplied, never serialized as ``null``. ``key`` is
         the table-qualified natural key of the fact this frame describes, absent when there is no such
-        fact. ``by`` rides the ``deleted`` cause; ``runner_name`` is resolved by the publisher, never here.
+        fact. ``by`` rides the ``deleted`` cause, ``reason`` the ``released`` one; ``runner_name`` is
+        resolved by the publisher, never here.
         ``project_id`` is the chunk's project, absent only when the chunk is gone. ``terminal`` is judged
         here from ``status`` over :data:`TERMINAL_STATUSES` — the set ``ChunkSummary.terminal`` reads."""
         payload = ChunkChangedPayload(
@@ -67,6 +69,7 @@ class EventBroker(_EventBroker):
             graph_id=graph_id,
             by=by,
             key=key,
+            reason=reason,
             project_id=project_id,
         ).to_payload()
         return self.publish(HubEventType.CHUNK_CHANGED, payload)
