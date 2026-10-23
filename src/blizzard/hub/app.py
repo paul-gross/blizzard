@@ -289,7 +289,7 @@ def _refuse_retired_host(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
-def _log_unhandled_request_error(request: Request, exc: Exception) -> JSONResponse:
+def _log_unhandled_request_error(request: Request, exc: Exception) -> PlainTextResponse:
     """Write the one JSON line for an exception no handler maps, tagged with the tenant the request
     resolved (read from ``request.state``, so it holds whichever context this runs in), then answer
     the ``500`` Starlette's server-error middleware answers when no handler exists.
