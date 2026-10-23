@@ -29,7 +29,7 @@
     "@angular/forms": "^21.2.25",
     "@angular/platform-browser": "^21.2.25",
     "@angular/router": "^21.2.25",
-    "@dagrejs/dagre": "^1.1.8",
+    "@dagrejs/dagre": "^3.1.1",
     "@tanstack/angular-query-experimental": "^5.101.2",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
