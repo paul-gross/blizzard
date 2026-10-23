@@ -36,7 +36,7 @@ from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.model import SlotBinding, binding_usage, free_slots, open_lease_count
 from blizzard.runner.lifecycle.routing import RoutingConflict, RoutingMap, routing_map
-from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository
+from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository, resolve_resume_command
 from blizzard.runner.throttle.gate import GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
 
@@ -387,14 +387,17 @@ class RunnerStatusService:
                     # offer a command this runner cannot compose. A polled read: no log.
                     harness = None
             bindings = held_by_chunk.get(escalation.chunk_id, [])
-            commands = EscalationCommands.compose(
-                escalation.chunk_id,
+            resume = resolve_resume_command(
                 session=session,
                 bindings=bindings,
                 harness=harness,
                 model=escalation.resolved_model,
                 effort=escalation.resolved_effort,
                 workspace_root=self._workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
+            )
+            commands = EscalationCommands.compose(
+                escalation.chunk_id,
+                resume=resume,
                 runner_dir=self._runner_dir,
                 runner=self._runner_name,
             )

@@ -35,7 +35,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
-from blizzard.runner.lifecycle.takeover import EscalationCommands
+from blizzard.runner.lifecycle.takeover import EscalationCommands, resolve_resume_command
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.transcripts.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 
@@ -221,14 +221,17 @@ class Attempt:
         bindings = self.ctx.stores.environments.bindings_for_chunk(lease.chunk_id)
         session = lease.session
         harness = self._resolve_harness(session, via="escalate") if session is not None else None
-        commands = EscalationCommands.compose(
-            lease.chunk_id,
+        resume = resolve_resume_command(
             session=session,
             bindings=bindings,
             harness=harness,
             model=lease.resolved_model,
             effort=lease.resolved_effort,
             workspace_root=self.ctx.workspaces.spawn_root(bindings[0].workspace_id if bindings else None),
+        )
+        commands = EscalationCommands.compose(
+            lease.chunk_id,
+            resume=resume,
             runner_dir=self.ctx.config.runner_dir,
             runner=self.ctx.config.runner_name,
         )

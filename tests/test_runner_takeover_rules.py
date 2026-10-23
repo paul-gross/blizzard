@@ -29,6 +29,7 @@ from blizzard.runner.lifecycle.takeover import (
     TakeoverVerb,
     admit_takeover,
     bounded_takeover_env,
+    resolve_resume_command,
     takeover_closing,
 )
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -220,7 +221,7 @@ class _ResumeHarness:
 _SESSION = SessionReference("cc", "sess-a")
 
 
-def _compose(**overrides: object) -> EscalationCommands:
+def _resolve(**overrides: object) -> str:
     fields: dict[str, object] = {
         "session": _SESSION,
         "bindings": [_BINDING],
@@ -228,8 +229,13 @@ def _compose(**overrides: object) -> EscalationCommands:
         "model": "opus",
         "effort": "high",
         "workspace_root": "/ws",
-        "runner_dir": "/runner",
     }
+    fields.update(overrides)
+    return resolve_resume_command(**fields)  # type: ignore[arg-type]
+
+
+def _compose(**overrides: object) -> EscalationCommands:
+    fields: dict[str, object] = {"resume": "resume sess-a", "runner_dir": "/runner"}
     fields.update(overrides)
     return EscalationCommands.compose("ch_1", **fields)  # type: ignore[arg-type]
 
@@ -237,8 +243,18 @@ def _compose(**overrides: object) -> EscalationCommands:
 def test_escalation_commands_compose_resume_and_wrapped() -> None:
     commands = _compose()
 
-    assert "sess-a" in commands.resume and "(opus/high)" in commands.resume
+    assert commands.resume == "resume sess-a"
     assert commands.wrapped == "blizzard runner takeover ch_1 --dir /runner"
+
+
+def test_escalation_commands_compose_nothing_without_a_resume_command() -> None:
+    assert _compose(resume="") == EscalationCommands(resume="", wrapped=None)
+
+
+def test_resolve_resume_command_uses_the_escalations_stamps() -> None:
+    resume = _resolve()
+
+    assert "sess-a" in resume and "(opus/high)" in resume
 
 
 @pytest.mark.parametrize(
@@ -246,8 +262,8 @@ def test_escalation_commands_compose_resume_and_wrapped() -> None:
     [{"session": None}, {"bindings": []}, {"harness": None}],
     ids=["no-session", "no-held-binding", "unresolved-owner"],
 )
-def test_escalation_commands_compose_nothing_without_a_precondition(overrides: dict[str, object]) -> None:
-    assert _compose(**overrides) == EscalationCommands(resume="", wrapped=None)
+def test_resolve_resume_command_is_empty_without_a_precondition(overrides: dict[str, object]) -> None:
+    assert _resolve(**overrides) == ""
 
 
 def test_escalation_commands_carry_no_wrapped_form_without_a_runner_dir() -> None:

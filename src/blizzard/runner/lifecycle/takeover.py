@@ -66,6 +66,7 @@ __all__ = [
     "TakeoverVerb",
     "admit_takeover",
     "bounded_takeover_env",
+    "resolve_resume_command",
     "takeover_closing",
 ]
 
@@ -297,33 +298,34 @@ class EscalationCommands:
     wrapped: str | None
 
     @classmethod
-    def compose(
-        cls,
-        chunk_id: str,
-        *,
-        session: SessionReference | None,
-        bindings: Sequence[EnvBinding],
-        harness: IHarnessWorkerLifecycle | None,
-        model: str | None,
-        effort: str | None,
-        workspace_root: str,
-        runner_dir: str,
-        runner: str = "",
-    ) -> EscalationCommands:
-        """Composed from the escalation's own stamps (``model``, ``effort``), so a takeover
-        lands in exactly the configuration the parked session ran with, never a fresh
-        resolution. ``harness`` is the session owner already resolved, ``None`` when it cannot
-        be; a missing session, held binding, or harness composes no command."""
-        workdir = resume_workdir(session, bindings)
-        if session is None or workdir is None or harness is None:
-            return cls(resume="", wrapped=None)
-        resume = harness.resume_command(
-            SpawnCwd.of_session(workspace_root, workdir), session.session_id, model=model, effort=effort
-        )
+    def compose(cls, chunk_id: str, *, resume: str, runner_dir: str, runner: str = "") -> EscalationCommands:
+        """Composed around ``resume``, the raw command the caller already resolved from the
+        escalation's own stamps (see :func:`resolve_resume_command`); ``""`` composes no command."""
         return cls(
             resume=resume,
             wrapped=TakeoverCommand.wrapped_for(chunk_id, resume_command=resume, runner_dir=runner_dir, runner=runner),
         )
+
+
+def resolve_resume_command(
+    *,
+    session: SessionReference | None,
+    bindings: Sequence[EnvBinding],
+    harness: IHarnessWorkerLifecycle | None,
+    model: str | None,
+    effort: str | None,
+    workspace_root: str,
+) -> str:
+    """The raw resume command for an escalation, built from its own stamps (``model``,
+    ``effort``) so a takeover lands in exactly the configuration the parked session ran
+    with, never a fresh resolution. ``harness`` is the session owner already resolved,
+    ``None`` when it cannot be; a missing session, held binding, or harness yields ``""``."""
+    workdir = resume_workdir(session, bindings)
+    if session is None or workdir is None or harness is None:
+        return ""
+    return harness.resume_command(
+        SpawnCwd.of_session(workspace_root, workdir), session.session_id, model=model, effort=effort
+    )
 
 
 class TakeoverError(Exception):
