@@ -6,6 +6,12 @@ import { HUB_PROJECT_FILTER, IN_APP_LINK, type InAppLink } from 'fleet/shell';
 /** The URL segment a lensed board URL opens with: `/p/{project}/{view}/…`. */
 export const LENS_SEGMENT = 'p';
 
+/** The route parameter the lens's project segment binds to. */
+export const PROJECT_SEGMENT_PARAM = 'projectSlug';
+
+/** The route path the lensed views mount under — the lens's segment, then the project's. */
+export const LENSED_ROUTE_PATH = `${LENS_SEGMENT}/:${PROJECT_SEGMENT_PARAM}`;
+
 /** Root segments that are never lensed: the lens's own segment and the public pages. */
 const UNLENSED_ROOTS: ReadonlySet<string> = new Set([LENS_SEGMENT, 'login', 'invite']);
 

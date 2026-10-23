@@ -11,7 +11,8 @@ import { BoardList, type BoardListEntry, type BoardListGroups } from './board-li
  * READY/BACKLOG line sits between the two ranked runs. Swept at a wide centre column and at the
  * narrowest one the desktop board renders: a 768px viewport (below it the hub serves the mobile
  * glance board instead) less the 260px rail and the page's gutters. See
- * `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep.
+ * `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md` §web:shell-sweep. Each row's
+ * left edge reads the same status color as its lane icon, and a selected row's edge reads cyan.
  */
 const CARD: BoardCard = {
   chunkId: 'ch_01list0000000000000000000',
@@ -57,14 +58,15 @@ async function loadDesignTokens(): Promise<void> {
   document.head.appendChild(style);
 }
 
-async function render(width: number): Promise<HTMLElement> {
+async function render(width: number, groups: BoardListGroups = GROUPS, selectedChunkId: string | null = null): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BoardList],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardList);
-  fixture.componentRef.setInput('groups', GROUPS);
+  fixture.componentRef.setInput('groups', groups);
+  fixture.componentRef.setInput('selectedChunkId', selectedChunkId);
   fixture.componentRef.setInput('canReorder', true);
   fixture.componentRef.setInput('canControl', true);
   await fixture.whenStable();
@@ -112,4 +114,36 @@ describe('board list shell sweep (web:shell-sweep)', () => {
       }
     });
   }
+
+  it("colors each row's left edge as its lane icon, and a selected row's edge cyan", async () => {
+    const statuses = ['ready', 'running', 'waiting_on_human', 'paused', 'needs_human', 'not_ready', 'done'] as const;
+    const groups: BoardListGroups = {
+      live: statuses.map((status) => entry('running', status.toUpperCase().replace('_', ''), { status, terminal: status === 'done' })),
+      ready: [],
+      backlog: [],
+      done: [],
+    };
+    const root = await render(1100, groups);
+    try {
+      const rows = [...root.querySelectorAll<HTMLElement>('[data-testid="list-row"]')];
+      expect(rows, 'fixture defect — wrong row count').toHaveLength(statuses.length);
+      for (const row of rows) {
+        const icon = row.querySelector<HTMLElement>('[data-testid="list-row-lane"]')!;
+        expect(getComputedStyle(row).borderLeftColor, `row ${row.getAttribute('data-status')}: edge differs from its lane icon`).toBe(getComputedStyle(icon).color);
+      }
+    } finally {
+      root.remove();
+    }
+
+    const selected = await render(1100, groups, groups.live[0].card.chunkId);
+    try {
+      const edge = getComputedStyle(selected.querySelector<HTMLElement>('[data-testid="list-row"].selected')!).borderLeftColor;
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--cyan)';
+      selected.appendChild(probe);
+      expect(edge, 'a selected row edge is not cyan').toBe(getComputedStyle(probe).color);
+    } finally {
+      selected.remove();
+    }
+  });
 });

@@ -4,11 +4,8 @@ import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { type ProjectView, errorMessage, hubProjectsKey } from 'fleet/shell';
 
-import { ProjectLens, lensedUrl, unlensedUrl } from '../core/project-lens';
+import { ProjectLens, lensSegmentOf, lensedUrl, unlensedUrl } from '../core/project-lens';
 import { projectsQueryOptions, readProject } from '../core/projects.query';
-
-/** The route parameter the lens's project segment binds to. */
-export const PROJECT_SEGMENT_PARAM = 'projectSlug';
 
 /**
  * Settles a lensed URL's project segment, in the tenant the shell has entered (it waits for that first):
@@ -21,11 +18,11 @@ export const PROJECT_SEGMENT_PARAM = 'projectSlug';
  * slug — is asked of the hub by itself. That read's `404` means only that the tenant has no such project: the board
  * stays in its tenant and the page does not reload.
  */
-export const projectLensGuard: CanActivateFn = async (route, state) => {
+export const projectLensGuard: CanActivateFn = async (_route, state) => {
   const lens = inject(ProjectLens);
   const router = inject(Router);
   const queryClient = inject(QueryClient);
-  const segment = route.paramMap.get(PROJECT_SEGMENT_PARAM) ?? '';
+  const segment = lensSegmentOf(state.url) ?? '';
 
   await lens.whenReady();
 

@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, openLookup, type Tone, FleetWhen } from 'fleet';
+import { type GraphLifecycle, type GraphSummaryView, compactRef, KitBadge, KitChip, KitSelectRow, type Tone, FleetWhen } from 'fleet';
 
-import { lifecycleTone } from '../core/lifecycle-tone';
+import { graphLifecycleTone } from '../core/lifecycle-tone';
 
 /** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
  * the hub serves in `created_at DESC` order. */
@@ -21,14 +21,6 @@ interface ExpansionOverride {
   readonly expanded: boolean;
   readonly selectionAtToggle: string | null;
 }
-
-/** A version's wire `lifecycle` → badge tone, chosen for color. `effective` and
- * `retired` come from {@link lifecycleTone}; `superseded`, and a lifecycle this build does not
- * know, reuse `idle`'s dim. */
-const LIFECYCLE_TONE = openLookup<GraphLifecycle, Tone>(
-  { effective: lifecycleTone(false), superseded: 'idle', retired: lifecycleTone(true) },
-  () => 'idle',
-);
 
 /**
  * The graph explorer's **list** — every minted graph, grouped by name (the
@@ -171,9 +163,9 @@ export class GraphExplorerList {
     return version.lifecycle ?? 'effective';
   }
 
-  /** {@link LIFECYCLE_TONE}'s lookup, bound to a version rather than a bare lifecycle so
+  /** {@link graphLifecycleTone}'s lookup, bound to a version rather than a bare lifecycle so
    * the template calls one method per row. */
   protected badgeTone(version: GraphSummaryView): Tone {
-    return LIFECYCLE_TONE(this.lifecycle(version));
+    return graphLifecycleTone(this.lifecycle(version));
   }
 }
