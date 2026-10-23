@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { FleetLiveUpdates, asyncState, asyncStateOf, injectNowSignal, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { FleetLiveUpdates, asyncState, asyncStateOf, injectNowSignal, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectHubChunkCountsQuery } from '../chunks/chunk-counts.query';
 import { injectHubFleetSpendQuery } from '../fleet-spend/fleet-spend.query';
@@ -8,6 +8,7 @@ import { injectHubQueueQuery } from '../queue/queue.query';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../core/runners.query';
+import { injectBoardWorkItemsQuery } from '../work-items/board-work-items.query';
 
 import { startOfLocalDayIso } from '../../core/local-day';
 import { doneTodayRows, doneTodayTotal, glanceVitals, inMotionRows, liveRunners, needsYouRows, terminalTotal, upNextRows } from './glance-board.model';
@@ -37,7 +38,6 @@ export class GlanceBoard {
   private readonly live = inject(FleetLiveUpdates);
 
   private readonly now = injectNowSignal();
-  private readonly runnerHosts = injectRunnerHostNames();
 
   /** Local midnight, cut from the shared clock; string equality stops the tick here, so the spend key changes only when the day does. */
   private readonly dayStart = computed(() => startOfLocalDayIso(this.now()));
@@ -50,13 +50,16 @@ export class GlanceBoard {
   private readonly decisions = computed(() => this.decisionsQuery.data() ?? []);
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 
-  protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks(), this.runnerHosts()));
+  /** Every chunk's work items — the board's own batched read, so the glance and the board share one cache. */
+  private readonly workItems = injectBoardWorkItemsQuery(() => this.chunks().map((chunk) => chunk.chunk_id));
 
-  protected readonly inMotion = computed<readonly MotionRow[]>(() => inMotionRows(this.chunks(), this.runnerHosts()));
+  protected readonly needsYou = computed<readonly AttentionRow[]>(() => needsYouRows(this.questions(), this.decisions(), this.chunks(), this.workItems()));
 
-  protected readonly upNext = computed<readonly UpNextRow[]>(() => upNextRows(this.queueQuery.data() ?? [], this.chunks()));
+  protected readonly inMotion = computed<readonly MotionRow[]>(() => inMotionRows(this.chunks(), this.workItems()));
 
-  protected readonly doneToday = computed<readonly DoneRow[]>(() => doneTodayRows(this.chunks(), this.now()));
+  protected readonly upNext = computed<readonly UpNextRow[]>(() => upNextRows(this.queueQuery.data() ?? [], this.chunks(), this.workItems()));
+
+  protected readonly doneToday = computed<readonly DoneRow[]>(() => doneTodayRows(this.chunks(), this.now(), this.workItems()));
 
   protected readonly terminalCount = computed(() => terminalTotal(this.countsQuery.data()));
 

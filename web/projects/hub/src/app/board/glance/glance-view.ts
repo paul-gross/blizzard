@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import {
   KitAsyncState,
-  KitBadge,
   KitPanel,
   KitSkeleton,
   formatCost,
@@ -11,37 +11,38 @@ import {
   hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
-  type Tone,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
+import type { WorkLine } from '../board-card/board-card.model';
+
+/** What every chunk row leads with: the chunk's work items, each its work-ref label over its title. */
+export interface RowWork {
+  readonly lines: readonly WorkLine[];
+  /** Whether the chunk's work items have been read — until then each title holds a skeleton. */
+  readonly itemsRead: boolean;
+}
+
 /** One "Needs you" row — an open ask (the more specific reason), an open gate,
  * or a chunk whose derived tone is `waiting`/`needs` with neither. */
-export interface AttentionRow {
+export interface AttentionRow extends RowWork {
   readonly chunkId: string;
   readonly shortId: string;
-  /** The holding runner's display name, or `null` when no runner holds the chunk. */
-  readonly runner: string | null;
-  /** The row's badge color — `chunk-lanes.ts`'s `STATUS_TONE` vocabulary
-   * (`waiting` or `needs`), never a parallel color table. */
-  readonly tone: Tone;
-  /** The badge's text — `ask` for an open question, `gate` for an open
-   * decision, `needs human` for an escalation, `waiting` for a parked (e.g.
-   * paused) chunk with no open ask or gate. */
-  readonly pillLabel: string;
+  /** What the panel's heading does not already say — `gate` for an open decision, or a
+   * parked chunk's own status (`paused`) — else `null`. */
+  readonly status: string | null;
   /** The ask's own question text, the gate's node name, or a fallback naming
    * where the chunk sits. */
   readonly sub: string;
 }
 
 /** One "In motion" row — a chunk whose tone is `running` (running or delivering). */
-export interface MotionRow {
+export interface MotionRow extends RowWork {
   readonly chunkId: string;
   readonly shortId: string;
-  /** The holding runner's display name, or `null` when no runner holds the chunk. */
-  readonly runner: string | null;
   readonly node: string;
-  readonly pillLabel: 'run' | 'deliver';
+  /** `delivering` for a delivering chunk; `null` for a running one, which the panel already names. */
+  readonly status: string | null;
   readonly costUsd: number;
   readonly costPartial: boolean;
   /** The chunk's derived spend estimate — `null` iff no summed row reported one. */
@@ -49,18 +50,18 @@ export interface MotionRow {
 }
 
 /** One "Up next" row — a currently READY chunk in the hub's dispatch order. */
-export interface UpNextRow {
+export interface UpNextRow extends RowWork {
   readonly chunkId: string;
   readonly shortId: string;
   readonly node: string;
 }
 
 /** One "Done today" row — a terminal chunk completed in the rolling previous 24 hours. */
-export interface DoneRow {
+export interface DoneRow extends RowWork {
   readonly chunkId: string;
   readonly shortId: string;
-  /** The chunk's work item label, empty when no pointer names a configured source. */
-  readonly pointerLabel: string;
+  /** `stopped` for a stopped chunk; `null` for a done one, which the panel already names. */
+  readonly status: string | null;
 }
 
 /** The vitals strip's four numbers — "am I needed?", answered before a single scroll. */
@@ -77,8 +78,10 @@ export interface Vitals {
 /**
  * The mobile glance board's presentational half (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — one scrolling column, ordered by
- * attention rather than by entity: the vitals strip, then "Needs you", "In
- * motion", "Up next", "Done today", and the comfort numbers ("Fleet spend · today") last.
+ * attention rather than by entity: the vitals strip and the day's spend ("Fleet
+ * spend · today"), then "Needs you", "In motion", "Up next", and "Done today".
+ * Each chunk row leads with its work items, as a board card does, and names its status
+ * only where the panel's heading does not.
  *
  * Presentational (`bzh:frontend-container-presentational`): renders exactly what
  * it is handed and injects no query. Each chunk row carries a whole-row
@@ -89,7 +92,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, KitSkeleton, RouterLink, LensLink],
+  imports: [KitAsyncState, KitPanel, KitSkeleton, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
