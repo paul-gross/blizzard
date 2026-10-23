@@ -1,4 +1,4 @@
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-shell';
 
 import { runnerLeasesKey } from './query-keys';
 

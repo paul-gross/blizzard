@@ -1,4 +1,4 @@
-import { chunkDetailKey } from 'fleet';
+import { chunkDetailKey } from 'fleet/runner-shell';
 
 /**
  * The TanStack Query keys the panel reads under, in one place — mirrors `fleet`'s

@@ -1,6 +1,6 @@
 import { inject, signal } from '@angular/core';
 import { injectMutation, injectQuery, QueryClient } from '@tanstack/angular-query-experimental';
-import { runnerApi } from 'fleet';
+import { runnerApi } from 'fleet/runner-shell';
 
 import { runnerLogoutMutationKey } from '../mutation-keys';
 import { sessionKey } from '../query-keys';

@@ -1,5 +1,5 @@
 import { ENVIRONMENT_INITIALIZER, type EnvironmentProviders, inject, makeEnvironmentProviders } from '@angular/core';
-import { runnerClient } from 'fleet';
+import { runnerClient } from 'fleet/runner-shell';
 
 import { SessionRecovery } from './session-recovery';
 

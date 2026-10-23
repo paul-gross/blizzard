@@ -1,12 +1,3 @@
-/* The menu never gives way; the identity does — this is where BoardHeader's
-   shrinkable trailing cluster lands, so the username truncates and the only
-   route back to mobile keeps its size at every width. */
-.menu {
-  display: flex;
-  flex: none;
-  align-items: center;
-  padding: 0 10px;
-}
 /* Content-dependent like the username: it truncates rather than pushing the
    profile menu off a narrow header. */
 .logout-error {

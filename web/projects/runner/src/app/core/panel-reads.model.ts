@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet/runner-shell';
 
 /** The runner a merged item came from — what its actions and links target. */
 export interface RunnerOwner {

@@ -1,0 +1,13 @@
+/* The menu never gives way; the identity does — this is where BoardHeader's
+   shrinkable trailing cluster lands, so the username truncates and the only
+   route back to mobile keeps its size at every width. */
+:host {
+  display: flex;
+  flex: none;
+}
+.menu {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 0 10px;
+}

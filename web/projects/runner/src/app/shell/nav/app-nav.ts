@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
-import { KitTab, KitTabStrip } from 'fleet';
+import { KitTab, KitTabStrip } from 'fleet/shell';
 
 import { PanelFiltersBar } from './panel-filters-bar';
 

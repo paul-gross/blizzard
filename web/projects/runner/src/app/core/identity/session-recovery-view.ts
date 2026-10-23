@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, output } from '@angular/core';
-import { KitButton } from 'fleet';
+import { KitButton } from 'fleet/shell';
 
 /**
  * The runner session-recovery surface — shown in place of the

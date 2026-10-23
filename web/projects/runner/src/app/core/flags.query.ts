@@ -1,4 +1,5 @@
-import { type FlagsRead, runnerApi, runnerFlagsKey } from 'fleet';
+import { type FlagsRead } from 'fleet/shell';
+import { runnerApi, runnerFlagsKey } from 'fleet/runner-shell';
 
 /** `GET /api/flags` on the host root — the host's own flags, read once at start and handed to the shared `FlagStore`. */
 export const runnerFlagsRead: FlagsRead = {

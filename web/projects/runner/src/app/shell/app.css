@@ -7,3 +7,9 @@
 router-outlet {
   display: none;
 }
+/* Reserves the space of the deferred titlebar: matches `MobileTitlebar`'s
+   rendered height so the routed content does not jump when it arrives. */
+.titlebar-placeholder {
+  flex: none;
+  height: 43px;
+}

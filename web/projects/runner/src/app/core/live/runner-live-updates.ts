@@ -12,7 +12,7 @@ import {
   type RunnerEventType,
   SseService,
   type SseStatus,
-} from 'fleet';
+} from 'fleet/runner-shell';
 
 import { hostKey, runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../query-keys';
 import { SessionRecovery } from '../identity/session-recovery';

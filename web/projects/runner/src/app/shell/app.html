@@ -9,7 +9,21 @@
          guarantee only holds when every projected node is the sole root
          of its own branch. -->
     @if (mobile()) {
-      <app-mobile-titlebar shell-header />
+      <!-- The titlebar's menu stack is interaction-only chrome, so it is
+           @defer-loaded: an eager reference from this template would keep the
+           CDK menu/overlay code in the initial chunk. `on immediate` fetches it
+           right after first render. A @defer block does not carry its root
+           node's slot attribute through to projection, so the wrapper names the
+           slot instead. -->
+      <ng-container ngProjectAs="[shell-header]">
+        @defer (on immediate) {
+          <app-mobile-titlebar />
+        } @placeholder {
+          <!-- Holds the titlebar's box so the routed content below does not
+               shift when the real titlebar arrives. -->
+          <div class="titlebar-placeholder" data-testid="mobile-titlebar-placeholder"></div>
+        }
+      </ng-container>
     } @else {
       <app-header shell-header />
     }

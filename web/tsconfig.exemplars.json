@@ -10,6 +10,7 @@
     "paths": {
       "fleet": ["../exemplars/web/fleet/src/exemplar-api.ts"],
       "fleet/shell": ["./projects/fleet/src/shell-api.ts"],
+      "fleet/runner-shell": ["./projects/fleet/src/runner-shell-api.ts"],
       "fleet/testing": ["./projects/fleet/src/lib/testing/public-api.ts"],
       "@angular/*/testing": ["./node_modules/@angular/*/types/testing.d.ts"],
       "*": ["./node_modules/*"]

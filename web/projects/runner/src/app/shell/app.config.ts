@@ -1,7 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { provideFlags } from 'fleet';
+import { provideFlags } from 'fleet/shell';
 import { runnerFlagsRead } from '../core/flags.query';
 import { provideSessionRecovery } from '../core/identity/session-recovery.provider';
 

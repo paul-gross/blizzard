@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { KitChip, KitGlyph, KitSwatch } from 'fleet';
+import { KitChip, KitSwatch } from 'fleet/shell';
+import { KitGlyph } from 'fleet/runner-shell';
 
 import type { FilterChoice } from './panel-filters.model';
 

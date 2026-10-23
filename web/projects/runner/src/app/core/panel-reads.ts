@@ -1,7 +1,7 @@
 import { type Signal, computed, inject } from '@angular/core';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
-import type { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet/runner-shell';
 
 import { injectHostRunnersQuery } from './host.query';
 import { runnerLeasesQueryOptions } from './leases.query';

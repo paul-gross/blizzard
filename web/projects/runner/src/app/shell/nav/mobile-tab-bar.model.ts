@@ -1,4 +1,4 @@
-import type { MobileTabItem } from 'fleet';
+import type { MobileTabItem } from 'fleet/shell';
 
 /** One of the panel's routed tabs, carrying the filters and the board's selection across. */
 function pageTab(testid: string, label: string, page: string): MobileTabItem {

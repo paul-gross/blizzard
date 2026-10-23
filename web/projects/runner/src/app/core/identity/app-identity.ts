@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { KitButton } from 'fleet';
+import { KitButton } from 'fleet/shell';
 
 import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
 import { RunnerLogout } from './runner-logout';

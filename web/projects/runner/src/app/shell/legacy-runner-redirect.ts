@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { type CanActivateFn, Router, type UrlTree } from '@angular/router';
 import { QueryClient } from '@tanstack/angular-query-experimental';
-import type { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet/runner-shell';
 
 import { fetchHostRunners } from '../core/host.query';
 import { RUNNER_PARAM } from '../core/panel-filters';

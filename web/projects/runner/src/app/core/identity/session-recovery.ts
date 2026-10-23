@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet/runner-shell';
 
 import { readRunnerSession, runnerLogoutInFlight } from './auth.query';
 

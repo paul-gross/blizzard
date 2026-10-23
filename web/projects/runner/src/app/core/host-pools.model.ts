@@ -1,4 +1,4 @@
-import { compactRef, type runnerApi, type SlotBarSlot } from 'fleet';
+import { compactRef, type runnerApi, type SlotBarSlot } from 'fleet/runner-shell';
 
 import { type PanelProject, slugForEntry } from './panel-reads.model';
 
