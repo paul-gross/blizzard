@@ -173,8 +173,7 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 # `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
 # from the source.
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
-# `release.*` fires once the hub accepts a gate-parked chunk back: between steps, on a runner set to release on a
-# decline, and from a usage-limited park, on a runner set to release on a usage limit.
+# `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
@@ -269,8 +268,7 @@ _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 # The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
 _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
-# The release CI subset: the between-steps window, whose recovery runs through InterruptedClaims; the full sweep
-# runs the usage-limited window too.
+# The release CI subset: the between-steps window; the full sweep runs the usage-limited one too.
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
 
 

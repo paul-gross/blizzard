@@ -1,10 +1,9 @@
 """Chunk release — the holding runner's own mid-graph giving back of its route.
 
 Behaves as detach does in everything but who asks: one ``route.released`` fact, recording the
-cause and the caller's reason, so the chunk re-derives ``ready`` at its current node. No requeue
-fact, no epoch bump, nothing superseded (``bzh:facts-not-status``). The refusals guard only who
-holds the chunk at which epoch; none judges whether letting go is wise, and the reason is
-recorded, never read."""
+cause and the caller's reason, so the chunk re-derives ``ready`` at its current node
+(``bzh:facts-not-status``). The refusals guard only who holds the chunk at which epoch; none
+judges whether letting go is wise, and the reason is recorded, never read."""
 
 from __future__ import annotations
 
@@ -58,9 +57,8 @@ class ReleaseService:
 
     def __init__(self, *, route: IWriteChunkRouteRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
         self._route = route
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the holder and epoch
-        # checks race a claim or completion on the same chunk, so the read and the write
-        # share one row-locked transaction.
+        # The holder and epoch checks race a claim or completion, so read and write share one
+        # row-locked transaction (``bzh:store-exclusive-write``).
         self._exclusive = exclusive
         self._clock = clock
 
