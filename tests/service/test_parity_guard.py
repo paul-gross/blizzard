@@ -3,7 +3,7 @@ sentinel against the real wire growing a mock counterpart forgets to serve.
 
 Two one-sided directions against the mock fleet's own served ``/openapi.json``: the mock hub serves
 every ``IHubClient``, setup-port, and host-client endpoint, verb-and-path-exact; the
-mock runner's ``/_drive/*`` routes match a declared verb set (``bzh:sweep-release-only-tiers``)."""
+mock runner's ``/_drive/*`` routes match a declared verb set (``bzh:ci-job-local-command``)."""
 
 from __future__ import annotations
 

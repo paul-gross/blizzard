@@ -4,8 +4,8 @@
 # reach: non-root uid, git on PATH, the postgres driver importable, the store at
 # head *before* the daemon serves, and a live GET /api/health + GET /api/ready.
 #
-# Local-only (no CI arch/multi-arch proof here — see docs/ci.md and the plan's
-# named gap on the GHCR publish leg). Requires a reachable docker daemon; errors
+# Runs in CI on every pull request (upper-tiers.yml); the multi-arch GHCR publish leg is not
+# proved here. Requires a reachable docker daemon; errors
 # with a clear message rather than a docker CLI stack trace when there isn't one.
 #
 # Invoke as `mise run image-smoke` or `./scripts/image-smoke.sh`.

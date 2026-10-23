@@ -32,7 +32,7 @@ description = "Run the kill-9 crash sweep's bounded CI profile (BLIZZARD_CRASH_S
 run = "BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m crash_sweep tests/crash/"
 
 [tasks.journey]
-description = "Run the capstone MVP acceptance-journey rehearsal (blizzard:journey) — the whole MVP acceptance journey end to end over real host daemons: five issues in (two grouped, the riskiest reordered to the top), an autonomous build→review→deliver night exhibiting a clean multi-repo land, a review-fail loop, an ask that parks and is answered, and a genuine failure that escalates, a mid-run SIGKILL reboot of both daemons, and the morning-after assertions (merged to bare main, full hub history+artifacts, resumed-without-takeover, nothing worked twice, no orphaned env, truthful `hub status`). Local-only like the crash sweep — needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
+description = "Run the capstone MVP acceptance-journey rehearsal (blizzard:journey) — the whole MVP acceptance journey end to end over real host daemons: five issues in (two grouped, the riskiest reordered to the top), an autonomous build→review→deliver night exhibiting a clean multi-repo land, a review-fail loop, an ask that parks and is answered, and a genuine failure that escalates, a mid-run SIGKILL reboot of both daemons, and the morning-after assertions (merged to bare main, full hub history+artifacts, resumed-without-takeover, nothing worked twice, no orphaned env, truthful `hub status`). Winter-free (the basic provider), so it runs in CI; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) when run locally"
 run = "BLIZZARD_JOURNEY=1 uv run pytest -m journey tests/journey/"
 
 [tasks.store-baseline]
@@ -118,8 +118,12 @@ env = { TRACE_STORE_ENDPOINT = "tempo.example:4317", TRACE_STORE_INSECURE = "fal
 run = "otelcol-contrib validate --config=packaging/otel-collector/collector.yaml"
 
 [tasks.gate]
-description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, Vale prose lint, pytest, spec/client drift, eslint, vitest)"
+description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, Vale prose lint, pytest, spec/client drift, eslint, vitest) — the gate job only; `mise run gate-full` mirrors the whole pull-request pipeline"
 run = "./scripts/ci-gate.sh"
+
+[tasks.gate-full]
+description = "blizzard:gate-full — the local mirror of the unconditional pull-request tiers: the merge gate, then service-test, the FULL crash-sweep, e2e, journey, image-smoke and compose-smoke, run serially (the smokes bind fixed ports). A red tier does not stop the later ones; the run ends with a per-tier verdict and exits non-zero on any red. Run the conditional checks separately when applicable: mise run store-baseline for store revisions, mise run rehearsal for a release cut. Needs everything its tiers need: the sibling blizzard-mock worktree, Chromium, a docker daemon with compose v2. GATE_FULL_TIERS narrows the run"
+run = "./scripts/gate-full.sh"
 
 [tasks.build]
 description = "The one build entrypoint: build both Angular apps into the embed dir, build the wheel, and verify it embeds the assets and installs+runs node-free"
@@ -130,11 +134,11 @@ description = "blizzard:mutation — scoped, resumable mutation testing (mutmut)
 run = "UV_PROJECT_ENVIRONMENT=.mutation-env uv run --group mutation python scripts/mutation.py"
 
 [tasks.image-smoke]
-description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, git + psycopg present, store at head before serving, GET /api/health and /api/ready live. Local-only, needs a reachable docker daemon."
+description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, git + psycopg present, store at head before serving, GET /api/health and /api/ready live. Needs a reachable docker daemon; runs in CI on every pull request."
 run = "./scripts/image-smoke.sh"
 
 [tasks.compose-smoke]
-description = "blizzard:compose-smoke — stand up the reference compose deployment (packaging/docker/compose.yaml) against a locally-built image on the localhost http-only profile: served through the Caddy proxy, the hub resolving a postgres BZ_HUB_DB_URL, and durability across a down (no -v) + up. Local-only, needs a reachable docker daemon and the docker compose plugin."
+description = "blizzard:compose-smoke — stand up the reference compose deployment (packaging/docker/compose.yaml) against a locally-built image on the localhost http-only profile: served through the Caddy proxy, the hub resolving a postgres BZ_HUB_DB_URL, and durability across a down (no -v) + up. Needs a reachable docker daemon and the docker compose plugin; runs in CI on every pull request."
 run = "./scripts/compose-smoke.sh"
 
 # Frontend (Angular workspace under web/). Mirror of the web/package.json scripts

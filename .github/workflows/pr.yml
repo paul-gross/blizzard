@@ -1,27 +1,24 @@
-# PR to master or a release line — the merge gate.
+# PR to master or a release line — the merge gate, and the whole suite.
 #
-# ruff + pyright + eslint + client-drift check + the unit and component tiers,
-# with the SERVICE tier and the kill-9 CRASH SWEEP running alongside as REAL gates too
-# (blizzard-context verification/blizzard.md: blizzard:service-test,
-# blizzard:crash-sweep) — a subset of the `push` workflow's jobs (everything but
-# the dev-build wheel artifact), so a PR that breaks either upper tier fails its
-# own check instead of only breaking master after merge.
+# ruff + pyright + eslint + client-drift check + the unit and component tiers, with every
+# upper tier a REAL gate alongside them, each its own parallel job: the service tier, the FULL
+# kill-9 crash sweep, the e2e acceptance loop, the acceptance journey, and the hub-image and
+# compose smokes (blizzard-context verification/blizzard.md: blizzard:service-test,
+# blizzard:crash-sweep, blizzard:e2e, blizzard:journey, blizzard:image-smoke,
+# blizzard:compose-smoke). A change to a store revision also runs the store baseline proof, and
+# a release cut (a commit carrying a `Release-Cut:` trailer) also runs the upgrade rehearsal
+# against a wheel built from the pull request's head. So a release needs no local test run: the
+# cut PR's own checks are the proof.
 #
-# Both upper tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
-# their runners run on the built-in `basic` provider over a fixture of bare `file://`
-# origins the scaffold mints with no winter source — no tokens, no forge, no network
-# beyond package installs. This workflow provides the sibling with a two-repo checkout:
-# `blizzard` and `blizzard-mock` laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the
-# on-disk layout the tiers' discovery expects (`tests/service/support.py`,
-# `tests/crash/support.py`: `blizzard_root().parent / "blizzard-mock"`). The winter
-# binding's own tests are the local-only `winter-binding` tier and never run here.
+# `push.yml` runs a subset of these jobs, so a PR that breaks any tier fails its own check
+# instead of only breaking master after merge. The tier jobs live in upper-tiers.yml, which owns
+# the sibling `blizzard-mock` checkout they need and the crash-sweep-profile rationale.
 #
-# The crash-sweep-profile rationale (why this workflow runs the bounded CI subset rather
-# than the FULL sweep, and where the wall-time figures live) is owned by
-# upper-tiers.yml, not restated here. The e2e acceptance loop (`mise run e2e`, incl. the
-# Playwright board scenario) remains a local + tag-only tier, not a `pr`/`push` gate
-# (build.md).
+# The jobs a pull request skips by condition (the store baseline, the rehearsal) become required
+# through an always-running result job, which passes when the job was skipped by its condition and
+# fails on any other non-success. The names of every job here are the required status contexts on
+# `master` (blizzard-context verification/blizzard/commands/packaging.md); `line provenance` runs
+# only on a release-line base, so it is not among them.
 name: pr
 
 on:
@@ -42,7 +39,8 @@ jobs:
   upper-tiers:
     uses: ./.github/workflows/upper-tiers.yml
     with:
-      crash_sweep_ci: "1"
+      full_suite: true
+      crash_sweep_ci: ""
 
   # The proof needs the floor release's wheel and a Postgres service, so it runs only when the pull request
   # changes a revision; the check sits here, at job level, so no other job is gated on the paths.
@@ -75,6 +73,109 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/store-baseline.yml
+
+  store-baseline-result:
+    name: store baseline (blizzard:store-baseline)
+    needs: [versions-changed, store-baseline]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: the proof passed, or no store revision changed
+        env:
+          CHANGED: ${{ needs.versions-changed.outputs.changed }}
+          RESULT: ${{ needs.store-baseline.result }}
+        run: |
+          [ "$RESULT" = success ] && exit 0
+          [ "$RESULT" = skipped ] && [ "$CHANGED" = false ] && exit 0
+          echo "::error::the store baseline finished '$RESULT' (revisions changed: '$CHANGED')"
+          exit 1
+
+  # A release cut is the pull request that moves a release line's version: a commit carrying a
+  # `Release-Cut:` trailer, read by the same helper line-provenance uses.
+  release-cut:
+    name: release cut detected
+    runs-on: ubuntu-latest
+    outputs:
+      cut: ${{ steps.detect.outputs.cut }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: any commit in the pull request carries a Release-Cut trailer
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: echo "cut=$(./scripts/release-cut-in-range.sh "$BASE_SHA" "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
+
+  # The cut's candidate, built from the head with the version the cut sets in
+  # pyproject.toml, just as the tag run explicitly stamps its release version.
+  cut-wheel:
+    name: build the cut's wheel
+    needs: [release-cut]
+    if: ${{ needs.release-cut.outputs.cut == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: build the wheel (embedded frontend + node-free install proof)
+        run: |
+          BLIZZARD_VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" \
+            ./scripts/build-wheel.sh
+      - name: export the locked requirements beside the wheel
+        run: |
+          WHEEL="$(ls dist/blizzard-*.whl)"
+          VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --no-project \
+            > "dist/blizzard-${VERSION}-requirements.txt"
+          ./scripts/export-requirements.sh "$VERSION" "$WHEEL" --extra postgres --no-project \
+            > "dist/blizzard-${VERSION}-requirements-pg.txt"
+      - name: hand the wheel and its requirements to the rehearsal
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-cut-wheel
+          path: |
+            dist/*.whl
+            dist/*-requirements*.txt
+          if-no-files-found: error
+
+  rehearsal:
+    needs: [cut-wheel]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rehearsal.yml
+    with:
+      candidate_artifact: release-cut-wheel
+
+  rehearsal-result:
+    name: upgrade rehearsal (release cut)
+    needs: [release-cut, cut-wheel, rehearsal]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: the rehearsal passed, or this is not a release cut
+        env:
+          CUT: ${{ needs.release-cut.outputs.cut }}
+          DETECT: ${{ needs.release-cut.result }}
+          RESULT: ${{ needs.rehearsal.result }}
+        run: |
+          [ "$DETECT" = success ] || { echo "::error::release-cut detection finished '$DETECT'"; exit 1; }
+          [ "$RESULT" = success ] && exit 0
+          [ "$RESULT" = skipped ] && [ "$CUT" = false ] && exit 0
+          echo "::error::the rehearsal finished '$RESULT' (release cut: '$CUT')"
+          exit 1
 
   # Only a pull request into a release line is held to where its commits came from.
   line-provenance:

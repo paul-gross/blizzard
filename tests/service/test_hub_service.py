@@ -296,7 +296,7 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
 def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> None:
     """The ``pause`` wire field off a live ``GET /chunks/{id}`` response,
     present only on the detail shape, never the summary card —
-    ``bzh:sweep-release-only-tiers``."""
+    ``bzh:ci-job-local-command``."""
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201

@@ -7,15 +7,14 @@
 # before the image is built from it. The store baseline proof (store-baseline.yml) runs
 # on candidate and patch tags, and not on a stable promotion.
 #
-# The full suite at a tag is the merge gate (unit + component) PLUS the three upper
-# tiers, each its own parallel job — the service tier, the FULL kill-9 crash sweep
-# (every registry point, not the bounded CI subset the master `push` gate runs), and the
-# e2e acceptance loop including the Playwright browser scenario. All three need the
-# two-repo checkout (blizzard + blizzard-mock) laid out as the siblings their discovery
-# expects — the same setup the `push` workflow proves green, with the mock checked out at
-# the tag of the same name (.github/actions/resolve-mock-ref). They are winter-free: no
-# winter source is checked out, and the winter binding's tests (`winter-binding`) are
-# local-only.
+# The full suite at a tag is the merge gate (unit + component) PLUS every upper tier, which
+# upper-tiers.yml defines once for this workflow and `pr.yml` alike: the service tier, the FULL
+# kill-9 crash sweep (every registry point, not the bounded subset the master `push` gate runs),
+# the e2e acceptance loop including the Playwright browser scenario, the acceptance journey, and
+# the hub-image and compose smokes. The mock-backed tiers run against the two-repo checkout
+# (blizzard + blizzard-mock) with the mock at the tag of the same name
+# (.github/actions/resolve-mock-ref). They are winter-free: no winter source is checked out, and
+# the winter binding's tests (`winter-binding`) are local-only.
 #
 # The GitHub Release is published with the workflow's built-in GITHUB_TOKEN — no
 # external registry and no user-supplied secret. The wheel is attached to the
@@ -64,142 +63,12 @@ jobs:
           path: compat-breaks.json
           if-no-files-found: error
 
-  service-tier:
-    name: service tier (blizzard:service-test)
+  upper-tiers:
     needs: [gate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-          persist-credentials: false
-      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
-        uses: ./blizzard/.github/actions/resolve-mock-ref
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-          working-directory: blizzard
-          # Relative to working-directory, so the default `**/uv.lock` alone only
-          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
-          # too, so its `uv sync` below shares this same cache.
-          cache-dependency-glob: |
-            uv.lock
-            ../blizzard-mock/uv.lock
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: service tier (blizzard:service-test)
-        env:
-          BLIZZARD_SERVICE: "1"
-        run: cd blizzard && uv run pytest -n auto tests/service/ -v
-
-  crash-sweep:
-    name: FULL kill-9 crash sweep (blizzard:crash-sweep)
-    needs: [gate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-          persist-credentials: false
-      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
-        uses: ./blizzard/.github/actions/resolve-mock-ref
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-          working-directory: blizzard
-          # Relative to working-directory, so the default `**/uv.lock` alone only
-          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
-          # too, so its `uv sync` below shares this same cache.
-          cache-dependency-glob: |
-            uv.lock
-            ../blizzard-mock/uv.lock
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: FULL kill-9 crash sweep (every registry point) — `mise run crash-sweep`
-        env:
-          BLIZZARD_CRASH_SWEEP: "1"
-        run: cd blizzard && uv run pytest -n auto -m crash_sweep tests/crash/ -v
-
-  e2e:
-    name: e2e acceptance loop (blizzard:e2e)
-    needs: [gate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-          persist-credentials: false
-      - name: resolve and checkout blizzard-mock (the tag's own, the mock fleet + fixture scaffold)
-        uses: ./blizzard/.github/actions/resolve-mock-ref
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-          working-directory: blizzard
-          # Relative to working-directory, so the default `**/uv.lock` alone only
-          # sees blizzard's own lockfile — name blizzard-mock's sibling lockfile
-          # too, so its `uv sync` below shares this same cache.
-          cache-dependency-glob: |
-            uv.lock
-            ../blizzard-mock/uv.lock
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: install mise (the e2e task pins its own tools)
-        uses: jdx/mise-action@v2
-        with:
-          # Pinned: mise's VERSION endpoint can advertise a release before that
-          # release's assets exist, and the unpinned action then 404s fetching one.
-          version: 2026.9.2
-          install: false
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: install Chromium for the e2e browser scenario (Playwright)
-        run: cd blizzard && uv run playwright install --with-deps chromium
-      - name: install the frontend's dependencies (the e2e task builds it into the wheel-embed dir)
-        # The e2e browser scenario drives the *served* Angular board — the hub mounts
-        # src/blizzard/static/{hub,runner} at / and falls back to the runtime placeholder
-        # when index.html is absent (foundation/web.py). The source checkout ships only
-        # the placeholder, so without a build the board scenario hits the placeholder
-        # and board-shell never appears. `mise run e2e` depends on `web-build`, which
-        # fills these dirs (src/blizzard/static/README.md); it needs `npm ci` first.
-        run: cd blizzard/web && npm ci
-      - name: cache the pinned otelcol-contrib (~390 MB) the fleet-trace subtests need
-        # The pin's single source is the `e2e` task's `tools` in mise.toml; the key follows that file,
-        # so a bumped pin re-downloads and an unchanged one is a cache hit.
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/mise/installs/github-open-telemetry-opentelemetry-collector-releases
-          key: otelcol-contrib-${{ runner.os }}-${{ hashFiles('blizzard/mise.toml') }}
-      - name: e2e acceptance loop incl. the browser scenario and fleet traces — `mise run e2e`
-        # Through the task, so the collector the `e2e` task pins is on PATH; a bare `uv run pytest`
-        # would skip every fleet-trace subtest.
-        env:
-          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
-        run: cd blizzard && mise run e2e
+    uses: ./.github/workflows/upper-tiers.yml
+    with:
+      full_suite: true
+      crash_sweep_ci: ""
 
   wheel:
     name: build the release wheel
@@ -282,7 +151,7 @@ jobs:
 
   build:
     name: build the image, sign and attest, assemble the inventory
-    needs: [gate, compat, service-tier, crash-sweep, e2e, wheel, rehearsal, store-baseline]
+    needs: [gate, compat, upper-tiers, wheel, rehearsal, store-baseline]
     # Runs when `rehearsal` or `store-baseline` was skipped on a stable tag, never when any need failed.
     if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest

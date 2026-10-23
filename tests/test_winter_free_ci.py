@@ -19,7 +19,7 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 _ROOT = repo_root()
-_PLATFORM_TIERS = ("service", "e2e", "crash")
+_PLATFORM_TIERS = ("service", "e2e", "crash", "journey")
 _WORKFLOWS = sorted((_ROOT / ".github" / "workflows").glob("*.yml"))
 
 #: Configures the winter provider or hands a fixture a winter source — what a platform-tier module must never do.
@@ -87,9 +87,8 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
         ("gate.yml", "python-tests"),
         ("upper-tiers.yml", "service-tier"),
         ("upper-tiers.yml", "crash-sweep"),
-        ("release.yml", "service-tier"),
-        ("release.yml", "crash-sweep"),
-        ("release.yml", "e2e"),
+        ("upper-tiers.yml", "e2e"),
+        ("upper-tiers.yml", "journey"),
     }
 
 

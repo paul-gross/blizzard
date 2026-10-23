@@ -5,7 +5,7 @@
 # folded baseline revision builds and the store the floor release's own published history builds,
 # and fails on any difference in schema or rows. What it asserts is owned by the test,
 # `tests/test_store_baseline.py`. Until a tree declares a `BASELINE_FLOOR` it skips and says so.
-# Not a required branch-protection check.
+# `pr.yml` reports it through an always-running result job, which is the required branch-protection check.
 name: store-baseline
 
 on:

@@ -1,25 +1,15 @@
 # Push to master — the merge gate plus the extra tiers and a dev build.
 #
-# Runs the full PR gate with the SERVICE tier and the kill-9 CRASH SWEEP alongside as REAL
-# gates (blizzard-context verification/blizzard.md: blizzard:service-test,
+# Runs the PR gate with the SERVICE tier and the kill-9 CRASH SWEEP (bounded profile) alongside as
+# REAL gates (blizzard-context verification/blizzard.md: blizzard:service-test,
 # blizzard:crash-sweep), then publishes a dev-build wheel as a workflow artifact for
 # fleet dogfooding.
 #
-# Both upper tiers need what a single-repo checkout does not carry: the sibling
-# `blizzard-mock` worktree (the mock fleet + fixture scaffold). The tiers are winter-free:
-# their runners run on the built-in `basic` provider over a fixture of bare `file://`
-# origins the scaffold mints with no winter source — no tokens, no forge, no network
-# beyond package installs. This workflow provides the sibling with a two-repo checkout:
-# `blizzard` and `blizzard-mock` laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the
-# on-disk layout the tiers' discovery expects (`tests/service/support.py`,
-# `tests/crash/support.py`: `blizzard_root().parent / "blizzard-mock"`). The winter
-# binding's own tests are the local-only `winter-binding` tier and never run here.
-#
-# The crash-sweep-profile rationale (why this workflow runs the bounded CI subset rather
-# than the FULL sweep, and where the wall-time figures live) is owned by
-# upper-tiers.yml, not restated here. The e2e acceptance loop (`mise run e2e`, incl. the
-# Playwright board scenario) remains a local + tag-only tier, not a `push` gate
-# (build.md). The upgrade rehearsal (rehearsal.yml) runs here and on `-rc.` tags only.
+# The rest of the suite (e2e, journey, the two smokes) is the pull request's gate, `full_suite` in
+# upper-tiers.yml: the `edge` channel is not held behind it, and an admin's direct push is ungated by
+# design. upper-tiers.yml owns the sibling `blizzard-mock` checkout the mock-backed tiers need and the
+# crash-sweep-profile rationale. The upgrade rehearsal (rehearsal.yml) runs here, on a release cut's pull
+# request, and on `-rc.` tags.
 name: push
 
 on:

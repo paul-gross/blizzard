@@ -1,7 +1,7 @@
 """Usage service tier — usage facts over the wire, both daemon directions (epic #57, #59).
 
 Proves the derivation and store-and-forward flow against a running daemon over real HTTP
-(``bzh:sweep-release-only-tiers``): a real runner buffers usage through a mock-hub outage
+(``bzh:ci-job-local-command``): a real runner buffers usage through a mock-hub outage
 and flushes once on recovery; a mock runner pushes usage facts to a live hub and the
 derived per-node-step usage + chunk total round-trip the live API, idempotent on replay."""
 

@@ -69,29 +69,45 @@ apply the stricter due-flag policy when checking a release cut or tag.
 ## The upper tiers
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
-service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`) over a
-two-repo checkout of `blizzard` + `blizzard-mock`; `pr.yml` and `push.yml` both call it. A leading `mock-ref` job
-resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch a tag run, a
-release-line pull request, and a `master` run each prove against, and when it fails — is owned by
+service tier (`blizzard:service-test`) and the kill-9 crash sweep (`blizzard:crash-sweep`) over a two-repo checkout of
+`blizzard` + `blizzard-mock`; `pr.yml`, `push.yml` and `release.yml` all call it. Two inputs choose the shape. With
+`full_suite: true` it also runs the e2e acceptance loop (`blizzard:e2e`), the acceptance journey (`blizzard:journey`),
+and the hub image and reference compose smokes (`blizzard:image-smoke`, `blizzard:compose-smoke`) as parallel jobs;
+`crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value the full one. `pr.yml` and `release.yml` pass
+`full_suite: true` and the full sweep; `push.yml` keeps the service tier and the bounded sweep, since the `edge` channel
+is not held behind e2e and an admin's direct push is ungated by design. The two smokes build their own wheel and need
+only docker, compose v2, node and uv, not the mock. A leading `mock-ref` job resolves the mock once, and every tier
+checks out that commit. The resolution — which mock tag or branch a tag run, a release-line pull request, and a `master`
+run each prove against, and when it fails — is owned by
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
-`release.yml`'s tier jobs call too. The tiers are winter-free: their runners use the built-in `basic` provider over a
-fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests sets
-`persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
+`release.yml`'s tier jobs resolve through too. The tiers are winter-free: their runners use the built-in `basic`
+provider over a fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests
+sets `persist-credentials: false`; `tests/test_winter_free_ci.py` pins both.
 
 Store-migration tests live beside their revisions, in `src/blizzard/{hub,runner}/store/migrations/tests/`. Those whose
 revision is more than 30 days old report as skips in `uv run pytest -n auto`; set
 `BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1` to run them (`bzh:colocated-migration-tests` in blizzard-context's tier rules).
 
-Locally the upper tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`); their exact
-local equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
-`mise run crash-sweep-ci`
-(`BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -n auto -m crash_sweep tests/crash/`).
+Locally the mock-backed tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`). One task
+reproduces the unconditional pull-request tiers: `mise run gate-full` (`blizzard:gate-full`) runs the merge gate, then
+`service-test`, the full `crash-sweep`, `e2e`, `journey`, `image-smoke` and `compose-smoke` serially, since the smokes
+bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on any
+red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
+`mise run rehearsal` for a release cut (both need `gh` and Postgres).
+
+Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
+`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `journey`, `image-smoke` and
+`compose-smoke` tasks can also run alone.
+
+**Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
+tag run the e2e job took 1453s, the full crash sweep 837s, the service tier 613s, and the merge gate's pytest shards
+about 1000s. Measured locally, the journey takes about 45s and each smoke about 80s on a warm docker cache, so none adds
+to the critical path. A pull request therefore finishes in roughly 25 minutes plus runner queueing, against about 17
+without e2e. A release cut adds the upgrade rehearsal after its wheel build.
 
 The winter binding's own tests are the `winter-binding` tier (`mise run winter-binding`, gated on
 `BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
 enclosing winter workspace, and never in CI.
-
-The e2e tier runs only locally and in the tag `release` workflow — it is never a `pr`/`push` gate job.
 
 ## The upgrade rehearsal
 
@@ -99,12 +115,20 @@ The e2e tier runs only locally and in the tag `release` workflow — it is never
 upgrade rehearsal (`blizzard:rehearsal`): each supported release's own published wheel seeds a hub and a runner host,
 the hub and then the runner are upgraded to a candidate wheel the caller names, and both stores are walked down to the
 release and forward again. `push.yml` calls it on every `master` push with the dev-build wheel, and `release.yml` on
-every `-rc.` tag with the wheel it is about to release; a pull request never runs it. A leading `releases` job lists the
-supported set with `blizzard-compat releases --json`, leaving a tag run's own tag out with `--tag`, and each release
-runs as two legs, SQLite and Postgres, against a `postgres:16` service. With no supported release, one leg reports that
-there is nothing to rehearse and passes. Each leg checks the mock out at the release's own tag where the mock carries
-one, else at `master`, through `resolve-mock-ref`'s `baseline` input. A failed leg uploads its daemons' logs as
+every `-rc.` tag with the wheel it is about to release; `pr.yml` calls it on a release cut's pull request, with a wheel
+built from the pull request's head. A leading `releases` job lists the supported set with
+`blizzard-compat releases --json`, leaving a tag run's own tag out with `--tag`, and each release runs as two legs,
+SQLite and Postgres, against a `postgres:16` service. With no supported release, one leg reports that there is nothing
+to rehearse and passes. Each leg checks the mock out at the release's own tag where the mock carries one, else at
+`master`, through `resolve-mock-ref`'s `baseline` input. A failed leg uploads its daemons' logs as
 `rehearsal-logs-<release>-<backend>`.
+
+A release cut is a pull request with a commit carrying a `Release-Cut:` trailer, which
+[`scripts/release-cut-in-range.sh`](../scripts/release-cut-in-range.sh) reads with the same
+[`scripts/trailers.sh`](../scripts/trailers.sh) helper `line-provenance` uses. On a cut, `cut-wheel` builds the head's
+wheel and requirements unstamped, so they carry the cut's `pyproject.toml` version, and `rehearsal` upgrades each
+supported release to it. The always-running `rehearsal-result` job (`upgrade rehearsal (release cut)`) is the required
+check: it passes when the rehearsal passed, or when the pull request is not a cut and the rehearsal was skipped.
 
 Locally the same tier is `mise run rehearsal`, which builds a candidate unless `BLIZZARD_REHEARSAL_CANDIDATE` names one;
 set `BLIZZARD_REHEARSAL_PG_URL` to a Postgres server to run the Postgres backend too.
@@ -123,7 +147,10 @@ proof skips and says so, which is every run before the first fold.
 `pr.yml` calls it when the pull request changes either store's `versions/` directory; a `versions-changed` job makes
 that check, so no other `pr.yml` job is gated on the paths. `release.yml` calls it on a candidate (`-rc.`) or patch tag
 and skips it on a stable promotion `vX.Y.0`, whose tree is its last candidate's; `build` waits on it and runs past it
-when skipped. It is not a required branch-protection check.
+when skipped. On a pull request the always-running `store-baseline-result` job
+(`store baseline
+(blizzard:store-baseline)`) is the required branch-protection check: it passes when the proof passed,
+or when no revision changed and the proof was skipped.
 
 Locally the same tier is `mise run store-baseline`; set `BLIZZARD_STORE_BASELINE_PG_URL` to a Postgres server to run the
 Postgres legs, and give `gh` a token (`GH_TOKEN`, plus `GH_REPO` outside a GitHub checkout) to download the floor's
@@ -131,19 +158,20 @@ wheel.
 
 ## Trigger workflows
 
-[`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the
-service tier and CI-profile crash sweep as real gate jobs. A pull request into a release branch also runs
-`line-provenance`, which has [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit
-the pull request adds that is not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:`
-commit. A push to a release branch runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's
-`versions/` directory also runs the store baseline proof.
+[`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the whole
+suite as parallel real gate jobs: the service tier, the full crash sweep, e2e, the journey and the two smokes, and on a
+release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
+[`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
+not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
+runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's `versions/` directory also runs the
+store baseline proof.
 
-[`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate and upper tiers, then
-uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently cut `X.Y.Z` as a workflow
-artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags, multi-arch like the release image: `edge`,
-mutable — the newest proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is the dogfooding pointer;
-`latest` never follows `master` and moves only on a stable release cut — [`docs/versioning.md`](./versioning.md) owns
-the channel semantics.
+[`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate, the service tier and the
+bounded crash sweep, then uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the most recently
+cut `X.Y.Z` as a workflow artifact and publishes `ghcr.io/paul-gross/blizzard-hub` under two dev tags, multi-arch like
+the release image: `edge`, mutable — the newest proven `master` image — and `sha-<full-git-sha>`, immutable. `edge` is
+the dogfooding pointer; `latest` never follows `master` and moves only on a stable release cut —
+[`docs/versioning.md`](./versioning.md) owns the channel semantics.
 
 The `proven-against` job, after the gate and upper tiers, uploads a `proven-against` artifact holding one JSON file that
 names the `blizzard` commit and the `blizzard-mock` commit the upper tiers ran against. A cut reads the mock commit its
@@ -166,8 +194,9 @@ OCI annotations are inlined in the `dev-image` job — no branching logic to uni
 pins the job.
 
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) (tag `v*`) runs the full suite — gate, the `compat`
-backstop, service tier, the **full** crash sweep, and e2e — builds the wheel once in `wheel`, rehearses the upgrade to
-it on an `-rc.` tag alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `compat`
+backstop, and `upper-tiers` called with `full_suite: true` and the **full** crash sweep (service tier, crash sweep, e2e,
+journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag alone,
+proves the store baseline on a candidate or patch tag, then runs three jobs. `compat`
 (`release / compatibility against supported releases`) runs `blizzard-compat --tag <version>` before any build: it
 judges the tag's tree against each supported release over that release's own `R..HEAD` range, fails a break the version
 does not admit, and uploads `compat-breaks.json`, which `build` fetches to the repository root. `wheel` checks the
@@ -217,8 +246,8 @@ with an anonymous pull:
 docker pull ghcr.io/paul-gross/blizzard-hub:latest
 ```
 
-`mise run image-smoke` builds and boots the image locally but cannot prove the multi-arch GHCR push — only a real tag
-cut's `build` run proves that.
+`mise run image-smoke` builds and boots the image, in CI on every pull request and locally, but cannot prove the
+multi-arch GHCR push — only a real tag cut's `build` run proves that.
 
 ## The wheel build
 
