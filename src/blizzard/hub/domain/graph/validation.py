@@ -15,6 +15,7 @@ from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import is_valid_graph_artifact_name
+from blizzard.hub.domain.graph.actions import RESERVED_WAITS, HubActionCatalogue
 from blizzard.hub.domain.graph.harnesses import harness_problems
 from blizzard.hub.domain.graph.model import (
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -74,14 +75,15 @@ class Validator:
     :meth:`of` does the running; the instance it returns carries what was found."""
 
     doc: GraphDoc
+    catalogue: HubActionCatalogue
     node_names: set[str]
     session_names: set[str]
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def of(cls, doc: GraphDoc) -> Validator:
-        validator = cls(doc, {n.name for n in doc.nodes}, set(doc.sessions))
+    def of(cls, doc: GraphDoc, catalogue: HubActionCatalogue) -> Validator:
+        validator = cls(doc, catalogue, {n.name for n in doc.nodes}, set(doc.sessions))
         validator._check()
         return validator
 
@@ -102,7 +104,9 @@ class Validator:
         self._check_sessions()
         self._check_artifacts()
         for node in self.doc.nodes:
-            check = NodeCheck.of(node, node_names=self.node_names, session_names=self.session_names)
+            check = NodeCheck.of(
+                node, catalogue=self.catalogue, node_names=self.node_names, session_names=self.session_names
+            )
             self.errors.extend(check.errors)
         self.warnings.extend(Reachability.of(self.doc).warnings)
 
@@ -186,18 +190,23 @@ class NodeCheck:
     """One node run against the rules its executor, judgement, checks, and session imply."""
 
     node: NodeDoc
+    catalogue: HubActionCatalogue
     node_names: set[str]
     session_names: set[str]
     errors: list[str] = field(default_factory=list)
 
     @classmethod
-    def of(cls, node: NodeDoc, *, node_names: set[str], session_names: set[str]) -> NodeCheck:
-        check = cls(node, node_names, session_names)
+    def of(
+        cls, node: NodeDoc, *, catalogue: HubActionCatalogue, node_names: set[str], session_names: set[str]
+    ) -> NodeCheck:
+        check = cls(node, catalogue, node_names, session_names)
         check._check()
         return check
 
     def _check(self) -> None:
         self._check_run()
+        self._check_action()
+        self._check_reserved_waits()
         self._check_poll()
         self._check_judgement_kind()
         self._check_checks_gating()
@@ -212,15 +221,67 @@ class NodeCheck:
         if self.node.run and self.node.executor is not Executor.HUB:
             self.errors.append(f"node `{self.node.name}`: `run:` is only legal on a hub node (`executor: hub`)")
 
+    def _check_action(self) -> None:
+        """A hub node names exactly one of ``action:`` and ``run:``; ``action:`` names a
+        catalogued action, ``with:`` carries only its declared string arguments and every
+        required one, and the node authors a choice for every answer that is not a reserved wait."""
+        node = self.node
+        if node.executor is not Executor.HUB:
+            if node.action is not None:
+                self.errors.append(f"node `{node.name}`: `action:` is only legal on a hub node (`executor: hub`)")
+            if node.action_args or node.malformed_action_args:
+                self.errors.append(f"node `{node.name}`: `with:` is only legal on a hub node (`executor: hub`)")
+            return
+        if node.action is not None and node.run:
+            self.errors.append(
+                f"hub node `{node.name}`: a hub node names exactly one of `action:` and `run:`, not both"
+            )
+        if node.action is None:
+            if not node.run:
+                self.errors.append(f"hub node `{node.name}`: a hub node must name an `action:`")
+            if node.action_args or node.malformed_action_args:
+                self.errors.append(f"hub node `{node.name}`: `with:` is only legal on a node that names an `action:`")
+            return
+        spec = self.catalogue.get(node.action)
+        if spec is None:
+            self.errors.append(
+                f"hub node `{node.name}`: unknown action `{node.action}` — expected one of "
+                f"{sorted(self.catalogue.names)}"
+            )
+            return
+        for key in node.malformed_action_args:
+            self.errors.append(f"hub node `{node.name}`: `with.{key}` must be a string or a list of strings")
+        for key in sorted(set(node.action_args) - spec.args):
+            self.errors.append(f"hub node `{node.name}`: action `{spec.name}` declares no argument `{key}`")
+        for key in sorted(spec.required_args - set(node.action_args) - set(node.malformed_action_args)):
+            self.errors.append(f"hub node `{node.name}`: action `{spec.name}` requires argument `with.{key}`")
+        authored = {c.name for c in node.judgement.choices} if node.judgement is not None else set()
+        for answer in sorted(spec.answers_for(node.action_args) - RESERVED_WAITS - authored):
+            self.errors.append(
+                f"hub node `{node.name}`: action `{spec.name}` can answer `{answer}`, which the node authors no "
+                f"choice for"
+            )
+
+    def _check_reserved_waits(self) -> None:
+        # A reserved wait ends a pass without moving the chunk, so no node routes one.
+        if self.node.judgement is None:
+            return
+        for choice in self.node.judgement.choices:
+            if choice.name in RESERVED_WAITS:
+                self.errors.append(
+                    f"node `{self.node.name}` choice `{choice.name}`: `{choice.name}` is a reserved wait and may "
+                    f"not be authored as a choice"
+                )
+
     def _check_poll(self) -> None:
-        """The pending-poll cadence (#66) is legal only on a hub command node — a node with
-        no ``run:`` step never reports ``pending``."""
+        """The pending-poll cadence (#66) is legal only on a hub node that can wait — one whose
+        action can answer a reserved wait, or one naming a non-empty ``run:``."""
         node = self.node
         interval, timeout = node.poll_interval_seconds, node.poll_timeout_seconds
-        if (interval is not None or timeout is not None) and not node.is_hub_command_node:
+        if (interval is not None or timeout is not None) and not self._can_wait():
             self.errors.append(
-                f"node `{node.name}`: `poll_interval`/`poll_timeout` are only legal on a "
-                f"hub command node (`executor: hub` with `run:`)"
+                f"node `{node.name}`: `poll_interval`/`poll_timeout` are only legal on a hub command node that can "
+                f"wait (an `action:` that can answer a reserved wait, or a non-empty `run:`)"
             )
         if interval is not None and interval <= 0:
             self.errors.append(f"node `{node.name}`: `poll_interval` must be a positive number of seconds")
@@ -228,6 +289,15 @@ class NodeCheck:
             self.errors.append(f"node `{node.name}`: `poll_timeout` must be a positive number of seconds")
         if interval is not None and timeout is not None and timeout < interval:
             self.errors.append(f"node `{node.name}`: `poll_timeout` must be >= `poll_interval`")
+
+    def _can_wait(self) -> bool:
+        node = self.node
+        if not node.is_hub_command_node:
+            return False
+        if node.action is None:
+            return bool(node.run)
+        spec = self.catalogue.get(node.action)
+        return spec is not None and spec.can_wait_for(node.action_args)
 
     def _check_judgement_kind(self) -> None:
         node, judgement = self.node, self.node.judgement

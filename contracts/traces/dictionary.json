@@ -1242,6 +1242,16 @@
         "type": "string"
       },
       {
+        "meaning": "The choice a hub node's action pass answered; empty when it answered an escalation.",
+        "name": "blizzard.hub.action.choice",
+        "type": "string"
+      },
+      {
+        "meaning": "The hub action a hub node's pass took.",
+        "name": "blizzard.hub.action.name",
+        "type": "string"
+      },
+      {
         "meaning": "The exit code of a hub node's `run:` step.",
         "name": "blizzard.hub.run_step.exit_code",
         "type": "int"

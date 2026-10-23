@@ -620,6 +620,8 @@ def test_the_platform_section_is_the_code_constants() -> None:
         platform_attr.CALLER,
         shared.CHUNK_ID,
         cli_spans.ATTR_LEASE_ID,
+        hub_platform.ACTION_CHOICE,
+        hub_platform.ACTION_NAME,
         hub_platform.RUN_STEP_EXIT_CODE,
         hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,

@@ -130,6 +130,10 @@ graph_nodes = Table(
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_nodes_tenant_id"), nullable=False),
+    # The hub action a hub node names in place of ``run``; null on a runner node or one naming ``run``.
+    Column("action", String, nullable=True),
+    # The action's ``with:`` arguments, a JSON map of name -> list of strings; null when none.
+    Column("action_args", Text, nullable=True),
     # Null/false disallows proposed work items.
 )
 Index("ix_graph_nodes_tenant_graph_id", graph_nodes.c.tenant_id, graph_nodes.c.graph_id)
@@ -1369,6 +1373,8 @@ hub_node_poll = Table(
     Column("epoch", Integer, nullable=False),
     Column("polled_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_node_poll_tenant_id"), nullable=False),
+    # The earliest moment a waiting pass asked to be polled again; null when it named none.
+    Column("next_poll_at", UtcDateTime, nullable=True),
 )
 Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 

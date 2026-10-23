@@ -426,6 +426,8 @@ class HubNodePollFact:
     node_id: str
     epoch: int
     polled_at: datetime
+    # The earliest moment the waiting pass asked to be polled again — it only postpones.
+    next_poll_at: datetime | None = None
 
 
 @domain_model

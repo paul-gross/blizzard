@@ -18,6 +18,7 @@ from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphArtifactFileMissing, GraphFile
+from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
@@ -92,8 +93,8 @@ def test_inlining_is_what_clears_the_validator_s_uninlined_value_rejection(tmp_p
     the path in place for the validator to refuse."""
     graph_path = _write_graph(tmp_path)
 
-    assert Validator.of(GraphFile(graph_path).doc).result.ok
-    uninlined = Validator.of(GraphDoc.of(yaml.safe_load(_GRAPH_YAML))).result
+    assert Validator.of(GraphFile(graph_path).doc, TEST_CATALOGUE).result.ok
+    uninlined = Validator.of(GraphDoc.of(yaml.safe_load(_GRAPH_YAML)), TEST_CATALOGUE).result
     assert not uninlined.ok
     assert any("is a file path, not content" in e for e in uninlined.errors)
 

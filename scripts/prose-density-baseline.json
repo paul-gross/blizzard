@@ -4300,7 +4300,7 @@
    "over_cap": 0,
    "total": 8
   },
-  "blizzard/hub/graphs/scripts/base_merge.py": {
+  "blizzard/hub/delivery/actions/base_merge.py": {
    "comments": 1,
    "docstrings": 19,
    "over_cap": 0,

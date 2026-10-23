@@ -29,7 +29,7 @@ from blizzard.hub.domain.graph.model import (
     TargetGraphRetired,
 )
 from blizzard.hub.domain.graph.validation import GraphValidationError, Validator, cross_graph_warnings
-from tests.support import make_graph
+from tests.support import TEST_CATALOGUE, make_graph
 
 pytestmark = pytest.mark.unit
 
@@ -189,5 +189,5 @@ def test_a_definition_differs_only_from_another_parsed_definition() -> None:
 
 def test_an_invalid_definition_is_refused_with_its_errors() -> None:
     with pytest.raises(GraphValidationError) as caught:
-        Validator.of(GraphDoc(name="work", entry="build", nodes=[])).require_valid()
+        Validator.of(GraphDoc(name="work", entry="build", nodes=[]), TEST_CATALOGUE).require_valid()
     assert any("entry `build`" in e for e in caught.value.result.errors)

@@ -220,6 +220,16 @@ def test_annotation_interval_seconds_round_trips_through_to_toml_and_load(tmp_pa
 
 
 @pytest.mark.unit
+def test_action_pass_seconds_defaults_to_300_and_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    assert config.action_pass_seconds == 300
+    edited = dataclasses.replace(config, action_pass_seconds=45)
+    edited.config_path.write_text(edited.to_toml())
+
+    assert load_hub_config(edited.root).action_pass_seconds == 45
+
+
+@pytest.mark.unit
 def test_annotation_interval_seconds_absent_from_toml_defaults_to_120(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()

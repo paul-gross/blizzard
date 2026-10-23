@@ -301,9 +301,9 @@ class NodeShape[StepT]:
 
     @property
     def is_hub_command_node(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
-        """True for a generic hub command node — ``executor: hub`` plus a non-empty
-        ``run:``. A predicate, not an assertion: an empty ``run:`` is authorable."""
-        return self.executor is Executor.HUB and bool(self.run)
+        """True for every hub node — one naming an action, one naming ``run:``, and one
+        stored with an empty ``run:``, which the step loop's empty run drives."""
+        return self.executor is Executor.HUB
 
 
 @domain_model
@@ -322,6 +322,13 @@ class NodeDoc(NodeShape[RunStepDoc]):
     bounce_cap: int | None = None
     # The hub command node's declared commands (#65, #67); empty on a worker node.
     run: list[RunStepDoc] = field(default_factory=list)
+    # The hub action this node names, in place of ``run:``, and its ``with:`` arguments,
+    # each one value or a list read as a tuple.
+    action: str | None = None
+    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The ``with:`` keys whose value is neither a string nor a list of strings — recorded,
+    # not refused, so validation can name each one.
+    malformed_action_args: tuple[str, ...] = ()
     # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor default.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
@@ -351,6 +358,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
         checks_cwd = body.text("checks_cwd")
         checks_timeout = body.number("checks_timeout")
         run = [RunStepDoc.of(r) for r in body.items("run")]
+        action_args, malformed_action_args = cls._action_args(body.get("with"), node=name)
         return cls(
             name=name,
             executor=executor,
@@ -363,6 +371,9 @@ class NodeDoc(NodeShape[RunStepDoc]):
             bounce_cap=bounce_cap,
             judgement=JudgementDoc.of(body.get("judgement")),
             run=run,
+            action=body.text("action"),
+            action_args=action_args,
+            malformed_action_args=malformed_action_args,
             poll_interval_seconds=poll_interval_seconds,
             poll_timeout_seconds=poll_timeout_seconds,
             session_source=session.source,
@@ -371,6 +382,22 @@ class NodeDoc(NodeShape[RunStepDoc]):
             checks_timeout=checks_timeout,
             retired_keys=tuple(sorted(set(body.body) & RETIRED_NODE_KEYS)),
         )
+
+    @staticmethod
+    def _action_args(raw: object, *, node: str) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]]:
+        if raw is None:
+            return {}, ()
+        body = Parser.of(raw, f"node {node!r} `with`").body
+        args: dict[str, tuple[str, ...]] = {}
+        malformed: list[str] = []
+        for key, value in body.items():
+            if isinstance(value, str):
+                args[str(key)] = (value,)
+            elif isinstance(value, list) and all(isinstance(v, str) for v in value):
+                args[str(key)] = tuple(value)
+            else:
+                malformed.append(str(key))
+        return args, tuple(sorted(malformed))
 
     @staticmethod
     def _retries(raw: object) -> tuple[int | None, str | None]:
@@ -593,6 +620,9 @@ class Node(NodeShape[RunStep]):
     bounce_cap: int | None = None
     # The generic hub command node's declared commands (#65) — see ``NodeDoc.run``.
     run: list[RunStep] = field(default_factory=list)
+    # See ``NodeDoc.action`` / ``NodeDoc.action_args``.
+    action: str | None = None
+    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None

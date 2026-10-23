@@ -362,6 +362,9 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
     span carries the step's exit code and its authored name, never its command, output or environment. The request that
     drove the node, which is a hub-advance poll or a completion or migration apply, carries a link to the `hub exec`
     span.
+  - *The hub's action passes.* A hub node naming an action takes one pass in place of its `run:` steps: a span named
+    `hub action pass`, a direct child of that step's `hub exec` span, carrying the action's name and the choice it
+    answered, never its visit or its effects.
   - *A restart between poll and exit.* A poll's spans parent on a step root the trace sweep exports only once that hub
     step closes. A restart between a poll and the exit of the hub node it drove can leave that root never exported. A
     trace backend then shows the poll's spans under a missing parent.
@@ -599,6 +602,8 @@ configures, with no daemon in between.
 | `blizzard.caller`                 | `string` | Who the verified credential names: `runner`, `board`, `operator` or `worker`; absent when none was verified. |
 | `blizzard.chunk.id`               | `string` | The chunk a request's route names.                                                                           |
 | `blizzard.cli.command`            | `string` | The CLI command a worker or an operator ran, as a span of the scope `blizzard.cli`.                          |
+| `blizzard.hub.action.choice`      | `string` | The choice a hub node's action pass answered; empty when it answered an escalation.                          |
+| `blizzard.hub.action.name`        | `string` | The hub action a hub node's pass took.                                                                       |
 | `blizzard.hub.run_step.exit_code` | `int`    | The exit code of a hub node's `run:` step.                                                                   |
 | `blizzard.hub.run_step.name`      | `string` | A hub node's `run:` step's authored name, never its command line; absent when the step authors none.         |
 | `blizzard.lease.id`               | `string` | The lease a worker's span arrived under, stamped by the runner.                                              |

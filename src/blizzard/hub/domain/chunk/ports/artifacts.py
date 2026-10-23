@@ -63,3 +63,24 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
         worker-produced one. Returns True iff it wrote."""
         ...
+
+    def record_landing(
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        repo: str,
+        revision: str,
+        repository_id: str,
+        at: datetime,
+    ) -> bool:
+        """Record a merge that has happened in one transaction: the ``merged/<repo>`` marker at ``revision``,
+        its ``delivery_repo_landed`` row stamped with ``repository_id``, and the chunk's close intents.
+
+        Admitted past the write fence (``bzh:epoch-fencing``) — a terminal chunk or a stale epoch does not
+        refuse it, because it records what the forge already did. Idempotent per ``(chunk, node, name,
+        epoch)``: a replay writes nothing a second time. Returns whether the fence would have refused it."""
+        ...

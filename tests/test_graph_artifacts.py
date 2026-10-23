@@ -22,7 +22,7 @@ from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata, tenants
 from blizzard.hub.tenancy import TenantId
-from tests.support import scoped_connections
+from tests.support import TEST_CATALOGUE, scoped_connections
 
 pytestmark = pytest.mark.unit
 
@@ -96,13 +96,13 @@ def test_two_identically_authored_docs_are_equal() -> None:
 
 
 def test_a_graph_declaring_no_artifacts_validates() -> None:
-    result = Validator.of(GraphDoc.of(_doc())).result
+    result = Validator.of(GraphDoc.of(_doc()), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 @pytest.mark.parametrize("name", ["docket", "docket.md", "docket-v2", "docket_v2", "a", "A1"])
 def test_a_legal_name_validates(name: str) -> None:
-    result = Validator.of(GraphDoc.of(_doc(artifacts={name: "content"}))).result
+    result = Validator.of(GraphDoc.of(_doc(artifacts={name: "content"})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
@@ -113,19 +113,23 @@ def test_a_legal_name_validates(name: str) -> None:
 def test_an_illegal_name_is_rejected(name: str) -> None:
     """Separators are strictly *internal and single*: two in a row is rejected the same as a
     leading or trailing one, which is more than "alphanumerics with separators" implies."""
-    result = Validator.of(GraphDoc.of(_doc(artifacts={name: "content"}))).result
+    result = Validator.of(GraphDoc.of(_doc(artifacts={name: "content"})), TEST_CATALOGUE).result
     assert not result.ok
     assert any(f"artifact `{name}`" in e and "name must be" in e for e in result.errors)
 
 
 def test_a_name_colliding_with_a_produces_name_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(artifacts={"review-findings": "x"}, produces=["review-findings"]))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(artifacts={"review-findings": "x"}, produces=["review-findings"])), TEST_CATALOGUE
+    ).result
     assert not result.ok
     assert any("collides with a node's `produces:` name" in e for e in result.errors)
 
 
 def test_a_name_not_colliding_with_any_produces_name_validates() -> None:
-    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": "x"}, produces=["review-findings"]))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(artifacts={"docket": "x"}, produces=["review-findings"])), TEST_CATALOGUE
+    ).result
     assert result.ok, result.errors
 
 
@@ -150,7 +154,7 @@ def test_a_value_still_shaped_like_a_file_path_is_rejected(value: str) -> None:
     """A definition with no directory to resolve against — stdin, or a raw ``POST /api/graphs``
     body — inlines nothing, so this shape reaching validation would bake the path itself and serve
     it as content. Every path shape counts: a `/` anywhere, or any filename extension."""
-    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": value}))).result
+    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": value})), TEST_CATALOGUE).result
     assert not result.ok
     assert any(f"`{value}` is a file path, not content" in e for e in result.errors)
 
@@ -170,7 +174,7 @@ def test_a_value_still_shaped_like_a_file_path_is_rejected(value: str) -> None:
 def test_inlined_content_is_not_mistaken_for_a_file_path(value: str) -> None:
     """Real content is prose carrying whitespace, so the single-token predicate cannot reach
     it — not even prose that names a path inside a sentence."""
-    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": value}))).result
+    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": value})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
@@ -178,7 +182,7 @@ def test_an_extension_less_lone_token_is_the_predicate_s_one_admitted_hole() -> 
     """`notes` is a legal filename and equally a legal one-word artifact, with nothing in the
     value to tell them apart, so it validates. Pinned so the residual hole is a stated
     property rather than an oversight — the docs state it too."""
-    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": "notes"}))).result
+    result = Validator.of(GraphDoc.of(_doc(artifacts={"docket": "notes"})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 

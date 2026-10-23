@@ -14,6 +14,12 @@ routes and the chunk re-polls it forever; announced once per node visit, not per
 missing edge then requeuing, not retrying. The work-item closure events are also the hub's —
 [work-sources.md](./work-sources.md) owns them.
 
+`hub-action-overran` (warning): a hub node's action pass ran past `action_pass_seconds`
+([install.md](./install.md#configuration-and-credentials)) and was cancelled. It answered `pending` where its action can
+wait, so the node's poll timeout still decides when waiting has gone on too long, and its failure choice where it
+cannot. A node that keeps reaching the bound is one whose forge is slow or unreachable; the remedy is that forge, or a
+larger `action_pass_seconds`.
+
 `repository-unresolved` (critical): a `deliver` step's chunk commits resolve to no single
 [repository](./repositories.md) record — none stands for one of them, or several match it. The step is refused before
 any command runs and routes its failure choice; the remedy is creating or editing the repository records, then

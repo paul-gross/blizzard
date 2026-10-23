@@ -172,13 +172,15 @@ class ChunkHubExecStore:
                 enqueue_close_intents(conn, chunk_id, at=at)
             return True
 
-    def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
+    def record_hub_node_poll(
+        self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
+    ) -> None:
         """Append one pending-poll-attempt fact (#66) — never a transition, no
         idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
         with self._store.write("record_hub_node_poll") as conn:
             conn.execute(
                 self._store.insert(s.hub_node_poll).values(
-                    chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at
+                    chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at, next_poll_at=next_poll_at
                 )
             )
 

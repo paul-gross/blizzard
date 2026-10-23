@@ -521,7 +521,9 @@ class ChunkFactsStore:
         if "hub_node_polls" in families:
             for p in _rows(stmts, conn, s.hub_node_poll, batch):
                 hub_node_polls[p.chunk_id].append(
-                    HubNodePollFact(node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at)
+                    HubNodePollFact(
+                        node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at, next_poll_at=p.next_poll_at
+                    )
                 )
 
         stopped_ats: dict[str, list[datetime]] = defaultdict(list)

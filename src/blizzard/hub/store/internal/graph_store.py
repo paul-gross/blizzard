@@ -213,7 +213,8 @@ class EdgeRow:
 @adapter_model
 @dataclass(frozen=True)
 class NodeRow:
-    """An empty ``run`` stores NULL rather than ``[]``, which reads back empty either way."""
+    """An empty ``run`` stores NULL rather than ``[]``, and empty ``action_args`` NULL rather
+    than ``{}``; each reads back empty either way."""
 
     def values(self, node: Node, *, graph_id: str) -> dict[str, Any]:
         return {
@@ -236,6 +237,8 @@ class NodeRow:
             "run": RUN.encode(node.run) if node.run else None,
             "poll_interval_seconds": node.poll_interval_seconds,
             "poll_timeout_seconds": node.poll_timeout_seconds,
+            "action": node.action,
+            "action_args": json.dumps({k: list(v) for k, v in node.action_args.items()}) if node.action_args else None,
         }
 
     def of(self, row: Any, *, choices: list[Choice]) -> Node:
@@ -259,6 +262,8 @@ class NodeRow:
             run=RUN.decode(row.run),
             poll_interval_seconds=row.poll_interval_seconds,
             poll_timeout_seconds=row.poll_timeout_seconds,
+            action=row.action,
+            action_args={k: tuple(v) for k, v in json.loads(row.action_args).items()} if row.action_args else {},
             choices=choices,
         )
 

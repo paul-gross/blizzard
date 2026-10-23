@@ -34,6 +34,13 @@ export function retriesLabel(node: GraphNodeView): string {
   return `${node.retries_max}${exhausted}`;
 }
 
+/** A hub node's `with:` arguments in `name: value, value` form, one argument per `;`, or `—`
+ * when it passes none. */
+export function actionArgsLabel(node: GraphNodeView): string {
+  const args = Object.entries(node.action_args ?? {});
+  return args.length > 0 ? args.map(([name, values]) => `${name}: ${values.join(', ')}`).join('; ') : '—';
+}
+
 /** A list column's display form — comma-joined, or `—` when empty/absent.
  * Shared so `checks`/`produces` render identically in the node table and the
  * diagram's detail pane. */

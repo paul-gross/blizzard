@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { entryNodeName, graphOverrideRetired } from './graph-detail.model';
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  action: null,
+  action_args: {},
   checks: [],
   checks_cwd: null,
   checks_timeout: null,

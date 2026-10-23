@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.delivery.hub_node import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 
 pytestmark = pytest.mark.unit
@@ -44,13 +44,13 @@ def _commit(branch: str, *, epoch: int = 1, repo: str = "acme/widget", forge: st
 def test_a_commit_listed_after_an_asset_is_still_resolved() -> None:
     commit = _commit("feat/x")
 
-    assert GitCommits.of([_asset(), commit]).rows == [commit]
+    assert GitCommits.of([_asset(), commit]).rows == (commit,)
 
 
 def test_assets_between_commits_do_not_hide_the_later_one() -> None:
     first, second = _commit("feat/x", repo="acme/widget"), _commit("feat/y", repo="acme/gadget")
 
-    assert GitCommits.of([first, _asset(), second]).rows == [first, second]
+    assert GitCommits.of([first, _asset(), second]).rows == (first, second)
 
 
 def test_two_branches_at_one_epoch_still_raise_past_a_leading_asset() -> None:
@@ -62,4 +62,4 @@ def test_the_same_owner_and_name_on_two_forge_hosts_stays_two_repositories() -> 
     on_github = _commit("feat/x", repo="widget", forge="git@github.com:acme/widget.git")
     on_example = _commit("feat/x", repo="widget", forge="git@git.example.test:acme/widget.git")
 
-    assert GitCommits.of([on_github, on_example]).rows == [on_github, on_example]
+    assert GitCommits.of([on_github, on_example]).rows == (on_github, on_example)

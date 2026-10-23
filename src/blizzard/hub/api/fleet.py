@@ -640,7 +640,7 @@ def hub_advance(
     change.publish(cause="hub-advanced", key=advance_key)
     if result is None:
         pending = facts.hub_node_pending()
-        next_poll_at = pending.polled_at + PollPolicy.of(node).interval if pending is not None else None
+        next_poll_at = PollPolicy.of(node).due_at(pending) if pending is not None else None
         # A future `next_poll_at` distinguishes "not yet due to poll" from a genuinely busy slot;
         # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
         if next_poll_at is not None and next_poll_at > services.clock.now():

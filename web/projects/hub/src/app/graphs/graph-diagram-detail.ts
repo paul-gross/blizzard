@@ -9,7 +9,7 @@ import {
 } from './graph-diagram-selection';
 import { type IncomingAddendum, incomingAddenda } from './graph-incoming-addenda';
 import type { EdgeTarget } from './graph-edge-target';
-import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
+import { actionArgsLabel, listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
 
 /**
  * The diagram's detail pane — the selected node's full `GraphNodeView` (including
@@ -69,9 +69,17 @@ export class GraphDiagramDetail {
    * every row is plain text, so this is a straight `KitFactText` list rather than
    * the templated form `finding-panel.ts`'s own `factRows` needs. */
   protected nodeFactRows(node: GraphNodeView): readonly KitFact[] {
+    // Only a hub node naming an action shows it, with what its `with:` passes.
+    const action: readonly KitFact[] = node.action
+      ? [
+          { label: 'Action', value: node.action, testid: 'graph-diagram-detail-action' },
+          { label: 'With', value: actionArgsLabel(node), testid: 'graph-diagram-detail-action-args' },
+        ]
+      : [];
     return [
       { label: 'Node', value: node.name },
       { label: 'Executor', value: node.executor },
+      ...action,
       { label: 'Session', value: sessionLabel(node) },
       { label: 'Judged by', value: node.judged_by },
       { label: 'Retries', value: retriesLabel(node) },

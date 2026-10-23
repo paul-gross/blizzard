@@ -11,6 +11,7 @@ import yaml
 
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
+from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +56,7 @@ _GATE_NODES = {
 
 
 def test_human_gate_node_mints_without_a_judgement_prompt() -> None:
-    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": _GATE_NODES})).result
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": _GATE_NODES}), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
@@ -72,7 +73,7 @@ def test_human_gate_with_a_judgement_prompt_is_rejected() -> None:
             },
         },
     }
-    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes})).result
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes}), TEST_CATALOGUE).result
     assert not result.ok
     assert any("must not declare `judgement.prompt`" in e for e in result.errors)
 
@@ -89,6 +90,6 @@ def test_human_gate_choice_must_resolve() -> None:
             },
         },
     }
-    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes})).result
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes}), TEST_CATALOGUE).result
     assert not result.ok
     assert any("resolves to no node" in e for e in result.errors)

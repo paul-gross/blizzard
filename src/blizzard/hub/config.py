@@ -33,6 +33,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.config_defaults import (
     AUTH_MODE_NONE,
     AUTH_MODE_OAUTH,
+    DEFAULT_ACTION_PASS_SECONDS,
     DEFAULT_ANNOTATION_INTERVAL_SECONDS,
     DEFAULT_CLOSE_FORGE_WRITES_ENABLED,
     DEFAULT_FOLLOW_LATEST,
@@ -513,6 +514,8 @@ class HubConfig:
     follow_latest: bool = DEFAULT_FOLLOW_LATEST
     #: Forge-status sweep cadence in seconds; consulted only when a source annotates.
     annotation_interval_seconds: int = DEFAULT_ANNOTATION_INTERVAL_SECONDS
+    #: A hub action pass's bound in seconds: an overrun is cancelled at its next `await`.
+    action_pass_seconds: int = DEFAULT_ACTION_PASS_SECONDS
     #: Instance-level forge-write posture for closing — false declines every
     #: configured source's closer (never the built-in hub source's, which writes no forge)
     #: so a non-canonical hub can't close real items; true (the default) is unconditional, so a
@@ -625,6 +628,10 @@ class HubConfig:
             "# least one work source sets annotate = true; a hub with none starts\n"
             "# no sweep loop regardless of this value.\n",
             f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
+            "\n# A hub action pass's bound, in seconds. A pass that overruns it is cancelled\n"
+            "# at its next wait and answers pending (or failure, for an action that cannot\n"
+            "# wait); the hub lets go of one stuck past it thirty seconds later.\n",
+            f"action_pass_seconds = {self.action_pass_seconds}\n",
             "\n# Forge-write posture for closing delivered work items. true (the\n"
             "# default) closes through every configured work source; set false on a\n"
             "# non-canonical hub — dev, staging, or a restored snapshot — so it never writes to\n"
@@ -760,6 +767,7 @@ class HubConfig:
             annotation_interval_seconds=int(
                 raw.get("annotation_interval_seconds", DEFAULT_ANNOTATION_INTERVAL_SECONDS)
             ),
+            action_pass_seconds=int(raw.get("action_pass_seconds", DEFAULT_ACTION_PASS_SECONDS)),
             close_forge_writes_enabled=close_forge_writes_enabled,
             auth=AuthConfig.of(raw.table("auth")),
             transcripts=TranscriptCapsConfig.of(raw.table("transcripts")),

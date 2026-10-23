@@ -23,6 +23,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
+    MARKER_PREFIX,
     enqueue_close_intents,
     fence,
     is_landing_marker,
@@ -274,6 +275,59 @@ class ChunkArtifactsStore:
             if is_landing_marker(name, content):
                 enqueue_close_intents(conn, chunk_id, at=at)
             return True
+
+    def record_landing(
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        repo: str,
+        revision: str,
+        repository_id: str,
+        at: datetime,
+    ) -> bool:
+        """The marker, the landed row and the close intents of one merge, in one transaction admitted past
+        the fence, which is evaluated only to answer whether it would have refused."""
+        name = f"{MARKER_PREFIX}{repo}"
+        with self._store.write("record_landing") as conn:
+            lock_chunk_row(conn, chunk_id)
+            refused = fence(conn, chunk_id, epoch=epoch, admission=admission) is not None
+            already = conn.execute(
+                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
+                    (s.artifacts.c.chunk_id == chunk_id)
+                    & (s.artifacts.c.node_id == node_id)
+                    & (s.artifacts.c.epoch == epoch)
+                    & (s.artifacts.c.name == name)
+                )
+            ).first()
+            if already is not None:
+                return refused
+            conn.execute(
+                self._store.insert(s.artifacts).values(
+                    artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    node_name=node_name,
+                    epoch=epoch,
+                    name=name,
+                    kind=ArtifactKind.ASSET.value,
+                    data=revision,
+                    repo=None,
+                    forge=None,
+                    produced_at=at,
+                    seq=next_artifact_seq(conn, chunk_id),
+                )
+            )
+            conn.execute(
+                self._store.insert(s.delivery_repo_landed).values(
+                    chunk_id=chunk_id, repo=repo, commit_hash=revision, repository_id=repository_id, landed_at=at
+                )
+            )
+            enqueue_close_intents(conn, chunk_id, at=at)
+            return refused
 
 
 def _conforms_artifacts(x: ChunkArtifactsStore) -> IWriteChunkArtifactsRepository:

@@ -14,6 +14,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
+from blizzard.hub.delivery.action_loop import ActionLoop
 
 pytestmark = pytest.mark.unit
 
@@ -99,7 +100,8 @@ class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
     reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
     (started unconditionally, no source gate), ``event_derivation``
-    (started unconditionally too), ``tenant_teardown_sweep`` (likewise), ``trace_export`` (``None`` — tracing is off), and ``egress_export`` (``None`` — no directory)."""
+    (started unconditionally too), ``tenant_teardown_sweep`` (likewise), ``trace_export`` (``None`` — tracing is off),
+    ``egress_export`` (``None`` — no directory), and ``action_loop`` (started and stopped around the sweeps)."""
 
     def __init__(
         self,
@@ -116,6 +118,7 @@ class _FakeServices:
         self.annotation = annotation
         self.trace_export = None
         self.egress_export = None
+        self.action_loop = ActionLoop()
 
 
 class _FakeState:

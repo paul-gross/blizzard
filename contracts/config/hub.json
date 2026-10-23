@@ -2,6 +2,14 @@
   "daemon": "hub",
   "keys": [
     {
+      "default": 300,
+      "deprecated": false,
+      "path": "action_pass_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
       "default": 120,
       "deprecated": false,
       "path": "annotation_interval_seconds",

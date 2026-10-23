@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.graphs.scripts.base_merge import contributes_only_base_change, merge_base_of
+from blizzard.hub.delivery.actions.base_merge import contributes_only_base_change, merge_base_of
 from blizzard.hub.graphs.scripts.land_common import (
     ForgeReadDegraded,
     LandedRevisionUnknown,

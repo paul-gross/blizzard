@@ -3,7 +3,9 @@ import { META_LINE_HEIGHT } from './graph-box-sizing';
 import { type TextMeasurer } from './graph-box-sizing';
 import { layoutGraph } from './graph-layout';
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  action: null,
+  action_args: {},
   checks: [],
   checks_cwd: null,
   checks_timeout: null,

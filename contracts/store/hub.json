@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261023_0900_route_released_cause",
+  "head_revision": "20261023_0901_hub_actions",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -3312,6 +3312,18 @@
     "graph_nodes": {
       "checks": [],
       "columns": {
+        "action": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "action_args": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
         "bounce_cap": {
           "deprecated": null,
           "nullable": true,
@@ -4297,6 +4309,12 @@
           "nullable": false,
           "server_default": false,
           "type": "Integer"
+        },
+        "next_poll_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
         },
         "node_id": {
           "deprecated": null,

@@ -60,8 +60,11 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         from_node_id, epoch)`` — or when the write fence refuses (``bzh:epoch-fencing``)."""
         ...
 
-    def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
-        """Append one pending-poll-attempt fact (#66) — never a transition.
+    def record_hub_node_poll(
+        self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
+    ) -> None:
+        """Append one pending-poll-attempt fact (#66) — never a transition. ``next_poll_at`` is the
+        earliest moment the waiting pass asked to be polled again.
 
         Append-only: an at-least-once poll attempt is harmless to record twice — it only
         widens the interval/timeout gating's read — so this carries no idempotency guard."""

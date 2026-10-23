@@ -17,7 +17,7 @@ from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import ChoiceTarget, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from tests.support import build_hub
+from tests.support import TEST_CATALOGUE, build_hub
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -80,7 +80,7 @@ def test_cross_graph_target_parses_reifies_and_validates() -> None:
     pass_choice = next(c for c in build.judgement.choices if c.name == "pass")
     assert pass_choice.target_graph == "default-delivery"
 
-    assert Validator.of(doc).result.ok  # no same-graph-node error for a well-formed cross-graph target
+    assert Validator.of(doc, TEST_CATALOGUE).result.ok  # no same-graph-node error for a well-formed cross-graph target
 
     graph = Reification.of(doc, FixedClock(_T0)).graph
     edge = next(e for e in graph.edges if e.to_node_name == "graph:default-delivery")
@@ -92,14 +92,14 @@ def test_cross_graph_target_parses_reifies_and_validates() -> None:
 @unit
 def test_malformed_cross_graph_target_is_a_validation_error() -> None:
     for bad in ("graph:", "graph:a:b"):
-        result = Validator.of(_doc(to=bad)).result
+        result = Validator.of(_doc(to=bad), TEST_CATALOGUE).result
         assert not result.ok
         assert any("malformed cross-graph target" in e for e in result.errors), result.errors
 
 
 @unit
 def test_same_graph_to_a_nonexistent_sibling_still_errors() -> None:
-    result = Validator.of(_doc(to="ghost")).result
+    result = Validator.of(_doc(to="ghost"), TEST_CATALOGUE).result
     assert not result.ok
     assert any("resolves to no node" in e for e in result.errors), result.errors
 

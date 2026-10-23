@@ -62,11 +62,15 @@ entry: build
 nodes:
   build:
     executor: hub
+    action: pass
     judgement:
       choices:
         pass:
           description: done
           to: done
+        success:
+          description: passed through
+          to: build
         failure:
           description: a command failed
           to: build
