@@ -68,9 +68,10 @@ def _service(engine: sa.Engine, clock: FixedClock) -> FactIngestService:
         versions=HubVersionWindow(__version__, VERSION_WINDOW),
         clock=clock,
     )
-    event_log = EventLogService(events=chunks.events, publisher=EventBroker(), chunks=chunks.record)
+    event_log = EventLogService(events=chunks.events, publisher=EventBroker())
     return FactIngestService(
         facts=chunks.facts,
+        chunks=chunks.record,
         route=chunks.route,
         escalations=chunks.escalations,
         questions=chunks.questions,

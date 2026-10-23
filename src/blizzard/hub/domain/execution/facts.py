@@ -7,7 +7,7 @@ lands on (``bzh:controller-read-only``) and stamps landing time from the injecte
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -33,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRe
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
@@ -43,6 +44,7 @@ from blizzard.hub.domain.execution.usage_facts import (
     subscription_identity,
     usage_miss_reason,
 )
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
@@ -126,6 +128,7 @@ class FactIngestService:
         self,
         *,
         facts: IReadChunkFactsRepository,
+        chunks: IReadChunkRecordRepository,
         route: IWriteChunkRouteRepository,
         escalations: IWriteChunkEscalationsRepository,
         questions: IWriteChunkQuestionsRepository,
@@ -136,6 +139,7 @@ class FactIngestService:
         clock: IClock,
     ) -> None:
         self._facts = facts
+        self._chunks = chunks
         self._route = route
         self._escalations = escalations
         self._questions = questions
@@ -164,12 +168,18 @@ class FactIngestService:
         route_ended: list[int] = []
         row_id_by_seq: dict[int, int] = {}
 
+        projects = self._event_projects([fact for fact in pushed if fact.seq > mark])
         for fact in sorted(pushed, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
             ok, row_id = self._apply(
-                runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode, runner_name=runner_name
+                runner_id,
+                fact.kind,
+                fact.payload,
+                route_token_mode=route_token_mode,
+                runner_name=runner_name,
+                projects=projects,
             )
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
@@ -203,6 +213,18 @@ class FactIngestService:
             row_id_by_seq=row_id_by_seq,
         )
 
+    def _event_projects(self, fresh: Sequence[PushedFact]) -> dict[str, ProjectId]:
+        """The project of each chunk the push's fresh ``event.recorded`` facts name, in one batched read
+        (``bzh:bulk-reconstitution``); a chunk the record no longer holds is absent."""
+        chunk_ids = {
+            chunk_id
+            for fact in fresh
+            if fact.kind == EVENT_RECORDED and (chunk_id := Payload(fact.payload).text("chunk_id")) is not None
+        }
+        if not chunk_ids:
+            return {}
+        return {chunk_id: chunk.project_id for chunk_id, chunk in self._chunks.get_many(sorted(chunk_ids)).items()}
+
     def _route_ended(self, fact: PushedFact) -> bool:
         """Whether a rejected fact was refused because its chunk has no live route: a route-token-gated
         kind whose chunk's route is gone, whichever of the gate or the write fence refused it."""
@@ -226,6 +248,7 @@ class FactIngestService:
         payload: dict[str, object],
         *,
         route_token_mode: str,
+        projects: Mapping[str, ProjectId],
         runner_name: str | None = None,
     ) -> tuple[bool, int | None]:
         """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
@@ -316,6 +339,7 @@ class FactIngestService:
                 runner_id=runner_id,
                 runner_name=runner_name,
                 chunk_id=fact.text("chunk_id"),
+                project_id=projects.get(fact.text("chunk_id") or ""),
                 lease_id=fact.text("lease_id"),
                 node_name=fact.text("node_name"),
                 message=fact.string("message"),
