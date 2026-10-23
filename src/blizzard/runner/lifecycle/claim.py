@@ -56,6 +56,7 @@ from blizzard.runner.lifecycle.spawn import (
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, OpenTakeover
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
+from blizzard.runner.throttle.release import ReleaseContext
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -105,7 +106,7 @@ class ClaimConfig(SpawnConfig, Protocol):
     def bound_workspace_ids(self) -> tuple[str, ...]: ...
 
 
-class ClaimContext(SpawnContext, Protocol):
+class ClaimContext(SpawnContext, ReleaseContext, Protocol):
     @property
     def stores(self) -> ClaimStores: ...
     @property

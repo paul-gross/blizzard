@@ -6,10 +6,13 @@ presents a route token that does not match it, and ``404`` for a chunk the tenan
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.wire.base import WireModel
+
+#: The reason is open vocabulary, but bounded: the hub stores it and fans it out on the feed.
+RELEASE_REASON_MAX_LENGTH = 64
 
 
 class ReleaseRequest(BaseModel):
@@ -19,7 +22,7 @@ class ReleaseRequest(BaseModel):
     epoch: int
     #: The chunk's live route capability token, as a completion carries it.
     route_token: str | None = None
-    reason: str
+    reason: str = Field(min_length=1, max_length=RELEASE_REASON_MAX_LENGTH)
 
 
 class ReleaseResponse(WireModel):

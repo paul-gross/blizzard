@@ -46,6 +46,7 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
+from blizzard.runner.throttle.release import ReleaseRefusals
 from blizzard.runner.throttle.settings import ThrottleSettings
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -197,6 +198,8 @@ class LoopContext:
     #: The check-runner seam — ``None`` when not wired, so a node with no
     #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
+    #: The release offers the hub refused, so a declining gate does not re-ask every tick.
+    release_refusals: ReleaseRefusals = field(default_factory=ReleaseRefusals)
     #: Coarse "any transcript source wired" flag; a read still resolves per-owner via ``transcript_source_for``.
     transcripts_wired: bool = False
     #: The SSE publish seam, typed against the Protocol

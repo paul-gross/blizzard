@@ -10710,6 +10710,8 @@
             "type": "integer"
           },
           "reason": {
+            "maxLength": 64,
+            "minLength": 1,
             "title": "Reason",
             "type": "string"
           },

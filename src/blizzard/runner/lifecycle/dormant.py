@@ -44,7 +44,7 @@ from blizzard.runner.process.owned_process import kill_owned_process, owned_proc
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
-from blizzard.runner.throttle.release import Release, ReleaseReason, releases_usage_limited
+from blizzard.runner.throttle.release import Release, ReleaseContext, ReleaseReason, releases_usage_limited
 from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -89,7 +89,7 @@ class DormantConfig(SpawnConfig, Protocol):
     def gates(self) -> tuple[str, ...]: ...
 
 
-class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, Protocol):
+class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, ReleaseContext, Protocol):
     @property
     def stores(self) -> DormantStores: ...
     @property

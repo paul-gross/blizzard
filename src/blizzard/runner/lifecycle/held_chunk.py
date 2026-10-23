@@ -28,12 +28,18 @@ from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import Completion
 from blizzard.runner.throttle.gate import StartKind
-from blizzard.runner.throttle.release import Release, ReleaseReason, releases_between_steps, releases_on_decline
+from blizzard.runner.throttle.release import (
+    Release,
+    ReleaseContext,
+    ReleaseReason,
+    releases_between_steps,
+    releases_on_decline,
+)
 
 _log = get_logger("blizzard.runner.loop")
 
 
-class HeldChunkContext(SpawnContext, Protocol): ...
+class HeldChunkContext(SpawnContext, ReleaseContext, Protocol): ...
 
 
 def offer_between_steps(ctx: HeldChunkContext, chunk_id: str, *, epoch: int, via: str) -> bool:

@@ -107,6 +107,17 @@ def test_a_caller_not_holding_the_route_is_refused_403(tmp_path: Path) -> None:
     assert _status(hub, chunk_id) == "running"
 
 
+@pytest.mark.parametrize("reason", ["", "x" * 65])
+def test_a_reason_outside_its_bounds_is_refused_422(tmp_path: Path, reason: str) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, token = _claimed(hub)
+
+    resp = _release(hub, chunk_id, route_token=token, reason=reason)
+
+    assert resp.status_code == 422, resp.text
+    assert _status(hub, chunk_id) == "running"
+
+
 def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 

@@ -7,12 +7,13 @@ would. Only the hub's acceptance runs the caller's letting go of what it holds l
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, PausePark
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
@@ -22,6 +23,7 @@ __all__ = [
     "Release",
     "ReleaseContext",
     "ReleaseReason",
+    "ReleaseRefusals",
     "releases_between_steps",
     "releases_on_decline",
     "releases_usage_limited",
@@ -85,11 +87,32 @@ class IReleaseHub(Protocol):
         ...
 
 
+@collaborator
+@dataclass
+class ReleaseRefusals:
+    """The offers the hub refused, one per chunk: a refused offer is not repeated at the same epoch and reason, so a
+    chunk whose gate keeps declining — or an older hub that does not know the route — is asked once, not every tick."""
+
+    _refused: dict[str, tuple[int, ReleaseReason]] = field(default_factory=dict)
+
+    def refused(self, chunk_id: str, epoch: int, reason: ReleaseReason) -> bool:
+        return self._refused.get(chunk_id) == (epoch, reason)
+
+    def remember(self, chunk_id: str, epoch: int, reason: ReleaseReason) -> None:
+        self._refused[chunk_id] = (epoch, reason)
+
+    def forget(self, chunk_id: str) -> None:
+        self._refused.pop(chunk_id, None)
+
+
 class ReleaseContext(Protocol):
     """What an offer reads."""
 
     @property
     def hub(self) -> IReleaseHub: ...
+
+    @property
+    def release_refusals(self) -> ReleaseRefusals: ...
 
 
 @dataclass(frozen=True)
@@ -108,19 +131,25 @@ class Release:
         then: Callable[[], None],
     ) -> bool:
         """Ask the hub to take ``chunk_id``'s route back; only on its acceptance run ``then``, the caller's letting go.
-        True when it let go. Any refusal, and an unreachable hub, leaves everything as it was."""
+        True when it let go. Any refusal, and an unreachable hub, leaves everything as it was; a refusal is remembered
+        and not asked again at the same epoch."""
+        refusals = self.ctx.release_refusals
+        if refusals.refused(chunk_id, epoch, reason):
+            return False
         try:
             accepted = self.ctx.hub.release(chunk_id, epoch=epoch, route_token=route_token, reason=reason.value)
         except HubClientError as exc:
             _log.info("release not offered — hub unreachable, holding", chunk_id=chunk_id, detail=str(exc))
             return False
         if not accepted:
+            refusals.remember(chunk_id, epoch, reason)
             _log.info("release refused — holding", chunk_id=chunk_id, reason=reason.value)
             return False
         if reason is ReleaseReason.USAGE_LIMITED:
             _CP_USAGE_LIMITED_AFTER_HUB_BEFORE_ABANDON.reached()
         else:
             _CP_AFTER_HUB_BEFORE_ENVIRONMENTS.reached()
+        refusals.forget(chunk_id)
         then()
         _log.info("released chunk back to the queue", chunk_id=chunk_id, epoch=epoch, reason=reason.value)
         return True

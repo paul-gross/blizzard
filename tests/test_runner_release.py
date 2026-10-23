@@ -32,6 +32,7 @@ from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, PausePark, Ru
 from blizzard.runner.throttle.release import (
     Release,
     ReleaseReason,
+    ReleaseRefusals,
     releases_between_steps,
     releases_on_decline,
     releases_usage_limited,
@@ -108,11 +109,14 @@ def test_a_park_is_offered_back_only_when_a_usage_limit_wrote_it_and_its_floor_s
 @dataclasses.dataclass(frozen=True)
 class _ReleaseCtx:
     hub: FakeHub | HttpHubClient
+    release_refusals: ReleaseRefusals = dataclasses.field(default_factory=ReleaseRefusals)
 
 
-def _offer(hub: FakeHub | HttpHubClient, let_go: Callable[[], None]) -> bool:
-    return Release(_ReleaseCtx(hub)).offer(
-        "ch_1", epoch=3, route_token="rtok", reason=ReleaseReason.THROTTLED, then=let_go
+def _offer(
+    hub: FakeHub | HttpHubClient, let_go: Callable[[], None], *, ctx: _ReleaseCtx | None = None, epoch: int = 3
+) -> bool:
+    return Release(ctx or _ReleaseCtx(hub)).offer(
+        "ch_1", epoch=epoch, route_token="rtok", reason=ReleaseReason.THROTTLED, then=let_go
     )
 
 
@@ -133,6 +137,21 @@ def test_a_refused_offer_holds() -> None:
 
     assert _offer(hub, let_go) is False
     assert let_go.calls == 0
+
+
+@pytest.mark.unit
+def test_a_refused_offer_is_not_repeated_at_the_same_epoch_but_is_at_the_next() -> None:
+    hub, let_go = FakeHub(), _Counter()
+    hub.release_refused.add("ch_1")
+    ctx = _ReleaseCtx(hub)
+
+    assert _offer(hub, let_go, ctx=ctx) is False
+    assert _offer(hub, let_go, ctx=ctx) is False
+    assert len(hub.releases) == 1
+
+    hub.release_refused.clear()
+    assert _offer(hub, let_go, ctx=ctx, epoch=4) is True
+    assert len(hub.releases) == 2
 
 
 @pytest.mark.unit
@@ -326,6 +345,7 @@ def test_a_refused_release_holds_and_the_step_waits_on_the_gate() -> None:
     hub.release_refused.add("ch_1")
 
     HeldChunk(ctx, "ch_1").drive()
+    HeldChunk(ctx, "ch_1").drive()
 
     assert len(hub.releases) == 1
     assert store.held_environment_ids() == ["e1"]
@@ -468,7 +488,7 @@ def test_a_refused_usage_limited_release_books_once_and_stays_parked(tmp_path: P
     _on_unpause(store, ctx)
     _on_unpause(store, ctx)
 
-    assert len(hub.releases) == 2
+    assert len(hub.releases) == 1
     assert store.pause_parked_lease_ids() == {"lease_1"}
     assert store.held_environment_ids() == ["e1"]
     assert len(_usage(store)) == 1
