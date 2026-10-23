@@ -29,6 +29,7 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.memberships import MembershipFact
 from blizzard.hub.auth.models import AuthFact, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.scoped import statements_of
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
 from tests.support import default_tenant, hub_level_connections, hub_migration_prototype, seed_invitation
@@ -57,8 +58,12 @@ def engine(tmp_path: Path) -> sa.Engine:
     return create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
 
 
-def _transactions(engine: sa.Engine) -> IdentityTransactions:
-    return IdentityTransactions(hub_level_connections(engine), RepoErrorFactory(structlog.get_logger("test")))
+def _transactions(engine: sa.Engine, store_errors: HubStoreErrorFactory | None = None) -> IdentityTransactions:
+    return IdentityTransactions(
+        hub_level_connections(engine),
+        RepoErrorFactory(structlog.get_logger("test")),
+        store_errors or HubStoreErrorFactory(structlog.get_logger("test")),
+    )
 
 
 def _claim(writes: IdentityWrites, tenant: TenantId) -> None:
@@ -97,6 +102,18 @@ def test_a_block_that_raises_leaves_nothing_behind(engine: sa.Engine) -> None:
         raise _Abandoned
 
     assert _counts(engine) == before
+
+
+def test_the_connections_a_block_hands_out_wrap_faults_through_the_injected_store_error_factory(
+    engine: sa.Engine,
+) -> None:
+    injected = HubStoreErrorFactory(structlog.get_logger("injected"))
+    tenant = default_tenant(engine)
+
+    with _transactions(engine, injected).begin() as writes:
+        connections = writes.tenant_connections(StoreScope(tenant))
+
+    assert connections._errors is injected
 
 
 def test_a_read_inside_the_block_sees_its_own_writes(engine: sa.Engine) -> None:

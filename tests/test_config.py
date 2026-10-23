@@ -857,10 +857,8 @@ def test_tracing_scaffold_renders_every_knob_commented_at_its_default(tmp_path: 
     root.mkdir()
     text = HubConfig.scaffold(root).to_toml()
     assert "[tracing]\n" in text
-    assert "worker_program_services" not in text
     for key, value in dataclasses.asdict(TracingConfig()).items():
-        if key != "worker_program_services":
-            assert f"# {key} = {toml_literal(value)}\n" in text
+        assert f"# {key} = {toml_literal(value)}\n" in text
     (root / "blizzard-hub.toml").write_text(text)
     assert load_hub_config(root).tracing == TracingConfig()
 
@@ -884,75 +882,31 @@ def test_tracing_overrides_round_trip_through_to_toml_and_load(tmp_path: Path) -
 
 
 @pytest.mark.unit
-def test_harness_telemetry_round_trips_and_refuses_a_non_boolean(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    assert TracingConfig().harness_telemetry is False
-    assert "\n# harness_telemetry = false\n" in HubConfig.scaffold(root).to_toml()
-    config = dataclasses.replace(HubConfig.scaffold(root), tracing=TracingConfig(harness_telemetry=True))
-    text = config.to_toml()
-    assert "\nharness_telemetry = true\n" in text
-    (root / "blizzard-hub.toml").write_text(text)
-    assert load_hub_config(root).tracing.harness_telemetry is True
-    (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nharness_telemetry = "yes"\n'
-    )
-    with pytest.raises(HubConfigError, match=re.escape("tracing.harness_telemetry must be true or false")):
-        load_hub_config(root)
-
-
-@pytest.mark.unit
-def test_worker_program_services_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
-    root = tmp_path / "hub"
-    root.mkdir()
-    tracing = TracingConfig(worker_program_services={"winter_cli": "winter-blizzard", "a.b": "svc"})
-    config = dataclasses.replace(HubConfig.scaffold(root), tracing=tracing)
-    (root / "blizzard-hub.toml").write_text(config.to_toml())
-    assert load_hub_config(root).tracing == tracing
-
-
-@pytest.mark.unit
 @pytest.mark.parametrize(
-    ("entry", "complaint"),
+    "block",
     [
-        ('"" = "svc"', "empty scope"),
-        ('"blizzard.cli" = "svc"', "tracing.worker_program_services.blizzard.cli"),
-        ('winter_cli = ""', "tracing.worker_program_services.winter_cli"),
-        ("winter_cli = 3", "tracing.worker_program_services.winter_cli"),
-        ('winter_cli = "blizzard-hub"', "'blizzard-hub'"),
-        ('winter_cli = "blizzard-runner"', "'blizzard-runner'"),
-        ('winter_cli = "blizzard-cli"', "'blizzard-cli'"),
+        "harness_telemetry = true\n",
+        "worker_programs = true\n",
+        'worker_program_services = "x"\n',
+        '[tracing.worker_program_services]\nwinter_cli = "winter-blizzard"\n',
     ],
 )
-def test_worker_program_services_refuses_a_bad_entry(tmp_path: Path, entry: str, complaint: str) -> None:
+def test_a_runner_only_tracing_key_fails_the_hub_load_naming_the_host_file(tmp_path: Path, block: str) -> None:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing.worker_program_services]\n{entry}\n'
-    )
-    with pytest.raises(HubConfigError, match=re.escape(complaint)):
+    header = "" if block.startswith("[") else "[tracing]\n"
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n\n{header}{block}')
+    with pytest.raises(HubConfigError, match=re.escape("blizzard-host.toml")):
         load_hub_config(root)
 
 
 @pytest.mark.unit
-def test_worker_program_services_refuses_a_non_table(tmp_path: Path) -> None:
+def test_the_hub_scaffold_renders_no_runner_only_tracing_key(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
-    (root / "blizzard-hub.toml").write_text(
-        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\nworker_program_services = "x"\n'
-    )
-    with pytest.raises(HubConfigError, match="must be a table"):
-        load_hub_config(root)
-
-
-@pytest.mark.unit
-def test_reserved_service_names_cover_each_daemons_own_name() -> None:
-    from blizzard.foundation.trace_export.config import RESERVED_SERVICE_NAMES
-    from blizzard.hub.domain.observability.tracing.attributes import CHUNK_SERVICE_NAME as CHUNK
-    from blizzard.hub.domain.observability.tracing.attributes import DEFAULT_SERVICE_NAME as HUB
-    from blizzard.runner.tracing.attributes import DEFAULT_SERVICE_NAME as RUNNER
-
-    assert {HUB, RUNNER, CHUNK} <= RESERVED_SERVICE_NAMES
+    text = HubConfig.scaffold(root).to_toml()
+    for key in ("worker_programs", "worker_program_services", "harness_telemetry"):
+        assert key not in text
 
 
 @pytest.mark.unit

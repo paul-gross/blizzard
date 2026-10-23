@@ -12,12 +12,12 @@ import pytest
 
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
 from tests.runner_fakes import FIXTURE_RUNNER_ID, REGISTERED_AT, SqlAlchemyRunnerStore, make_store, migrated_store_at
 from tests.runner_trace_leases import closed_lease
@@ -33,7 +33,7 @@ def _config(tmp_path: Path) -> tuple[RunnerConfig, SqlAlchemyRunnerStore]:
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
         hub_url="http://127.0.0.1:9",
-        tracing=TracingConfig(settle_seconds=0),
+        tracing=RunnerTracingConfig(settle_seconds=0),
     )
     config.data_dir.mkdir(parents=True, exist_ok=True)
     migrated_store_at(config.db_url)

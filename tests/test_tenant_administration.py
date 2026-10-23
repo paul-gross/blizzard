@@ -32,6 +32,7 @@ from blizzard.hub.domain.tenancy.administration import (
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
 from tests.support import (
@@ -223,7 +224,11 @@ def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: Hu
     interrupted = TenantAdministration(
         tenants=TenantAdministrationStore(
             hub_level_connections(hub.engine),
-            IdentityTransactions(hub_level_connections(hub.engine), RepoErrorFactory(structlog.get_logger("test"))),
+            IdentityTransactions(
+                hub_level_connections(hub.engine),
+                RepoErrorFactory(structlog.get_logger("test")),
+                HubStoreErrorFactory(structlog.get_logger("test")),
+            ),
         ),
         mint_packaged=mint_then_fail,
         changed=hub.hub_services.tenants.open_tenants.refresh,

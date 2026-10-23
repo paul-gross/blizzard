@@ -37,6 +37,12 @@ against billed spend only can now trip early on a runner that spends a subscript
 runner's `runner_ceiling_usd` and `chunk_cap_usd` against its recent `~`-marked spend in `blizzard hub status`, and
 raise any cap that recent figure would cross.
 
+### Runner-only tracing keys in the hub's configuration
+
+`worker_programs`, `worker_program_services` and `harness_telemetry` configure the runner's receiver; the hub never read
+them. If `blizzard-hub.toml`'s `[tracing]` table carries any of them, delete them, or move them to `blizzard-host.toml`
+where the runner reads them. The hub now refuses to start with one present, and its error names `blizzard-host.toml`.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

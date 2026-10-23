@@ -9,7 +9,16 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.events.broker import EventBroker
-from tests.support import HubHarness, build_hub, chunk_stores, drain_stream, emitted_events, make_ready, pointer_token
+from tests.support import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    drain_stream,
+    emitted_events,
+    ingest,
+    make_ready,
+    pointer_token,
+)
 
 pytestmark = pytest.mark.component
 
@@ -171,18 +180,19 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
     ]
 
 
-def _push_event_fact(hub: HubHarness, *, kind: str, severity: str, message: str = "message") -> dict:
+def _push_event_fact(
+    hub: HubHarness, *, kind: str, severity: str, message: str = "message", chunk_ids: tuple[str, ...] = ()
+) -> dict:
+    payload = {"severity": severity, "kind": kind, "message": message}
     resp = hub.client.post(
         "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [
-                {
-                    "seq": 1,
-                    "kind": "event.recorded",
-                    "payload": {"severity": severity, "kind": kind, "message": message},
-                }
-            ],
+                {"seq": seq, "kind": "event.recorded", "payload": {**payload, "chunk_id": chunk_id}}
+                for seq, chunk_id in enumerate(chunk_ids, start=1)
+            ]
+            or [{"seq": 1, "kind": "event.recorded", "payload": payload}],
         },
     )
     assert resp.status_code == 200, resp.text
@@ -227,6 +237,24 @@ def test_event_recorded_with_a_declared_kind_and_its_declared_severity_is_applie
     assert len(events) == 1
     assert events[0]["kind"] == "worker-lost"
     assert events[0]["severity"] == "critical"
+
+
+def test_event_recorded_publishes_the_project_of_its_chunk_and_keeps_the_id_of_one_that_is_gone(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])
+    since = hub.events.latest_id()
+
+    ack = _push_event_fact(hub, kind="worker-lost", severity="critical", chunk_ids=(chunk_id, "ch_gone"))
+
+    assert ack["applied"] == [1, 2]
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "event-logged"]
+    by_chunk = {frame["chunk_id"]: frame.get("project_id") for frame in frames}
+    assert by_chunk["ch_gone"] is None
+    assert by_chunk[chunk_id] is not None
+    rows = hub.client.get("/api/events").json()["events"]
+    assert {row["chunk_id"] for row in rows} == {chunk_id, "ch_gone"}
 
 
 def test_a_legacy_severity_outside_the_vocabulary_is_served_narrowed_to_its_kinds_declared_one(

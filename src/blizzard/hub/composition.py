@@ -733,6 +733,8 @@ class HubCore:
     :func:`build_hub_core`. A tenant's stores are opened through :meth:`open`."""
 
     store_connections: HubStoreConnections
+    #: The factory the connections wrap a driver fault through, shared with every adapter that opens its own.
+    store_errors: HubStoreErrorFactory
     hub_scoped_reads: HubScopedReads
     auth_errors: RepoErrorFactory
     users: UserRepository
@@ -827,6 +829,7 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
 
     return HubCore(
         store_connections=store_connections,
+        store_errors=store_errors,
         hub_scoped_reads=hub_scoped_reads,
         auth_errors=auth_errors,
         users=UserRepository(store_connections, auth_errors),
@@ -929,7 +932,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # Recording an event is what publishes it (``bzh:operational-event-log``) — one
     # service, shared by every event-authoring call site below, over the same store and
     # broker instance every other collaborator holds.
-    event_log = EventLogService(events=chunk_events, publisher=events, chunks=chunk_record)
+    event_log = EventLogService(events=chunk_events, publisher=events)
     hub_node = HubNodeExecutor(
         facts=chunk_facts,
         artifacts=chunk_artifacts,
@@ -1082,6 +1085,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         delete=stores.delete,
         facts=FactIngestService(
             facts=chunk_facts,
+            chunks=chunk_record,
             route=chunk_route,
             escalations=chunk_escalations,
             questions=chunk_questions,
@@ -1232,6 +1236,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         close_drain=CloseIntentDrainer(
             delivery=chunk_delivery,
             artifacts=chunk_artifacts,
+            chunks=chunk_record,
             events=event_log,
             work_sources=work_sources,
             clock=clock,
@@ -1440,7 +1445,7 @@ def build_services(
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     memberships = MembershipRepository(store_connections)
     hub_admin_store = HubAdminRepository(store_connections)
-    identity_transactions = IdentityTransactions(store_connections, auth_errors)
+    identity_transactions = IdentityTransactions(store_connections, auth_errors, core.store_errors)
     auth = AuthService(
         users=user_store,
         identities=identity_store,

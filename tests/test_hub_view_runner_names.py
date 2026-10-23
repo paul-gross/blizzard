@@ -152,6 +152,7 @@ def test_an_id_the_registry_does_not_hold_reads_unnamed(tmp_path: Path) -> None:
         kind="attempt-failed",
         runner_id="rn_gone",
         chunk_id=None,
+        project_id=None,
         lease_id=None,
         node_name=None,
         message="boom",

@@ -23,6 +23,8 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -139,6 +141,7 @@ class CloseIntentDrainer:
         *,
         delivery: IWriteChunkDeliveryRepository,
         artifacts: IReadChunkArtifactsRepository,
+        chunks: IReadChunkRecordRepository,
         events: EventLogService,
         work_sources: IWorkSourceRegistry,
         clock: IClock,
@@ -147,6 +150,7 @@ class CloseIntentDrainer:
         self._delivery = delivery
         self._artifacts = artifacts
         self._public_url = public_url
+        self._chunks = chunks
         self._events = events
         self._work_sources = work_sources
         self._clock = clock
@@ -165,11 +169,21 @@ class CloseIntentDrainer:
             for chunk_id in chunk_ids
         }
 
+    def _projects(self, chunk_ids: set[str]) -> dict[str, ProjectId]:
+        """The project of each of the pass's chunks, in one batched read (``bzh:bulk-reconstitution``); a chunk the
+        record no longer holds is absent."""
+        if not chunk_ids:
+            return {}
+        chunks = self._chunks.get_many(sorted(chunk_ids))
+        return {chunk_id: chunk.project_id for chunk_id, chunk in chunks.items() if chunk.project_id is not None}
+
     def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
         """Attempt each of ``due`` — this tenant's due intents, in intent order — counting each
         outcome into ``tally``. A per-ref failure is caught and counted rather than raised: a
         ``gone`` or ``failed`` outcome is itself an informative result."""
-        traces = self._traces({intent.chunk_id for intent in due})
+        chunk_ids = {intent.chunk_id for intent in due}
+        traces = self._traces(chunk_ids)
+        projects = self._projects(chunk_ids)
         for intent in due:
             closer = self._work_sources.closer(intent.ref.source)
             if closer is None:
@@ -198,6 +212,7 @@ class CloseIntentDrainer:
                 kind=event.kind,
                 runner_id=None,
                 chunk_id=intent.chunk_id,
+                project_id=projects.get(intent.chunk_id),
                 lease_id=None,
                 node_name=None,
                 message=event.message,

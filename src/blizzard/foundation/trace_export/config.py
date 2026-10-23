@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from blizzard.foundation.cli_spans import SCOPE_NAME
-from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
-from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, OPEN_TABLE, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
-
-RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", "blizzard-chunk", CLI_SERVICE_NAME})
 
 
 @domain_model
 @dataclass(frozen=True)
 class TracingConfig:
-    """Resolved ``[tracing]`` config — the trace sweep's own knobs, each an integer
+    """Resolved ``[tracing]`` config every daemon shares — the trace sweep's own knobs, each an integer
     of seconds or a count with a working default — plus the platform-span switch and its root
-    sample ratio. An OTLP endpoint in OpenTelemetry's own environment variables is the other switch."""
+    sample ratio. An OTLP endpoint in OpenTelemetry's own environment variables is the other switch. The keys only
+    the runner acts on live on its :class:`~blizzard.runner.tracing.config.RunnerTracingConfig`."""
 
     sweep_seconds: int = 60
     #: How long a closed unit must have been closed before it is exported; 0 exports at once.
@@ -28,12 +23,6 @@ class TracingConfig:
     #: Platform spans run only with this on *and* an OTLP endpoint configured.
     platform: bool = False
     platform_sample_ratio: float = 0.01
-    #: Worker programs' own spans reach the runner's receiver; takes effect only alongside ``platform``.
-    worker_programs: bool = False
-    #: Scope name to the ``service.name`` its kept worker-program or Claude Code telemetry leaves with.
-    worker_program_services: Mapping[str, str] = field(default_factory=dict)
-    #: Claude Code workers export all three signals to the runner's receivers; needs ``platform``.
-    harness_telemetry: bool = False
 
     @classmethod
     def of(cls, tracing: ConfigView, invalid: type[Exception]) -> TracingConfig:
@@ -49,27 +38,7 @@ class TracingConfig:
             ),
             platform=cls._boolean(tracing, "platform", defaults.platform, invalid),
             platform_sample_ratio=cls._ratio(tracing, "platform_sample_ratio", defaults.platform_sample_ratio, invalid),
-            worker_programs=cls._boolean(tracing, "worker_programs", defaults.worker_programs, invalid),
-            worker_program_services=cls._services(tracing, invalid),
-            harness_telemetry=cls._boolean(tracing, "harness_telemetry", defaults.harness_telemetry, invalid),
         )
-
-    @staticmethod
-    def _services(tracing: ConfigView, invalid: type[Exception]) -> dict[str, str]:
-        table = tracing.get("worker_program_services", {})
-        if not isinstance(table, dict):
-            raise invalid(f"tracing.worker_program_services must be a table, got {table!r}")
-        for scope, name in tracing.table("worker_program_services").items():
-            entry = f"tracing.worker_program_services.{scope}"
-            if not scope.strip():
-                raise invalid("tracing.worker_program_services has an empty scope name")
-            if scope == SCOPE_NAME:
-                raise invalid(f"{entry} maps the CLI scope, whose service.name is fixed")
-            if not isinstance(name, str) or not name.strip():
-                raise invalid(f"{entry} must be a non-empty string, got {name!r}")
-            if name in RESERVED_SERVICE_NAMES:
-                raise invalid(f"{entry} must not be the reserved service name {name!r}")
-        return dict(table)
 
     @staticmethod
     def _boolean(tracing: ConfigView, key: str, default: bool, invalid: type[Exception]) -> bool:
@@ -97,42 +66,36 @@ class TracingConfig:
             raise invalid(f"tracing.{key} must be {bound}, got {value!r}")
         return value
 
-    def to_toml(self, *, unit: str, receiver: bool = False) -> list[str]:
+    def to_toml(self, *, unit: str) -> list[str]:
         """The ``[tracing]`` block. Every knob is rendered — commented out at its default,
         live once overridden — so the file shows an operator what the values ARE."""
-        defaults = TracingConfig()
-        lines = [
+        return [self.banner(unit), "[tracing]\n", *self.knob_lines(SHARED_KEYS)]
+
+    @staticmethod
+    def banner(unit: str, notes: str = "") -> str:
+        """The comment block above ``[tracing]``; ``notes`` is a daemon's own lines on the keys only it acts on."""
+        return (
             "\n# Trace knobs. Tracing turns on only through OpenTelemetry's own variables\n"
             "# (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT); the\n"
             "# sweep knobs tune fleet-trace export once it runs. Seconds, except batch_limit\n"
             f"# ({unit} per export). platform = true also emits platform spans (requests,\n"
             "# queries, outbound calls), roots kept at platform_sample_ratio, 0 to 1.\n"
-            "# worker_programs = true (with platform) also lets a worker's own programs send\n"
-            "# spans to the runner; a third-party program may record bodies or parameters.\n"
-            "# harness_telemetry = true (with platform) points a Claude Code worker's metrics, logs\n"
-            "# and traces at the runner for each signal you have not configured; its identity\n"
-            "# attributes (user.email, organization.id) are exported with them.\n"
-            f"{_SERVICES_NOTE if receiver else ''}"
-            "# Uncomment to override.\n",
-            "[tracing]\n",
-        ]
-        for key in _KEYS:
+            f"{notes}"
+            "# Uncomment to override.\n"
+        )
+
+    def knob_lines(self, keys: tuple[str, ...]) -> list[str]:
+        """``keys`` rendered one line each: commented out at the default, live once overridden."""
+        defaults = type(self)()
+        lines = []
+        for key in keys:
             value = getattr(self, key)
             literal = toml_literal(value)
             lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
-        if self.worker_program_services:
-            lines.append("\n[tracing.worker_program_services]\n")
-            lines.extend(
-                f"{json.dumps(scope)} = {json.dumps(name)}\n" for scope, name in self.worker_program_services.items()
-            )
-        elif receiver:
-            lines.append('\n# [tracing.worker_program_services]\n# winter_cli = "winter-blizzard"\n')
         return lines
 
 
-_SERVICES_NOTE = "# [tracing.worker_program_services] names that telemetry's service.name by scope.\n"
-
-_KEYS = (
+SHARED_KEYS = (
     "sweep_seconds",
     "settle_seconds",
     "batch_limit",
@@ -140,14 +103,13 @@ _KEYS = (
     "replay_max_window",
     "platform",
     "platform_sample_ratio",
-    "worker_programs",
-    "harness_telemetry",
 )
 
 
 _DEFAULTS = TracingConfig()
 
-#: Every ``[tracing]`` key, declared here beside the parser that reads it; each daemon's registry includes them.
+#: Every ``[tracing]`` key every daemon shares, declared here beside the parser that reads it; each daemon's registry
+#: includes them.
 TRACING_KEYS: tuple[ConfigKey, ...] = (
     ConfigKey("tracing", TABLE),
     ConfigKey("tracing.sweep_seconds", INTEGER, default=_DEFAULTS.sweep_seconds),
@@ -157,9 +119,6 @@ TRACING_KEYS: tuple[ConfigKey, ...] = (
     ConfigKey("tracing.replay_max_window", INTEGER, default=_DEFAULTS.replay_max_window),
     ConfigKey("tracing.platform", BOOLEAN, default=_DEFAULTS.platform),
     ConfigKey("tracing.platform_sample_ratio", NUMBER, default=_DEFAULTS.platform_sample_ratio),
-    ConfigKey("tracing.worker_programs", BOOLEAN, default=_DEFAULTS.worker_programs),
-    ConfigKey("tracing.worker_program_services", OPEN_TABLE),
-    ConfigKey("tracing.harness_telemetry", BOOLEAN, default=_DEFAULTS.harness_telemetry),
 )
 
 

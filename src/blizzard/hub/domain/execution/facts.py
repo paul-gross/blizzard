@@ -7,7 +7,7 @@ lands on (``bzh:controller-read-only``) and stamps landing time from the injecte
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,11 +28,12 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, ChunkFacts, NodeQuestion, QuestionDelivery
+from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
@@ -126,6 +127,7 @@ class FactIngestService:
         self,
         *,
         facts: IReadChunkFactsRepository,
+        chunks: IReadChunkRecordRepository,
         route: IWriteChunkRouteRepository,
         escalations: IWriteChunkEscalationsRepository,
         questions: IWriteChunkQuestionsRepository,
@@ -136,6 +138,7 @@ class FactIngestService:
         clock: IClock,
     ) -> None:
         self._facts = facts
+        self._chunks = chunks
         self._route = route
         self._escalations = escalations
         self._questions = questions
@@ -164,12 +167,18 @@ class FactIngestService:
         route_ended: list[int] = []
         row_id_by_seq: dict[int, int] = {}
 
+        chunks = self._event_chunks([fact for fact in pushed if fact.seq > mark])
         for fact in sorted(pushed, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
             ok, row_id = self._apply(
-                runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode, runner_name=runner_name
+                runner_id,
+                fact.kind,
+                fact.payload,
+                route_token_mode=route_token_mode,
+                runner_name=runner_name,
+                chunks=chunks,
             )
             if not ok:
                 # A contract mismatch, not an idempotency skip: do not advance the mark
@@ -203,6 +212,18 @@ class FactIngestService:
             row_id_by_seq=row_id_by_seq,
         )
 
+    def _event_chunks(self, fresh: Sequence[PushedFact]) -> Mapping[str, Chunk]:
+        """The chunk each of the push's fresh ``event.recorded`` facts names, in one batched read
+        (``bzh:bulk-reconstitution``); a chunk the record no longer holds is absent."""
+        chunk_ids = {
+            chunk_id
+            for fact in fresh
+            if fact.kind == EVENT_RECORDED and (chunk_id := Payload(fact.payload).text("chunk_id")) is not None
+        }
+        if not chunk_ids:
+            return {}
+        return self._chunks.get_many(sorted(chunk_ids))
+
     def _route_ended(self, fact: PushedFact) -> bool:
         """Whether a rejected fact was refused because its chunk has no live route: a route-token-gated
         kind whose chunk's route is gone, whichever of the gate or the write fence refused it."""
@@ -226,6 +247,7 @@ class FactIngestService:
         payload: dict[str, object],
         *,
         route_token_mode: str,
+        chunks: Mapping[str, Chunk],
         runner_name: str | None = None,
     ) -> tuple[bool, int | None]:
         """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
@@ -311,11 +333,13 @@ class FactIngestService:
             if wire_kind is None:
                 _log.warning("event fact not admitted to the log", kind=fact.require_text("kind"))
                 return False, None
+            chunk = chunks.get(fact.text("chunk_id") or "")
             event_id = self._events.record(
                 kind=wire_kind,
                 runner_id=runner_id,
                 runner_name=runner_name,
                 chunk_id=fact.text("chunk_id"),
+                project_id=chunk.project_id if chunk is not None else None,
                 lease_id=fact.text("lease_id"),
                 node_name=fact.text("node_name"),
                 message=fact.string("message"),

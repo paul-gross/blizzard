@@ -11,7 +11,7 @@ import pytest
 
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
-from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.projects.model import ProjectId
 
 pytestmark = pytest.mark.unit
 
@@ -48,6 +48,7 @@ class _FakeEvents:
 @dataclass
 class _FakePublisher:
     published: list[tuple[str, str]] = field(default_factory=list)
+    projects: list[str | None] = field(default_factory=list)
 
     def publish_event_logged(
         self,
@@ -61,6 +62,7 @@ class _FakePublisher:
         project_id: str | None = None,
     ) -> int:
         self.published.append((severity, kind))
+        self.projects.append(project_id)
         return len(self.published)
 
 
@@ -68,15 +70,7 @@ def _service(events: _FakeEvents, publisher: _FakePublisher) -> EventLogService:
     return EventLogService(
         events=cast(IWriteChunkEventsRepository, events),
         publisher=cast(IEventLogPublisher, publisher),
-        chunks=cast(IReadChunkRecordRepository, _NoChunks()),
     )
-
-
-class _NoChunks:
-    """A chunk record holding no chunk, so a frame names no project."""
-
-    def get(self, chunk_id: str) -> None:
-        return None
 
 
 def test_record_derives_severity_from_the_closed_vocabulary() -> None:
@@ -87,6 +81,7 @@ def test_record_derives_severity_from_the_closed_vocabulary() -> None:
         kind="worker-lost",
         runner_id="r1",
         chunk_id="ch_1",
+        project_id=ProjectId("prj_1"),
         lease_id="lease_1",
         node_name="build",
         message="lost",
@@ -95,3 +90,24 @@ def test_record_derives_severity_from_the_closed_vocabulary() -> None:
     )
 
     assert events.rows == [_RecordedRow(severity="critical", kind="worker-lost")]
+
+
+def test_the_frame_carries_the_project_the_caller_passed_and_a_row_naming_a_gone_chunk_still_records() -> None:
+    events, publisher = _FakeEvents(), _FakePublisher()
+    service = _service(events, publisher)
+
+    for project_id in (ProjectId("prj_1"), None):
+        service.record(
+            kind="worker-lost",
+            runner_id="r1",
+            chunk_id="ch_gone",
+            project_id=project_id,
+            lease_id=None,
+            node_name=None,
+            message="lost",
+            detail=None,
+            at=_AT,
+        )
+
+    assert publisher.projects == [ProjectId("prj_1"), None]
+    assert [row.kind for row in events.rows] == ["worker-lost", "worker-lost"]

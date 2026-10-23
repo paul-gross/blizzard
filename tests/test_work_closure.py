@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -29,6 +30,7 @@ from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryReposito
 from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
@@ -65,7 +67,6 @@ def _event_log(hub: HubHarness) -> EventLogService:
     return EventLogService(
         events=cast(IWriteChunkEventsRepository, hub.services.chunks.events),
         publisher=hub.events,
-        chunks=hub.services.chunks.record,
     )
 
 
@@ -255,6 +256,7 @@ class _RecordedEvent:
     chunk_id: str | None
     message: str
     detail: dict | None
+    project_id: str | None = None
 
 
 class _FakeCloseChunks:
@@ -272,6 +274,13 @@ class _FakeCloseChunks:
         self._written: set[tuple[str, str, str, str]] = set()
         self.delivery_reads: list[list[str]] = []
         self.sources: dict[str, DeliverySources] = {}
+        self.projects: dict[str, str] = {}
+        self.record_reads: list[list[str]] = []
+
+    def get_many(self, chunk_ids: list[str]) -> dict[str, SimpleNamespace]:
+        """The record's batched read, holding only the chunks ``projects`` names."""
+        self.record_reads.append(list(chunk_ids))
+        return {c: SimpleNamespace(project_id=self.projects[c]) for c in chunk_ids if c in self.projects}
 
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
         self.delivery_reads.append(list(chunk_ids))
@@ -301,6 +310,7 @@ class _FakeCloseChunks:
         kind: EventLogKind,
         runner_id: str,
         chunk_id: str | None,
+        project_id: str | None,
         lease_id: str | None,
         node_name: str | None,
         message: str,
@@ -309,7 +319,12 @@ class _FakeCloseChunks:
     ) -> int:
         self.events.append(
             _RecordedEvent(
-                severity=EVENT_LOG_SEVERITY[kind], kind=kind, chunk_id=chunk_id, message=message, detail=detail
+                severity=EVENT_LOG_SEVERITY[kind],
+                kind=kind,
+                chunk_id=chunk_id,
+                project_id=project_id,
+                message=message,
+                detail=detail,
             )
         )
         return len(self.events)
@@ -350,6 +365,7 @@ def _drainer(
         CloseIntentDrainer(
             delivery=_as_delivery(chunks),
             artifacts=cast(IReadChunkArtifactsRepository, chunks),
+            chunks=cast(IReadChunkRecordRepository, chunks),
             events=_as_events(chunks),
             work_sources=registry,
             clock=clock,
@@ -594,12 +610,30 @@ def test_sweep_hands_each_closer_the_trace_of_its_chunks_landing_from_one_batche
     assert closer.traces[2] is None  # a hand-completed chunk landed nothing to name
 
 
+def test_sweep_resolves_the_projects_of_its_chunks_in_one_batched_read_and_names_none_for_a_gone_chunk() -> None:
+    present = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="1"))
+    also_present = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="default", ref="2"), intent_id=2)
+    gone = PendingCloseIntent(chunk_id="ch_2", ref=WorkRef(source="default", ref="3"), intent_id=3)
+    chunks = _FakeCloseChunks([present, also_present, gone])
+    chunks.projects["ch_1"] = "prj_widget"
+
+    _drainer(chunks, {"default": FakeCloser()}).sweep()
+
+    assert chunks.record_reads == [["ch_1", "ch_2"]]
+    assert [(e.chunk_id, e.project_id) for e in chunks.events] == [
+        ("ch_1", "prj_widget"),
+        ("ch_1", "prj_widget"),
+        ("ch_2", None),
+    ]
+
+
 def test_sweep_reads_no_delivery_when_no_intent_is_due() -> None:
     chunks = _FakeCloseChunks([])
 
     _drainer(chunks, {"default": FakeCloser()}).sweep()
 
     assert chunks.delivery_reads == []
+    assert chunks.record_reads == []
 
 
 def test_sweep_of_a_skipped_intent_ticks_the_same_backoff_as_a_failed_one() -> None:
@@ -627,6 +661,7 @@ def test_sweep_against_a_real_store_is_idempotent_on_a_second_pass(tmp_path: Pat
         CloseIntentDrainer(
             delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
             artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
@@ -661,6 +696,7 @@ def test_sweep_retries_a_failed_intent_on_the_next_pass_until_it_converges(tmp_p
         CloseIntentDrainer(
             delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
             artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
@@ -696,6 +732,7 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
         CloseIntentDrainer(
             delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
             artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,
@@ -733,6 +770,7 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
         CloseIntentDrainer(
             delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
             artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
             events=_event_log(hub),
             work_sources=registry,
             clock=hub.clock,

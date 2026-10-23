@@ -42,6 +42,7 @@ from blizzard.hub.auth.memberships import (
 from blizzard.hub.auth.models import ResolvedIdentity, User
 from blizzard.hub.auth.permissions import permissions_for
 from blizzard.hub.store import schema as s
+from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.tenancy import TenantId
 from tests.support import default_tenant, hub_level_connections, hub_migration_prototype
 
@@ -244,7 +245,7 @@ def members(engine: sa.Engine, tenants: tuple[TenantId, TenantId]) -> TenantMemb
         memberships=repo,
         hub_admins=HubAdminRepository(connections),
         users=users,
-        transactions=IdentityTransactions(connections, errors),
+        transactions=IdentityTransactions(connections, errors, HubStoreErrorFactory(structlog.get_logger("test"))),
         auth_facts=AuthFactsService(facts=AuthFactsRepository(connections), clock=clock),
         clock=clock,
     )

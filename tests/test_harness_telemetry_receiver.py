@@ -21,12 +21,12 @@ from blizzard.foundation.platform_tracing.received import (
     rejected_data_points,
     rejected_log_records,
 )
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_ids import chunk_trace_id
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import Lease
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.exclusion import is_excluded
 from blizzard.runner.tracing.received_export import (
     DisabledReceivedTelemetryExport,
@@ -328,15 +328,15 @@ def test_a_log_record_keeps_its_trace_context_only_inside_the_leases_chunk_trace
 
 @pytest.mark.parametrize(
     "config",
-    [TracingConfig(), TracingConfig(harness_telemetry=True), TracingConfig(platform=True)],
+    [RunnerTracingConfig(), RunnerTracingConfig(harness_telemetry=True), RunnerTracingConfig(platform=True)],
 )
-def test_the_export_handle_is_off_unless_both_switches_are_on(config: TracingConfig) -> None:
+def test_the_export_handle_is_off_unless_both_switches_are_on(config: RunnerTracingConfig) -> None:
     handle = build_received_telemetry_export(config, _ENDPOINT, resource={"service.name": "blizzard-runner"})
     assert isinstance(handle, DisabledReceivedTelemetryExport)
 
 
 def test_the_export_handle_is_off_without_an_otlp_endpoint() -> None:
-    config = TracingConfig(platform=True, harness_telemetry=True)
+    config = RunnerTracingConfig(platform=True, harness_telemetry=True)
     assert isinstance(build_received_telemetry_export(config, {}, resource={}), DisabledReceivedTelemetryExport)
 
 
@@ -345,7 +345,7 @@ def test_a_url_attribute_leaves_without_its_query_string() -> None:
 
     exporter = InMemoryLogRecordExporter()
     handle = build_received_telemetry_export(
-        TracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, log_exporter=exporter
+        RunnerTracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, log_exporter=exporter
     )
     handle.forward_logs(
         [_record(attributes={"url.full": "https://x.test/p?token=secret#f", "url.query": "token=s"})], "s"
@@ -389,7 +389,7 @@ def test_every_metric_kind_encodes_through_the_sdks_own_protobuf_encoder() -> No
 
     capture = Capture()
     handle = build_received_telemetry_export(
-        TracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, metric_exporter=capture
+        RunnerTracingConfig(platform=True, harness_telemetry=True), _ENDPOINT, resource={}, metric_exporter=capture
     )
     handle.forward_metrics(
         [

@@ -19,6 +19,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.cli.runtime import packaged_version_window
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
@@ -78,7 +79,15 @@ def load_host_config_for_store(root: Path, *, host: str | None = None, port: int
 
 def hub_runtime_of(root: Path, *, allow_external_db: bool = False) -> hub_runtime.Runtime:
     """The hub runtime at ``root`` with the suite's inputs."""
-    return hub_runtime.Runtime(root, SystemClock(), allow_external_db, flag_registry=FLAG_REGISTRY, strict=STRICT)
+    clock = SystemClock()
+    return hub_runtime.Runtime(
+        root,
+        clock,
+        allow_external_db,
+        open_event_log=system_event_log_opener(clock),
+        flag_registry=FLAG_REGISTRY,
+        strict=STRICT,
+    )
 
 
 def init_hub(root: Path, *, allow_external_db: bool = False) -> HubConfig:

@@ -30,7 +30,6 @@ from blizzard.foundation.flags import (
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.config import (
     DEFAULT_AUTH_HUB_ROLE,
     DEFAULT_BASE_BRANCH,
@@ -89,6 +88,7 @@ from blizzard.runner.host_layout import (
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
 #: The name a pre-host runner read its one token under; a host reads ``BZ_HUB_TOKEN_<NAME>`` per runner.
@@ -300,7 +300,7 @@ class HostConfig:
     session_secret_env: str = DEFAULT_SESSION_SECRET_ENV
     session_secret: bytes = field(default=b"", repr=False)
     auth: Auth = field(default_factory=lambda: Auth.of(None))
-    tracing: TracingConfig = field(default_factory=TracingConfig)
+    tracing: RunnerTracingConfig = field(default_factory=RunnerTracingConfig)
     #: The ``[flags]`` overrides, laid onto every runner's config.
     flags: Mapping[str, bool] = field(default_factory=dict)
     #: The ``[flags]`` as the load resolved them, applied by composition; ``None`` for a config built in code.
@@ -686,7 +686,7 @@ class HostConfig:
             if auth.users:
                 lines.append("\n[auth.users]\n")
                 lines.extend(f"{json.dumps(name)} = {json.dumps(role)}\n" for name, role in auth.users)
-        lines.extend(self.tracing.to_toml(unit="closed leases", receiver=True))
+        lines.extend(self.tracing.to_toml(unit="closed leases"))
         lines.append(_transcripts_toml(self.transcripts))
         if self.worker_stdout.table.body:
             lines.append("\n[worker_stdout]\n")
@@ -808,7 +808,7 @@ def _parse(
         "trusted_proxies", lambda: TrustedProxies.entries(document.get("trusted_proxies"), ConfigError), ()
     )
     tracing = errors.attempt(
-        "[tracing]", lambda: TracingConfig.of(document.table("tracing"), ConfigError), TracingConfig()
+        "[tracing]", lambda: RunnerTracingConfig.of(document.table("tracing"), ConfigError), RunnerTracingConfig()
     )
     flags: Mapping[str, bool] = {}
     if resolved is not None:

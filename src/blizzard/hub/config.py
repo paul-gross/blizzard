@@ -73,6 +73,9 @@ RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 
+# `[tracing]` keys only the runner acts on: a hub file carrying one fails the load, naming the file that owns it.
+RUNNER_ONLY_TRACING_KEYS = ("worker_programs", "worker_program_services", "harness_telemetry")
+
 # `[[auth.oauth.provider]]` required keys — structural presence only;
 # secret resolution and `type`/`issuer` validation happen where a provider is consumed.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
@@ -734,6 +737,12 @@ class HubConfig:
                 f"[[{RENAMED_WORK_SOURCE_KEY}]] is now [[work_source]] — rename the block(s) in "
                 f"{path}. Leaving the old key would configure zero external work sources: "
                 "every board label for a pointer outside the built-in `hub` source would render null."
+            )
+        runner_only = [key for key in RUNNER_ONLY_TRACING_KEYS if key in raw.table("tracing")]
+        if runner_only:
+            raise ConfigError(
+                f"[tracing] {', '.join(runner_only)} in {path} belong{'s' if len(runner_only) == 1 else ''} to the "
+                "runner — the hub reads none of them; delete them here, or set them in blizzard-host.toml."
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
         env = Env()

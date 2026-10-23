@@ -11,8 +11,8 @@ from typing import Any, Protocol
 
 from blizzard.foundation.platform_tracing.handle import platform_tracing_enabled
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
+from blizzard.runner.tracing.config import RunnerTracingConfig
 
 
 class IReceivedTelemetryExport(Protocol):
@@ -42,7 +42,7 @@ class DisabledReceivedTelemetryExport:
 
 
 def build_received_telemetry_export(
-    config: TracingConfig,
+    config: RunnerTracingConfig,
     environ: Mapping[str, str],
     *,
     resource: Mapping[str, str],
