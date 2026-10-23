@@ -88,7 +88,7 @@ it derives, so another name's token is not found and init adds a second runner. 
 
 `--tenant` is needed only when you belong to several tenants.
 
-Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL` in the shell — and on a hub with
+Operator verbs take the hub by URL — `--hub-url` on each call, or `BZ_HUB_URL` in the shell — and, for a tenant-scoped verb, `--tenant` or `BZ_HUB_TENANT` — and on a hub with
 `auth.mode = "oauth"`, `blizzard hub login --hub-url …` comes first.
 
 `add` prints the runner's id and, once, its token as a `BZ_HUB_TOKEN_<NAME>=…` line, the runner's name upper-cased with

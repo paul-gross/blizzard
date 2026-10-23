@@ -9,7 +9,7 @@ import click
 from blizzard.cli.collaborators import CliCollaborators, ClientFactory
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.foundation.operator_sessions import IReadSessionStore
-from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_URL, CliContext
+from blizzard.hub.cli.context import DEFAULT_HUB_URL, ENV_HUB_TENANT, ENV_HUB_URL, CliContext
 
 
 class HubCommand(click.Command):
@@ -38,8 +38,9 @@ class HubCommand(click.Command):
         return click.Option(
             ["--tenant", "tenant"],
             default=None,
+            envvar=ENV_HUB_TENANT,
             metavar="TENANT_ID",
-            help="The tenant to act in, by id; needed only when you belong to several.",
+            help=f"The tenant to act in, by id (default ${ENV_HUB_TENANT}); needed only when you belong to several.",
         )
 
     def connected(self, params: list[click.Parameter]) -> list[click.Parameter]:
