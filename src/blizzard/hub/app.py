@@ -393,11 +393,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     and drive the sweeps across the app's lifetime. The tasks are created here — not in
     :func:`build_hosted_app` — because this is the one place that runs for every app the
     ``lifespan`` fires for."""
+    services: HubServices | None = app.state.services
+    if services is not None:
+        services.action_loop.start()
     tasks = [asyncio.create_task(sweep.run()) for sweep in Sweep.all(app)]
     yield
     app.state.shutdown.set()
     for task in tasks:
         await task
+    if services is not None:
+        services.action_loop.stop()
 
 
 def create_app(
@@ -600,6 +605,7 @@ def build_hosted_app(
         egress=config.egress,
         egress_path_key=_egress_path_key(config.egress),
         annotation_interval_seconds=config.annotation_interval_seconds,
+        action_pass_seconds=config.action_pass_seconds,
         version_window=version_window,
     )
     # Only once the store is at the expected schema head: a store mid-migration must

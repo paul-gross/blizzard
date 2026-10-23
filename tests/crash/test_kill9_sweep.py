@@ -109,6 +109,7 @@ _DEDICATED_PREFIXES = (
     "abandon.",
     "pause.",
     "hubnode.",
+    "action.",
     "migrate.",
     "attach.",
     "nudge.",
@@ -132,6 +133,9 @@ _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
 # hub's synchronous executor; each is swept by its own dedicated test below.
 _HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
 _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
+# `action.*` fires inside the hub's action pass driver, as a pass's effect is written. Swept by
+# `test_kill9_at_action_crash_point`.
+_ACTION_POINTS = [p for p in _ALL_POINTS if p.startswith("action.")]
 # `migrate.*` fires inside the HUB on a cross-graph judgement choice. Swept by
 # `test_kill9_at_migrate_crash_point`.
 _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
@@ -218,6 +222,7 @@ _HUBNODE_CI_SUBSET = ("hubnode.after-step.before-marker",)
 # The hub-node pending CI subset (#66): the narrower between-polls window carved out of the
 # `hubnode.*` family above; its lone member is its own CI representative.
 _HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
+_ACTION_CI_SUBSET = ("action.after-effect.before-write",)
 
 # The migrate CI subset (#90): the family's lone member is its own CI representative.
 _MIGRATE_CI_SUBSET = ("migrate.after-record.before-response",)
@@ -290,6 +295,7 @@ _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
 _PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
 _HUBNODE_SWEEP = _select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET)
 _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET)
+_ACTION_SWEEP = _select(_ACTION_POINTS, _ACTION_CI_SUBSET)
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
 _ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
 _NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
@@ -320,6 +326,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_PAUSE_POINTS, _PAUSE_CI_SUBSET))
         | set(_select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET))
         | set(_select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET))
+        | set(_select(_ACTION_POINTS, _ACTION_CI_SUBSET))
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
         | set(_select(_ATTACH_POINTS, _ATTACH_CI_SUBSET))
         | set(_select(_NUDGE_POINTS, _NUDGE_CI_SUBSET))
@@ -3006,6 +3013,105 @@ def _repo_pull_count(forge: httpx2.Client, repo: str) -> int:
     resp = forge.get(f"/repos/{OWNER}/{repo}/pulls", params={"state": "all"})
     resp.raise_for_status()
     return len(resp.json())
+
+
+# --- Hub action pass — the action.* effect-write windows ---
+
+
+# Both test fences, on every start: a hub admits the test actions only beside the crash fence, and a fence
+# without an armed point never kills.
+_TEST_ACTIONS_ENV = {"BLIZZARD_TEST_ACTIONS": "1", "BLIZZARD_CRASH_FENCE": "1"}
+
+
+def _action_graph_yaml(landed_file: str) -> str:
+    """A ``build -> deliver(action) -> done`` graph whose ``deliver`` takes ``test.sequence``: each pass records
+    a ``test-sequence/<n>`` marker through the effect sink, then answers ``done``."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file),
+                "judgement": {
+                    "prompt": "verdict('pass', 'the mock harness committed the change; checks are green')\n",
+                    "choices": {"pass": {"description": "Committed and green.", "to": "deliver"}},
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "action": "test.sequence",
+                "with": {"choices": ["done"]},
+                "judgement": {
+                    "choices": {
+                        "done": {"description": "Delivered; finish.", "to": "done"},
+                        "failure": {"description": "The pass failed; back to build.", "to": "build"},
+                    },
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+@pytest.mark.parametrize("point", _ACTION_SWEEP)
+def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` while a pass's effect is written recovers: a crash before the effect is durable re-takes
+    the pass and writes it once, a crash after it finds it durable and the next pass counts past it, and no
+    hub-execution slot leaks."""
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(
+        hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, extra_env=_TEST_ACTIONS_ENV
+    )
+    runner_proc = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        minted = hub.post("/api/graphs", json={"definition_yaml": _action_graph_yaml(landed_file)})
+        assert minted.status_code == 201, minted.text
+        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an action sweep"})
+        assert issue.status_code == 201, issue.text
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        code = wait_death(hub_proc)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+        # Restart unarmed: the runner re-flushes the build completion, whose replay re-drives the hub node.
+        hub_proc = start_hub(
+            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, extra_env=_TEST_ACTIONS_ENV
+        )
+        await_http(hub, "/api/health", proc=hub_proc)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
+
+        names = [a["name"] for a in hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
+        recorded = sorted(n for n in names if n.startswith("test-sequence/"))
+        if point == "action.after-effect.before-write":
+            assert recorded == ["test-sequence/0"], (
+                f"the unwritten effect must be written once on the re-take: {recorded}"
+            )
+        elif point == "action.after-write.before-resume":
+            assert recorded == ["test-sequence/0", "test-sequence/1"], f"the re-take must count past it: {recorded}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
 
 
 def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:

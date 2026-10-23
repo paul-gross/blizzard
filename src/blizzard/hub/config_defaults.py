@@ -11,5 +11,7 @@ AUTH_MODE_OAUTH = "oauth"
 
 #: Forge-status sweep cadence, in seconds.
 DEFAULT_ANNOTATION_INTERVAL_SECONDS = 120
+#: A hub action pass's bound, in seconds.
+DEFAULT_ACTION_PASS_SECONDS = 300
 DEFAULT_FOLLOW_LATEST = False
 DEFAULT_CLOSE_FORGE_WRITES_ENABLED = True

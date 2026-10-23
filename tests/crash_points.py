@@ -28,6 +28,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.ingest",
     "blizzard.runner.throttle.release",
     "blizzard.hub.delivery.hub_node",
+    "blizzard.hub.delivery.action_pass",
     "blizzard.hub.domain.execution.claim",
     "blizzard.hub.domain.execution.apply",
     "blizzard.hub.domain.work_items.closure",

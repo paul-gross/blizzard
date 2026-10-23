@@ -59,6 +59,11 @@ flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_
 override variables unset leaves the resolved config byte-identical to a toml-only load; a malformed `BZ_HUB_PORT` fails
 with a `ConfigError` naming the variable, from `hub init` and from every later load alike.
 
+`action_pass_seconds` (default 300) in `blizzard-hub.toml` bounds one pass of a hub node's action, and the environment
+does not override it. A pass that overruns it is cancelled at its next wait, answers `pending` where its action can wait
+and its failure choice where it cannot, and records `hub-action-overran` ([observability.md](./observability.md)); the
+hub lets go of a pass still stuck thirty seconds later, so it never holds the hub's slot past that.
+
 ## Runtime directories
 
 Every verb that takes a runtime directory resolves it from three rungs, highest first: the explicit flag or argument,

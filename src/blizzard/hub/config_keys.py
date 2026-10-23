@@ -20,6 +20,7 @@ from blizzard.foundation.config_keys import (
 from blizzard.foundation.trace_export.config import TRACING_KEYS
 from blizzard.hub.config_defaults import (
     AUTH_MODE_NONE,
+    DEFAULT_ACTION_PASS_SECONDS,
     DEFAULT_ANNOTATION_INTERVAL_SECONDS,
     DEFAULT_CLOSE_FORGE_WRITES_ENABLED,
     DEFAULT_FOLLOW_LATEST,
@@ -52,6 +53,7 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("produces_mode", STRING, default=PRODUCES_WARN),
         ConfigKey("follow_latest", BOOLEAN, default=DEFAULT_FOLLOW_LATEST),
         ConfigKey("annotation_interval_seconds", INTEGER, default=DEFAULT_ANNOTATION_INTERVAL_SECONDS),
+        ConfigKey("action_pass_seconds", INTEGER, default=DEFAULT_ACTION_PASS_SECONDS),
         ConfigKey("close_forge_writes_enabled", BOOLEAN, default=DEFAULT_CLOSE_FORGE_WRITES_ENABLED),
         ConfigKey("trusted_proxies", STRING_LIST),
         ConfigKey("public_url", STRING),

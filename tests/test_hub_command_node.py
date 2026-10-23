@@ -39,9 +39,9 @@ from blizzard.hub.delivery.hub_node import (
     HubNodeExecutor,
     PollPolicy,
     PrintedChoice,
-    UnconvergedDeliveryError,
     _NoopStep,
 )
+from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
     Chunk,

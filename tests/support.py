@@ -66,6 +66,9 @@ from blizzard.hub.composition import (
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig
+from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
+from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
+from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
@@ -1312,6 +1315,9 @@ def build_hub(
     flags: Flags | None = None,
     hub_version: str | None = None,
     version_window: VersionWindow = VERSION_WINDOW,
+    actions: HubActions = HUB_ACTIONS,
+    action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
+    action_pass_grace: timedelta = ACTION_PASS_GRACE,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -1404,6 +1410,9 @@ def build_hub(
         annotation_interval_seconds=config.annotation_interval_seconds,
         hub_version=hub_version or __version__,
         version_window=version_window,
+        actions=actions,
+        action_pass_seconds=action_pass_seconds,
+        action_pass_grace=action_pass_grace,
     )
     hub_services.tenants.open_tenants.refresh()
     services = hub_services.tenants.open_services(default)

@@ -1950,6 +1950,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "graph": frozenset({"artifact"}),
     "runners": frozenset(),
     "chunk": frozenset({"graph", "runners", "artifact", "projects"}),
+    "actions": frozenset({"chunk", "graph", "artifact", "config", "projects"}),
     "execution": frozenset({"chunk", "graph", "runners", "artifact"}),
     "operations": frozenset({"execution", "chunk", "graph", "runners"}),
     "work_items": frozenset({"operations", "chunk", "graph", "projects"}),
@@ -2376,6 +2377,263 @@ def test_domain_layer_cycle_check_catches_a_cycle(layers: dict[str, frozenset[st
     cycle = _layer_cycle(layers)
     assert cycle
     assert cycle[0] == cycle[-1]
+
+
+# ``bzh:hub-action-purity`` — every module under ``hub/delivery/actions/`` imports only what this allowlist names.
+_HUB_ACTIONS_DIR = _HUB_DIR / "delivery" / "actions"
+_ACTION_STDLIB = frozenset(
+    {
+        "__future__",
+        "abc",
+        "asyncio",
+        "base64",
+        "collections",
+        "collections.abc",
+        "contextlib",
+        "dataclasses",
+        "datetime",
+        "enum",
+        "functools",
+        "hashlib",
+        "itertools",
+        "json",
+        "math",
+        "re",
+        "textwrap",
+        "types",
+        "typing",
+        "urllib.parse",
+    }
+)
+_ACTION_FOUNDATION = frozenset(
+    f"blizzard.foundation.{name}" for name in ("roles", "escalation_causes", "findings", "garden_proposals", "repo_ref")
+)
+_ACTION_BLIZZARD = frozenset(
+    {
+        "blizzard.hub.domain.actions",
+        "blizzard.hub.domain.graph.actions",
+        "blizzard.hub.domain.config.repositories",
+        "blizzard.hub.delivery.forge_handle",
+        "blizzard.hub.delivery.actions",
+    }
+)
+#: ``asyncio`` is admitted whole, so the attributes reaching a process or a connection are refused by name.
+_ACTION_REFUSED_ASYNCIO = frozenset(
+    {
+        "subprocess",
+        "create_subprocess_exec",
+        "create_subprocess_shell",
+        "open_connection",
+        "open_unix_connection",
+        "start_server",
+    }
+)
+#: What no blizzard module an action reaches may import: the modules that reach a process or the network.
+_ACTION_TRANSITIVE_REFUSED = (
+    "subprocess",
+    "socket",
+    "ssl",
+    "urllib.request",
+    "http.client",
+    "multiprocessing",
+    "ctypes",
+)
+
+
+def _action_imports(path: Path, src_root: Path) -> Iterator[tuple[int, str, str | None]]:
+    """Each import in ``path`` as its line, the module it names — a relative one resolved against ``path``'s own
+    package under ``src_root`` — and, for a ``from`` import, the name it takes from that module."""
+    package = list(path.relative_to(src_root).with_suffix("").parts)[:-1]
+    for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield node.lineno, alias.name, None
+        elif isinstance(node, ast.ImportFrom):
+            base = package[: len(package) - (node.level - 1)] if node.level else []
+            module = ".".join([*base, *(node.module.split(".") if node.module else [])])
+            for alias in node.names:
+                yield node.lineno, module, alias.name
+
+
+def _within(module: str, prefixes: Iterable[str]) -> bool:
+    return any(module == prefix or module.startswith(f"{prefix}.") for prefix in prefixes)
+
+
+def _action_import_admitted(module: str, name: str | None) -> bool:
+    """A plain import of an allowlisted module, or a name taken from one — or a submodule taken from a package
+    whose submodule is allowlisted (``from blizzard.foundation import roles``)."""
+    candidates = [module] if name is None else [module, f"{module}.{name}"]
+    for candidate in candidates:
+        if candidate in _ACTION_STDLIB or candidate in _ACTION_FOUNDATION or _within(candidate, _ACTION_BLIZZARD):
+            return candidate != "asyncio" or name not in _ACTION_REFUSED_ASYNCIO
+    return False
+
+
+def _module_path(module: str, src_root: Path) -> Path | None:
+    """The source file a dotted blizzard module loads from under ``src_root``, if it is blizzard's own."""
+    base = src_root.joinpath(*module.split("."))
+    for candidate in (base.with_suffix(".py"), base / "__init__.py"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _os_misuses(path: Path, src_root: Path) -> list[str]:
+    """Every use of ``os`` in ``path`` but ``os.urandom``."""
+    tree = ast.parse(path.read_text(), filename=str(path))
+    found = [
+        f"{path.relative_to(src_root)}:{line} takes os.{name}"
+        for line, module, name in _action_imports(path, src_root)
+        if module == "os" and name is not None and name != "urandom"
+    ]
+    found += [
+        f"{path.relative_to(src_root)}:{node.lineno} reaches os.{node.attr}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+        and node.attr != "urandom"
+    ]
+    return found
+
+
+def _hub_action_purity_violations(actions_dir: Path, src_root: Path) -> list[str]:
+    """``bzh:hub-action-purity``'s import gate over ``actions_dir``: every import on the allowlist, no refused
+    ``asyncio`` attribute, and no blizzard module the actions reach — directly or through another — importing a
+    module that reaches a process or the network, or using any of ``os`` but ``os.urandom``."""
+    violations: list[str] = []
+    reached: list[str] = []
+    for path in _production_files(actions_dir):
+        rel = path.relative_to(src_root)
+        for line, module, name in _action_imports(path, src_root):
+            if not _action_import_admitted(module, name):
+                violations.append(f"{rel}:{line} imports {module if name is None else f'{module}.{name}'}")
+            elif module.startswith("blizzard."):
+                reached += [module, f"{module}.{name}"] if name is not None else [module]
+        violations += [
+            f"{rel}:{node.lineno} reaches asyncio.{node.attr}"
+            for node in ast.walk(ast.parse(path.read_text(), filename=str(path)))
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "asyncio"
+            and node.attr in _ACTION_REFUSED_ASYNCIO
+        ]
+    seen: set[Path] = set()
+    while reached:
+        module = reached.pop()
+        # A package's own `__init__` loads before any of its modules does.
+        parts = module.split(".")
+        for depth in range(1, len(parts) + 1):
+            path = _module_path(".".join(parts[:depth]), src_root)
+            if path is None or path in seen:
+                continue
+            seen.add(path)
+            for line, imported, name in _action_imports(path, src_root):
+                if _within(imported, _ACTION_TRANSITIVE_REFUSED) or (
+                    name is not None and _within(f"{imported}.{name}", _ACTION_TRANSITIVE_REFUSED)
+                ):
+                    violations.append(f"{path.relative_to(src_root)}:{line} imports {imported}, reached by an action")
+                elif imported.startswith("blizzard."):
+                    reached += [imported, f"{imported}.{name}"] if name is not None else [imported]
+            violations += _os_misuses(path, src_root)
+    return sorted(set(violations))
+
+
+def test_hub_actions_import_only_their_allowlist() -> None:
+    violations = _hub_action_purity_violations(_HUB_ACTIONS_DIR, _SRC_DIR.parent)
+    assert not violations, f"a hub action may import only its allowlist (bzh:hub-action-purity): {violations}"
+
+
+def _plant_actions(tmp_path: Path, files: Mapping[str, str]) -> list[str]:
+    """A blizzard tree holding one clean action and an allowlisted domain module, with ``files`` laid over it."""
+    root = tmp_path / "src"
+    for rel, text in {
+        "blizzard/__init__.py": "",
+        "blizzard/hub/__init__.py": "",
+        "blizzard/hub/domain/__init__.py": "",
+        "blizzard/hub/domain/actions/__init__.py": "",
+        "blizzard/hub/domain/actions/visit.py": "import os\n\nID = os.urandom(4)\n",
+        "blizzard/hub/delivery/__init__.py": "",
+        "blizzard/hub/delivery/actions/__init__.py": "",
+        "blizzard/hub/delivery/actions/clean.py": (
+            "from __future__ import annotations\n\nimport asyncio\n\n"
+            "from blizzard.hub.domain.actions.visit import ID\n\n"
+            "async def take() -> bytes:\n    await asyncio.sleep(0)\n    return ID\n"
+        ),
+        **files,
+    }.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    return _hub_action_purity_violations(root / "blizzard" / "hub" / "delivery" / "actions", root)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "caught"),
+    [
+        ("blizzard/hub/delivery/actions/a.py", "from blizzard.hub.store import schema", True),
+        ("blizzard/hub/delivery/actions/a.py", "import os", True),
+        ("blizzard/hub/delivery/actions/a.py", "import httpx2", True),
+        ("blizzard/hub/delivery/actions/a.py", "from ...store import schema", True),
+        ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation import process", True),
+        ("blizzard/hub/delivery/actions/a.py", "import asyncio\n\nasyncio.create_subprocess_exec('true')", True),
+        ("blizzard/hub/delivery/actions/a.py", "from asyncio import open_connection", True),
+        ("blizzard/hub/domain/actions/visit.py", "import subprocess", True),
+        ("blizzard/hub/domain/actions/visit.py", "import os\n\nKEY = os.environ", True),
+        ("blizzard/hub/domain/actions/visit.py", "from os import environ", True),
+        ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation import roles", False),
+        ("blizzard/hub/delivery/actions/a.py", "from .clean import take", False),
+        ("blizzard/hub/delivery/actions/a.py", "import asyncio\n\nasyncio.sleep(0)", False),
+    ],
+)
+def test_the_hub_action_purity_gate_judges_each_planted_module(
+    tmp_path: Path, rel: str, text: str, caught: bool
+) -> None:
+    violations = _plant_actions(tmp_path, {rel: f"{text}\n"})
+    assert bool(violations) is caught, violations
+
+
+def test_the_hub_action_purity_gate_follows_an_allowlisted_module_through_another(tmp_path: Path) -> None:
+    violations = _plant_actions(
+        tmp_path,
+        {
+            "blizzard/hub/domain/actions/visit.py": "from blizzard.hub.domain.helper import X\n",
+            "blizzard/hub/domain/helper.py": "import socket\n\nX = socket\n",
+        },
+    )
+    assert violations == ["blizzard/hub/domain/helper.py:1 imports socket, reached by an action"]
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("actions/visit.py", "from blizzard.hub.domain.execution.apply import X"),
+        ("graph/model.py", "from blizzard.hub.domain.actions.visit import Visit"),
+    ],
+)
+def test_the_layer_walker_holds_the_actions_package_in_its_row(tmp_path: Path, rel: str, text: str) -> None:
+    domain = tmp_path / "blizzard" / "hub" / "domain"
+    for path, body in {
+        "../../__init__.py": "",
+        "../__init__.py": "",
+        "__init__.py": "",
+        "kernel/__init__.py": "",
+        "graph/__init__.py": "",
+        "graph/actions.py": "RESERVED_WAITS = frozenset()\n",
+        "execution/__init__.py": "",
+        "execution/apply.py": "X = 1\n",
+        "actions/__init__.py": "",
+        "actions/effects.py": "from blizzard.hub.domain.graph.actions import RESERVED_WAITS\n",
+        rel: f"{text}\n",
+    }.items():
+        (domain / path).parent.mkdir(parents=True, exist_ok=True)
+        (domain / path).write_text(body)
+    layers = {
+        "kernel": frozenset[str](),
+        "graph": frozenset[str](),
+        "execution": frozenset({"graph"}),
+        "actions": _DOMAIN_PACKAGE_LAYERS["actions"] & {"graph"},
+    }
+    assert len(_layer_crossings(_hub_domain_tree(domain, layers))) == 1
 
 
 #: Each runner node -> the nodes it may import besides itself (``bzh:domain-package-layers``); the rest are edges.
