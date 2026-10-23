@@ -183,7 +183,7 @@ class ChunkSummary(WireModel):
     # The chunk's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
     runner_id: str | None = None
-    # The workspace the chunk's live route claimed in — the binding's workspace on the routed runner; `None` when unrouted.
+    # The workspace the chunk's live route claimed in — the routed binding's workspace; `None` when unrouted.
     workspace_id: str | None = None
     # The routed runner's name — not unique, never a key; `None` when the registry holds no such runner.
     runner_name: str | None = None
