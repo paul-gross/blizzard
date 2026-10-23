@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -429,6 +429,12 @@ class PollPolicy:
             ),
         )
 
+    def due_at(self, row: HubNodePollFact) -> datetime:
+        """When a visit waiting since ``row`` is next due: the later of its interval elapsing and
+        the row's own ``next_poll_at``, which only ever postpones. Every reader of due-ness asks here."""
+        due = row.polled_at + self.interval
+        return max(due, row.next_poll_at) if row.next_poll_at is not None else due
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -555,7 +561,7 @@ class HubNodeExecutor:
         now = self._clock.now()
         facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
-        if poll_history and now - poll_history[-1].polled_at < PollPolicy.of(node).interval:
+        if poll_history and now < PollPolicy.of(node).due_at(poll_history[-1]):
             return None  # not yet due — never touches the tenant's slot
         slot_id = self._hub_exec.acquire_hub_exec_slot(
             chunk.chunk_id, node_id=node.node_id, at=now, stale_after=self._slot_stale_after
@@ -680,6 +686,8 @@ class HubNodeExecutor:
             choice_names = frozenset(c.name for c in node.choices)
             chosen: str | None = None
             failed_step: FailedStep | None = None
+            # A node naming an action carries no `run:`, so it takes the empty run here until a
+            # pass takes it.
             for index, step in enumerate(node.run or [_NoopStep()], start=1):
                 if step.produces and self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces

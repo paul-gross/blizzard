@@ -67,6 +67,8 @@ def _node_view(node: Node) -> GraphNodeView:
             )
             for c in node.choices
         ],
+        action=node.action,
+        action_args={name: list(values) for name, values in node.action_args.items()},
     )
 
 

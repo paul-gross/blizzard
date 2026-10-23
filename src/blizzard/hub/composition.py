@@ -129,6 +129,7 @@ from blizzard.hub.domain.garden.runs.history import GardenRunService
 from blizzard.hub.domain.garden.runs.run import RunService
 from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
+from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
 from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
@@ -981,7 +982,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     host_report = HostReportService(hosts=host_store, clock=clock)
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
-    graph_mint = GraphMintService(graphs=graph_store, clock=clock)
+    graph_mint = GraphMintService(graphs=graph_store, clock=clock, catalogue=SHIPPED_CATALOGUE)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)

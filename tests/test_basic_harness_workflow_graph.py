@@ -12,6 +12,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
+from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
@@ -23,7 +24,7 @@ def _doc():  # type: ignore[no-untyped-def]
 
 
 def test_bas_hwf_validates_with_no_errors_or_warnings() -> None:
-    result = Validator.of(_doc()).result
+    result = Validator.of(_doc(), TEST_CATALOGUE).result
     assert result.ok, result.errors
     assert result.warnings == []
 

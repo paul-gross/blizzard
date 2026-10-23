@@ -18,6 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
+from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.graph.validation import GraphValidationError
@@ -141,6 +142,8 @@ def packaged_minter(clock: IClock, yaml: IConfigCodec) -> Callable[[IWriteGraphR
     """Reconciles the packaged set into the graphs it is handed — a new tenant's, on its creation's transaction."""
 
     def mint(graphs: IWriteGraphRepository) -> list[GraphSyncOutcome]:
-        return GraphReconciliation(GraphMintService(graphs=graphs, clock=clock), graphs, yaml).outcomes()
+        return GraphReconciliation(
+            GraphMintService(graphs=graphs, clock=clock, catalogue=SHIPPED_CATALOGUE), graphs, yaml
+        ).outcomes()
 
     return mint

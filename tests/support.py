@@ -86,6 +86,7 @@ from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSo
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
+from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -142,6 +143,9 @@ from blizzard.wire.work_source import WorkSourceDocument
 from tests.config_inputs import VERSION_WINDOW, create_hub_app
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+# The shipped catalogue with the two test actions added — what a test hands graph validation.
+TEST_CATALOGUE = SHIPPED_CATALOGUE.including(TEST_ACTION_SPECS)
 
 
 def first_color(colors: Sequence[ProjectColor]) -> ProjectColor:

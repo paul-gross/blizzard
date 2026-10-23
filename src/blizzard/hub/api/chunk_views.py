@@ -470,7 +470,7 @@ class ChunkView:
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None
-        return PendingView(node_name=node.name, next_poll_at=iso_utc(pending.polled_at + PollPolicy.of(node).interval))
+        return PendingView(node_name=node.name, next_poll_at=iso_utc(PollPolicy.of(node).due_at(pending)))
 
     def intended_migration(self) -> IntendedMigrationView | None:
         """The chunk's standing migration intent as a view, or ``None`` when no

@@ -14,7 +14,9 @@ const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 
   warnings: [],
 };
 
-const NODE_DEFAULTS: Pick<GraphNodeView, 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | 'checks_cwd' | 'checks_timeout' | 'choices' | 'judgement_prompt' | 'produces' | 'prompt' | 'retries_exhausted' | 'retries_max' | 'session_source'> = {
+  action: null,
+  action_args: {},
   checks: [],
   checks_cwd: null,
   checks_timeout: null,
@@ -73,6 +75,8 @@ const GRAPH: GraphView = {
       node_id: 'n_deliver',
       name: 'deliver',
       executor: 'hub',
+      action: 'garden-deliver',
+      action_args: { delta: ['delta'], proposals: ['docket', 'more'] },
       session: 'fresh',
       judged_by: 'worker',
       choices: [{ requires_checks: false, choice_id: 'c_landed', name: 'landed', description: '' }],
@@ -121,6 +125,20 @@ describe('GraphDiagramDetail', () => {
     expect(text).toContain('2 → fail');
     expect(text).toContain('lint, test');
     expect(text).toContain('plan, retrospective');
+  });
+
+  it("renders a hub node's action and its with: arguments", () => {
+    const fixture = mount(GRAPH, { kind: 'node', nodeId: 'n_deliver' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="graph-diagram-detail-action"]')?.textContent).toContain('garden-deliver');
+    expect(el.querySelector('[data-testid="graph-diagram-detail-action-args"]')?.textContent).toContain('delta: delta; proposals: docket, more');
+  });
+
+  it('shows no action row for a runner node', () => {
+    const fixture = mount(GRAPH, { kind: 'node', nodeId: 'n_build' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="graph-diagram-detail-action"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-diagram-detail-action-args"]')).toBeNull();
   });
 
   it("renders a selected node's prompt and judgement_prompt text in full, through the kit prose block", () => {

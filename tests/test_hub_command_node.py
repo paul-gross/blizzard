@@ -61,6 +61,7 @@ from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_COD
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points
 from tests.support import (
+    TEST_CATALOGUE,
     FakeHubCommandRunner,
     FakeHubWorkdir,
     FakeWorkSource,
@@ -119,7 +120,7 @@ nodes:
 
 def _errors(yaml_nodes: dict) -> list[str]:
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": yaml_nodes})
-    return Validator.of(doc).result.errors
+    return Validator.of(doc, TEST_CATALOGUE).result.errors
 
 
 def test_hub_node_with_run_and_choices_is_valid() -> None:
@@ -145,7 +146,7 @@ def test_hub_node_with_run_and_choices_is_valid() -> None:
             },
         }
     )
-    result = Validator.of(doc).result
+    result = Validator.of(doc, TEST_CATALOGUE).result
     assert result.errors == []
 
 
@@ -978,7 +979,7 @@ def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path, monke
     """An unroutable failure strands the node but emits one critical event per
     (node, epoch), even on repeat polls (event-recording-publishes AC3). Mint refuses a hub
     node with no `failure` edge, so the legacy stored graph is minted past validation."""
-    assert Validator.of(GraphDoc.of(yaml.safe_load(_UNROUTABLE_GRAPH_YAML))).result.errors
+    assert Validator.of(GraphDoc.of(yaml.safe_load(_UNROUTABLE_GRAPH_YAML)), TEST_CATALOGUE).result.errors
     monkeypatch.setattr(Validator, "require_valid", lambda self: self.result)
     runner = FakeHubCommandRunner()
     runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))

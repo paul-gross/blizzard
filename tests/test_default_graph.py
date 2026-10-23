@@ -12,12 +12,13 @@ import pytest
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
+from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
 
 def test_default_graph_validates_with_no_errors_or_warnings() -> None:
-    result = Validator.of(PACKAGED.default.doc).result
+    result = Validator.of(PACKAGED.default.doc, TEST_CATALOGUE).result
     assert result.ok, result.errors
     assert result.warnings == []
 

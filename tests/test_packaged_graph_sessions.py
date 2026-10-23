@@ -14,6 +14,7 @@ from blizzard.hub.domain.graph.model import SessionRef
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphFile
 from tests.repo_files import repo_root
+from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +33,7 @@ def test_every_packaged_graph_still_validates(name: str) -> None:
     """The one way this tuning can break a deploy: a graph referencing a pool it does not
     declare is rejected at mint, and `graph_sync` reconciliation of the packaged set would
     go red on first boot."""
-    result = Validator.of(_doc(name)).result
+    result = Validator.of(_doc(name), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 

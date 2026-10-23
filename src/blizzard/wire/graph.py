@@ -132,6 +132,10 @@ class GraphNodeView(WireModel):
     produces: list[ProducesEntry] = []
     judgement_prompt: str | None = None
     choices: list[GraphChoiceView] = []
+    # The hub action a hub node names, and its ``with:`` arguments, each a list of values;
+    # ``None`` and empty on a runner node or a hub node naming ``run:``.
+    action: str | None = None
+    action_args: dict[str, list[str]] = {}
 
 
 class GraphView(WireModel):

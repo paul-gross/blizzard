@@ -7030,6 +7030,28 @@
       "GraphNodeView": {
         "description": "A reified node in a minted graph \u2014 the full immutable definition.",
         "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "action_args": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Action Args",
+            "type": "object"
+          },
           "checks": {
             "default": [],
             "items": {
@@ -7167,7 +7189,9 @@
           "checks_timeout",
           "produces",
           "judgement_prompt",
-          "choices"
+          "choices",
+          "action",
+          "action_args"
         ],
         "title": "GraphNodeView",
         "type": "object"

@@ -14,6 +14,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import JudgedBy
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import (
     RESERVED_TERMINAL,
     Choice,
@@ -133,6 +134,8 @@ class Reification:
             ],
             bounce_cap=nd.bounce_cap,
             run=[RunStep(command=r.command, name=r.name, produces=r.produces) for r in nd.run],
+            action=nd.action,
+            action_args=dict(nd.action_args),
             poll_interval_seconds=nd.poll_interval_seconds,
             poll_timeout_seconds=nd.poll_timeout_seconds,
             checks_cwd=nd.checks_cwd,
@@ -159,9 +162,10 @@ class GraphMintService:
     Holds the *write* graph repository; the model refuses an invalid definition
     (:class:`~blizzard.hub.domain.graph.validation.GraphValidationError`) before anything persists."""
 
-    def __init__(self, *, graphs: IWriteGraphRepository, clock: IClock) -> None:
+    def __init__(self, *, graphs: IWriteGraphRepository, clock: IClock, catalogue: HubActionCatalogue) -> None:
         self._graphs = graphs
         self._clock = clock
+        self._catalogue = catalogue
 
     def mint(self, doc: GraphDoc, *, definition_yaml: str) -> tuple[Graph, list[str]]:
         graph, warnings = self._prepared(doc)
@@ -171,7 +175,7 @@ class GraphMintService:
     def _prepared(self, doc: GraphDoc) -> tuple[Graph, list[str]]:
         """``doc`` validated and reified, with its warnings. The cross-graph reads resolve other
         graphs' names — a different aggregate — so they never run under a name lock."""
-        result = Validator.of(doc).require_valid()
+        result = Validator.of(doc, self._catalogue).require_valid()
         graph = Reification.of(doc, self._clock).graph
         enabled = self._graphs.enabled_names(graph.cross_graph_targets())
         return graph, [*result.warnings, *cross_graph_warnings(graph, enabled_names=enabled)]

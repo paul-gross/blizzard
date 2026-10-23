@@ -4210,6 +4210,16 @@ export type GraphMintRequest = {
  */
 export type GraphNodeView = {
     /**
+     * Action
+     */
+    action: string | null;
+    /**
+     * Action Args
+     */
+    action_args: {
+        [key: string]: Array<string>;
+    };
+    /**
      * Checks
      */
     checks: Array<string>;

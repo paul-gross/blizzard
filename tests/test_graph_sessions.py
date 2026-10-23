@@ -23,7 +23,7 @@ from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata, tenants
 from blizzard.hub.tenancy import TenantId
-from tests.support import scoped_connections
+from tests.support import TEST_CATALOGUE, scoped_connections
 
 pytestmark = pytest.mark.unit
 
@@ -216,18 +216,18 @@ def test_two_identically_authored_docs_are_equal() -> None:
 
 
 def test_a_declared_session_that_a_node_references_validates() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}}, build_session="fresh:code"))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}}, build_session="fresh:code")), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_a_session_name_colliding_with_a_node_name_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"review": {}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"review": {}})), TEST_CATALOGUE).result
     assert not result.ok
     assert any("may not collide with a node name" in e for e in result.errors)
 
 
 def test_fresh_naming_no_declared_session_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(build_session="fresh:code"))).result
+    result = Validator.of(GraphDoc.of(_doc(build_session="fresh:code")), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`fresh:code` names no declared session" in e for e in result.errors)
 
@@ -235,32 +235,32 @@ def test_fresh_naming_no_declared_session_is_rejected() -> None:
 def test_fresh_naming_a_node_is_rejected_even_though_the_node_exists() -> None:
     # `fresh` always mints, and a session minted at node `review` is not in `build`'s
     # implicit lineage — so `fresh:<node>` would name nothing.
-    result = Validator.of(GraphDoc.of(_doc(build_session="fresh:review"))).result
+    result = Validator.of(GraphDoc.of(_doc(build_session="fresh:review")), TEST_CATALOGUE).result
     assert not result.ok
     assert any("never a node" in e for e in result.errors)
 
 
 def test_resume_naming_a_declared_session_validates() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}}, build_session="resume:code"))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}}, build_session="resume:code")), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_resume_naming_a_node_still_validates_with_no_sessions_declared() -> None:
     # #115's `resume:<node>` — the second tier of the two-tier resolution, and the
     # back-compat guarantee for every graph minted before #144.
-    result = Validator.of(GraphDoc.of(_doc(build_session="resume:review"))).result
+    result = Validator.of(GraphDoc.of(_doc(build_session="resume:review")), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_resume_naming_neither_a_session_nor_a_node_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(build_session="resume:nowhere"))).result
+    result = Validator.of(GraphDoc.of(_doc(build_session="resume:nowhere")), TEST_CATALOGUE).result
     assert not result.ok
     assert any("names neither a declared session nor a node" in e for e in result.errors)
 
 
 @pytest.mark.parametrize("raw", ["resume:", "fresh:", "bogus"])
 def test_a_malformed_session_value_names_every_legal_form(raw: str) -> None:
-    result = Validator.of(GraphDoc.of(_doc(build_session=raw))).result
+    result = Validator.of(GraphDoc.of(_doc(build_session=raw)), TEST_CATALOGUE).result
     assert not result.ok
     message = next(e for e in result.errors if "malformed session value" in e)
     for form in ("`fresh`", "`resume`", "`resume:<node>`", "`fresh:<session>`", "`resume:<session>`"):
@@ -268,7 +268,7 @@ def test_a_malformed_session_value_names_every_legal_form(raw: str) -> None:
 
 
 def test_an_empty_effort_string_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"effort": "  "}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"effort": "  "}})), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`effort` must be a non-empty string" in e for e in result.errors)
 
@@ -276,12 +276,12 @@ def test_an_empty_effort_string_is_rejected() -> None:
 def test_an_unrecognized_effort_value_is_accepted_by_the_hub() -> None:
     # The hub cannot see runner `[effort.aliases]` config, so recognizing the value is the
     # adapter's job (`bzh:one-owner`) — the hub checks only that it is a non-empty string.
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"effort": "glacial"}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"effort": "glacial"}})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_an_empty_compaction_window_string_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "  "}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "  "}})), TEST_CATALOGUE).result
     assert not result.ok
     assert any("`compaction_window` must be a non-empty string" in e for e in result.errors)
 
@@ -289,20 +289,20 @@ def test_an_empty_compaction_window_string_is_rejected() -> None:
 def test_an_unrecognized_compaction_window_value_is_accepted_by_the_hub() -> None:
     # Same rule as effort: the adapter's vocabulary to recognize, not the
     # hub's — the hub checks only that it is a non-empty string.
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "bogus"}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"compaction_window": "bogus"}})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 def test_an_unrecognized_model_preference_is_accepted_by_the_hub() -> None:
     # Same reason: a model entry is an opaque preference string hub-side; resolution
     # belongs to the adapter.
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"model": ["not-a-real-model"]}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"model": ["not-a-real-model"]}})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
 @pytest.mark.parametrize("field", ["max_context_tokens", "max_transcript_bytes", "max_invocations"])
 def test_a_non_positive_rotate_threshold_is_rejected(field: str) -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"rotate": {field: 0}}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"rotate": {field: 0}}})), TEST_CATALOGUE).result
     assert not result.ok
     assert any(f"`rotate.{field}` must be a positive number" in e for e in result.errors)
 
@@ -310,7 +310,7 @@ def test_a_non_positive_rotate_threshold_is_rejected(field: str) -> None:
 def test_a_declared_but_unreferenced_session_is_legal() -> None:
     # An unreferenced *node* warns; an unreferenced declaration does not even do that —
     # it is inert data, and warning on it would fire on every mid-edit graph.
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {}})), TEST_CATALOGUE).result
     assert result.ok, result.errors
 
 
@@ -326,26 +326,32 @@ def test_an_empty_harnesses_list_is_rejected_naming_the_rule() -> None:
 
 
 def test_a_duplicate_harnesses_entry_is_rejected_naming_the_rule() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "claude_code"]}}))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "claude_code"]}})), TEST_CATALOGUE
+    ).result
     assert not result.ok
     assert any("`harnesses` entries must be unique" in e for e in result.errors)
 
 
 def test_a_duplicate_harnesses_entry_after_trimming_is_rejected() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", " claude_code "]}}))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", " claude_code "]}})), TEST_CATALOGUE
+    ).result
     assert not result.ok
     assert any("`harnesses` entries must be unique" in e for e in result.errors)
 
 
 def test_a_blank_harnesses_entry_is_rejected_naming_the_rule() -> None:
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "  "]}}))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(sessions={"code": {"harnesses": ["claude_code", "  "]}})), TEST_CATALOGUE
+    ).result
     assert not result.ok
     assert any("`harnesses` entries must be non-empty strings" in e for e in result.errors)
 
 
 def test_every_blank_and_duplicate_harnesses_entry_is_reported_not_just_the_first() -> None:
     entries = ["claude_code", " ", "", "opencode", "claude_code", "opencode"]
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": entries}}))).result
+    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": entries}})), TEST_CATALOGUE).result
     assert not result.ok
     assert any("entry 2 is blank" in e for e in result.errors)
     assert any("entry 3 is blank" in e for e in result.errors)
@@ -355,7 +361,9 @@ def test_every_blank_and_duplicate_harnesses_entry_is_reported_not_just_the_firs
 
 def test_a_well_formed_harnesses_set_naming_a_harness_no_runner_holds_mints_successfully() -> None:
     # Fleet availability is never consulted here — the hub validates shape only.
-    result = Validator.of(GraphDoc.of(_doc(sessions={"code": {"harnesses": ["no-such-harness"]}}))).result
+    result = Validator.of(
+        GraphDoc.of(_doc(sessions={"code": {"harnesses": ["no-such-harness"]}})), TEST_CATALOGUE
+    ).result
     assert result.ok, result.errors
 
 

@@ -66,6 +66,8 @@ function node(fields: Pick<GraphNodeView, 'node_id' | 'name'> & Partial<GraphNod
     session: 'fresh',
     judged_by: 'worker',
     prompt: null,
+    action: null,
+    action_args: {},
     checks: [],
     checks_cwd: null,
     checks_timeout: null,
