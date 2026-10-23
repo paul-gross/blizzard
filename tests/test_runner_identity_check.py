@@ -406,7 +406,8 @@ def _proxied(
 ) -> tuple[httpx2.Response, IdentityVerdictHolder, list[str]]:
     """A fleet-summary read through the hub proxy of a runner whose store names ``r1``; the hub answers the
     identity read with ``identity`` (the token naming ``r1`` unless a test says otherwise), or is
-    unreachable when it is a ``503``, or for its first ``silent_reads`` reads. Returns the response, the loop's verdict, and the identity reads."""
+    unreachable when it is a ``503``, or for its first ``silent_reads`` reads. Returns the response, the loop's
+    verdict, and the identity reads."""
     asked: list[str] = []
     answer = identity if identity is not None else _identity("r1")
 
