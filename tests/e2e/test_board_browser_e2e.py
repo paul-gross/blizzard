@@ -419,7 +419,8 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("detail-status")).to_have_text("done")
                 assert page.get_by_test_id("history-step").count() >= 1, "detail shows no node history"
                 assert page.get_by_test_id("artifact").count() >= 1, "detail shows no artifacts"
-                expect(page.get_by_test_id("artifact-ref").first).to_be_visible()  # the build git_commit
+                # Each artifact renders as a link; the build git_commit's ref sits inside one.
+                expect(page.get_by_test_id("artifact-link").get_by_test_id("artifact-ref").first).to_be_visible()
 
                 # Dock link → chunk detail page, Artifacts tab, pre-selected (#160) — the
                 # one tier exercising the link, route, and built bundle together.
