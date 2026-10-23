@@ -158,6 +158,13 @@ testpaths = [
 # The exemplar tests import the `exemplar` package beside them and `tests.support`.
 pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
+# A deprecation or ORM-misuse warning is a failure, not noise. StarletteDeprecationWarning subclasses
+# UserWarning, so DeprecationWarning does not cover it; ResourceWarning is deliberately left out.
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::starlette.exceptions.StarletteDeprecationWarning",
+    "error::sqlalchemy.exc.SAWarning",
+]
 # The verification tiers (blizzard-context verification/blizzard.md): the default
 # run is unit + component; `-m component` selects the component tier alone.
 markers = [

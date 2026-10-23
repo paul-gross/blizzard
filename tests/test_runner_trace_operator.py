@@ -28,7 +28,7 @@ from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
 from tests import runner_trace_fixtures as fx
 from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
+from tests.runner_client import UntimedTestClient, runner_client
 from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.runner_trace_leases import closed_lease
 from tests.support import InMemoryTraceExporter
@@ -95,7 +95,7 @@ def _app(runner: _Runner, tmp_path: Path) -> FastAPI:
 
 def _client(runner: _Runner, tmp_path: Path) -> TestClient:
     """A client at the host's root — the door an operator verb reaches through."""
-    return TestClient(_app(runner, tmp_path))
+    return UntimedTestClient(_app(runner, tmp_path))
 
 
 def _routes(runner: _Runner, tmp_path: Path) -> TestClient:

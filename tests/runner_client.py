@@ -25,6 +25,16 @@ def runner_base_url(app: FastAPI, origin: str = "http://testserver") -> str:
     return origin + runner_prefix(sole_runner_id(app))
 
 
+class UntimedTestClient(TestClient):
+    """A :class:`TestClient` for the client a production seam hands a per-request ``timeout=`` to: Starlette's
+    in-process transport never honored one and warns when it is passed, so the budget is dropped here and the seam's
+    code, which really sets it, stays untouched."""
+
+    def request(self, method: str, url: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        kwargs.pop("timeout", None)
+        return super().request(method, url, **kwargs)
+
+
 def runner_client(app: FastAPI, **kwargs: Any) -> TestClient:
     """A :class:`TestClient` addressing the one runner ``app`` serves; ``kwargs`` are the client's own."""
     return TestClient(app, base_url=runner_base_url(app, kwargs.pop("base_url", "http://testserver")), **kwargs)

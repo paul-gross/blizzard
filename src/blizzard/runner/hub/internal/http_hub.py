@@ -174,7 +174,7 @@ def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None
 
 def _no_such_project(operation: str, resp: httpx2.Response) -> HubClientError | None:
     """An add under the host refused for a named project the tenant does not hold (422 with the hub's text)."""
-    if resp.status_code != httpx2.codes.UNPROCESSABLE_ENTITY or not _text_detail(resp):
+    if resp.status_code != httpx2.codes.UNPROCESSABLE_CONTENT or not _text_detail(resp):
         return None
     return RunnerAddRefused(
         f"{operation} -> {resp.status_code}", reason=RunnerAddRefusalReason.NO_SUCH_PROJECT, detail=_detail(resp)

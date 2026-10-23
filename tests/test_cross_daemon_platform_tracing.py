@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -34,7 +33,7 @@ from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
 from tests.config_inputs import build_hosted_hub_app, create_runner_app, init_hub
-from tests.runner_client import runner_client
+from tests.runner_client import UntimedTestClient, runner_client
 from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 pytestmark = pytest.mark.component
@@ -86,7 +85,7 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
         exporter=runner_exporter,
     )
 
-    with TestClient(build_hosted_hub_app(hub_config, platform_tracing=hub_handle)) as hub:
+    with UntimedTestClient(build_hosted_hub_app(hub_config, platform_tracing=hub_handle)) as hub:
         added = hub.post("/api/runners", json={"name": _RUNNER})
         assert added.status_code == 201, added.text
         bearer = added.json()["token"]
