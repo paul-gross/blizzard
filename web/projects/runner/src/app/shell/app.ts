@@ -4,7 +4,7 @@ import { RunnerLiveUpdates } from '../core/live/runner-live-updates';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { SessionRecoveryView } from '../core/identity/session-recovery-view';
 
-import { AppShell, FlagStore, ViewportService } from 'fleet';
+import { AppShell, FlagStore, ViewportService } from 'fleet/shell';
 import { AppHeader } from './nav/app-header';
 import { AppNav } from './nav/app-nav';
 import { MobileTabBar } from './nav/mobile-tab-bar';

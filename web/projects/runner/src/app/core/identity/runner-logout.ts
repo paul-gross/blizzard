@@ -1,5 +1,5 @@
 import { Injectable, computed } from '@angular/core';
-import { errorMessage } from 'fleet';
+import { errorMessage } from 'fleet/shell';
 
 import { injectRunnerLogoutMutation } from './auth.query';
 

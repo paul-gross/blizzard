@@ -1,6 +1,6 @@
 import { computed, type Signal } from '@angular/core';
 import { injectQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerApi } from 'fleet/runner-shell';
 
 import {
   hostEnvironmentsKey,

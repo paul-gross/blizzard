@@ -1,4 +1,4 @@
-import { type runnerApi, type SseStatus, type StatCell } from 'fleet';
+import { type runnerApi, type SseStatus, type StatCell } from 'fleet/runner-shell';
 
 /** The header's connection label: the live stream's reconnect first, then its settled auth failure, then the
  * host read's pending and failed states — `ok` otherwise. */

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet';
+import { MobileTabBar as FleetMobileTabBar, type MobileTabItem } from 'fleet/shell';
 import { injectPanelAsks } from '../../core/panel-reads';
 import { mobileTabItems } from './mobile-tab-bar.model';
 

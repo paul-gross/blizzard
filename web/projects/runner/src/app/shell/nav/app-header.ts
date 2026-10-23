@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { BoardHeader, FlagStore, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, type StatCell, ViewportMenu } from 'fleet';
+import { BoardHeader, FlagStore } from 'fleet/shell';
+import { type StatCell } from 'fleet/runner-shell';
 import { PanelFilters } from '../../core/panel-filters';
 import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../core/host.query';
 import { LocalIdentity } from '../../core/identity/app-identity';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { headerConnectionLabel, headerStatCells } from './app-header.model';
+import { AppProfileMenu } from './app-profile-menu';
 
 /**
  * The runner's desktop app header — the shared 48px
@@ -29,6 +30,9 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
  * The identity block ({@link LocalIdentity}) and the profile menu ride in the header's
  * `[header-trailing]` slot — each a self-fetching mini-container of its own, composed
  * here without this component or {@link BoardHeader} knowing anything about identity.
+ * The profile menu ({@link AppProfileMenu}) is `@defer`-loaded: its CDK menu stack is
+ * interaction-only chrome, and an eager reference from here would keep that stack in the
+ * initial chunk (`bzh:frontend-eager-shell-entry`).
  * The `@container board-header (max-width: 699px)` narrow-tier collapse drops the
  * identity at that width so the profile menu — this shell's only appearance switcher in
  * desktop mode — never gets pushed off a phone-width header.
@@ -36,7 +40,7 @@ import { headerConnectionLabel, headerStatCells } from './app-header.model';
 @Component({
   selector: 'app-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, CdkMenuTrigger, KitAvatar, KitMenu, KitMenuItem, KitMenuPanel, LocalIdentity, ViewportMenu],
+  imports: [AppProfileMenu, BoardHeader, LocalIdentity],
   templateUrl: './app-header.html',
   styleUrl: './app-header.css',
 })
@@ -51,7 +55,7 @@ export class AppHeader {
   /** The Runner filter, which narrows {@link headerStats} to the runner it names. */
   private readonly filters = inject(PanelFilters);
 
-  /** The shell's one logout owner; the menu item's pending flag and trigger bind to it. */
+  /** The shell's one logout owner; the failure of the menu's `Log out` surfaces in this header's own alert. */
   protected readonly logout = inject(RunnerLogout);
 
   /** The header's connection cell — folds in the live stream's own state,

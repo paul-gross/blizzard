@@ -98,6 +98,7 @@ function createProgram(root, rootNames, memory) {
     paths: {
       fleet: ['./projects/fleet/src/public-api.ts'],
       'fleet/shell': ['./projects/fleet/src/shell-api.ts'],
+      'fleet/runner-shell': ['./projects/fleet/src/runner-shell-api.ts'],
       'fleet/testing': ['./projects/fleet/src/lib/testing/public-api.ts'],
     },
     target: ts.ScriptTarget.ES2022,

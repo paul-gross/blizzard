@@ -1,15 +1,15 @@
 // @ts-check
 /*
  * The bundle-composition gate (`blizzard-context:/verification/blizzard.md`'s
- * `web:bundle-composition` method) — a merge-gate check on the hub app's initial chunk,
- * the tooled half of `architecture/frontend-structure/eager-shell.md`
+ * `web:bundle-composition` method) — a merge-gate check on each app's initial chunk (the
+ * hub's and the runner's), the tooled half of `architecture/frontend-structure/eager-shell.md`
  * (`bzh:frontend-eager-shell-entry`).
  *
- * Builds the hub app with esbuild's own metafile (`ng build hub --stats-json`) and
- * resolves the initial chunk two ways from the same metafile:
+ * Builds each app with esbuild's own metafile (`ng build <app> --stats-json`) and
+ * resolves its initial chunk two ways from the same metafile:
  *
  * - At **output** granularity, for the size breakdown: the output whose `entryPoint` is
- *   the hub's `main.ts`, plus every output it reaches through a static
+ *   the app's `main.ts`, plus every output it reaches through a static
  *   (`kind: 'import-statement'`) edge, transitively. A `kind: 'dynamic-import'` edge
  *   starts a lazy chunk and is not followed.
  * - At **source-file** granularity, for forbidden-module detection and attribution: the
@@ -20,8 +20,8 @@
  * Fails when a source file reachable that eagerly is one esbuild cannot drop from the
  * initial chunk even when nothing on the eager path uses its exports (the barrel-leak
  * failure mode this check exists to catch): the fleet `chunk/chunk-detail/` or `transcripts/`
- * sub-barrels, the hub's `garden/`, `graphs/`, or `board/chunk-dock/` folders,
- * `@dagrejs/*`, or `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles.
+ * sub-barrels and `@angular/cdk`'s `menu`/`overlay`/`listbox` bundles in either app, and
+ * for the hub also its `garden/`, `graphs/`, or `board/chunk-dock/` folders and `@dagrejs/*`.
  *
  * Run from `web/`: `npm run bundle-check` (`node scripts/bundle-check.js`).
  */
@@ -32,21 +32,34 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const HUB_MAIN = 'projects/hub/src/main.ts';
 
 /** Forbidden initial-chunk module patterns, each a predicate over a metafile-relative path
- * (forward slashes, no leading `./`, e.g. `projects/hub/src/app/garden/garden-page.ts`). */
-const FORBIDDEN = [
+ * (forward slashes, no leading `./`, e.g. `projects/hub/src/app/garden/garden-page.ts`).
+ * The fleet sub-barrels and the CDK stack are shared; the rest is per app. */
+const SHARED_FORBIDDEN = [
   { name: 'fleet chunk-detail/', test: (f) => f.startsWith('projects/fleet/src/lib/chunk/chunk-detail/') },
-  { name: 'hub chunk-dock/', test: (f) => f.startsWith('projects/hub/src/app/board/chunk-dock/') },
-  { name: 'hub garden/', test: (f) => f.startsWith('projects/hub/src/app/garden/') },
-  { name: 'hub graphs/', test: (f) => f.startsWith('projects/hub/src/app/graphs/') },
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
-  { name: '@dagrejs/*', test: (f) => f.startsWith('node_modules/@dagrejs/') },
   {
     name: '@angular/cdk menu/overlay/listbox',
     test: (f) => f.startsWith('node_modules/@angular/cdk/') && (f.includes('menu') || f.includes('overlay') || f.includes('listbox')),
   },
+];
+
+/** The apps the gate builds, each with the `main.ts` its initial chunk starts from and the
+ * forbidden patterns that bind it. */
+const APPS = [
+  {
+    name: 'hub',
+    main: 'projects/hub/src/main.ts',
+    forbidden: [
+      ...SHARED_FORBIDDEN,
+      { name: 'hub chunk-dock/', test: (f) => f.startsWith('projects/hub/src/app/board/chunk-dock/') },
+      { name: 'hub garden/', test: (f) => f.startsWith('projects/hub/src/app/garden/') },
+      { name: 'hub graphs/', test: (f) => f.startsWith('projects/hub/src/app/graphs/') },
+      { name: '@dagrejs/*', test: (f) => f.startsWith('node_modules/@dagrejs/') },
+    ],
+  },
+  { name: 'runner', main: 'projects/runner/src/main.ts', forbidden: SHARED_FORBIDDEN },
 ];
 
 /** Areas named in the printed per-area breakdown, most-material first. Informational only —
@@ -65,13 +78,13 @@ const REPORT_AREAS = [
   { name: 'fleet transcripts/', test: (f) => f.startsWith('projects/fleet/src/lib/transcripts/') },
 ];
 
-/** Every output reachable from the output whose `entryPoint` is `HUB_MAIN`, over static
+/** Every output reachable from the output whose `entryPoint` is `main`, over static
  * (`import-statement`) edges only — the initial chunk, at output granularity.
  * @param {{ outputs: Record<string, any> }} meta */
-function computeInitialOutputs(meta) {
+function computeInitialOutputs(meta, main) {
   const outputs = meta.outputs;
-  const mainKey = Object.keys(outputs).find((k) => outputs[k].entryPoint === HUB_MAIN);
-  if (!mainKey) throw new Error(`bundle-check: no output in stats.json has entryPoint ${HUB_MAIN}`);
+  const mainKey = Object.keys(outputs).find((k) => outputs[k].entryPoint === main);
+  if (!mainKey) throw new Error(`bundle-check: no output in stats.json has entryPoint ${main}`);
 
   const visited = new Set();
   const stack = [mainKey];
@@ -86,15 +99,15 @@ function computeInitialOutputs(meta) {
   return visited;
 }
 
-/** Every source file reachable from `HUB_MAIN` over static (`import-statement`) edges
+/** Every source file reachable from `main` over static (`import-statement`) edges
  * only, at source-file granularity — the same initial-chunk walk `computeInitialOutputs`
  * does, but over the full module graph, so each forbidden hit still names its importer.
  * @param {{ inputs: Record<string, any> }} meta */
-function computeEagerFiles(meta) {
+function computeEagerFiles(meta, main) {
   const inputs = meta.inputs;
   const visited = new Set();
   const parent = new Map();
-  const stack = [HUB_MAIN];
+  const stack = [main];
   while (stack.length > 0) {
     const cur = stack.pop();
     if (visited.has(cur)) continue;
@@ -110,11 +123,12 @@ function computeEagerFiles(meta) {
 
 /** The forbidden files among `eagerFiles`, each with the file that statically imports it.
  * @param {Set<string>} eagerFiles
- * @param {Map<string, string>} parent */
-function findViolations(eagerFiles, parent) {
+ * @param {Map<string, string>} parent
+ * @param {{ name: string, test: (f: string) => boolean }[]} forbidden */
+function findViolations(eagerFiles, parent, forbidden) {
   const violations = [];
   for (const file of eagerFiles) {
-    const hit = FORBIDDEN.find((f) => f.test(file));
+    const hit = forbidden.find((f) => f.test(file));
     if (hit) violations.push({ file, pattern: hit.name, importer: parent.get(file) ?? '<entry>' });
   }
   return violations;
@@ -152,7 +166,7 @@ function formatBytes(bytes) {
 function assertBundleCompositionDetectorWorks() {
   const fixture = {
     inputs: {
-      [HUB_MAIN]: {
+      [APPS[0].main]: {
         bytes: 10,
         imports: [{ path: 'projects/hub/src/app/shell/app.ts', kind: 'import-statement' }],
       },
@@ -170,8 +184,8 @@ function assertBundleCompositionDetectorWorks() {
     },
   };
 
-  const { visited, parent } = computeEagerFiles(fixture);
-  const violations = findViolations(visited, parent);
+  const { visited, parent } = computeEagerFiles(fixture, APPS[0].main);
+  const violations = findViolations(visited, parent, APPS[0].forbidden);
   const files = violations.map((v) => v.file);
 
   if (!files.includes('projects/hub/src/app/garden/garden-page.ts')) {
@@ -189,14 +203,14 @@ function assertBundleCompositionDetectorWorks() {
   }
 }
 
-function main() {
-  assertBundleCompositionDetectorWorks();
-
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-check-'));
+/** Build one app and check its initial chunk; resolves to whether it passed.
+ * @param {{ name: string, main: string, forbidden: { name: string, test: (f: string) => boolean }[] }} app */
+function checkApp(app) {
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), `bundle-check-${app.name}-`));
   let buildFailed = false;
   try {
     try {
-      execFileSync('npx', ['ng', 'build', 'hub', '--output-path', outDir, '--stats-json'], {
+      execFileSync('npx', ['ng', 'build', app.name, '--output-path', outDir, '--stats-json'], {
         cwd: ROOT,
         stdio: 'inherit',
       });
@@ -206,46 +220,52 @@ function main() {
 
     const statsPath = path.join(outDir, 'stats.json');
     if (!fs.existsSync(statsPath)) {
-      console.error('bundle-check: hub build produced no stats.json — see the build output above.');
-      process.exitCode = 1;
-      return;
+      console.error(`bundle-check: ${app.name} build produced no stats.json — see the build output above.`);
+      return false;
     }
     const meta = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
 
-    const initialOutputs = computeInitialOutputs(meta);
-    const { visited: eagerFiles, parent } = computeEagerFiles(meta);
-    const violations = findViolations(eagerFiles, parent);
+    const initialOutputs = computeInitialOutputs(meta, app.main);
+    const { visited: eagerFiles, parent } = computeEagerFiles(meta, app.main);
+    const violations = findViolations(eagerFiles, parent, app.forbidden);
     const initialTotal = [...initialOutputs]
       .filter((o) => o.endsWith('.js'))
       .reduce((sum, o) => sum + (meta.outputs[o]?.bytes ?? 0), 0);
 
-    console.log(`bundle-check: initial JS total ${formatBytes(initialTotal)} across ${initialOutputs.size} output(s).`);
-    console.log('bundle-check: per-area breakdown of the initial chunk —');
+    console.log(`bundle-check: ${app.name} initial JS total ${formatBytes(initialTotal)} across ${initialOutputs.size} output(s).`);
+    console.log(`bundle-check: ${app.name} per-area breakdown of the initial chunk —`);
     for (const { name, bytes } of areaBreakdown(meta, initialOutputs)) {
       if (bytes > 0) console.log(`  ${name}: ${formatBytes(bytes)}`);
     }
 
     if (violations.length > 0) {
-      console.error('\nbundle-check: forbidden module(s) reachable from the initial chunk:\n');
+      console.error(`\nbundle-check: forbidden module(s) reachable from the ${app.name} initial chunk:\n`);
       for (const v of violations) console.error(`  ${v.file} (${v.pattern}) — imported by ${v.importer}`);
       console.error(
         '\nRoute this behind a lazy page or an `@defer` block instead of an eager shell import — see ' +
           'architecture/frontend-structure/eager-shell.md (bzh:frontend-eager-shell-entry).',
       );
-      process.exitCode = 1;
-      return;
+      return false;
     }
 
     if (buildFailed) {
-      console.error('bundle-check: hub build failed — see the build output above.');
-      process.exitCode = 1;
-      return;
+      console.error(`bundle-check: ${app.name} build failed — see the build output above.`);
+      return false;
     }
 
-    console.log('bundle-check: initial chunk carries no forbidden module.');
+    console.log(`bundle-check: ${app.name} initial chunk carries no forbidden module.`);
+    return true;
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
   }
+}
+
+function main() {
+  assertBundleCompositionDetectorWorks();
+
+  // Every app is checked before the verdict, so one run reports all the failures.
+  const results = APPS.map(checkApp);
+  if (results.includes(false)) process.exitCode = 1;
 }
 
 main();

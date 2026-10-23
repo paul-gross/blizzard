@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import type { runnerApi } from 'fleet/runner-shell';
 
 import type { PanelProject } from '../../core/panel-reads.model';
 
