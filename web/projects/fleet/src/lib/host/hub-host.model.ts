@@ -1,7 +1,7 @@
 import type { HostRegistryView, HostSubscriptionUsageView, SubscriptionUsageView } from '../api/hub';
 import { ageMs, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
-import type { WorkspaceRow } from './workspace-table';
+import type { WorkspaceRow } from './workspace-rows.model';
 
 /** The hub's subscription usage samples folded to the shared subscription list's rows, in
  * wire order, every time-relative field read against the one `nowMs`. */

@@ -8,7 +8,6 @@ import { vi } from 'vitest';
 import { hubClient, hubHostsKey, hubRunnersKey } from 'fleet';
 import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { FleetPage } from './fleet-page';
-import { RunnersPage } from './runners-page';
 
 /** The operator's identity with `runner:retire` — the permission the host verbs need. */
 const RETIRE_ME = {
@@ -64,7 +63,6 @@ const click = (el: HTMLElement, selector: string) => el.querySelector<HTMLButton
 
 for (const [name, container, release, hostCard] of [
   ['FleetPage', FleetPage, 'fleet-runner-release', 'fleet-card-h1'],
-  ['RunnersPage', RunnersPage, 'mobile-fleet-runner-release', 'host-card'],
 ] as const) {
   describe(`${name} host verbs`, () => {
     let stub: RequestClientStub;
@@ -79,14 +77,10 @@ for (const [name, container, release, hostCard] of [
           provideRouter([{ path: 'fleet', component: FleetPage, children: [{ path: ':id', children: [] }] }]),
         ],
       }).compileComponents();
-      // The Fleet tab opens its selection from the URL; the mobile screen has none.
-      const fixture =
-        container === FleetPage
-          ? await RouterTestingHarness.create().then(async (harness) => {
-              await harness.navigateByUrl('/fleet/h1');
-              return harness.fixture;
-            })
-          : TestBed.createComponent(container as Type<unknown>);
+      // The Fleet tab opens its selection from the URL.
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl('/fleet/h1');
+      const fixture = harness.fixture;
       await settle(fixture);
       const invalidate = vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries');
       return { fixture, el: fixture.nativeElement as HTMLElement, invalidate };

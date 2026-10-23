@@ -5,7 +5,7 @@ import { SampleMissReason } from '../api/hub';
 import { ageMs, formatAge, formatHeldFor, formatRefreshedAgo, formatSeenTag } from '../core/when';
 import { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
 import { classifySubscriptionFreshness, type SubscriptionPace, toPaceBars } from './subscription-pace.model';
-import type { EnvironmentRow, WorkspaceRow } from './workspace-table';
+import type { EnvironmentRow, WorkspaceRow } from './workspace-rows.model';
 
 /**
  * `42m` since the binding fact — browser-clock decoration only

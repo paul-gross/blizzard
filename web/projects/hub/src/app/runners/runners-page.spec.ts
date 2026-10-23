@@ -1,5 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 import { hubClient } from 'fleet';
@@ -7,6 +9,11 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRe
 
 import { RunnersPage } from './runners-page';
 
+/** An admin's `/api/me` — `runner:retire` too, so a host verb would render anywhere it is offered. */
+const ADMIN_ME = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
+};
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not
  * the admin-tier `runner:pause`. */
 const CONTRIBUTOR_ME = {
@@ -16,18 +23,32 @@ const CONTRIBUTOR_ME = {
 };
 
 const NOW = new Date().toISOString();
-const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
+const runner = (id: string, over: Record<string, unknown> = {}) => ({
   runner_id: id,
+  runner_name: id,
   workspace_id: 'ws_a',
   registered_at: NOW,
   last_seen_at: NOW,
   online: true,
+  connection: 'online',
   hub_paused: false,
   locally_paused: false,
   ...over,
 });
 const RUNNERS = {
-  runners: [runner('rn_online', { env_capacity: 4 }), runner('rn_paused', { hub_paused: true })],
+  runners: [runner('rn_online', { host_id: 'hs_h1', env_capacity: 4 }), runner('rn_paused', { hub_paused: true })],
+};
+const HOST = {
+  host_id: 'hs_h1',
+  host_name: 'build-box',
+  connection: 'online',
+  online: true,
+  enrolled: true,
+  added_at: NOW,
+  last_seen_at: NOW,
+  workspaces: [],
+  subscriptions: [],
+  subscription_usage: [],
 };
 const CHUNKS = [
   {
@@ -36,150 +57,144 @@ const CHUNKS = [
     status: 'running',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'rn_online',
     environment_count: 2,
   },
 ];
 
 /**
- * The mobile Fleet page's container half, exercised through the real
- * `/api/runners` + `/api/chunks` reads rather than through `RunnersView`'s
- * inputs directly, since this is the seam that folds them
- * (`injectRunnerRows`) and wires the pause mutation.
+ * The mobile Fleet tab's container, driven through the router and the real `/api/runners`,
+ * `/api/hosts` and `/api/chunks` reads: a bare `/fleet` is the overview, `/fleet/:id` the opened
+ * host's or hostless runner's breakdown.
  */
 describe('RunnersPage (mobile Fleet screen)', () => {
   let stub: RequestClientStub;
 
-  async function render() {
-    await TestBed.configureTestingModule({
-      imports: [RunnersPage],
+  async function open(url: string, me: unknown = OPERATOR_ME_RESPONSE, over: (method: string, path: string) => unknown = () => undefined) {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      const hit = over(method, path);
+      if (hit !== undefined) return hit;
+      if (path === '/api/me') return me;
+      if (path === '/api/runners') return RUNNERS;
+      if (path === '/api/hosts') return { hosts: [HOST] };
+      if (path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
+      return {};
+    });
+    TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([{ path: 'fleet', component: RunnersPage, children: [{ path: ':id', children: [] }] }]),
       ],
-    }).compileComponents();
-    const fixture = TestBed.createComponent(RunnersPage);
-    await settle(fixture);
-    return fixture;
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url);
+    await settle(harness.fixture);
+    return { harness, el: harness.fixture.nativeElement as HTMLElement };
   }
+
+  const toggle = (el: HTMLElement, id: string): HTMLButtonElement | null =>
+    el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="runner-toggle"]`);
 
   afterEach(() => stub.restore());
 
-  it('renders the registry rows the shared runner-rows fold produces, including claims', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      return {};
+  describe('the overview (/fleet)', () => {
+    it("renders the board rail's runner panel, each runner's name opening its Fleet detail", async () => {
+      const { el } = await open('/fleet');
+
+      expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(2);
+      expect(el.querySelector('[data-runner="rn_online"] [data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet/hs_h1');
+      expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-fleet-link"]')?.getAttribute('href')).toBe('/fleet/rn_paused');
+      expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeNull();
     });
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="mobile-fleet-runner"]')).toHaveLength(2);
-    const claims = el.querySelectorAll('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-claim"]');
-    expect(claims).toHaveLength(1);
-    expect(claims[0].textContent).toContain('build');
-    expect(el.querySelector('[data-runner="rn_paused"] [data-testid="mobile-fleet-runner-hub-paused"]')).not.toBeNull();
-  });
-
-  it('pauses an online runner via the client call', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
-      return {};
-    });
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-runner="rn_online"] [data-testid="mobile-fleet-runner-toggle"]')?.click();
-    await settle(fixture);
-
-    const calls = stub.forRoute('/api/runners/rn_online/pause', 'POST');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ by: 'operator' });
-  });
-
-  it('withholds the hub brake for a contributor (no runner:pause) — the registry still renders', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return CONTRIBUTOR_ME;
-      if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      return {};
-    });
-    const fixture = await render();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelectorAll('[data-testid="mobile-fleet-runner"]')).toHaveLength(2);
-    expect(el.querySelectorAll('[data-testid="mobile-fleet-runner-toggle"]')).toHaveLength(0);
-  });
-
-  /*
-   * The mobile toggle held to the same standard as `RunnerPanel` (desktop): the
-   * control that triggered a pause/resume mutation disables for the duration, a
-   * sibling row's own toggle stays clickable, and a rejection renders inline
-   * rather than being swallowed (`bzh:frontend-pending-override`).
-   */
-  describe('pause/resume per-row pending scope', () => {
-    const toggle = (el: HTMLElement, id: string): HTMLButtonElement | null =>
-      el.querySelector<HTMLButtonElement>(`[data-runner="${id}"] [data-testid="mobile-fleet-runner-toggle"]`);
-
-    it("disables only the tapped row's toggle while its mutation is pending, re-enabling once it settles", async () => {
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-        if (method === 'GET' && path === '/api/runners') return RUNNERS;
-        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-        if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
-        return {};
-      });
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
-      const queryClient = TestBed.inject(QueryClient);
-      let resolveInvalidate!: () => void;
-      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(
-        new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    it('labels each toggle by its runner\'s hub brake, and pauses through the client call', async () => {
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
+        path === '/api/runners/rn_online/pause' ? RUNNERS.runners[0] : undefined,
       );
 
-      toggle(el, 'rn_online')?.click();
-      // Held open by the `invalidateQueries` spy above — a bare macrotask tick +
-      // a manual `detectChanges()` stands in for `settle()`'s own `whenStable()`,
-      // which would hang on it (same idiom `runner-panel.spec.ts` uses).
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      fixture.detectChanges();
+      expect(toggle(el, 'rn_online')?.textContent?.trim()).toBe('Pause');
+      expect(toggle(el, 'rn_paused')?.textContent?.trim()).toBe('Resume');
 
-      // The tapped row disables…
+      toggle(el, 'rn_online')?.click();
+      await settle(harness.fixture);
+
+      const calls = stub.forRoute('/api/runners/rn_online/pause', 'POST');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].body).toEqual({ by: 'operator' });
+    });
+
+    it('withholds the toggles for a contributor (no runner:pause) — the runners still render', async () => {
+      const { el } = await open('/fleet', CONTRIBUTOR_ME);
+
+      expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(2);
+      expect(el.querySelectorAll('[data-testid="runner-toggle"]')).toHaveLength(0);
+    });
+
+    it("disables only the tapped runner's toggle while its mutation is pending, re-enabling once it settles", async () => {
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
+        path === '/api/runners/rn_online/pause' ? RUNNERS.runners[0] : undefined,
+      );
+      const queryClient = TestBed.inject(QueryClient);
+      let resolveInvalidate!: () => void;
+      vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(new Promise<void>((resolve) => (resolveInvalidate = resolve)));
+
+      toggle(el, 'rn_online')?.click();
+      // Held open by the `invalidateQueries` spy above — a bare macrotask tick and a manual
+      // `detectChanges()` stand in for `settle()`'s own `whenStable()`, which would hang on it.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      harness.fixture.detectChanges();
+
       expect(toggle(el, 'rn_online')?.disabled).toBe(true);
-      // …but a sibling row's own toggle stays clickable — the two fire the same
-      // `pauseMutation` instance with different variables.
       expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
 
       resolveInvalidate();
-      await settle(fixture);
+      await settle(harness.fixture);
 
       expect(toggle(el, 'rn_online')?.disabled).toBe(false);
     });
 
-    it("reports a pause failure through the page's visible error slot, without disabling a sibling row", async () => {
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-        if (method === 'GET' && path === '/api/runners') return RUNNERS;
-        if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-        if (path === '/api/runners/rn_online/pause') return stubError(409, { detail: 'runner already paused' });
-        return {};
-      });
-      const fixture = await render();
-      const el = fixture.nativeElement as HTMLElement;
+    it('reports a pause failure in a visible notice, without disabling a sibling runner', async () => {
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
+        path === '/api/runners/rn_online/pause' ? stubError(409, { detail: 'runner already paused' }) : undefined,
+      );
 
       toggle(el, 'rn_online')?.click();
-      await settle(fixture);
+      await settle(harness.fixture);
 
-      expect(el.querySelector('[data-testid="mobile-fleet-action-error"]')?.textContent).toBe(
-        'runner already paused',
-      );
-      // The failure never disables a sibling row that never fired the mutation.
+      expect(el.querySelector('[data-testid="runner-action-error"]')?.textContent).toBe('runner already paused');
       expect(toggle(el, 'rn_paused')?.disabled).toBe(false);
+    });
+  });
+
+  describe('the detail (/fleet/:id)', () => {
+    it('opens a host behind a back bar to the overview, its held chunks each linking to their chunk page', async () => {
+      const { el } = await open('/fleet/hs_h1');
+
+      expect(el.querySelector('[data-testid="mobile-fleet-back"]')?.getAttribute('href')).toBe('/fleet');
+      expect(el.querySelector('[data-testid="fleet-detail-name"]')?.textContent).toContain('build-box');
+      expect(el.querySelector('[data-testid="runner-panel"]')).toBeNull();
+      const claim = el.querySelector('[data-runner="rn_online"] [data-testid="fleet-runner-claim-link"]');
+      expect(claim?.getAttribute('href')).toBe('/board/chunk/ch_01claim000000000000000000000');
+      expect(claim?.textContent).toContain('build');
+    });
+
+    it('leaves the host verbs — enroll, revoke, retire — to the desktop Fleet tab, even for an admin', async () => {
+      const { el } = await open('/fleet/hs_h1', ADMIN_ME);
+
+      expect(el.querySelector('[data-testid="host-verbs"]')).toBeNull();
+    });
+
+    it('opens a hostless runner by its own id', async () => {
+      const { el } = await open('/fleet/rn_paused');
+
+      expect(el.querySelector('[data-testid="fleet-detail-name"]')?.textContent).toContain('rn_paused');
+    });
+
+    it('names an id that matches no host or runner', async () => {
+      const { el } = await open('/fleet/hs_gone');
+
+      expect(el.querySelector('[data-testid="mobile-fleet-not-found"]')?.textContent).toContain('hs_gone');
     });
   });
 });

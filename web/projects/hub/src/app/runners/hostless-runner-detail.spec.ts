@@ -1,6 +1,7 @@
 import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import type { RunnerDetailVm } from './fleet-page.model';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
@@ -77,7 +78,7 @@ describe('HostlessRunnerDetail', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [HostlessRunnerDetail],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 

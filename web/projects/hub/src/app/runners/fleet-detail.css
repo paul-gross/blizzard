@@ -3,6 +3,9 @@
 :host {
   display: block;
   min-width: 0;
+  /* The sections below — and the runner rows inside them — reflow against this column's own
+     width, so the phone's full-screen detail and a narrow desktop pane both stack. */
+  container: fleet-detail / inline-size;
   padding-bottom: 24px;
   font-family: var(--mono);
   font-size: var(--fs-base);
@@ -62,4 +65,16 @@
 .mut {
   color: var(--label-dim);
   font-size: var(--fs-xs);
+}
+/* A phone-width column: tighter insets, and the subscription paces one to a row. */
+@container fleet-detail (max-width: 560px) {
+  .hd {
+    padding: 10px 12px;
+  }
+  .sec {
+    margin: 10px 8px 0;
+  }
+  .subs {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

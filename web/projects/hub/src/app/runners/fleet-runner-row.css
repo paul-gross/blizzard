@@ -90,15 +90,24 @@
   list-style: none;
 }
 .claim {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 3px 0;
   border-bottom: 1px dashed var(--line);
   font-size: var(--fs-xs);
 }
 .claim:last-child {
   border-bottom: none;
+}
+/* Each held chunk opens its chunk page, the whole line its hit target. */
+.claim-link {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.claim-link:hover .c-id,
+.claim-link:focus-visible .c-id {
+  text-decoration: underline;
 }
 .c-id {
   color: var(--amber-hi);
@@ -118,4 +127,18 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+/* A phone-width detail column: the facts and the held chunks stack rather than share a row, and
+   each held chunk grows to a finger-sized line. */
+@container fleet-detail (max-width: 560px) {
+  .rgrid {
+    grid-template-columns: minmax(0, 1fr);
+    padding-left: 0;
+  }
+  .facts {
+    --kv-label-col: 80px;
+  }
+  .claim-link {
+    padding: 10px 0;
+  }
 }

@@ -1,5 +1,5 @@
 export { SubscriptionPaceGroup } from './subscription-pace-group';
-export { WorkspaceTable, type WorkspaceRow } from './workspace-table';
+export type { WorkspaceRow } from './workspace-rows.model';
 export { FRESHNESS_AGING_AFTER_MS, type SubscriptionPace } from './subscription-pace.model';
 export { hostSubscriptionPaces, hostWorkspaceRows, hubSubscriptionPaces } from './hub-host.model';
 export { runnerSubscriptionLines, runnerSubscriptionPaces } from './runner-host.model';

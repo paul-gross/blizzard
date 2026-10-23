@@ -1,6 +1,7 @@
 import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import type { RunnerRow } from './runner-rows.model';
 import { FleetRunnerRow } from './fleet-runner-row';
@@ -69,7 +70,7 @@ describe('FleetRunnerRow', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [FleetRunnerRow],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -87,6 +88,22 @@ describe('FleetRunnerRow', () => {
     const claim = el.querySelector('[data-testid="fleet-runner-claims"] .claim');
     expect(claim?.textContent).toContain('build');
     expect(claim?.textContent).toContain('running');
+  });
+
+  it("opens each held chunk's page from its whole line", async () => {
+    const { el } = await render(
+      row('rn_a', {
+        claims: [
+          { chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' },
+          { chunkId: 'ch_02', shortId: 'C-02', node: 'deliver', status: 'delivering' },
+        ],
+      }),
+    );
+
+    const links = [...el.querySelectorAll('[data-testid="fleet-runner-claim-link"]')];
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/board/chunk/ch_01', '/board/chunk/ch_02']);
+    expect(links[0].textContent).toContain('C-01');
+    expect(links[0].textContent).toContain('running');
   });
 
   it('names the hub brake and the runner’s own, with the spend-ceiling reason on the latter', async () => {
@@ -111,7 +128,7 @@ describe('FleetRunnerRow', () => {
     expect(online.el.querySelector('fleet-kit-beacon .beacon')?.classList.contains('step')).toBe(false);
 
     TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({ imports: [FleetRunnerRow], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [FleetRunnerRow], providers: [provideZonelessChangeDetection(), provideRouter([])] }).compileComponents();
     const offline = await render(row('rn_off', { connection: 'offline', online: false }));
     expect(offline.el.querySelector('fleet-kit-beacon .beacon')?.getAttribute('style')).toContain('var(--red)');
     expect(offline.el.querySelector('fleet-kit-beacon .beacon')?.classList.contains('step')).toBe(true);

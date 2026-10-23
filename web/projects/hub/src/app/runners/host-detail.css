@@ -63,3 +63,19 @@
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
 }
+/* A phone-width column: the connection facts stack, and an environment line gives up its fixed
+   columns, its holder clipping before its chunk or node does. */
+@container fleet-detail (max-width: 560px) {
+  .conn {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .env {
+    grid-template-columns: 12px auto minmax(0, 1fr) minmax(0, max-content) auto;
+    gap: 8px;
+  }
+  .holder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

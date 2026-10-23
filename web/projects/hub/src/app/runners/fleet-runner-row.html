@@ -44,10 +44,12 @@
         <ul class="claims" data-testid="fleet-runner-claims">
           @for (claim of row().claims; track claim.chunkId) {
             <li class="claim">
-              <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
-              <span class="node">{{ claim.node }}</span>
-              <span class="sep">·</span>
-              <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
+              <a class="claim-link" data-testid="fleet-runner-claim-link" [routerLink]="['/board', 'chunk', claim.chunkId] | lensLink">
+                <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
+                <span class="node">{{ claim.node }}</span>
+                <span class="sep">·</span>
+                <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
+              </a>
             </li>
           }
         </ul>

@@ -126,7 +126,7 @@ const ROWS: readonly RunnerRow[] = [
   },
 ];
 
-async function render(rows: readonly RunnerRow[] = ROWS) {
+async function render(rows: readonly RunnerRow[] = ROWS, canPause = false) {
   await TestBed.configureTestingModule({
     imports: [RunnerPanelView],
     providers: [provideZonelessChangeDetection(), provideRouter([])],
@@ -134,6 +134,7 @@ async function render(rows: readonly RunnerRow[] = ROWS) {
   const fixture = TestBed.createComponent(RunnerPanelView);
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('rows', rows);
+  fixture.componentRef.setInput('canPause', canPause);
   await fixture.whenStable();
   return fixture;
 }
@@ -205,6 +206,57 @@ describe('compact runner rail layout shell sweep (web:shell-sweep)', () => {
       expect(new Set(lights.map((l) => l.left)).size, 'every light starts at one column').toBe(1);
       for (const mark of [local, hub]) {
         expect(mark.getBoundingClientRect().width).toBeGreaterThan(0);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+
+  it.each([390, 320])('holds a long runner name to one ellipsised line beside its whole host and seen tag at %ipx', async (width) => {
+    await loadDesignTokens();
+    const long = { ...ROW, runner_name: `${NAME}-${NAME}-${NAME}` };
+    const fixture = await render([long]);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const row = root.querySelector<HTMLElement>('[data-testid="runner"]')!;
+      const link = row.querySelector<HTMLElement>('[data-testid="runner-fleet-link"]')!;
+      const lineHeight = parseFloat(getComputedStyle(link).lineHeight) || parseFloat(getComputedStyle(link).fontSize) * 1.5;
+      expect(link.getBoundingClientRect().height, `${width}px: the name wraps`).toBeLessThanOrEqual(lineHeight + 1);
+      expect(link.scrollWidth, `${width}px: the name is not clipped`).toBeGreaterThan(link.clientWidth);
+      expect(getComputedStyle(link).textOverflow).toBe('ellipsis');
+      const seen = row.querySelector<HTMLElement>('[data-testid="runner-seen"]')!;
+      expect(seen.scrollWidth, `${width}px: the seen tag is clipped`).toBeLessThanOrEqual(seen.clientWidth);
+      expect(seen.getBoundingClientRect().right, `${width}px: the seen tag overflows its row`).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
+      expect(row.scrollWidth, `${width}px: the row overflows horizontally`).toBeLessThanOrEqual(row.clientWidth);
+    } finally {
+      root.remove();
+    }
+  });
+
+  it.each([390, 320])('spans each runner with its pause/resume toggle, where offered, at %ipx', async (width) => {
+    await loadDesignTokens();
+    const fixture = await render(ROWS, true);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(width, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      for (const row of root.querySelectorAll<HTMLElement>('[data-testid="runner"]')) {
+        const toggle = row.querySelector<HTMLElement>('[data-testid="runner-toggle"]')!.getBoundingClientRect();
+        const inner = row.getBoundingClientRect();
+        const pad = parseFloat(getComputedStyle(row).paddingLeft) + parseFloat(getComputedStyle(row).paddingRight);
+        expect(toggle.width, `${width}px: the toggle does not span its runner`).toBeGreaterThanOrEqual(inner.width - pad - 1);
+        expect(toggle.height, `${width}px: the toggle is not finger-sized`).toBeGreaterThanOrEqual(32);
+        expect(toggle.right, `${width}px: the toggle overflows its runner`).toBeLessThanOrEqual(inner.right + 1);
       }
     } finally {
       root.remove();

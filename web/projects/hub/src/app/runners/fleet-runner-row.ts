@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, computed, input, output, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import {
   type ChunkStatus,
@@ -12,6 +13,7 @@ import {
   STATUS_TONE,
   type Tone,
 } from 'fleet';
+import { LensLink } from 'fleet/shell';
 import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
@@ -39,6 +41,8 @@ import { StatusLight } from './status-light';
     KitBadge,
     KitButton,
     KitFactList,
+    LensLink,
+    RouterLink,
     RunnerSubscription,
     ServedProjectGroup,
     StatusLight,
