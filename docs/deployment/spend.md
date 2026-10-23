@@ -142,8 +142,8 @@ hours = ["19:00-08:00"]
   `below_pct`. It waits for the soonest reset among the windows over the line.
 - **Budget** admits while the runner's spend over the trailing `window_hours` is under `usd`. The spend is the one
   figure every dollar line reads, billed plus estimated. It gives no `until`: the runner waits for its oldest spend to
-  age out of the window, then carries on. Unlike the ceiling, which trips and stays tripped until a person clears it, the
-  budget only holds back new starts, so a runner that spends through it on a long step still reaches the ceiling. A
+  age out of the window, then carries on. Unlike the ceiling, which trips and stays tripped until a person clears it,
+  the budget only holds back new starts, so a runner that spends through it on a long step still reaches the ceiling. A
   budget at or above `runner_ceiling_usd` summed over the same hours is invalid.
 - **Schedule** admits while the host's own local time falls inside one of its spans. A span belongs to the day it starts
   on, so `19:00-08:00` on a Friday runs into Saturday morning. Spans are wall-clock times in the host's zone and follow
@@ -154,10 +154,10 @@ provider is sampled. A sample is fresh for three of its subscription's sampling 
 passed is not read. A lever whose window is missing or whose sample is stale says no and names why, and says yes again
 at the next fresh sample that carries it; it never falls back to an older sample or a guessed zero.
 
-Before every start the runner asks, in order, the subscription floor, pace, utilization, budget, and schedule, and starts only
-when each says yes. The gate is asked before a claim and before each step, never inside one: a step already begun runs
-to its end, and a continuation of a parked session answers to the floor alone. A chunk whose next step is declined waits
-between steps in its environment, with no retry used, and enters the step once the throttles admit it.
+Before every start the runner asks, in order, the subscription floor, pace, utilization, budget, and schedule, and
+starts only when each says yes. The gate is asked before a claim and before each step, never inside one: a step already
+begun runs to its end, and a continuation of a parked session answers to the floor alone. A chunk whose next step is
+declined waits between steps in its environment, with no retry used, and enters the step once the throttles admit it.
 
 An invalid throttle halts that runner alone and names the key, for example `throttle.pace.taper[2].from_pct`;
 `blizzard runner host --check` reports it with the rest. A `pace` or `utilization` table on a runner that spends no
