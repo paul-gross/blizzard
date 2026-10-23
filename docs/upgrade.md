@@ -140,9 +140,9 @@ One release keys every runner by an id the hub mints, and retires `runner_auth_m
 **Order.** Across this boundary a runner may not run against the hub until it has been upgraded: the hub takes every
 runner's identity from its bearer token and answers with `rn_` ids that a runner of the previous release cannot follow.
 Let the chunks in flight finish, stop every runner, and take a hub store backup ([`docs/backup.md`](./backup.md)).
-Upgrade the hub, which migrates on boot. Then upgrade each runner: its store migration runs offline before the daemon
-starts, as the packaged unit's `ExecStartPre` runs it. Start the runners; each registers with the token it already holds
-and keeps the id the hub minted for it.
+Upgrade each runner while it is stopped: its store migration runs offline before the daemon starts, as the packaged
+unit's `ExecStartPre` runs it. Upgrade the hub, which migrates on boot. Then start the runners; each registers with the
+token it already holds and keeps the id the hub minted for it.
 
 **If a runner is still pre-boundary.** It is not supported against the upgraded hub; keep it stopped until it is
 upgraded.

@@ -9,18 +9,18 @@ file is the in-repo operator reference for running it.
 
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
-(`contracts/ast-grep/`), pytest (unit + component), OpenAPI spec drift, contract document drift
-(`gate / contract drift`), compatibility against the supported releases
-(`gate / compatibility against supported releases`, every trigger but a tag — see below), the change notes under
-`changes/` (`gate / change notes`, every trigger — see below), flag lifecycle (`gate / flag lifecycle`, PR-only), the
-`web/` frontend checks (eslint, vitest, structural gate, bundle composition, story render, generated-client drift), and
-the Vale prose lint (`gate / process-reference and change-history lint`, `styles/Blizzard/ProcessReference.yml`,
-`styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and `styles/Blizzard/ShortFormPointer.yml`
-against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and
-web TypeScript/CSS; generated API clients are excluded and `.html` templates are outside Vale's configured extensions.
-The change-history rule flags the change-history phrases its own token list names, which is the one statement of what it
-catches. Every gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond
-package installs.
+(`contracts/ast-grep/`), the `dprint check` Markdown format (`gate / dprint`, `blizzard:markdown-format`), pytest
+(unit + component), OpenAPI spec drift, contract document drift (`gate / contract drift`), compatibility against the
+supported releases (`gate / compatibility against supported releases`, every trigger but a tag — see below), the change
+notes under `changes/` (`gate / change notes`, every trigger — see below), flag lifecycle (`gate / flag lifecycle`,
+PR-only), the `web/` frontend checks (eslint, vitest, structural gate, bundle composition, story render,
+generated-client drift), and the Vale prose lint (`gate / process-reference and change-history lint`,
+`styles/Blizzard/ProcessReference.yml`, `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and
+`styles/Blizzard/ShortFormPointer.yml` against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown,
+configured Python and `src/` YAML, and web TypeScript/CSS; generated API clients are excluded and `.html` templates are
+outside Vale's configured extensions. The change-history rule flags the change-history phrases its own token list names,
+which is the one statement of what it catches. Every gate check is seams-mocked and token-free, needing no real forge,
+no tokens, and no network beyond package installs.
 
 The pytest tier runs as four parallel shard jobs, and the service tier below as three.
 `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite, chosen
@@ -204,17 +204,20 @@ version against the tag and builds the wheel with the embedded frontend and its 
 upgrades each supported release to that wheel and is skipped on a stable tag. `build`, which waits on both and runs only
 when nothing it needs failed, takes that same wheel, pushes a multi-arch (`linux/amd64` + `linux/arm64`) hub image to
 GHCR, signs it keylessly by its manifest-list digest (`cosign sign --yes --recursive`), attests its build provenance,
-assembles the release's attached files with [`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the
-wheel, both hashed requirements files with their project lines, the image file naming the digest, `compat-breaks.json`
-(attached by every release built from a commit at or after the one that added it, so not `v0.2.0` or a patch on
-`release/0.2`), and `SHA256SUMS` over all of them — attests the provenance of every attached file, and uploads them as
-one workflow artifact. `publish` then downloads that artifact and makes one `gh release create` call with every file
-attached; there is no external package-index publish. `verify` runs last, once the release page exists, holding only
-`contents: read` and a copy of [`scripts/verify-release.sh`](../scripts/verify-release.sh) taken from the tag's tree: it
-proves the image's signature and attestations, the attached files, and an install from the release page, so a red
-`verify` is a red run on a release that already exists. Anyone can run the same check as
-`scripts/verify-release.sh <tag>` with `gh` (with its `attestation` command), `cosign`, and `uv`, and no checkout; it
-refuses a release cut before `v0.2.0-rc.2`, the first one it can verify.
+writes three SPDX 2.3 JSON bills of materials with Syft — one for each of the hub image's `linux/amd64` and
+`linux/arm64` platform images, one for the wheel's runtime — and attests each with `attest-sbom` against the digest or
+wheel it describes, assembles the release's attached files with
+[`scripts/release-inventory.sh`](../scripts/release-inventory.sh) — the wheel, both hashed requirements files with their
+project lines, the image file naming the digest, `compat-breaks.json` (attached by every release built from a commit at
+or after the one that added it, so not `v0.2.0` or a patch on `release/0.2`), and `SHA256SUMS` over all of them —
+attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then downloads that
+artifact and makes one `gh release create` call with every file attached; there is no external package-index publish.
+`verify` runs last, once the release page exists, holding only `contents: read` and a copy of
+[`scripts/verify-release.sh`](../scripts/verify-release.sh) taken from the tag's tree: it proves the image's signature
+and attestations, the attached files, and an install from the release page, so a red `verify` is a red run on a release
+that already exists. Anyone can run the same check as `scripts/verify-release.sh <tag>` with `gh` (with its
+`attestation` command), `cosign`, and `uv`, and no checkout; it refuses a release cut before `v0.2.0-rc.2`, the first
+one it can verify.
 
 The release tag fan-out (`vX.Y.Z` → exact + minor + `latest`; `vX.Y.Z-rc.*` → exact only) lives in
 [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py`, and the attached set's
