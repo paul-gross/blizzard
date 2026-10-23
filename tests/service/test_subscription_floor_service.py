@@ -25,6 +25,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.store.schema import external_usage_samples
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from blizzard.runner.throttle.settings import ThrottleSettings
 from tests.fleet_launchers import REPO, await_http, runner_config, terminate
 from tests.host_files import host_config_of
 from tests.runner_join import RUNNER_BIN, runner_spawn_env
@@ -94,6 +95,7 @@ def _two_plan_host(
     host_token: str,
     runners: tuple[tuple[_Added, str], ...],
     plans: tuple[SubscriptionDeclaration, ...],
+    throttle: ThrottleSettings | None = None,
 ) -> Iterator[httpx.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token`` and declaring ``plans``, one ``[[runner]]`` per
     ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots;
@@ -115,7 +117,7 @@ def _two_plan_host(
             id=runner.runner_id,
             subscription=slug,
             bindings=(ProjectBinding(runner.project, workspace_id, _AGENTS),),
-            own=dataclasses.replace(base, name=runner.name, runner_id=runner.runner_id),
+            own=dataclasses.replace(base, name=runner.name, runner_id=runner.runner_id, throttle=throttle),
         )
         for runner, slug in runners
     )

@@ -8,6 +8,7 @@ that parameter object, plus the loop's static config.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, tzinfo
 from typing import TYPE_CHECKING
 
 from blizzard.foundation.clock import IClock
@@ -45,6 +46,7 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
+from blizzard.runner.throttle.settings import ThrottleSettings
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -89,6 +91,10 @@ class LoopConfig:
     subscription: str | None = None
     #: Whether the registration declares the host's subscriptions — false on a registered host, which reports them.
     declares_subscriptions: bool = True
+    #: The throttles the runner's gate asks, ``None`` when it configures none.
+    throttle: ThrottleSettings | None = None
+    #: The host's local zone, in which the schedule lever reads the wall clock.
+    host_zone: tzinfo = UTC
     #: The directory the per-lease harness-stdout files live in; empty means
     #: no redirect. A worker's envelope survives the process there for later read-back.
     worker_stdout_dir: str = ""

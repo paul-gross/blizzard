@@ -14,13 +14,14 @@ import os
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
+from datetime import tzinfo
 from pathlib import Path
 
 import httpx
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.clock import IClock, SystemClock, local_zone
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_held_keys, warn_ignored_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
@@ -187,6 +188,8 @@ class HostProcess:
     workspaces: IWorkspaces
     events: EventBroker | None
     clock: SystemClock
+    #: The host's local zone, with its daylight-saving rules, that the schedule lever reads the wall clock in.
+    zone: tzinfo
     process: LinuxProcessProbe
     #: The one launch seam every child of the host and its runners goes through.
     children: IChildProcesses
@@ -720,6 +723,7 @@ def _build_host_graph(
             workspaces=workspaces,
             events=events,
             clock=clock,
+            zone=local_zone(os.environ if environ is None else environ),
             process=LinuxProcessProbe(),
             children=children,
             telemetry_receiver=TelemetryReceiver(

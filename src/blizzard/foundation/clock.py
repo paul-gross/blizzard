@@ -7,9 +7,12 @@ a bound ``FixedClock`` makes every duration deterministic."""
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
+from pathlib import Path
 from typing import Protocol
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.roles import collaborator
 
@@ -34,6 +37,25 @@ class SystemClock:
 
     def now(self) -> datetime:
         return datetime.now(UTC)
+
+
+def local_zone(environ: Mapping[str, str], localtime: Path = Path("/etc/localtime")) -> tzinfo:
+    """The machine's local zone as a named zone that carries its daylight-saving rules, never a fixed offset: the
+    ``TZ`` variable when it names one, else the zone ``localtime`` links to. ``UTC`` where neither resolves."""
+    named = environ.get("TZ", "").lstrip(":")
+    candidates = [named] if named else []
+    try:
+        target = localtime.resolve().as_posix()
+    except OSError:
+        target = ""
+    if "zoneinfo/" in target:
+        candidates.append(target.split("zoneinfo/", 1)[1])
+    for key in candidates:
+        try:
+            return ZoneInfo(key)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            continue
+    return UTC
 
 
 class SystemMonotonicClock:

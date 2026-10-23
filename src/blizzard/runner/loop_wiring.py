@@ -147,6 +147,8 @@ class LoopWiring:
             agents=config.agents,
             subscription=resolved_subscriptions[0].slug if resolved_subscriptions else None,
             declares_subscriptions=not graph.host.registered(),
+            throttle=config.throttle,
+            host_zone=graph.host.zone,
             runner_prompt=self.runner_prompt,
             worker_stdout_dir=str(worker_stdout_dir),
             worker_stdout_retention_days=config.worker_stdout_retention_days,
