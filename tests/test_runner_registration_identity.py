@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
@@ -76,7 +76,7 @@ def _rename(hub: HubHarness, tenant: TenantId, name: str) -> None:
     hub.hub_services.tenants.open_tenants.refresh()
 
 
-def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace_id: str = "w1") -> httpx.Response:
+def _register(hub: HubHarness, token: str, *, name: str | None = None, workspace_id: str = "w1") -> httpx2.Response:
     assert hub.app is not None
     body: dict[str, object] = {"workspace_id": workspace_id}
     if name is not None:

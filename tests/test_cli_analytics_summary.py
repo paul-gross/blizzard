@@ -10,7 +10,7 @@ import contextlib
 import json
 from collections.abc import Iterator
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -33,7 +33,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
 class _FakeStreamResponse(_FakeResponse):

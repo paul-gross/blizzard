@@ -1,8 +1,8 @@
 """Builds the hub's work source registry over the stored records.
 
-One credentialed ``httpx.Client`` per configured source record — never a shared client,
+One credentialed ``httpx2.Client`` per configured source record — never a shared client,
 never a shared token. A ``provider -> entry`` map selects the adapter; confined to
-``internal/`` (``bzh:dependency-inversion``), keeping ``httpx`` out of the root.
+``internal/`` (``bzh:dependency-inversion``), keeping ``httpx2`` out of the root.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import httpx
+import httpx2
 
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.users import IReadUserRepository
@@ -35,14 +35,14 @@ class WorkSourceEntry:
     record: ConfiguredWorkSource
     secret: SecretValue | None
     #: Applied to the source's client as it is built — the composition root's tracing hook.
-    instrument: Callable[[httpx.Client], None] = lambda _client: None
+    instrument: Callable[[httpx2.Client], None] = lambda _client: None
 
     @classmethod
     def of(
         cls,
         record: ConfiguredWorkSource,
         secret: SecretValue | None,
-        instrument: Callable[[httpx.Client], None] | None = None,
+        instrument: Callable[[httpx2.Client], None] | None = None,
     ) -> WorkSourceEntry:
         kinds: dict[str, type[WorkSourceEntry]] = {"github": GithubEntry}
         kind = kinds.get(record.fields.provider)
@@ -56,7 +56,7 @@ class WorkSourceEntry:
         record: ConfiguredWorkSource,
         *,
         secrets: ISecretReader,
-        instrument: Callable[[httpx.Client], None] | None = None,
+        instrument: Callable[[httpx2.Client], None] | None = None,
     ) -> BuiltWorkSource:
         """Build the record's adapter over a client carrying its revealed secret."""
         secret: SecretValue | None = None
@@ -81,7 +81,7 @@ class WorkSourceEntry:
         edits: WorkItemEditService,
         resolution: GardenProposalDeliveryResolution,
         close_forge_writes_enabled: bool = True,
-        instrument_client: Callable[[httpx.Client], None] | None = None,
+        instrument_client: Callable[[httpx2.Client], None] | None = None,
     ) -> StoreWorkSourceRegistry:
         """Construct a store-backed registry; ``instrument_client`` applies to each
         configured source's client."""
@@ -100,9 +100,9 @@ class WorkSourceEntry:
         return self.secret.expose()
 
     @property
-    def client(self) -> httpx.Client:
+    def client(self) -> httpx2.Client:
         headers = {"Authorization": f"token {self.token}"}
-        client = httpx.Client(base_url=self.api_base, headers=headers, timeout=30.0)
+        client = httpx2.Client(base_url=self.api_base, headers=headers, timeout=30.0)
         self.instrument(client)
         return client
 
@@ -110,7 +110,7 @@ class WorkSourceEntry:
     def api_base(self) -> str:
         raise NotImplementedError
 
-    def source(self, client: httpx.Client) -> IWorkSource:
+    def source(self, client: httpx2.Client) -> IWorkSource:
         raise NotImplementedError
 
 
@@ -126,7 +126,7 @@ class GithubEntry(WorkSourceEntry):
         """The record's own web origin, else the one its API base implies."""
         return self.record.fields.web_base or web_origin(self.api_base)
 
-    def source(self, client: httpx.Client) -> IWorkSource:
+    def source(self, client: httpx2.Client) -> IWorkSource:
         return GitHubWorkSource(
             client,
             source_id=self.record.work_source_id,

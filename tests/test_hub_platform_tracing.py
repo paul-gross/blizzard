@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -156,7 +156,7 @@ def test_an_outbound_call_through_an_injected_oauth_client_is_an_httpx_client_sp
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
     handle = _handle(config, exporter)
-    oauth = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+    oauth = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(200, json={})))
     build_hosted_hub_app(config, platform_tracing=handle, oauth_http_client=oauth)
     oauth.get("https://idp.example/token?code=tok-secret-9")
     spans = _spans(handle, exporter)
@@ -409,20 +409,20 @@ def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authentica
     config = replace(_config(tmp_path), auth=AuthConfig(mode=AUTH_MODE_OAUTH))
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
-    posted: list[httpx.Request] = []
+    posted: list[httpx2.Request] = []
     with TestClient(app) as client:
 
-        def answer(request: httpx.Request) -> httpx.Response:
+        def answer(request: httpx2.Request) -> httpx2.Response:
             if request.url.host == "collector.local":
                 posted.append(request)
-                return httpx.Response(200)
+                return httpx2.Response(200)
             relayed = client.request(
                 request.method,
                 request.url.raw_path.decode(),
                 headers=dict(request.headers),
                 content=request.content,
             )
-            return httpx.Response(
+            return httpx2.Response(
                 relayed.status_code, headers={"content-type": relayed.headers["content-type"]}, content=relayed.content
             )
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -23,14 +23,14 @@ pytestmark = pytest.mark.component
 
 def _register(
     hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a", *, token: str | None = None
-) -> httpx.Response:
+) -> httpx2.Response:
     headers = {"Authorization": f"Bearer {token}"} if token is not None else None
     return hub.client.post(
         "/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id}, headers=headers
     )
 
 
-def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> httpx.Response:
+def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> httpx2.Response:
     return hub.client.post(f"/api/runners/{runner_id}/enrollments")
 
 

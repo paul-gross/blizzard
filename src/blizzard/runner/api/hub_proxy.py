@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import httpx
+import httpx2
 import structlog
 from fastapi import Request, status
 from fastapi.exceptions import HTTPException
@@ -59,7 +59,7 @@ class HubProxy:
 
     config: RunnerConfig
     what: str
-    client: httpx.Client
+    client: httpx2.Client
     clock: IMonotonicClock
     #: The token the forward presents — the runner's held one; ``config``'s own when none is wired.
     token: ICurrentHubToken | None = None
@@ -99,7 +99,7 @@ class HubProxy:
         severity: str = "error",
         params: dict[str, str] | None = None,
         **fields: object,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         return self.forward("GET", path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
 
     def post(
@@ -111,7 +111,7 @@ class HubProxy:
         severity: str = "error",
         params: dict[str, str] | None = None,
         **fields: object,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         return self.forward("POST", path, expect=expect, timeout=timeout, severity=severity, params=params, **fields)
 
     def forward(
@@ -124,7 +124,7 @@ class HubProxy:
         severity: str = "error",
         params: dict[str, str] | None = None,
         **fields: object,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Forward ``method path``, or raise ``502`` unreachable / the upstream status verbatim.
 
         While the loop has not checked the runner's identity, the forward first asks the hub which runner
@@ -155,7 +155,7 @@ class HubProxy:
         severity: str,
         params: dict[str, str] | None,
         **fields: object,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         url = f"{self.config.hub_url.rstrip('/')}{path}"
         retryable = method == "GET"
         budget = timeout if timeout is not None else (_HUB_RETRY_CEILING if retryable else _HUB_TIMEOUT)
@@ -175,7 +175,7 @@ class HubProxy:
                     timeout=attempt_timeout,
                     params=params,
                 )
-            except httpx.HTTPError as exc:
+            except httpx2.HTTPError as exc:
                 if retryable and self._may_retry(retries, budget, started):
                     self.clock.sleep(_backoff(retries))
                     retries += 1
@@ -238,7 +238,7 @@ class HubProxy:
         return get_logger(f"blizzard.runner.api.{self.what.replace('-', '_')}")
 
     @staticmethod
-    def _detail(response: httpx.Response) -> str:
+    def _detail(response: httpx2.Response) -> str:
         """The hub's error detail, unwrapped from its JSON body when present."""
         try:
             payload = response.json()

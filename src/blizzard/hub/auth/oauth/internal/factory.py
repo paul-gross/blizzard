@@ -11,7 +11,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-import httpx
+import httpx2
 
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.oauth.internal.github_provider import GithubProvider
@@ -40,14 +40,14 @@ class ProviderEntry:
 
     @classmethod
     def registry(
-        cls, providers: Sequence[OAuthProviderConfig], *, http_client: httpx.Client | None = None
+        cls, providers: Sequence[OAuthProviderConfig], *, http_client: httpx2.Client | None = None
     ) -> OAuthProviderRegistry:
-        """One provider conformer per configured entry, sharing one ``httpx.Client``.
+        """One provider conformer per configured entry, sharing one ``httpx2.Client``.
 
         A misconfigured entry fails here, at boot, naming the offending provider — never
         silently at first login. ``http_client`` is injectable for tests; the ``host``
         composition root leaves it unset for the real client."""
-        client = http_client or httpx.Client(timeout=15.0)
+        client = http_client or httpx2.Client(timeout=15.0)
         return OAuthProviderRegistry({e.name: cls.of(e).provider(client) for e in providers})
 
     @property
@@ -59,12 +59,12 @@ class ProviderEntry:
             )
         return os.environ[self.config.client_secret_env]
 
-    def provider(self, client: httpx.Client) -> IOAuthProvider:
+    def provider(self, client: httpx2.Client) -> IOAuthProvider:
         raise NotImplementedError
 
 
 class OidcEntry(ProviderEntry):
-    def provider(self, client: httpx.Client) -> IOAuthProvider:
+    def provider(self, client: httpx2.Client) -> IOAuthProvider:
         secret = self.secret
         if not self.config.issuer:
             raise ConfigError(f"[[auth.oauth.provider]] {self.config.name!r} is type 'oidc' but carries no issuer")
@@ -80,7 +80,7 @@ class OidcEntry(ProviderEntry):
 
 
 class GithubEntry(ProviderEntry):
-    def provider(self, client: httpx.Client) -> IOAuthProvider:
+    def provider(self, client: httpx2.Client) -> IOAuthProvider:
         if self.config.emails_authoritative is not None:
             raise ConfigError(
                 f"[[auth.oauth.provider]] {self.config.name!r} is type 'github', whose verified emails are always "

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Protocol, TypeVar
 
-import httpx
+import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -89,7 +89,7 @@ class LoopWiring:
         tracer: IPlatformTracer | None = None,
     ) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
-        the caller owns the ``httpx.Client`` behind ``hub``.
+        the caller owns the ``httpx2.Client`` behind ``hub``.
 
         ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep — safe
         only when no spawn can race it, so off by default. ``tracer`` is the tick's span seam, absent by default."""
@@ -241,7 +241,7 @@ class LoopWiring:
         config = self.config
         graph = process or build_runner_process(config, events=self.events, bundle=self.bundle)
         try:
-            with httpx.Client(
+            with httpx2.Client(
                 base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(graph.hub_token)
             ) as client:
                 graph.platform_tracing.instrument_client(client)
@@ -321,7 +321,7 @@ class ResumeMarking:
 class PeriodicDriver:
     """A background thread that ticks the loop on an interval (~30s).
 
-    Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is logged
+    Owns its own ``httpx2.Client`` for the driver's lifetime. A tick that raises is logged
     and swallowed so one bad pass never kills the daemon."""
 
     def __init__(
@@ -338,7 +338,7 @@ class PeriodicDriver:
         self._interval = interval_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
-        self._client: httpx.Client | None = None
+        self._client: httpx2.Client | None = None
 
     def start(self) -> None:
         self._thread.start()
@@ -360,7 +360,7 @@ class PeriodicDriver:
 
     def _run(self) -> None:
         config = self._wiring.config
-        self._client = httpx.Client(
+        self._client = httpx2.Client(
             base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
         )
         self._graph.platform_tracing.instrument_client(self._client)

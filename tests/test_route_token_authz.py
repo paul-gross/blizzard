@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
@@ -82,7 +82,7 @@ def _completion(node_id: str, *, epoch: int, runner_id: str = "r1", route_token:
     return body
 
 
-def _submit(hub, chunk_id: str, **kwargs) -> httpx.Response:  # type: ignore[no-untyped-def]
+def _submit(hub, chunk_id: str, **kwargs) -> httpx2.Response:  # type: ignore[no-untyped-def]
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(**kwargs))
 
 

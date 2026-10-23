@@ -1030,7 +1030,7 @@ def test_hub_store_internal_holds_no_http_client() -> None:
     """``hub/store/internal/`` is the SQL adapters' home, as every module there states. An
     HTTP client belongs to the package owning its own seam — `hub/forge/internal/`,
     `hub/work_sources/internal/` — never beside them."""
-    violations = _violations(_HUB_STORE_INTERNAL_DIR, ("httpx",))
+    violations = _violations(_HUB_STORE_INTERNAL_DIR, ("httpx2",))
     assert not violations, f"E — hub/store/internal/ is SQL-only: {violations}"
 
 
@@ -1844,7 +1844,7 @@ def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: P
     assert contexts - _conformance_sentinels(src / "runner/loop/context.py") == set()
 
 
-_DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx")
+_DOMAIN_CORE_FRAMEWORKS = ("fastapi", "starlette", "sqlalchemy", "click", "httpx2")
 _DOMAIN_CORE_STDLIB_DRIVERS = ("os", "shutil", "subprocess", "tempfile")
 _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS)
 
@@ -1916,7 +1916,7 @@ def test_domain_core_driver_gate_flags_a_driver_and_honours_its_exemptions(tmp_p
             "leases/paths.py": "import os\nimport shutil\n",
             "leases/clean.py": "import posixpath\n",
             "harness/claude_code/adapter.py": "import subprocess\nimport os\n",
-            "harness/claude_code/http.py": "import httpx\n",
+            "harness/claude_code/http.py": "import httpx2\n",
             "harness/wiring.py": "import tempfile\n",
         },
     )
@@ -1924,7 +1924,7 @@ def test_domain_core_driver_gate_flags_a_driver_and_honours_its_exemptions(tmp_p
     flagged = _driver_import_violations(runner, files, {})
     assert "leases/launch.py imports subprocess" in flagged
     assert "harness/wiring.py imports tempfile" in flagged
-    assert "harness/claude_code/http.py imports httpx" in flagged
+    assert "harness/claude_code/http.py imports httpx2" in flagged
     assert not [v for v in flagged if v.startswith(("harness/claude_code/adapter.py", "leases/clean.py"))]
     admitted = _driver_import_violations(runner, files, {runner / "leases" / "paths.py": ("os",)})
     assert "leases/paths.py imports shutil" in admitted
@@ -2779,8 +2779,8 @@ def test_runner_domain_core_selection_keys_on_every_node_module_outside_internal
             "leases/model.py": "from blizzard.foundation.roles import domain_model\n@domain_model\nclass Lease: ...\n",
             "leases/requeue.py": "import fastapi\nclass RequeueService: ...\n",
             "leases/internal/__init__.py": "",
-            "leases/internal/http_leases.py": "import httpx\n",
-            "hub/internal/http_hub.py": "import httpx\n",
+            "leases/internal/http_leases.py": "import httpx2\n",
+            "hub/internal/http_hub.py": "import httpx2\n",
             "config.py": "from typing import Protocol\nclass IConfig(Protocol): ...\n",
             "api/routes.py": "import fastapi\n",
         },
@@ -2994,19 +2994,19 @@ def test_an_operator_trace_loads_no_opentelemetry_and_an_untraced_command_no_emi
 def test_trace_ids_load_no_driver_or_hub_store() -> None:
     """The runner imports the id derivation, so it loads nothing but the standard library and the kernel."""
     loaded = _loaded_after_importing("blizzard.foundation.trace_ids")
-    heavy = {m for m in loaded if m.split(".")[0] in ("sqlalchemy", "httpx") or m.startswith("blizzard.hub")}
+    heavy = {m for m in loaded if m.split(".")[0] in ("sqlalchemy", "httpx2") or m.startswith("blizzard.hub")}
     assert not heavy, heavy
 
 
 def test_trace_step_rules_load_no_http_driver_or_hub_store() -> None:
     loaded = _loaded_after_importing("blizzard.hub.domain.observability.tracing.steps")
-    heavy = {m for m in loaded if m.split(".")[0] == "httpx" or m.startswith("blizzard.hub.store")}
+    heavy = {m for m in loaded if m.split(".")[0] == "httpx2" or m.startswith("blizzard.hub.store")}
     assert not heavy, heavy
 
 
 def test_trace_assembly_loads_no_http_driver_opentelemetry_or_hub_store() -> None:
     loaded = _loaded_after_importing("blizzard.hub.domain.observability.tracing.assembly")
-    heavy = {m for m in loaded if m.split(".")[0] in ("httpx", "opentelemetry") or m.startswith("blizzard.hub.store")}
+    heavy = {m for m in loaded if m.split(".")[0] in ("httpx2", "opentelemetry") or m.startswith("blizzard.hub.store")}
     assert not heavy, heavy
 
 
@@ -3665,7 +3665,7 @@ def _wire_import_violations(src_root: Path, *, exempt: frozenset[Path]) -> list[
 def _domain_model_collaborator_violations(src_root: Path, paths: Iterable[Path] | None = None) -> list[str]:
     """Every ``@domain_model`` in ``paths`` with a field — inherited, ``InitVar``, or
     ``init=False`` included — whose annotation mentions a collaborator at any depth, a driver
-    handle spelled dotted (``httpx.Client``) included."""
+    handle spelled dotted (``httpx2.Client``) included."""
     scan = _role_scan(src_root)
     violations: list[str] = []
     for site in scan.sites_in(paths):
@@ -3841,7 +3841,7 @@ from functools import cached_property
 from ipaddress import IPv4Network
 from typing import Literal, NamedTuple, Optional, Protocol, Self
 
-import httpx
+import httpx2
 from sqlalchemy import Connection
 
 from blizzard.foundation.roles import adapter_model, collaborator, domain_model, dto
@@ -3902,7 +3902,7 @@ def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
         "@dto\n@dataclass\nclass Base:\n    x: int\n\n@dataclass\nclass Child(Base):\n    y: int\n",
         "@dto\n@dataclass\nclass ParseError:\n    x: int\n\n@dataclass\nclass Sub(ParseError):\n    y: int\n",
         "class Late:\n    x: int\n\nLate = dataclass(Late)\n",
-        "@dto\n@dataclass\nclass Wired:\n    x: int\n    client: httpx.Client\n",
+        "@dto\n@dataclass\nclass Wired:\n    x: int\n    client: httpx2.Client\n",
         "@domain_model\n@dataclass\nclass Checked:\n    conn: Connection\n",
         "@dto\n@dataclass\nclass Driven:\n    x: int\n    driver: Driver\n",
         "@collaborator\n@dataclass\nclass Held:\n    thing: IThing\n\n    def go(self) -> None: ...\n",
@@ -3936,7 +3936,7 @@ def test_role_marker_check_catches_a_misdeclared_data_class(tmp_path: Path, sour
         "class StepContext(BaseContext, Protocol): ...\n\n@dataclass\nclass Step:\n    n: int\n    ctx: StepContext\n",
         "@collaborator\n@dataclass\nclass Runner:\n    url: str\n\n    def run(self) -> None: ...\n",
         "@dataclass\nclass Uses:\n    x: int\n    driver: Driver\n",
-        "@dataclass\nclass Daemon:\n    verb: str\n    client: httpx.Client\n",
+        "@dataclass\nclass Daemon:\n    verb: str\n    client: httpx2.Client\n",
         "import sqlalchemy as sa\n\n@dataclass\nclass Check:\n    conn: sa.Connection\n",
     ],
 )
@@ -4077,7 +4077,7 @@ def test_wire_import_check_admits_the_boundary_the_wire_adapters_and_a_root(tmp_
         "thing: IThing = field(init=False)",
         "service: Service",
         "things: Things",
-        "client: httpx.Client | None = None",
+        "client: httpx2.Client | None = None",
         "conns: list[Connection]",
         "drivers: tuple[Driver, ...] = ()",
     ],

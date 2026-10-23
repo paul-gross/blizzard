@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import yaml
 
@@ -35,7 +35,7 @@ _SECOND_REPO = f"{OWNER}/{_SECOND_SOURCE}"
 
 
 @contextmanager
-def _two_projects(tmp_path: Path) -> Iterator[tuple[httpx.Client, httpx.Client, int]]:
+def _two_projects(tmp_path: Path) -> Iterator[tuple[httpx2.Client, httpx2.Client, int]]:
     """A real hub over the fixture forge whose ``default`` project links the ``toy-api`` source and repository,
     and whose ``second`` project links only :data:`_SECOND_SOURCE` — no repository. Yields the forge, the hub and
     the hub's port."""
@@ -54,13 +54,13 @@ def _two_projects(tmp_path: Path) -> Iterator[tuple[httpx.Client, httpx.Client, 
         yield forge, hub, hub_port
 
 
-def _issue(forge: httpx.Client, title: str, *, repo: str = REPO) -> int:
+def _issue(forge: httpx2.Client, title: str, *, repo: str = REPO) -> int:
     filed = forge.post(f"/repos/{repo}/issues", json={"title": title, "body": "the chunk"})
     assert filed.status_code == 201, filed.text
     return int(filed.json()["number"])
 
 
-def _chunk_ids(hub: httpx.Client) -> list[str]:
+def _chunk_ids(hub: httpx2.Client) -> list[str]:
     listed = hub.get("/api/chunks")
     assert listed.status_code == 200, listed.text
     return [chunk["chunk_id"] for chunk in listed.json()["chunks"]]

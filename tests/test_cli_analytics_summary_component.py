@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import click
-import httpx
+import httpx2
 import pytest
 from click.testing import Result
 
@@ -48,13 +48,13 @@ _LENS_PARAMS = {"project"}
 def _relay(hub: HubHarness, token: str) -> Bound:
     headers = _cookie(token)
 
-    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx.Response:
+    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
         return hub.client.get(url, params=params, headers=headers)
 
     @contextlib.contextmanager
     def fake_stream(
         method: str, url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object
-    ) -> Iterator[httpx.Response]:
+    ) -> Iterator[httpx2.Response]:
         with hub.client.stream(method.upper(), url, params=params, headers=headers) as resp:
             yield resp
 

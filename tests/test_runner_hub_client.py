@@ -1,4 +1,4 @@
-"""The hub client — driven against a fake hub via ``httpx.MockTransport``.
+"""The hub client — driven against a fake hub via ``httpx2.MockTransport``.
 
 The runner's outbound edge, no live daemon: peek, the 201/409 claim split, completion,
 the idempotent envelope re-read, the chunk poll, and a transport failure surfacing as
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
 from structlog.testing import capture_logs
 
@@ -45,8 +45,8 @@ from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptS
 
 
 def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
-    transport = httpx.MockTransport(handler)
-    return HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport))
+    transport = httpx2.MockTransport(handler)
+    return HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=transport))
 
 
 @pytest.mark.unit
@@ -97,9 +97,9 @@ def test_envelope_of_carries_every_node_field() -> None:
 
 @pytest.mark.unit
 def test_peek_queue_parses_entries() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/queue/peek"
-        return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
+        return httpx2.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
     peek = _client(handler).peek_queue((), policy="pass-over")
     assert [e.chunk_id for e in peek] == ["ch_1"]
@@ -109,10 +109,10 @@ def test_peek_queue_parses_entries() -> None:
 def test_peek_queue_posts_the_request_body() -> None:
     seen: dict[str, object] = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.method == "POST"
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"entries": []})
+        return httpx2.Response(200, json={"entries": []})
 
     _client(handler).peek_queue([HarnessCapability(harness_id="claude", default=True)], policy="hold")
     expected = QueuePeekRequest(capabilities=[RunnerCapability(harness_id="claude", default=True)], policy="hold")
@@ -121,7 +121,7 @@ def test_peek_queue_posts_the_request_body() -> None:
 
 @pytest.mark.unit
 def test_claim_route_201_returns_envelope() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/routes"
         body = {
             "chunk_id": "ch_1",
@@ -144,7 +144,7 @@ def test_claim_route_201_returns_envelope() -> None:
             },
             "route_token": "rtok_test",
         }
-        return httpx.Response(201, json=body)
+        return httpx2.Response(201, json=body)
 
     outcome = _client(handler).claim_route(ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"]))
     assert outcome.won
@@ -154,8 +154,8 @@ def test_claim_route_201_returns_envelope() -> None:
 
 @pytest.mark.unit
 def test_claim_route_409_is_conflict_not_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(409, json={"chunk_id": "ch_1", "held_by_runner_id": "r2", "detail": "already claimed"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(409, json={"chunk_id": "ch_1", "held_by_runner_id": "r2", "detail": "already claimed"})
 
     outcome = _client(handler).claim_route(ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"]))
     assert not outcome.won
@@ -168,8 +168,8 @@ def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict
     terminal denial carries ``status``, a race-loss conflict carries
     ``held_by_runner_id`` — and the adapter tells them apart on that field alone."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(409, json={"chunk_id": "ch_1", "status": "stopped", "detail": "chunk is terminal"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(409, json={"chunk_id": "ch_1", "status": "stopped", "detail": "chunk is terminal"})
 
     outcome = _client(handler).claim_route(ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"]))
     assert not outcome.won
@@ -183,8 +183,8 @@ def test_claim_route_409_with_a_prerequisite_chunk_id_field_is_a_dependency_deni
     ``prerequisite_chunk_id`` where a terminal denial carries ``status`` and a race-loss
     conflict carries ``held_by_runner_id`` — the adapter tells them apart on that field."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             409,
             json={
                 "chunk_id": "ch_1",
@@ -206,8 +206,8 @@ def test_claim_route_409_with_an_incompatible_runner_id_field_is_an_incompatibil
     own ``incompatible_runner_id`` field rather than ``status``, ``prerequisite_chunk_id``,
     or ``held_by_runner_id``."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             409,
             json={
                 "chunk_id": "ch_1",
@@ -229,8 +229,8 @@ def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
     """A distinct outcome from the 409 race loss: the hub's registry has
     this runner paused and refused the claim outright."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             403, json={"chunk_id": "ch_1", "runner_id": "r1", "detail": "runner is paused at the hub"}
         )
 
@@ -242,9 +242,9 @@ def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
 
 @pytest.mark.unit
 def test_submit_completion_returns_apply_response() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/chunks/ch_1/completions"
-        return httpx.Response(200, json={"outcome": "hub_node_taken", "detail": "delivering"})
+        return httpx2.Response(200, json={"outcome": "hub_node_taken", "detail": "delivering"})
 
     resp = _client(handler).submit_completion("ch_1", Completion(choice="pass", epoch=1, from_node_id="nd_build"))
     assert resp.outcome == "hub_node_taken"
@@ -255,9 +255,9 @@ def test_push_transcripts_posts_to_its_own_route_not_events() -> None:
     """The transcript lane posts to ``/transcripts``, never ``/events`` — its own structural
     separation, exercised at the wire."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/transcripts"
-        return httpx.Response(200, json={"runner_id": "r1", "high_water": 3, "applied": [3], "already_applied": []})
+        return httpx2.Response(200, json={"runner_id": "r1", "high_water": 3, "applied": [3], "already_applied": []})
 
     batch = TranscriptSegmentBatch(
         records=[
@@ -287,14 +287,14 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
     shared client's default."""
     seen_timeouts = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_timeouts.append(request.extensions["timeout"]["read"])
-        return httpx.Response(200, json={"runner_id": "r1", "high_water": 1, "applied": [1], "already_applied": []})
+        return httpx2.Response(200, json={"runner_id": "r1", "high_water": 1, "applied": [1], "already_applied": []})
 
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     # A much longer default than the transcript route's own override, so the two are
     # unambiguously distinguishable in what the transport actually receives.
-    client = HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport, timeout=30.0))
+    client = HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=transport, timeout=30.0))
     batch = TranscriptSegmentBatch(
         records=[
             TranscriptSegmentRecord(
@@ -322,9 +322,9 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
 
 @pytest.mark.unit
 def test_hub_advance_posts_to_the_fleet_path() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/chunks/ch_1/hub-advance"
-        return httpx.Response(200, json={"chunk_id": "ch_1", "status": "running", "ran": False, "detail": "busy"})
+        return httpx2.Response(200, json={"chunk_id": "ch_1", "status": "running", "ran": False, "detail": "busy"})
 
     resp = _client(handler).hub_advance("ch_1")
     assert resp.ran is False
@@ -332,10 +332,10 @@ def test_hub_advance_posts_to_the_fleet_path() -> None:
 
 @pytest.mark.unit
 def test_chunk_statuses_parses_the_batch_response() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/chunk-statuses"
         assert request.url.params.get_list("chunk_id") == ["ch_1", "ch_2"]
-        return httpx.Response(200, json=[{"chunk_id": "ch_1", "status": "done", "latest_epoch": 1}])
+        return httpx2.Response(200, json=[{"chunk_id": "ch_1", "status": "done", "latest_epoch": 1}])
 
     found = _client(handler).chunk_statuses(["ch_1", "ch_2"])
     assert set(found) == {"ch_1"}
@@ -350,10 +350,10 @@ def test_chunk_statuses_batches_across_the_query_param_limit(monkeypatch: pytest
     monkeypatch.setattr(http_hub_module, "_CHUNK_STATUSES_BATCH_LIMIT", 2)
     seen_batches: list[list[str]] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         batch = request.url.params.get_list("chunk_id")
         seen_batches.append(batch)
-        return httpx.Response(200, json=[{"chunk_id": cid, "status": "done", "latest_epoch": 1} for cid in batch])
+        return httpx2.Response(200, json=[{"chunk_id": cid, "status": "done", "latest_epoch": 1} for cid in batch])
 
     found = _client(handler).chunk_statuses(["ch_1", "ch_2", "ch_3"])
     assert seen_batches == [["ch_1", "ch_2"], ["ch_3"]]
@@ -365,8 +365,8 @@ def test_chunk_statuses_omits_an_id_the_hub_does_not_know() -> None:
     """The batch route never 404s — an unknown id is simply absent from
     the response, unlike the single-chunk-identified reads."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=[])
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=[])
 
     assert _client(handler).chunk_statuses(["ch_missing"]) == {}
 
@@ -375,12 +375,12 @@ def test_chunk_statuses_omits_an_id_the_hub_does_not_know() -> None:
 def test_register_runner_posts_registration() -> None:
     seen: dict[str, object] = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/runners"
         import json
 
         seen.update(json.loads(request.content))
-        return httpx.Response(201, json={"runner_id": "rn_1", "runner_name": "r-claude", "first_registration": True})
+        return httpx2.Response(201, json={"runner_id": "rn_1", "runner_name": "r-claude", "first_registration": True})
 
     reply = _client(handler).register_runner("r-claude", "ws1", env_capacity=4)
     # The body declares the name and never an id — the hub takes the id from the token; url/redirect_uris,
@@ -406,9 +406,9 @@ def test_register_runner_posts_registration() -> None:
 
 @pytest.mark.unit
 def test_register_runner_reads_the_hub_version_and_window_it_answers_with() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert json.loads(request.content)["version"] == "0.2.1"
-        return httpx.Response(
+        return httpx2.Response(
             201,
             json={
                 "runner_id": "rn_1",
@@ -418,16 +418,16 @@ def test_register_runner_reads_the_hub_version_and_window_it_answers_with() -> N
             },
         )
 
-    transport = httpx.MockTransport(handler)
-    client = HttpHubClient(httpx.Client(base_url="http://hub.test", transport=transport), version="0.2.1")
+    transport = httpx2.MockTransport(handler)
+    client = HttpHubClient(httpx2.Client(base_url="http://hub.test", transport=transport), version="0.2.1")
     reply = client.register_runner("r-claude", "ws1")
     assert (reply.hub_version, reply.window) == ("0.3.0", HubVersionWindow(floor="0.2", ceiling="0.3"))
 
 
 @pytest.mark.unit
 def test_a_registration_the_window_refuses_raises_the_typed_refusal() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             409,
             json={
                 "reason": "too-old",
@@ -454,11 +454,11 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
     """A caller that omits env_capacity posts an explicit null, not a missing key."""
     seen: dict[str, object] = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         import json
 
         seen.update(json.loads(request.content))
-        return httpx.Response(201, json={"runner_id": "rn_1", "first_registration": True})
+        return httpx2.Response(201, json={"runner_id": "rn_1", "first_registration": True})
 
     reply = _client(handler).register_runner("r-claude", "ws1")
     # A reply naming no runner leaves the name this registration declared.
@@ -485,11 +485,11 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
 def test_register_runner_posts_the_gates_it_imposes() -> None:
     seen: dict[str, object] = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         import json
 
         seen.update(json.loads(request.content))
-        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+        return httpx2.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1", gates=("build", "review"))
     assert seen["gates"] == ["build", "review"]
@@ -500,11 +500,11 @@ def test_register_runner_posts_its_own_federation_identity() -> None:
     """``url``/``redirect_uris`` ride the registration body when given."""
     seen: dict[str, object] = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         import json
 
         seen.update(json.loads(request.content))
-        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+        return httpx2.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner(
         "r1", "ws1", url="https://runner-a.example", redirect_uris=("https://runner-a.example/api/auth/callback",)
@@ -525,8 +525,8 @@ _TENANT = {"tenant_id": "tn_1", "tenant_name": "acme"}
 def test_identity_carries_the_fleet_flags_the_hub_answers_with(
     answered: dict[str, dict[str, bool]], expected: dict[str, bool]
 ) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
 
     identity = _client(handler).identity()
     assert isinstance(identity, TokenIdentity)
@@ -545,8 +545,8 @@ def test_register_runner_reads_the_tenant_the_hub_answers_with(
     """The reply's tenant reaches the runner as the hub answered it; a hub that predates tenants
     names none, and the reply carries none rather than failing to parse."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
             201, json={"runner_id": "rn_1", "runner_name": "r-claude", "first_registration": False, **answered}
         )
 
@@ -556,9 +556,9 @@ def test_register_runner_reads_the_tenant_the_hub_answers_with(
 
 @pytest.mark.unit
 def test_fetch_runner_paused_reads_the_derived_brake() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/runners/r1"
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "runner_id": "r1",
@@ -575,8 +575,8 @@ def test_fetch_runner_paused_reads_the_derived_brake() -> None:
 
 @pytest.mark.unit
 def test_transport_failure_raises_hub_client_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="boom")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
         _client(handler).peek_queue((), policy="pass-over")
@@ -584,8 +584,8 @@ def test_transport_failure_raises_hub_client_error() -> None:
 
 @pytest.mark.unit
 def test_chunk_statuses_5xx_raises_hub_client_error_for_the_whole_call() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="boom")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(500, text="boom")
 
     with pytest.raises(HubClientError):
         _client(handler).chunk_statuses(["ch_1"])
@@ -593,8 +593,8 @@ def test_chunk_statuses_5xx_raises_hub_client_error_for_the_whole_call() -> None
 
 @pytest.mark.unit
 def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused", request=request)
 
     with pytest.raises(HubClientError):
         _client(handler).chunk_statuses(["ch_1"])
@@ -604,8 +604,8 @@ def test_chunk_statuses_transport_failure_raises_hub_client_error() -> None:
 
 
 def _refusing(status_code: int, **kwargs: object):  # type: ignore[no-untyped-def]
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(status_code, **kwargs)  # type: ignore[arg-type]
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(status_code, **kwargs)  # type: ignore[arg-type]
 
     return handler
 
@@ -668,13 +668,13 @@ def test_409_on_a_route_that_does_not_opt_in_stays_a_plain_hub_client_error() ->
 
 @pytest.mark.unit
 def test_identity_presents_the_runner_token_and_reads_its_runner() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert (request.method, request.url.path) == ("GET", "/api/fleet/identity")
         assert request.headers["Authorization"] == "Bearer runner-token"
-        return httpx.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude"})
+        return httpx2.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude"})
 
-    transport = httpx.MockTransport(handler)
-    client = httpx.Client(
+    transport = httpx2.MockTransport(handler)
+    client = httpx2.Client(
         base_url="http://hub.test", transport=transport, headers={"Authorization": "Bearer runner-token"}
     )
     assert HttpHubClient(client).identity() == TokenIdentity(runner_id="rn_1", runner_name="r-claude")
@@ -689,8 +689,8 @@ def test_identity_presents_the_runner_token_and_reads_its_runner() -> None:
 def test_identity_reads_the_tenant_the_hub_answers_with(
     answered: dict[str, str], tenant: tuple[str | None, str | None]
 ) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"runner_id": "rn_1", "runner_name": "r-claude", **answered})
 
     identity = _client(handler).identity()
     assert isinstance(identity, TokenIdentity)
@@ -721,7 +721,7 @@ def test_identity_carries_a_refusal_reason_it_does_not_know_raw() -> None:
 @pytest.mark.unit
 def test_an_incompatible_claim_carries_a_denial_reason_it_does_not_know_raw() -> None:
     body = {"chunk_id": "ch_1", "incompatible_runner_id": "r1", "detail": "why", "reason": "gained"}
-    outcome = _client(lambda request: httpx.Response(409, json=body)).claim_route(
+    outcome = _client(lambda request: httpx2.Response(409, json=body)).claim_route(
         ClaimRequest(chunk_id="ch_1", workspace_id="ws1", environment_ids=["e1"])
     )
     assert outcome.denied_incompatible is not None and outcome.denied_incompatible.reason == Unrecognized("gained")
@@ -744,8 +744,8 @@ def test_identity_raises_on_any_other_answer(status_code: int, kwargs: dict[str,
 
 @pytest.mark.unit
 def test_identity_raises_when_the_hub_is_unreachable() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused", request=request)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("refused", request=request)
 
     with pytest.raises(HubClientError):
         _client(handler).identity()

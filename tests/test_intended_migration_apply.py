@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.support import build_hub, pointer_token, report_lease
@@ -234,7 +234,7 @@ def _setup(hub, *, src_yaml: str = _SRC_YAML) -> tuple[str, str]:  # type: ignor
     return chunk_id, node_id
 
 
-def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx.Response:  # type: ignore[no-untyped-def]
+def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -> httpx2.Response:  # type: ignore[no-untyped-def]
     body = {"to_graph": to_graph}
     if node is not None:
         body["node"] = node
@@ -245,7 +245,7 @@ def _set_intent(hub, chunk_id: str, *, to_graph: str, node: str | None = None) -
 
 def _complete(  # type: ignore[no-untyped-def]
     hub, chunk_id: str, node_id: str, *, choice: str = "pass", epoch: int = 1, artifacts: list | None = None
-) -> httpx.Response:
+) -> httpx2.Response:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

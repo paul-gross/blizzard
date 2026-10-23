@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
@@ -78,7 +78,7 @@ def _submit(
     epoch: int = 1,
     runner_id: str = "r1",
     artifacts: list[dict] | None = None,
-) -> httpx.Response:
+) -> httpx2.Response:
     body = {
         "choice": "pass",
         "epoch": epoch,
@@ -156,7 +156,7 @@ def test_the_rejection_under_enforce_leaves_the_fence_and_transition_untouched(t
     assert retried.json()["outcome"] != "failure"
 
 
-def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx.Response:  # type: ignore[no-untyped-def]
+def _decide(hub, chunk_id: str, node_id: str, *, artifacts: list[dict]) -> httpx2.Response:  # type: ignore[no-untyped-def]
     body = {"from_node_id": node_id, "epoch": 1, "runner_id": "r1", "artifacts": artifacts}
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import click
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner, Result
 from fastapi.testclient import TestClient
@@ -30,7 +30,7 @@ _HUB_URL = "http://testserver"
 Cli = Callable[..., Result]
 
 
-def _ok(response: httpx.Response, status: int = 201) -> None:
+def _ok(response: httpx2.Response, status: int = 201) -> None:
     assert response.status_code == status, response.text
 
 

@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 import yaml
 
@@ -43,9 +43,9 @@ class Garden:
     """A real hub daemon with a garden routine seated on it, plus the mock runner that
     submits a run's artifacts and the fixture commit a delta's revisions cite."""
 
-    hub: httpx.Client
+    hub: httpx2.Client
     hub_port: int
-    runner: httpx.Client
+    runner: httpx2.Client
     routine_id: str
     nodes: dict[str, str]
     head: str
@@ -101,7 +101,7 @@ def deliver(
     scope: str = _SCOPE,
     proposals: Sequence[dict[str, Any]] = (),
     routine_id: str | None = None,
-) -> httpx.Response:
+) -> httpx2.Response:
     """One routine run's whole delivery: mint the run, claim its entry node as the mock
     runner, submit the run's artifacts over the wire, then post the hub's own
     garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``.

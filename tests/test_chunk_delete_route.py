@@ -29,7 +29,7 @@ def _claim(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
 
 
 def _delete_chunk(hub, chunk_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
-    """``DELETE /api/chunks/{id}`` with its JSON body — ``httpx``'s own
+    """``DELETE /api/chunks/{id}`` with its JSON body — ``httpx2``'s own
     ``delete()`` refuses a ``json`` keyword, so this goes through ``request`` instead,
     the way ``CliContext.send`` itself now has to for the same reason."""
     body = {"by": by} if by is not None else {}

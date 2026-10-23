@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 
-import httpx
+import httpx2
 import pytest
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Event, ReadableSpan
@@ -238,7 +238,7 @@ def test_the_enabled_pipeline_exports_roots_children_queries_and_client_calls() 
     )
     engine = create_engine("sqlite://")
     handle.instrument_engine(engine)
-    client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(204)))
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda _: httpx2.Response(204)))
     handle.instrument_client(client)
     with handle.tracer.root("tick"), handle.tracer.child("step", {"blizzard.tick.step": "Step"}):
         annotate_caller("worker")

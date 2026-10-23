@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.run_mode import RunMode
@@ -55,7 +55,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
 def _run_row(**overrides: object) -> dict[str, object]:
@@ -283,7 +283,7 @@ _HUB_URL = "http://hub.local:8421"
 
 
 def _relay(hub: HubHarness) -> Bound:
-    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> httpx.Response:
+    def fake_get(url: str, *, params: dict[str, str] | None = None, timeout: float) -> httpx2.Response:
         return hub.client.get(url, params=params)
 
     return bind_stubs(get=fake_get)

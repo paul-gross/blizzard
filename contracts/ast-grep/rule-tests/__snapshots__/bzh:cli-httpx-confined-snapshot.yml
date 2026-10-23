@@ -1,38 +1,38 @@
 id: bzh:cli-httpx-confined
 snapshots:
   ? |
-    from httpx import Client
+    from httpx2 import Client
   : labels:
-    - source: from httpx import Client
+    - source: from httpx2 import Client
       style: primary
       start: 0
-      end: 24
+      end: 25
   ? |
-    from httpx._exceptions import HTTPError
+    from httpx2._exceptions import HTTPError
   : labels:
-    - source: from httpx._exceptions import HTTPError
+    - source: from httpx2._exceptions import HTTPError
       style: primary
       start: 0
-      end: 39
+      end: 40
   ? |
     if TYPE_CHECKING:
-        import httpx
+        import httpx2
   : labels:
-    - source: import httpx
+    - source: import httpx2
       style: primary
       start: 22
-      end: 34
+      end: 35
   ? |
-    import httpx
+    import httpx2
   : labels:
-    - source: import httpx
+    - source: import httpx2
       style: primary
       start: 0
-      end: 12
+      end: 13
   ? |
-    import httpx as http_client
+    import httpx2 as http_client
   : labels:
-    - source: import httpx as http_client
+    - source: import httpx2 as http_client
       style: primary
       start: 0
-      end: 27
+      end: 28

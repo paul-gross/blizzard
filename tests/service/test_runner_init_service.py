@@ -11,7 +11,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from sqlalchemy.engine import make_url
 
@@ -38,7 +38,7 @@ _HUB_BIN = Path(sys.executable).parent / "blizzard-hub"
 
 
 @contextlib.contextmanager
-def _hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
+def _hub(hub_dir: Path, port: int) -> Iterator[httpx2.Client]:
     """A real ``blizzard hub host`` over ``hub_dir`` on its default ``auth.mode = "none"``, which
     ``hub init`` creates first when the directory holds no hub yet."""
     if not hub_dir.exists():
@@ -50,7 +50,7 @@ def _hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -89,15 +89,15 @@ def _runner(runner_dir: Path, hub_url: str) -> Iterator[RunnerConfig]:
 
 
 def _online(hub_url: str, config: RunnerConfig) -> bool:
-    answer = httpx.get(f"{hub_url}/api/runners/{config.runner_id}", timeout=15.0)
+    answer = httpx2.get(f"{hub_url}/api/runners/{config.runner_id}", timeout=15.0)
     return answer.status_code == 200 and answer.json()["connection"] == "online"
 
 
-def _runner_ids(hub: httpx.Client) -> list[str]:
+def _runner_ids(hub: httpx2.Client) -> list[str]:
     return [runner["runner_id"] for runner in hub.get("/api/runners").json()["runners"]]
 
 
-def _view(hub: httpx.Client, runner_id: str) -> dict:
+def _view(hub: httpx2.Client, runner_id: str) -> dict:
     view = hub.get(f"/api/runners/{runner_id}")
     assert view.status_code == 200, view.text
     return view.json()

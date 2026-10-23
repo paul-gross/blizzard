@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import click
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -104,14 +104,14 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     _seed_escalated_lease(store)
     assert store.active_lease("lease_1") is None  # the closed-lease shape the bug reproduced against
 
-    reached: dict[str, httpx.Response] = {}
+    reached: dict[str, httpx2.Response] = {}
     # `BLIZZARD_RUNNER_URL`'s host is unreachable here (`port=0` ephemeral binding), so this reaches the daemon over
     # the UDS socket `--dir` names, at the runner prefix the forwarded URL carries.
-    transport = httpx.HTTPTransport(uds=str(HostLayout(root).socket_path))
+    transport = httpx2.HTTPTransport(uds=str(HostLayout(root).socket_path))
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         assert env is not None
-        with httpx.Client(transport=transport, base_url="http://runner", timeout=5.0) as client:
+        with httpx2.Client(transport=transport, base_url="http://runner", timeout=5.0) as client:
             reached["attachments"] = client.get(
                 f"{urlsplit(env['BLIZZARD_RUNNER_URL']).path}/api/leases/{env['BLIZZARD_LEASE_ID']}/attachments",
                 headers={"X-Blizzard-Lease-Token": env["BLIZZARD_LEASE_TOKEN"]},
@@ -198,7 +198,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 ) -> None:
     """A ``Ctrl-C`` into the interactive session must not strand the takeover open —
     the end-PATCH runs in a ``finally`` around the child, firing even for the
-    ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx.HTTPError` handler misses."""
+    ``BaseException`` `KeyboardInterrupt`, which the CLI's `httpx2.HTTPError` handler misses."""
     root = _init_runner(tmp_path)
     store = _registered_store(root)
     _seed_parked_lease(store)
@@ -356,12 +356,12 @@ def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeyp
     _open_stranded_takeover(store)
     real_get = RunnerDaemon.get
 
-    def stale_list(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
+    def stale_list(self: RunnerDaemon, path: str, *, params: dict[str, str] | None = None) -> httpx2.Response:
         resp = real_get(self, path, params=params)
         if path == "/api/takeovers":
             body = resp.json()
             body["items"][0]["takeover_id"] = "tko_gone"
-            return httpx.Response(200, json=body)
+            return httpx2.Response(200, json=body)
         return resp
 
     monkeypatch.setattr(RunnerDaemon, "get", stale_list)

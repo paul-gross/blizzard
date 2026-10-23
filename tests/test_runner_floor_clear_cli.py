@@ -7,7 +7,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -27,13 +27,13 @@ _CLEARED = {"slug": None, "cleared_at": "2026-10-22T12:00:00+00:00", "by": "oper
 Calls = list[tuple[str, dict[str, object]]]
 
 
-def _host(monkeypatch: pytest.MonkeyPatch, answer: Callable[[httpx.Request], httpx.Response]) -> Calls:
+def _host(monkeypatch: pytest.MonkeyPatch, answer: Callable[[httpx2.Request], httpx2.Response]) -> Calls:
     """Every verb reaches a mock host of runner ``alpha``, which answers its floor clears with ``answer``."""
     calls: Calls = []
 
-    def route(request: httpx.Request) -> httpx.Response:
+    def route(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/host/runners":
-            return httpx.Response(200, json={"items": _RUNNERS})
+            return httpx2.Response(200, json={"items": _RUNNERS})
         calls.append((request.url.path, json.loads(request.content or b"{}")))
         return answer(request)
 
@@ -41,7 +41,7 @@ def _host(monkeypatch: pytest.MonkeyPatch, answer: Callable[[httpx.Request], htt
         cls: type[RunnerDaemon], verb: str, _dir: str, _url: str | None, _door: object, runner: str | None = None
     ) -> RunnerDaemon:
         return RunnerDaemon(
-            verb, httpx.Client(transport=httpx.MockTransport(route), base_url="http://host"), "host", runner
+            verb, httpx2.Client(transport=httpx2.MockTransport(route), base_url="http://host"), "host", runner
         )
 
     monkeypatch.setattr(RunnerDaemon, "reach", classmethod(reach))
@@ -50,7 +50,7 @@ def _host(monkeypatch: pytest.MonkeyPatch, answer: Callable[[httpx.Request], htt
 
 @pytest.mark.parametrize("targets", [[], ["--subscription", "team-plan", "--runner", "alpha"]])
 def test_clear_floor_takes_exactly_one_target(targets: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _host(monkeypatch, lambda _request: httpx.Response(200, json=_CLEARED))
+    calls = _host(monkeypatch, lambda _request: httpx2.Response(200, json=_CLEARED))
 
     result = CliRunner().invoke(runner_group, ["clear-floor", *targets])
 
@@ -60,7 +60,7 @@ def test_clear_floor_takes_exactly_one_target(targets: list[str], monkeypatch: p
 
 
 def test_a_subscription_clear_reaches_the_host_as_the_operator(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _host(monkeypatch, lambda _request: httpx.Response(200, json=_CLEARED))
+    calls = _host(monkeypatch, lambda _request: httpx2.Response(200, json=_CLEARED))
 
     result = CliRunner().invoke(runner_group, ["clear-floor", "--subscription", "team-plan"])
 
@@ -70,7 +70,7 @@ def test_a_subscription_clear_reaches_the_host_as_the_operator(monkeypatch: pyte
 
 
 def test_a_runner_clear_reaches_that_runner_with_who_cleared_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _host(monkeypatch, lambda _request: httpx.Response(200, json=_CLEARED))
+    calls = _host(monkeypatch, lambda _request: httpx2.Response(200, json=_CLEARED))
 
     result = CliRunner().invoke(runner_group, ["clear-floor", "--runner", "alpha", "--by", "alice"])
 
@@ -79,7 +79,7 @@ def test_a_runner_clear_reaches_that_runner_with_who_cleared_it(monkeypatch: pyt
 
 
 def test_an_undeclared_subscription_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    _host(monkeypatch, lambda _request: httpx.Response(404, json={"detail": "no subscription nobody on this host"}))
+    _host(monkeypatch, lambda _request: httpx2.Response(404, json={"detail": "no subscription nobody on this host"}))
 
     result = CliRunner().invoke(runner_group, ["clear-floor", "--subscription", "nobody"])
 
@@ -92,7 +92,7 @@ def test_a_runner_spending_a_subscription_is_refused_naming_the_subscription_to_
 ) -> None:
     _host(
         monkeypatch,
-        lambda _request: httpx.Response(409, json={"detail": {"slug": "team-plan", "message": "spends team-plan"}}),
+        lambda _request: httpx2.Response(409, json={"detail": {"slug": "team-plan", "message": "spends team-plan"}}),
     )
 
     result = CliRunner().invoke(runner_group, ["clear-floor", "--runner", "alpha"])

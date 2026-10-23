@@ -15,7 +15,7 @@ import subprocess
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -155,7 +155,7 @@ def _drive(config, hub, chunk_id, fenced_env, *, on_tick=None, timeout: float = 
     os.environ.update(fenced_env)
     try:
         with runner_api(config):
-            runner = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+            runner = httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
             try:
                 deadline = time.monotonic() + timeout
                 status = "ready"
@@ -249,7 +249,7 @@ def test_resumed_node_entry_announces_a_replaced_workspace_prompt(tmp_path: Path
     with _live_stack(tmp_path) as (hub, chunk_id, config, workspace, origin_bare, fenced):
         db_url = config.db_url
 
-        def replace_once(runner: httpx.Client) -> None:
+        def replace_once(runner: httpx2.Client) -> None:
             # Fire once build has exited and review holds the chunk — strictly between
             # build's two entries. Idempotent: only the first crossing writes.
             if replaced:

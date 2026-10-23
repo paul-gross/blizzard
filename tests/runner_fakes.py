@@ -699,7 +699,7 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         runner_id = self._caller()
-        # Validated into the wire record exactly as the httpx binding does, so a test reads what shipped.
+        # Validated into the wire record exactly as the httpx2 binding does, so a test reads what shipped.
         shipped = [TranscriptSegmentRecord.model_validate({"seq": r.seq, **r.body}) for r in records]
         self.push_transcripts_calls.append([record.seq for record in shipped])
         mark = self.transcript_high_water.get(runner_id, 0)

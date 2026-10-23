@@ -1,7 +1,7 @@
 """The ``oidc`` conformer — issuer discovery, code exchange, ``id_token`` signature
 verification (package-private).
 
-All ``httpx``/JWT usage is confined here (``bzh:dependency-inversion``). Discovery
+All ``httpx2``/JWT usage is confined here (``bzh:dependency-inversion``). Discovery
 (the issuer's ``.well-known/openid-configuration``) is fetched lazily on first use
 and cached for the conformer's lifetime — it does not change under a running hub."""
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from urllib.parse import urlencode
 
-import httpx
+import httpx2
 import jwt
 from jwt.algorithms import RSAAlgorithm
 
@@ -49,7 +49,7 @@ class OidcProvider:
         issuer: str,
         client_id: str,
         client_secret: str,
-        http_client: httpx.Client,
+        http_client: httpx2.Client,
         emails_authoritative: bool = False,
     ) -> None:
         self.name = name
@@ -97,7 +97,7 @@ class OidcProvider:
             token_resp.raise_for_status()
             id_token = token_resp.json()["id_token"]
             claims = self._verify_id_token(id_token, str(discovery["jwks_uri"]))
-        except (httpx.HTTPError, KeyError, jwt.PyJWTError) as exc:
+        except (httpx2.HTTPError, KeyError, jwt.PyJWTError) as exc:
             _log.warning("oidc exchange failed", provider=self.name, detail=str(exc))
             raise OAuthExchangeError(f"oidc exchange failed for provider {self.name!r}") from exc
         subject = claims.get("sub")

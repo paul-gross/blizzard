@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 from click.testing import Result
@@ -154,9 +154,9 @@ def test_delete_refuses_the_hubs_only_open_tenant_and_an_unknown_one(hub: HubHar
 
 @pytest.mark.unit
 def test_a_deletion_left_underway_says_the_hub_finishes_it() -> None:
-    def delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
+    def delete(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
         body = {"tenant_id": "ten_a", "state": "deleting", "rows_removed": None}
-        return httpx.Response(202, json=body, request=httpx.Request("DELETE", url))
+        return httpx2.Response(202, json=body, request=httpx2.Request("DELETE", url))
 
     bound = bind_stubs(delete=delete)
 
@@ -181,8 +181,8 @@ def test_list_shows_a_deletion_underway_with_when_it_began() -> None:
         },
     ]
 
-    def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
-        return httpx.Response(200, json=rows, request=httpx.Request("GET", url))
+    def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
+        return httpx2.Response(200, json=rows, request=httpx2.Request("GET", url))
 
     bound = bind_stubs(get=get)
 

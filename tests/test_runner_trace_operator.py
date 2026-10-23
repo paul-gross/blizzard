@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 from fastapi import FastAPI
@@ -362,10 +362,10 @@ def test_cli_names_where_to_resume_when_a_window_request_itself_fails(
     runner = _Runner(tmp_path)
     client = _client(runner, tmp_path)
 
-    def post(url: str, **kwargs: object) -> httpx.Response:
+    def post(url: str, **kwargs: object) -> httpx2.Response:
         if failure == "timeout":
-            raise httpx.ReadTimeout("timed out")
-        return httpx.Response(500, json={}, request=httpx.Request("POST", url))
+            raise httpx2.ReadTimeout("timed out")
+        return httpx2.Response(500, json={}, request=httpx2.Request("POST", url))
 
     def reach(
         verb: str, directory: str, runner_url: str | None, trace: object, selector: str | None = None

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
@@ -23,7 +23,11 @@ _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1
 
 
 def _runner_app(
-    tmp_path: Path, *, hub_url: str | None = _HUB_URL, hub_token: str = "", hub_proxy_client: httpx.Client | None = None
+    tmp_path: Path,
+    *,
+    hub_url: str | None = _HUB_URL,
+    hub_token: str = "",
+    hub_proxy_client: httpx2.Client | None = None,
 ) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=hub_url or "", hub_token=hub_token)
     return runner_client(create_runner_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
@@ -34,11 +38,11 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
     """The route forwards to the hub's fleet-summary route and returns the counts verbatim."""
     seen: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(str(request.url))
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -49,13 +53,13 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward carries the same bearer credential as the loop's own hub client."""
-    seen_headers: list[httpx.Headers] = []
+    seen_headers: list[httpx2.Headers] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_token="proxy-token", hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -65,13 +69,13 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_
 @pytest.mark.component
 def test_proxy_sends_no_authorization_header_when_no_token_is_configured(tmp_path: Path) -> None:
     """A runner holding no ``hub_token`` sends no ``Authorization`` header at all."""
-    seen_headers: list[httpx.Headers] = []
+    seen_headers: list[httpx2.Headers] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 200, resp.text
@@ -82,10 +86,10 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(tmp_pat
 def test_proxy_passes_through_the_hub_status(tmp_path: Path) -> None:
     """A hub 5xx surfaces with the hub's own status — a distinct error, not empty counts."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"detail": "hub store error"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(500, json={"detail": "hub store error"})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 500
@@ -96,10 +100,10 @@ def test_proxy_passes_through_the_hub_status(tmp_path: Path) -> None:
 def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     """A transport failure to the hub is a 502 — never a pretend answer of empty counts."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 502
@@ -111,10 +115,10 @@ def test_proxy_unreachable_hub_line_logs_at_error(tmp_path: Path) -> None:
     """This route's own forward keeps today's ``error`` severity — only the
     dashboard's tolerated fleet-summary call lowers it (``tests/test_dashboard_route.py``)."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     with capture_logs() as logs:
         resp = _runner_app(tmp_path, hub_proxy_client=client).get("/api/fleet-summary")
 
@@ -129,12 +133,12 @@ def test_proxy_503_when_the_runner_is_not_wired_to_a_hub(tmp_path: Path) -> None
     """No ``hub_url`` (never enrolled) 503s before any outbound call."""
     attempted = False
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         nonlocal attempted
         attempted = True
-        return httpx.Response(200, json=_COUNTS)
+        return httpx2.Response(200, json=_COUNTS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_url=None, hub_proxy_client=client).get("/api/fleet-summary")
 
     assert resp.status_code == 503

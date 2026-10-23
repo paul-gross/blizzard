@@ -18,7 +18,7 @@ import time
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
-import httpx
+import httpx2
 import uvicorn
 
 from blizzard.foundation.trace_export.config import TracingConfig
@@ -84,7 +84,7 @@ def git_bare(bare: Path, *args: str) -> str:
 
 
 def await_http(
-    proc: subprocess.Popen[str], client: httpx.Client, path: str, *, log: Path | None = None, timeout: float = 40.0
+    proc: subprocess.Popen[str], client: httpx2.Client, path: str, *, log: Path | None = None, timeout: float = 40.0
 ) -> None:
     """Block until ``path`` answers 200, or fail naming why.
 
@@ -95,7 +95,7 @@ def await_http(
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise AssertionError(f"process exited early ({proc.returncode}):\n{read_daemon_log(log)}")
-        with contextlib.suppress(httpx.HTTPError):
+        with contextlib.suppress(httpx2.HTTPError):
             if client.get(path).status_code == 200:
                 return
         time.sleep(0.15)
@@ -103,7 +103,7 @@ def await_http(
 
 
 @contextlib.contextmanager
-def run_forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
+def run_forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx2.Client]:
     log = origins.parent / "forge.log"
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
@@ -111,7 +111,7 @@ def run_forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/healthz", log=log)
         yield client
@@ -136,7 +136,7 @@ def run_hub(
     settle_seconds: int = 0,
     egress: EgressConfig | None = None,
     rehost: bool = False,
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
     instead of initializing it; ``egress`` replaces the ``[egress]`` block. Traced (exporting to ``collector``,
     sweeping every second, settling for ``settle_seconds``) when a usable collector is given — with platform spans
@@ -185,7 +185,7 @@ def run_hub(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         if not rehost:
@@ -254,7 +254,7 @@ def runner_config(
 
 def drive_until_done(
     config: RunnerConfig,
-    hub: httpx.Client,
+    hub: httpx2.Client,
     chunk_id: str,
     fenced_env: dict[str, str],
     *,
@@ -300,11 +300,11 @@ def runner_api(
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_level="warning"))
     thread = threading.Thread(target=server.run, name="runner-local-api", daemon=True)
     thread.start()
-    client = httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0)
     try:
         deadline = time.monotonic() + 30.0
         while time.monotonic() < deadline:
-            with contextlib.suppress(httpx.HTTPError):
+            with contextlib.suppress(httpx2.HTTPError):
                 if client.get("/api/health").status_code == 200:
                     break
             time.sleep(0.1)

@@ -6,7 +6,7 @@ valid:
 
     with CliCollaborators.of(ctx).client_factory(timeout=5.0) as client:
         client.get(url)
-  # Taking an httpx type through the one module that imports it.
+  # Taking an httpx2 type through the one module that imports it.
   - |
     from blizzard.cli.collaborators import HTTPError, Response
   # A module merely named like the library.
@@ -14,14 +14,14 @@ valid:
     from blizzard.hub import httpx_view
 invalid:
   - |
-    import httpx
+    import httpx2
   - |
-    import httpx as http_client
+    import httpx2 as http_client
   - |
-    from httpx import Client
+    from httpx2 import Client
   - |
-    from httpx._exceptions import HTTPError
+    from httpx2._exceptions import HTTPError
   # Under TYPE_CHECKING, too.
   - |
     if TYPE_CHECKING:
-        import httpx
+        import httpx2

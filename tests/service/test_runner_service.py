@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from fastapi import FastAPI
@@ -85,7 +85,7 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
         os.environ.update(prior)
 
 
-def _status(hub: httpx.Client, chunk_id: str) -> str:
+def _status(hub: httpx2.Client, chunk_id: str) -> str:
     """The mock hub's own status read."""
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
@@ -99,7 +99,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
         engine.dispose()
 
 
-def _seed(hub: httpx.Client) -> str:
+def _seed(hub: httpx2.Client) -> str:
     resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
@@ -637,7 +637,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
             assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
 
-            runner_client = httpx.Client(base_url=config.local_api_url, timeout=10.0)
+            runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 leases = runner_client.get("/api/leases")
                 assert leases.status_code == 200, leases.text
@@ -740,7 +740,7 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
             # 40s, not 10s: the node-scope read below now rides HubProxy's bounded-backoff
             # retry before its 503 surfaces, so the client must outwait the
             # retry ceiling rather than the old single-attempt latency.
-            runner_client = httpx.Client(base_url=config.local_api_url, timeout=40.0)
+            runner_client = httpx2.Client(base_url=config.local_api_url, timeout=40.0)
             try:
 
                 def _lease_minted() -> bool:
@@ -805,7 +805,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     # The runner daemon deliberately outlives the mock hub: the last leg reads the panel
     # route with the hub process already terminated.
     with runner_api(config):
-        panel = httpx.Client(base_url=config.local_api_url, timeout=15.0)
+        panel = httpx2.Client(base_url=config.local_api_url, timeout=15.0)
         try:
             with mock_hub(bin_dir, hub_port) as hub:
                 seed_pinned_runner(hub, runner)
@@ -882,7 +882,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
             panel.close()
 
 
-def _sole_lease(panel: httpx.Client, chunk_id: str) -> dict:
+def _sole_lease(panel: httpx2.Client, chunk_id: str) -> dict:
     """The chunk's one lease as the runner's own lease list reports it."""
     leases = panel.get("/api/leases")
     assert leases.status_code == 200, leases.text
@@ -891,7 +891,7 @@ def _sole_lease(panel: httpx.Client, chunk_id: str) -> dict:
     return matches[0]
 
 
-def _panel_read_while_open(config: RunnerConfig, fenced: dict[str, str], panel: httpx.Client, chunk_id: str) -> dict:
+def _panel_read_while_open(config: RunnerConfig, fenced: dict[str, str], panel: httpx2.Client, chunk_id: str) -> dict:
     """One tick, then the panel's transcript read for the chunk's lease if it has one yet."""
     _drive(config, fenced, ticks=1, pause=0.3)
     matches = [item for item in panel.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id]
@@ -901,7 +901,9 @@ def _panel_read_while_open(config: RunnerConfig, fenced: dict[str, str], panel: 
     return resp.json() if resp.status_code == 200 else {}
 
 
-def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
+def _run_and_check(
+    config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
+) -> bool:
     """One tick + a status read — the poll predicate the scenarios share."""
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
@@ -943,7 +945,7 @@ def test_runner_stream_delivers_live_and_replays_from_last_event_id(tmp_path: Pa
         # A reconnect naming the first event's id as its cursor must replay only the
         # second — dedup at the seam, not a second delivery of the first.
         with (
-            httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
+            httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
             client.stream("GET", "/api/events/stream", headers={"Last-Event-ID": str(first_id)}) as resp,
         ):
             assert resp.status_code == 200
@@ -1021,11 +1023,11 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
     jwks_server = uvicorn.Server(uvicorn.Config(jwks_app, host="127.0.0.1", port=jwks_port, log_level="warning"))
     jwks_thread = threading.Thread(target=jwks_server.run, daemon=True)
     jwks_thread.start()
-    jwks_client = httpx.Client(base_url=f"http://127.0.0.1:{jwks_port}", timeout=10.0)
+    jwks_client = httpx2.Client(base_url=f"http://127.0.0.1:{jwks_port}", timeout=10.0)
     try:
         deadline = time.monotonic() + 20.0
         while time.monotonic() < deadline:
-            with contextlib.suppress(httpx.HTTPError):
+            with contextlib.suppress(httpx2.HTTPError):
                 if jwks_client.get("/api/auth/jwks.json").status_code == 200:
                     break
             time.sleep(0.1)
@@ -1035,7 +1037,7 @@ def test_events_stream_401s_without_a_session_over_tcp_under_oauth(tmp_path: Pat
         app_config = dataclasses.replace(config, hub_url=f"http://127.0.0.1:{jwks_port}")
         with (
             runner_api(app_config),
-            httpx.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
+            httpx2.Client(base_url=f"http://{config.host}:{config.port}", timeout=10.0) as client,
         ):
             resp = client.get("/api/events/stream")
         assert resp.status_code == 401, resp.text
@@ -1063,13 +1065,13 @@ def test_runner_sigterm_returns_promptly_with_a_client_parked_on_the_stream(tmp_
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
     exit_code: int | None = None
     try:
         await_http(proc, client, "/api/health", log=log)
         # The server dies mid-stream by design; closing our own end of a now-dead
         # connection is expected to raise, not a failure of what this test asserts.
-        with contextlib.suppress(httpx.HTTPError), client.stream("GET", "/api/events/stream") as resp:
+        with contextlib.suppress(httpx2.HTTPError), client.stream("GET", "/api/events/stream") as resp:
             assert resp.status_code == 200
             next(resp.iter_text())  # block for the reserved comment — the subscriber is live
             # The loop's first pass can be sampling an external subscription; the
@@ -1157,7 +1159,7 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
         }
         log = config.root / "daemon.log"
         proc = _host(config, env)
-        client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        client = httpx2.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
             await_http(proc, client, "/api/health", log=log)
             # A closed lease is what the sweep tells: run one chunk to done.
@@ -1214,7 +1216,7 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
         log = config.root / "daemon.log"
         proc = _host(config, env)
-        client = httpx.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
+        client = httpx2.Client(base_url=f"http://127.0.0.1:{config.port}", timeout=10.0)
         try:
             await_http(proc, client, "/api/health", log=log)
             assert poll_until(lambda: _trace_config_rejections(config, pending=True) == 1)

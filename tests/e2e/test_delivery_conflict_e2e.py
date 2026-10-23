@@ -12,7 +12,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.composition import RunnerProcess
@@ -93,7 +93,7 @@ def _graph_yaml() -> str:
 
 def _drive_one_bounce(
     config: RunnerConfig,
-    hub: httpx.Client,
+    hub: httpx2.Client,
     chunk_id: str,
     fenced_env: dict[str, str],
     process: RunnerProcess | None,
@@ -128,7 +128,7 @@ def _drive_one_bounce(
 
 def _drive_until_rebuilt(
     config: RunnerConfig,
-    hub: httpx.Client,
+    hub: httpx2.Client,
     chunk_id: str,
     fenced_env: dict[str, str],
     process: RunnerProcess | None,

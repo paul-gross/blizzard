@@ -14,7 +14,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.auth_core import Role
@@ -36,15 +36,15 @@ class _MemberStream:
     """One member's ``GET /api/events/stream``, read on a background thread with the member's session cookie:
     the event names it delivers, in order, and whether the hub has ended it."""
 
-    def __init__(self, base_url: str, cookies: httpx.Cookies) -> None:
-        self._client = httpx.Client(
-            base_url=base_url, cookies=cookies, timeout=httpx.Timeout(10.0, read=DEFAULT_KEEPALIVE_SECONDS * 2)
+    def __init__(self, base_url: str, cookies: httpx2.Cookies) -> None:
+        self._client = httpx2.Client(
+            base_url=base_url, cookies=cookies, timeout=httpx2.Timeout(10.0, read=DEFAULT_KEEPALIVE_SECONDS * 2)
         )
         self.events: queue.Queue[str] = queue.Queue()
         self.opened = threading.Event()
         self.ended = threading.Event()
         self.status: int | None = None
-        self._response: httpx.Response | None = None
+        self._response: httpx2.Response | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def _run(self) -> None:
@@ -61,7 +61,7 @@ class _MemberStream:
                     elif line.startswith("data:") and event_type:
                         self.events.put(event_type)
                         event_type = None
-        except httpx.HTTPError:
+        except httpx2.HTTPError:
             pass
         finally:
             self.opened.set()
@@ -101,7 +101,7 @@ class _MemberStream:
 
 
 @contextlib.contextmanager
-def _member_stream(base_url: str, member: httpx.Client) -> Iterator[_MemberStream]:
+def _member_stream(base_url: str, member: httpx2.Client) -> Iterator[_MemberStream]:
     stream = _MemberStream(base_url, member.cookies)
     try:
         stream.start()
@@ -111,14 +111,16 @@ def _member_stream(base_url: str, member: httpx.Client) -> Iterator[_MemberStrea
         stream.close()
 
 
-def _sign_in(idp: httpx.Client, base_url: str, hub_dir: Path, *, subject: str, handle: str, role: Role) -> httpx.Client:
+def _sign_in(
+    idp: httpx2.Client, base_url: str, hub_dir: Path, *, subject: str, handle: str, role: Role
+) -> httpx2.Client:
     """A client holding the session the OIDC dance ends in for an invited ``handle`` with ``role``."""
     email = f"{handle}@example.com"
     profile = idp.put(
         "/_levers/profile", json={"subject": subject, "handle": handle, "email": email, "email_verified": True}
     )
     assert profile.status_code < 300, profile.text
-    client = httpx.Client(base_url=base_url, timeout=30.0)
+    client = httpx2.Client(base_url=base_url, timeout=30.0)
     client.get(f"/api/auth/oidc-co/authorize?invite={invite(hub_dir, email, role=role)}", follow_redirects=True)
     assert "bz_session" in client.cookies, f"{handle} did not sign in"
     return client

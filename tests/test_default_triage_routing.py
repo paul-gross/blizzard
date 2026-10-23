@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.documents import YAML_CODEC
@@ -43,7 +43,7 @@ def _claimed_triage_chunk(hub, *, ref: str) -> tuple[str, str]:  # type: ignore[
     return chunk_id, envelope["node"]["node_id"]
 
 
-def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx.Response:  # type: ignore[no-untyped-def]
+def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:  # type: ignore[no-untyped-def]
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

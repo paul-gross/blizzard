@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
@@ -47,7 +47,7 @@ def _real(tmp_path: Path, **extra: object) -> EgressConfig:
     return EgressConfig(directory=tmp_path / "out", settle_seconds=0, min_free_bytes=0, **extra)  # type: ignore[arg-type]
 
 
-def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object) -> httpx.Response:
+def _backfill(hub: HubHarness, since: datetime, until: datetime, **extra: object) -> httpx2.Response:
     body = {"since": iso_utc(since), "until": iso_utc(until), **extra}
     return hub.client.post("/api/egress/backfill", json=body)
 

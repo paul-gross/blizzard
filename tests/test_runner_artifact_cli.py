@@ -1,5 +1,5 @@
 """``blizzard runner artifact list|get|create|staged`` + the deprecated ``attach`` alias
-(unit tier): ``httpx`` stubbed, no live socket. The routes
+(unit tier): ``httpx2`` stubbed, no live socket. The routes
 themselves are the component tier's ``tests/test_runner_artifacts_api.py``. The verbs do not
 soft-fail: a rejected read/write must reach the worker as a non-zero exit.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -39,7 +39,7 @@ class _RejectingResponse:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
-        raise httpx.HTTPStatusError("403 forbidden", request=object(), response=self)  # type: ignore[arg-type]
+        raise httpx2.HTTPStatusError("403 forbidden", request=object(), response=self)  # type: ignore[arg-type]
 
     def json(self) -> object:
         return self._detail
@@ -63,7 +63,7 @@ _ARTIFACTS_PAYLOAD = [
 
 
 def _fake_get_by_suffix(routes: dict[str, _FakeResponse], calls: list[tuple[str, dict, dict | None]] | None = None):
-    """A stub ``httpx.get`` that answers by the request URL's trailing path segment — ``list``
+    """A stub ``httpx2.get`` that answers by the request URL's trailing path segment — ``list``
     now makes two calls (``artifacts`` then ``attachments``), so a single canned response no
     longer distinguishes them."""
 
@@ -452,7 +452,7 @@ class _NotFoundResponse:
     status_code = 404
 
     def raise_for_status(self) -> None:
-        raise httpx.HTTPStatusError("404 not found", request=object(), response=self)  # type: ignore[arg-type]
+        raise httpx2.HTTPStatusError("404 not found", request=object(), response=self)  # type: ignore[arg-type]
 
     def json(self) -> object:
         return {"detail": "no such artifact"}

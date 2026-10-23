@@ -8,7 +8,7 @@ needed here.
 from __future__ import annotations
 
 import click
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -32,7 +32,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
 class _StubLogin:
@@ -111,7 +111,7 @@ def test_logout_deletes_the_local_session_and_calls_the_revoke_route(monkeypatch
 
 def test_logout_still_cleans_up_locally_when_the_hub_is_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        raise httpx.ConnectError("connection refused")
+        raise httpx2.ConnectError("connection refused")
 
     deleted: list[str] = []
     bound = bind_stubs(post=fake_post)

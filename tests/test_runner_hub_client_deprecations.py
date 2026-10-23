@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.hub.client import (
@@ -132,15 +132,15 @@ def _violations(calls: list[Call]) -> list[str]:
 # --- the clients, driven through a recording transport ---------------------------------------------
 
 
-def _recording() -> tuple[httpx.Client, list[Call]]:
+def _recording() -> tuple[httpx2.Client, list[Call]]:
     calls: list[Call] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         body = json.loads(request.content) if request.content else None
         calls.append(Call(request.method, request.url.path, body))
-        return httpx.Response(200, json={})
+        return httpx2.Response(200, json={})
 
-    return httpx.Client(base_url="http://hub.test", transport=httpx.MockTransport(handler)), calls
+    return httpx2.Client(base_url="http://hub.test", transport=httpx2.MockTransport(handler)), calls
 
 
 _TRANSCRIPT = {
@@ -191,7 +191,7 @@ def _public_methods(cls: type) -> set[str]:
     return {name for name, _ in inspect.getmembers(cls, inspect.isfunction) if not name.startswith("_")} - {"__init__"}
 
 
-def _drive(driver: Callable[[Any], object], build: Callable[[httpx.Client], Any]) -> list[Call]:
+def _drive(driver: Callable[[Any], object], build: Callable[[httpx2.Client], Any]) -> list[Call]:
     client, calls = _recording()
     with warnings.catch_warnings():
         # A read of a field marked `Field(deprecated=...)` raises here, and is not swallowed below.

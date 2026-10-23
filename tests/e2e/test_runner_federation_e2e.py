@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
@@ -86,7 +86,7 @@ def _runner_bin() -> str:
 
 
 @contextlib.contextmanager
-def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client]:
+def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx2.Client]:
     env = {**os.environ, _SECRET_ENV: _SECRET}
     subprocess.run([_hub_bin(), "init", str(hub_dir)], check=True, capture_output=True, text=True, env=env)
     provider = OAuthProviderConfig(
@@ -113,7 +113,7 @@ def _oauth_hub(hub_dir: Path, idp_port: int, port: int) -> Iterator[httpx.Client
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -134,7 +134,7 @@ def _spawn_runner(runner_dir: Path, *, port: int) -> subprocess.Popen[str]:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
@@ -154,7 +154,7 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, name: str) 
     the runner's ``.env``."""
     public_url = f"http://127.0.0.1:{port}"
     hub_url = f"http://127.0.0.1:{hub_port}"
-    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+    with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
         operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
         runner_id, token = add_runner(operator, name)
     adopt_runner(runner_dir, hub_url, token)
@@ -172,7 +172,7 @@ def _federated_runner(runner_dir: Path, *, hub_port: int, port: int, name: str) 
 
     proc = _spawn_runner(runner_dir, port=port)
     try:
-        with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+        with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
             operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
             assert poll_until(lambda: operator.get(f"/api/runners/{runner_id}").json()["registered_at"] is not None), (
                 "the runner never registered at its hub"
@@ -368,13 +368,13 @@ def _registered_host(root: Path, *, hub_port: int, port: int) -> Iterator[tuple[
     """A host the signed-in superuser adds at the hub, running two runners it adds under itself with its host token;
     yields its host id and its runners' ids once the hub has answered its report, so sign-in is offered."""
     hub_url = f"http://127.0.0.1:{hub_port}"
-    with httpx.Client(base_url=hub_url, timeout=15.0) as operator:
+    with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
         operator.get(f"/api/auth/{_PROVIDER_NAME}/authorize", follow_redirects=True)
         added = operator.post("/api/hosts", json={"name": "host-e2e"})
         assert added.status_code == 201, added.text
     host_id, host_token = str(added.json()["host_id"]), str(added.json()["token"])
     runners: list[tuple[str, str, str]] = []
-    with httpx.Client(base_url=hub_url, timeout=15.0, headers={"Authorization": f"Bearer {host_token}"}) as host:
+    with httpx2.Client(base_url=hub_url, timeout=15.0, headers={"Authorization": f"Bearer {host_token}"}) as host:
         for name in ("runner-one", "runner-two"):
             minted = host.post("/api/fleet/host/runners", json={"name": name})
             assert minted.status_code == 201, minted.text
@@ -410,7 +410,7 @@ def _registered_host(root: Path, *, hub_port: int, port: int) -> Iterator[tuple[
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         # The host signs in as itself only once the hub has answered its report.

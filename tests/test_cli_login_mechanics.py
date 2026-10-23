@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.cli import login as cli_login
@@ -37,7 +37,7 @@ def _hit_loopback_in_background(redirect_uri: str, *, code: str | None, state: s
         params["error"] = error
 
     def _hit() -> None:
-        httpx.get(redirect_uri, params=params, timeout=5.0)
+        httpx2.get(redirect_uri, params=params, timeout=5.0)
 
     threading.Thread(target=_hit, daemon=True).start()
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 import pytest
 from click.testing import Result
 
@@ -33,7 +33,7 @@ def _cli_against(hub: HubHarness) -> list[dict[str, str]]:
     """Route the CLI's ``GET``s to ``hub``; returns the headers each request sent, in order."""
     sent: list[dict[str, str]] = []
 
-    def get(url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:
+    def get(url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
         sent.append(dict(kwargs.get("headers") or {}))
         return hub.client.get(url, **kwargs)
 
@@ -91,7 +91,7 @@ def test_naming_no_tenant_among_several_lists_the_callers_tenants(tmp_path: Path
 def _cli_routed(hub: HubHarness) -> Bound:
     """Route every CLI request to ``hub``."""
 
-    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx.Response:
+    def forward(method: str, url: str, *, timeout: float, **kwargs: Any) -> httpx2.Response:
         return hub.client.request(method.upper(), url, **kwargs)
 
     return bind_stubs(request=forward)

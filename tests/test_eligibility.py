@@ -329,7 +329,7 @@ def test_the_harness_gate_agrees_with_harness_selector(
 
 def test_holds_no_repository_clock_or_framework_import() -> None:
     tree = ast.parse(Path(eligibility.__file__).read_text())
-    banned_modules = ("sqlalchemy", "httpx", "fastapi", "store", "api")
+    banned_modules = ("sqlalchemy", "httpx2", "fastapi", "store", "api")
     banned_names = {"IReadGraphRepository", "IWriteGraphRepository", "IClock"}
     for stmt in ast.walk(tree):
         if isinstance(stmt, ast.Import):

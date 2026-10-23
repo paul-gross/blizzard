@@ -1,13 +1,13 @@
-"""httpx adapter for the archived-transcript seam — a sibling of
+"""httpx2 adapter for the archived-transcript seam — a sibling of
 ``src/blizzard/runner/hub/internal/http_hub.py``, the runner's other outbound hub adapter.
 
-All httpx and pydantic-wire usage is confined here: the hub's transcript-segments read is
+All httpx2 and pydantic-wire usage is confined here: the hub's transcript-segments read is
 fetched, validated, and translated into an :class:`ArchivedTranscript`. Every outcome
 reaches the caller as a value; nothing here ever raises past this boundary."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.transcripts.archived_repository import (
@@ -34,20 +34,20 @@ def _answer(status: ArchivedTranscriptStatus) -> ArchivedTranscript:
 
 class HttpArchivedTranscriptRepository:
     """Implements :class:`IReadArchivedTranscriptRepository` over an injected
-    ``httpx.Client`` already carrying the runner's own auth headers (``config.auth_headers()``,
+    ``httpx2.Client`` already carrying the runner's own auth headers (``config.auth_headers()``,
     ``bzh:dependency-inversion``)."""
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(self, client: httpx2.Client) -> None:
         self._client = client
 
     def read_turns(self, *, chunk_id: str, node_id: str, epoch: int) -> ArchivedTranscript:
         path = f"{_FLEET_API}/chunks/{chunk_id}/transcript-segments"
         try:
             resp = self._client.get(path, params={"node_id": node_id, "epoch": epoch})
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("hub unreachable for archived transcript", chunk_id=chunk_id, node_id=node_id, error=str(exc))
             return _answer("unreachable")
-        if resp.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+        if resp.status_code in (httpx2.codes.UNAUTHORIZED, httpx2.codes.FORBIDDEN):
             # A refusal is a definite answer, not a transport failure — the caller
             # falls back to local exactly like "holds nothing" would. Logged, never silent.
             _log.error(

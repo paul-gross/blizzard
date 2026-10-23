@@ -17,7 +17,7 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from opentelemetry.sdk.trace.export import SpanExporter
     from sqlalchemy import Engine
 
@@ -54,7 +54,7 @@ class IPlatformTracing(Protocol):
 
     def instrument_engine(self, engine: Engine) -> None: ...
 
-    def instrument_client(self, client: httpx.Client | httpx.AsyncClient) -> None: ...
+    def instrument_client(self, client: httpx2.Client | httpx2.AsyncClient) -> None: ...
 
     def suppressed(self) -> AbstractContextManager[object]:
         """No span of any instrumentation starts inside — an excluded request's children included."""
@@ -98,7 +98,7 @@ class DisabledPlatformTracing:
     def instrument_engine(self, engine: Engine) -> None:
         return None
 
-    def instrument_client(self, client: httpx.Client | httpx.AsyncClient) -> None:
+    def instrument_client(self, client: httpx2.Client | httpx2.AsyncClient) -> None:
         return None
 
     def suppressed(self) -> AbstractContextManager[object]:

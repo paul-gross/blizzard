@@ -1,6 +1,6 @@
 """``GET /api/leases/{id}/artifacts`` and ``.../artifacts/{name}``.
 
-Exercised over a real store via TestClient, hub reached through a stubbed ``httpx.Client``
+Exercised over a real store via TestClient, hub reached through a stubbed ``httpx2.Client``
 so the forward, status pass-through, and 502-on-unreachable are asserted for real. Layered
 like the attach write — lease-scoped, token-authorized, then proxied; a ``--scope graph``
 read resolves from the store's own pinned mirror and never reaches the stub."""
@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
 
@@ -70,30 +70,30 @@ _ENVELOPE: dict[str, object] = {
 
 class _FakeHubResponse:
     """A status/payload pair for ``_stub_hub`` to answer with — converted to a real
-    ``httpx.Response`` at dispatch time, never duck-typed for ``hub_proxy`` itself."""
+    ``httpx2.Response`` at dispatch time, never duck-typed for ``hub_proxy`` itself."""
 
     def __init__(self, status_code: int, payload: object | None = None, text: str = "") -> None:
         self.status_code = status_code
         self.payload = payload
         self.text = text
 
-    def to_httpx_response(self) -> httpx.Response:
+    def to_httpx_response(self) -> httpx2.Response:
         if self.payload is None:
-            return httpx.Response(self.status_code, text=self.text)
-        return httpx.Response(self.status_code, json=self.payload)
+            return httpx2.Response(self.status_code, text=self.text)
+        return httpx2.Response(self.status_code, json=self.payload)
 
 
 class _HubRouter:
-    """A late-bound handler behind the proxy's ``httpx.Client`` — ``_app_with_store`` builds
+    """A late-bound handler behind the proxy's ``httpx2.Client`` — ``_app_with_store`` builds
     the client (and the app wired to it) before a test knows how the hub should answer, so
     ``_stub_hub`` arms this after the fact instead of monkeypatching a module-level function."""
 
     def __init__(self) -> None:
-        self.handler: Callable[[httpx.Request], httpx.Response] = lambda request: httpx.Response(
+        self.handler: Callable[[httpx2.Request], httpx2.Response] = lambda request: httpx2.Response(
             500, json={"detail": f"hub not stubbed for {request.url}"}
         )
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         return self.handler(request)
 
 
@@ -105,7 +105,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):  # type: ignore
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
-        hub_proxy_client=httpx.Client(transport=httpx.MockTransport(router)),
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(router)),
         hub_retry_clock=no_retry_clock(),
     )
     app.state.hub_router = router
@@ -143,7 +143,7 @@ def _stub_hub(
     defaults to "nothing published" (an empty list / a 404) — so a test not exercising
     system scope needs no shape for it; ``system_list``/``system_get`` override either."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         url = str(request.url)
         if seen is not None:
             seen.append(url)
@@ -280,13 +280,13 @@ def test_list_forwards_the_runner_bearer_when_a_token_is_configured(tmp_path: Pa
     _seed_lease(store)
     seen_headers: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers["authorization"])
         if str(request.url) == _SYSTEM_ARTIFACTS_PATH:
-            return httpx.Response(200, json=[])
-        return httpx.Response(200, json=_ENVELOPE)
+            return httpx2.Response(200, json=[])
+        return httpx2.Response(200, json=_ENVELOPE)
 
-    hub_proxy_client = httpx.Client(transport=httpx.MockTransport(handler))
+    hub_proxy_client = httpx2.Client(transport=httpx2.MockTransport(handler))
     with runner_client(
         create_runner_app(
             config,
@@ -427,8 +427,8 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
     app.state.hub_router.handler = handler
     with runner_client(app) as client:

@@ -12,7 +12,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
@@ -92,7 +92,7 @@ def _create(
     return source_id
 
 
-def _ingest(client: TestClient, token: str) -> httpx.Response:
+def _ingest(client: TestClient, token: str) -> httpx2.Response:
     return client.post("/api/chunks", json={"tokens": [token]})
 
 

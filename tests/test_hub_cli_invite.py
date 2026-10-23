@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner, Result
 
@@ -135,8 +135,8 @@ def test_list_names_who_accepted_an_invitation() -> None:
         "accepted_by": "usr_bea",
     }
 
-    def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx.Response:
-        return httpx.Response(200, json={"invitations": [row]}, request=httpx.Request("GET", url))
+    def get(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
+        return httpx2.Response(200, json={"invitations": [row]}, request=httpx2.Request("GET", url))
 
     bound = bind_stubs(get=get)
 

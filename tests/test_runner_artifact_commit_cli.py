@@ -1,12 +1,12 @@
 """``blizzard runner artifact commit`` — the verb's identity handling and rejection
-surfacing (unit tier): ``httpx.post`` stubbed, no live socket. Like
+surfacing (unit tier): ``httpx2.post`` stubbed, no live socket. Like
 ``artifact create``, this does not soft-fail: a rejection must reach the worker as a
 non-zero exit. Carries no ``--forge`` — the origin comes from the repo manifest.
 """
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -170,7 +170,7 @@ def test_commit_verb_surfaces_a_transport_failure_as_a_nonzero_exit(monkeypatch:
     """An unreachable runner must reach the worker, not be swallowed."""
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
-        raise httpx.ConnectError("connection refused")
+        raise httpx2.ConnectError("connection refused")
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
@@ -196,7 +196,7 @@ def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_its
             return {"detail": "environment 'e1' has no repo 'blizzrd' — it holds ['blizzard', 'blizzard-mock']"}
 
         def raise_for_status(self) -> None:
-            raise httpx.HTTPStatusError("400", request=object(), response=self)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("400", request=object(), response=self)  # type: ignore[arg-type]
 
     bound = bind_stubs(post=lambda *a, **k: _RejectingResponse())
     result = bound.runner.invoke(

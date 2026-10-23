@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.tools.invariants import Invariants
@@ -274,7 +274,7 @@ def _blizzard_bin(name: str) -> str:
     return str(Path(sys.executable).parent / name)
 
 
-def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[str, str]:
+def _file_hub(forge: httpx2.Client, repo: str, title: str, body: str) -> tuple[str, str]:
     """File an issue and return its ``{source, ref}`` pointer — ``repo`` is the
     configured source's own name (``_work_sources``), ``ref`` its issue number."""
     issue = forge.post(f"/repos/{OWNER}/{repo}/issues", json={"title": title, "body": body})
@@ -282,7 +282,7 @@ def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[st
     return repo, str(issue.json()["number"])
 
 
-def _ingest(hub: httpx.Client, pointer: tuple[str, str]) -> str:
+def _ingest(hub: httpx2.Client, pointer: tuple[str, str]) -> str:
     source, ref = pointer
     resp = hub.post("/api/chunks", json={"tokens": [f"{source}:{ref}"]})
     assert resp.status_code == 201, resp.text
@@ -292,7 +292,7 @@ def _ingest(hub: httpx.Client, pointer: tuple[str, str]) -> str:
     return chunk_id
 
 
-def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: httpx.Client) -> subprocess.Popen[str]:
+def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: httpx2.Client) -> subprocess.Popen[str]:
     """Bring the hub back through the systemd units' migrate-then-host path (the runner is
     restarted by the caller). Returns the fresh, healthy hub process."""
     hub_proc = start_hub(
@@ -336,7 +336,7 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
 
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     forge_port, hub_port, runner_port = free_port(), free_port(), free_port()
-    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     hub_url = f"http://127.0.0.1:{hub_port}"
 
     hub_proc: subprocess.Popen[str] | None = None
@@ -530,7 +530,7 @@ def _assert_check_invariants_cli(runner_dir: Path, hub_dir: Path) -> None:
 
 
 def _assert_morning_after(
-    hub: httpx.Client,
+    hub: httpx2.Client,
     chunks: dict[str, str],
     workspace: Path,
     ask_session_id: str,

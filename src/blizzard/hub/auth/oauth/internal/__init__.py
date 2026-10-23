@@ -2,7 +2,7 @@
 
 Everything here is confined to ``hub/auth/oauth/`` and must not be imported from
 outside it; a consumer depends on :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider`
-instead. All ``httpx``/JWT/provider-wire-shape knowledge is confined here.
+instead. All ``httpx2``/JWT/provider-wire-shape knowledge is confined here.
 """
 
 from __future__ import annotations

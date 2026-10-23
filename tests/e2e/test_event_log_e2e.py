@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
@@ -76,7 +76,7 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _sse_event_types(hub: httpx.Client) -> list[str]:
+def _sse_event_types(hub: httpx2.Client) -> list[str]:
     """The event types on the SSE spine's replay tail (``Last-Event-ID: 0`` replays the
     buffered frames on connect). The tail flushes immediately, then the live connection
     blocks — so a short read window captures it, and the ensuing ``ReadTimeout`` is
@@ -88,7 +88,7 @@ def _sse_event_types(hub: httpx.Client) -> list[str]:
             for line in resp.iter_lines():
                 if line.startswith("event:"):
                     types.append(line.split(":", 1)[1].strip())
-    except httpx.ReadTimeout:
+    except httpx2.ReadTimeout:
         pass  # the buffered tail drained; the live stream then blocks — expected
     return types
 
@@ -139,7 +139,7 @@ def _reset_fixture(bin_dir: Path, scratch: Path) -> tuple[Path, Path]:
 
 
 def _push_event(
-    hub: httpx.Client,
+    hub: httpx2.Client,
     *,
     seq: int,
     severity: str,

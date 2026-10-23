@@ -177,7 +177,7 @@ def test_takes_no_routine_flag(tmp_path: Path) -> None:
     assert [row["proposal_id"] for row in resp.json()] == ["gprop_1"]
 
 
-def _follow_pages(hub: HubHarness, chunk_id: str, **params: object) -> list[dict]:  # type: ignore[type-arg]
+def _follow_pages(hub: HubHarness, chunk_id: str, **params: str | int) -> list[dict]:  # type: ignore[type-arg]
     rows: list[dict] = []  # type: ignore[type-arg]
     while True:
         resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/garden/proposals/page", params=params)

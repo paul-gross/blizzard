@@ -4,8 +4,8 @@ id: bzh:cli-httpx-confined
 language: Python
 severity: error
 message: >-
-  httpx is imported only by blizzard.cli.collaborators, the CLI tree's one client-factory module. A command builds
-  its client through CliCollaborators.client_factory and takes httpx's types from that module (bzh:dependency-injection).
+  httpx2 is imported only by blizzard.cli.collaborators, the CLI tree's one client-factory module. A command builds
+  its client through CliCollaborators.client_factory and takes httpx2's types from that module (bzh:dependency-injection).
 files:
   - src/blizzard/cli/**
   - src/blizzard/hub/cli/**
@@ -14,7 +14,7 @@ ignores:
   - src/blizzard/cli/collaborators.py
 rule:
   any:
-    - pattern: import httpx
-    - pattern: import httpx as $ALIAS
-    - pattern: from httpx import $$$NAMES
-    - pattern: from httpx.$$$SUB import $$$NAMES
+    - pattern: import httpx2
+    - pattern: import httpx2 as $ALIAS
+    - pattern: from httpx2 import $$$NAMES
+    - pattern: from httpx2.$$$SUB import $$$NAMES

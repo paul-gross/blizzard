@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from datetime import tzinfo
 from pathlib import Path
 
-import httpx
+import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
@@ -229,7 +229,7 @@ class HostProcess:
         default_factory=lambda: HostRegistrationHolder.for_host(registered=False)
     )
     #: The client the host's own hub calls go through, under its host token — ``None`` on a host with none.
-    host_hub_http_client: httpx.Client | None = None
+    host_hub_http_client: httpx2.Client | None = None
 
     def registered(self) -> bool:
         """Whether the host holds a host token: it reports itself, and its roster with it, so its runners declare
@@ -667,7 +667,7 @@ def _build_host_graph(
     at its defaults under its overrides; each override it ignores is warned of here, once."""
     install_runner_guard()
     engine = create_engine_from_url(config.db_url)
-    host_hub_http_client: httpx.Client | None = None
+    host_hub_http_client: httpx2.Client | None = None
     try:
         built: list[HostProcess] = []
 
@@ -711,7 +711,7 @@ def _build_host_graph(
         host_registration = HostRegistrationHolder.for_host(registered=bool(host_token))
         host_hub: HttpHostHubClient | None = None
         if host_registration.current().registered():
-            host_hub_http_client = httpx.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
+            host_hub_http_client = httpx2.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
             platform_tracing.instrument_client(host_hub_http_client)
             host_hub = HttpHostHubClient(host_hub_http_client, token=host_token)
         host = HostProcess(

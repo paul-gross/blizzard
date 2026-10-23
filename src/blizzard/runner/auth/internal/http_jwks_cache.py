@@ -1,12 +1,12 @@
 """The runner's cached view of the hub's published JWKS.
 
 Fetched lazily and cached by ``kid``; a :meth:`JwksCache.key_for` miss triggers exactly
-one re-fetch, so a rotated key is picked up with no restart. All ``httpx``/JWK-parsing
+one re-fetch, so a rotated key is picked up with no restart. All ``httpx2``/JWK-parsing
 usage is confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jwt.algorithms import RSAAlgorithm
 
@@ -18,7 +18,7 @@ _log = get_logger("blizzard.runner.auth")
 class JwksCache:
     """A per-process cache of the hub's current + previous public signing keys."""
 
-    def __init__(self, http_client: httpx.Client, jwks_url: str) -> None:
+    def __init__(self, http_client: httpx2.Client, jwks_url: str) -> None:
         self._http = http_client
         self._url = jwks_url
         self._keys: dict[str, RSAPublicKey] = {}
@@ -34,7 +34,7 @@ class JwksCache:
         try:
             resp = self._http.get(self._url)
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.warning("jwks fetch failed", url=self._url, detail=str(exc))
             return
         keys: dict[str, RSAPublicKey] = {}

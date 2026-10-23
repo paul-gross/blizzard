@@ -508,7 +508,7 @@ def _routes_by_key(app: FastAPI) -> dict[tuple[str, str], APIRoute]:
 def test_every_live_route_is_classified(tmp_path: Path) -> None:
     """No route is unclassified: every live route appears in exactly one of the three
     plane tables — a newly added, unnamed route fails this assertion."""
-    app = build_hub(tmp_path).client.app
+    app = build_hub(tmp_path).wired_app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
     classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
@@ -519,7 +519,7 @@ def test_every_live_route_is_classified(tmp_path: Path) -> None:
 def test_every_classified_route_is_still_live(tmp_path: Path) -> None:
     """The inverse check: no table entry names a route that no longer exists (a
     renamed/removed route leaving a stale, silently-untested table row)."""
-    app = build_hub(tmp_path).client.app
+    app = build_hub(tmp_path).wired_app
     assert isinstance(app, FastAPI)
     live = _live_routes(app)
     classified = _PUBLIC | set(_HUMAN) | _FLEET | _HOST | {_FLEET_CLAIM}
@@ -531,7 +531,7 @@ def test_human_routes_require_their_declared_permission(tmp_path: Path) -> None:
     """Every route named **human** actually carries a ``require(<permission>)``
     dependency for exactly the permission the table declares — introspected off the
     live route, not merely asserted by table membership."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key, expected_permission in _HUMAN.items():
         route = by_key[key]
         assert _required_permission(route) == expected_permission, key
@@ -539,7 +539,7 @@ def test_human_routes_require_their_declared_permission(tmp_path: Path) -> None:
 
 def test_public_routes_carry_no_permission_gate(tmp_path: Path) -> None:
     """Every route named **public** carries no ``require(<permission>)`` dependency."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _PUBLIC:
         route = by_key[key]
         assert _required_permission(route) is None, key
@@ -549,7 +549,7 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
     """Every route named **fleet** is gated by ``require_runner_principal``
     and carries no human ``require(<permission>)`` dependency —
     the fleet plane is not human-permission-gated at all."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _FLEET:
         route = by_key[key]
         assert "require_runner_principal" in _dependency_names(route), key
@@ -563,7 +563,7 @@ def test_fleet_routes_carry_the_runner_principal_gate_not_a_permission(tmp_path:
 def test_host_routes_carry_the_host_principal_gate_and_never_the_runner_one(tmp_path: Path) -> None:
     """Every route named **host** is gated by ``require_host_principal`` and by no runner principal or human
     permission, so a runner's token resolves no host and a host's token resolves no runner."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _HOST:
         route = by_key[key]
         names = _dependency_names(route)
@@ -574,7 +574,7 @@ def test_host_routes_carry_the_host_principal_gate_and_never_the_runner_one(tmp_
 
 
 def test_no_other_fleet_route_accepts_the_host_principal(tmp_path: Path) -> None:
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _FLEET | {_FLEET_CLAIM}:
         assert "require_host_principal" not in _dependency_names(by_key[key]), key
 
@@ -583,7 +583,7 @@ def test_human_routes_resolve_their_tenant_unless_hub_level(tmp_path: Path) -> N
     """A tenant route resolves its tenant at router level (``tenant_bound``, or
     ``TenantBoundAdmitting`` for a route in :data:`_ADMITTING`) and gates on a permission in it
     (``require``); a hub-level route resolves none and gates on a hub permission (``require_hub``)."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _HUMAN:
         names = _dependency_names(by_key[key])
         resolvers = names & {"tenant_bound", "TenantBoundAdmitting"}
@@ -598,7 +598,7 @@ def test_only_the_named_routes_admit_a_hub_permission_without_a_membership(tmp_p
     """Exhaustive both ways: a live route's router admits a non-member exactly when the route is in
     :data:`_ADMITTING`, under exactly the permission named there, which its gate takes as the
     alternative to its tenant permission."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     assert set(_ADMITTING) <= set(_HUMAN) - _HUB_LEVEL
     for key, route in by_key.items():
         assert _admitted_permission(route) == _ADMITTING.get(key), key
@@ -627,7 +627,7 @@ def test_the_admission_introspection_reads_an_admitting_route() -> None:
 def test_fleet_routes_resolve_their_tenant_and_public_routes_none(tmp_path: Path) -> None:
     """A fleet route's tenant is its credential's, resolved at router level; a public route
     serves no tenant."""
-    by_key = _routes_by_key(build_hub(tmp_path).client.app)
+    by_key = _routes_by_key(build_hub(tmp_path).wired_app)
     for key in _FLEET | _HOST | {_FLEET_CLAIM}:
         assert "tenant_bound" in _dependency_names(by_key[key]), key
     for key in _PUBLIC:

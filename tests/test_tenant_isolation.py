@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-import httpx
+import httpx2
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
@@ -760,7 +760,7 @@ def _fill(body: object, tenant: _Tenant, ids: dict[str, str]) -> object:
     return body
 
 
-def _send(sender: _Tenant, owner: _Tenant, method: str, path: str, probe: _Probe) -> httpx.Response:
+def _send(sender: _Tenant, owner: _Tenant, method: str, path: str, probe: _Probe) -> httpx2.Response:
     """``method path`` from ``sender``, its path and body naming ``owner``'s records. A fleet call presents the
     sender's runner token and names the sender's runner; the configuration apply sends the sender's own export."""
     ids = probe.ids or {}

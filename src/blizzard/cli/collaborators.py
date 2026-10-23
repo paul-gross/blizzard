@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import click
-from httpx import Client, ConnectError, HTTPError, HTTPStatusError, HTTPTransport, Response
+from httpx2 import Client, ConnectError, HTTPError, HTTPStatusError, HTTPTransport, Response
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.span_clock import Clock

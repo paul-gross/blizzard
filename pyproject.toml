@@ -12,8 +12,8 @@ dependencies = [
     # uvicorn; the CLI's client verbs are pure HTTP clients of those APIs.
     "fastapi>=0.142.0",
     "uvicorn[standard]>=0.32.0",
-    # httpx backs FastAPI's TestClient and the CLI's daemon-API client verbs.
-    "httpx>=0.27.0",
+    # httpx2 backs FastAPI's TestClient (starlette prefers it over httpx) and the CLI's daemon-API client verbs.
+    "httpx2>=2.16.0",
     # Persistence — the hub store and the runner store are SQLAlchemy over
     # sqlite (default) or postgres, held inside the portable surface
     # (bzh:sql-portable). Alembic drives the two independent migration trees,

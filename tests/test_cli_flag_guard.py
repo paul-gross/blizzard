@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 import click
-import httpx
+import httpx2
 import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
@@ -158,8 +158,8 @@ def test_a_flag_off_404_from_the_host_renders_the_same_message() -> None:
     from blizzard.runner.cli.daemon import RunnerDaemon
 
     body = {"detail": FlagOff.of("hub-thing").model_dump()}
-    client = httpx.Client(
-        transport=httpx.MockTransport(lambda request: httpx.Response(404, json=body)), base_url="http://r"
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda request: httpx2.Response(404, json=body)), base_url="http://r"
     )
     with pytest.raises(click.ClickException) as raised:
         RunnerDaemon("verb", client, "r").get_from_host("/api/held")

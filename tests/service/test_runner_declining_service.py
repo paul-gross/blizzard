@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from pydantic import BaseModel
 
@@ -40,19 +40,19 @@ class _PreFieldRegistration(BaseModel):
     version: str | None = None
 
 
-def _add(hub: httpx.Client, name: str) -> tuple[str, dict[str, str]]:
+def _add(hub: httpx2.Client, name: str) -> tuple[str, dict[str, str]]:
     added = hub.post("/api/runners", json={"name": name})
     assert added.status_code == 201, added.text
     return added.json()["runner_id"], {"Authorization": f"Bearer {added.json()['token']}"}
 
 
-def _register(hub: httpx.Client, bearer: dict[str, str], **declared: Any) -> None:
+def _register(hub: httpx2.Client, bearer: dict[str, str], **declared: Any) -> None:
     body = {"workspace_id": "w1", "capabilities": _CAPABILITIES, **declared}
     registered = hub.post("/api/fleet/runners", json=body, headers=bearer)
     assert registered.status_code == 201, registered.text
 
 
-def _held(hub: httpx.Client, runner_id: str) -> list[dict[str, Any]]:
+def _held(hub: httpx2.Client, runner_id: str) -> list[dict[str, Any]]:
     """The reasons the operator registry shows ``runner_id`` declining on."""
     registry = hub.get(f"/api/runners/{runner_id}")
     assert registry.status_code == 200, registry.text

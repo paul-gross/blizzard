@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
-import httpx
+import httpx2
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -500,7 +500,7 @@ def build_hosted_app(
     config: HubConfig,
     *,
     platform_tracing: IPlatformTracing | None = None,
-    oauth_http_client: httpx.Client | None = None,
+    oauth_http_client: httpx2.Client | None = None,
     version_window: VersionWindow,
 ) -> FastAPI:
     """The ``host`` composition root: open the store and wire every fleet seam.
@@ -546,8 +546,8 @@ def build_hosted_app(
     # The IdP signing-key lifecycle — likewise built only under `oauth`; a
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
-    oauth_client = oauth_http_client or httpx.Client(timeout=15.0)
-    forge_client = httpx.Client(timeout=10.0)
+    oauth_client = oauth_http_client or httpx2.Client(timeout=15.0)
+    forge_client = httpx2.Client(timeout=10.0)
     for client in (oauth_client, forge_client):
         platform_tracing.instrument_client(client)
 

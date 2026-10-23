@@ -1,14 +1,14 @@
 """The GitHub-backed commit resolver — the real forge check
 behind `ICommitForge` (`src/blizzard/hub/forge/repository_commits.py`): resolves whether a cited commit exists on a
 repo, degrading to ``None`` (well-formedness only) when the forge cannot answer. Confined to ``internal/``
-(``bzh:dependency-inversion``); ``httpx`` is used only here, as
+(``bzh:dependency-inversion``); ``httpx2`` is used only here, as
 `src/blizzard/hub/work_sources/internal/github_work_source.py` uses its own client only in its own `internal/`."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-import httpx
+import httpx2
 
 from blizzard.foundation.repo_ref import RepoRef
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution
@@ -20,7 +20,7 @@ class GitHubCommitResolver:
     status degrades to ``None`` rather than rejecting or crashing a delivery on a resolver
     fault. The forge, owner and token are per-call parameters; nothing about a forge is held here."""
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(self, client: httpx2.Client) -> None:
         self._client = client
 
     def resolve(
@@ -34,7 +34,7 @@ class GitHubCommitResolver:
         try:
             resp = self._client.get(f"{forge_url.rstrip('/')}/repos/{qualified}/commits/{commit}", headers=headers)
         except Exception:
-            # Broader than ``httpx.HTTPError`` on purpose: a malformed URL component raises
+            # Broader than ``httpx2.HTTPError`` on purpose: a malformed URL component raises
             # at request-construction time, outside that hierarchy. This must never raise.
             return None
         if resp.status_code == 200:
@@ -44,7 +44,7 @@ class GitHubCommitResolver:
         return None
 
     @staticmethod
-    def _authored_at(resp: httpx.Response) -> datetime | None:
+    def _authored_at(resp: httpx2.Response) -> datetime | None:
         """The commit's own authored instant from the same body the
         200 response already carries — no second forge round trip. Malformed or missing
         JSON degrades to `None` (unattributed, never guessed)."""

@@ -1,11 +1,11 @@
 """``blizzard hub finding list|show`` (unit tier) and the human-driven exit
 verbs — pure clients of the finding routes, driven here with
-``httpx`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``tests/test_hub_cli_garden_proposal.py``
+``httpx2`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``tests/test_hub_cli_garden_proposal.py``
 shape."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 from click.testing import CliRunner
 
@@ -25,7 +25,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit

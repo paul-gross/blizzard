@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.auth_core import Role
@@ -240,7 +240,7 @@ _BY_ID_ROUTES = (
 )
 
 
-def _by_id(hub: HubHarness, runner_id: str, suffix: str, body: dict[str, str] | None) -> httpx.Response:
+def _by_id(hub: HubHarness, runner_id: str, suffix: str, body: dict[str, str] | None) -> httpx2.Response:
     path = f"/api/runners/{runner_id}{suffix}"
     return hub.client.post(path, json=body) if suffix else hub.client.get(path)
 

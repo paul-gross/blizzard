@@ -12,7 +12,7 @@ import os
 import time
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
@@ -86,7 +86,7 @@ def _pending_total(config: RunnerConfig) -> int:
         engine.dispose()
 
 
-def _status(hub: httpx.Client, chunk_id: str) -> str:
+def _status(hub: httpx2.Client, chunk_id: str) -> str:
     """The mock hub's own status read — distinct from the live-hub reads further down
     this file, which stay at the real hub's anonymous ``GET /api/chunks/{id}``."""
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
@@ -97,7 +97,9 @@ def _tick_then_usage_buffered(config: RunnerConfig, fenced: dict[str, str]) -> b
     return _pending_usage(config) >= 1
 
 
-def _run_and_check(config: RunnerConfig, fenced: dict[str, str], hub: httpx.Client, chunk_id: str, target: str) -> bool:
+def _run_and_check(
+    config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
+) -> bool:
     _drive(config, fenced, ticks=1)
     return _status(hub, chunk_id) == target
 
@@ -177,7 +179,7 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
+def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
     assert issue.status_code == 201, issue.text
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
@@ -220,7 +222,7 @@ def _usage_payload(
     return payload
 
 
-def _push_usage(hub: httpx.Client, *, seq: int, payload: dict) -> dict:
+def _push_usage(hub: httpx2.Client, *, seq: int, payload: dict) -> dict:
     resp = hub.post(
         "/api/fleet/events",
         json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},

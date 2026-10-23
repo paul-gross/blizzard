@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -51,7 +51,7 @@ class AnthropicSubscriptionSampler:
         *,
         credentials_path: str | None = None,
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
-        http_client: Callable[[], httpx.Client],
+        http_client: Callable[[], httpx2.Client],
         clock: IClock,
     ) -> None:
         # `credentials_path` is read-only here; the caller supplies the (shared) client.
@@ -74,7 +74,7 @@ class AnthropicSubscriptionSampler:
                 },
                 timeout=_USAGE_TIMEOUT_SECONDS,
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             # Covers both a timeout and a connection failure: a best-effort diagnostic
             # sample, never a spawn/resume failure.
             _log.warning("external subscription usage sample failed: request error", detail=str(exc))

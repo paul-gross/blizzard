@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -75,14 +75,14 @@ def _sign(private_key: object, **claim_overrides: object) -> str:
     return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": _KID})  # type: ignore[arg-type]
 
 
-def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> httpx.Client:
-    def handler(request: httpx.Request) -> httpx.Response:
+def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> httpx2.Client:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/auth/jwks.json"
         if not oauth_enabled:
-            return httpx.Response(404)
-        return httpx.Response(200, json={"keys": [jwk]})
+            return httpx2.Response(404)
+        return httpx2.Response(200, json={"keys": [jwk]})
 
-    return httpx.Client(transport=httpx.MockTransport(handler), base_url="http://hub.example")
+    return httpx2.Client(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
 
 
 def _runner_paths(client: TestClient, *paths: str) -> tuple[str, ...]:
@@ -646,6 +646,7 @@ def test_two_runners_mint_differently_named_session_cookies_and_ignore_each_othe
 
     _bounce_in(client_a, private_key, jti="jti-ns-a")
     cookie_a = next(c.value for c in client_a.cookies.jar if c.name == _NAMES.session)
+    assert cookie_a is not None
     # Runner B ignores A's cookie, even replayed under A's name.
     client_b.cookies.set(_NAMES.session, cookie_a)
     assert client_b.get("/api/host/environments").status_code == 401
@@ -717,6 +718,7 @@ def test_a_registered_host_signs_in_as_its_host_id_for_client_audience_and_cooki
     assert client.get("/api/host/environments").status_code == 200
     # The first runner's cookie name authenticates nothing on a registered host.
     session = next(c.value for c in client.cookies.jar if c.name == host_names.session)
+    assert session is not None
     client.cookies.clear()
     client.cookies.set(_NAMES.session, session)
     assert client.get("/api/host/environments").status_code == 401

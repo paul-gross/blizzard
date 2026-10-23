@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import httpx
+import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -57,10 +57,10 @@ def _keypair() -> tuple[object, dict[str, str]]:
 
 
 def _jwks_cache(jwk: dict[str, str]) -> JwksCache:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"keys": [jwk]})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"keys": [jwk]})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://hub.example")
+    client = httpx2.Client(transport=httpx2.MockTransport(handler), base_url="http://hub.example")
     return JwksCache(client, "/api/auth/jwks.json")
 
 

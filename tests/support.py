@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import IO, Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 import sqlalchemy as sa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -1045,8 +1045,8 @@ class RunnerFleetClient(TestClient):
         self._connected: set[str] = set()
 
     def request(self, method: str, url: Any, *args: Any, **kwargs: Any) -> Any:
-        path = httpx.URL(str(url)).path
-        headers = httpx.Headers(kwargs.get("headers"))
+        path = httpx2.URL(str(url)).path
+        headers = httpx2.Headers(kwargs.get("headers"))
         if path.startswith(_FLEET_PREFIX) and "authorization" not in headers and "authorization" not in self.headers:
             runner_id = self._caller(str(url), path, kwargs)
             claim = method.upper() == "POST" and path == "/api/fleet/routes"
@@ -1061,7 +1061,7 @@ class RunnerFleetClient(TestClient):
             return str(body["runner_id"])
         if path.startswith(_FLEET_RUNNERS_PREFIX):
             return path.removeprefix(_FLEET_RUNNERS_PREFIX).split("/", 1)[0]
-        query = httpx.URL(url).params.get("runner_id") or httpx.QueryParams(kwargs.get("params")).get("runner_id")
+        query = httpx2.URL(url).params.get("runner_id") or httpx2.QueryParams(kwargs.get("params")).get("runner_id")
         return query or self.default_runner_id
 
     def _seed(self, runner_id: str, body: object, *, connect: bool) -> None:
@@ -1095,6 +1095,12 @@ class HubHarness:
     #: The wired app, so a test can build a second ``TestClient`` with a different peer
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
+
+    @property
+    def wired_app(self) -> FastAPI:
+        """The wired app, as the :class:`FastAPI` it is — ``client.app`` types it as any ASGI app."""
+        assert self.app is not None
+        return self.app
 
     def open_services(self, tenant: TenantId) -> TenantServices:
         """``tenant``'s services, opened as a request in that tenant would open them."""
@@ -1425,7 +1431,7 @@ def fixture_work_source(slug: str, locator: str, api_base: str, *, annotate: boo
     )
 
 
-def ensure_fixture_secret(hub: httpx.Client) -> None:
+def ensure_fixture_secret(hub: httpx2.Client) -> None:
     """Create :data:`FIXTURE_FORGE_SECRET` unless an earlier seeding already did."""
     secret = hub.post("/api/secrets", json={"name": FIXTURE_FORGE_SECRET, "value": "fixture-token"})
     assert secret.status_code in (201, 409), secret.text
@@ -1452,7 +1458,7 @@ def fixture_repositories(sources: Sequence[WorkSourceDocument], forge_api_url: s
 
 
 def create_repositories(
-    hub: httpx.Client, repositories: Sequence[dict[str, str]], *, project: str | None = "default"
+    hub: httpx2.Client, repositories: Sequence[dict[str, str]], *, project: str | None = "default"
 ) -> None:
     """Create repository ``repositories`` — and the secret they name — through a running hub's own
     API and link each to ``project`` (a slug; ``None`` links none), so a deliver node of that project's
@@ -1466,7 +1472,7 @@ def create_repositories(
             assert linked.status_code == 200, linked.text
 
 
-def create_work_sources(hub: httpx.Client, sources: Sequence[WorkSourceDocument]) -> None:
+def create_work_sources(hub: httpx2.Client, sources: Sequence[WorkSourceDocument]) -> None:
     """Create ``sources``, and the secret they name, through a running hub's own API, each linked to the
     hub's only project.
 

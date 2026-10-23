@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -42,7 +42,7 @@ _ITEMS: dict[str, object] = {
 }
 
 
-def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
+def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx2.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
     return runner_client(create_runner_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
 
@@ -57,11 +57,11 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path) -> None:
     point untouched, with no proxy-side code change."""
     seen: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(str(request.url))
-        return httpx.Response(200, json=_ITEMS)
+        return httpx2.Response(200, json=_ITEMS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -78,11 +78,11 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> N
     the newer half of any skew it is party to, so it never proxies the old path onward."""
     seen: list[str] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(str(request.url))
-        return httpx.Response(200, json=_ITEMS)
+        return httpx2.Response(200, json=_ITEMS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     test_client = _runner_app(tmp_path, hub_proxy_client=client)
     canonical = test_client.get(f"/api/chunks/{_CHUNK}/work-items")
     alias = test_client.get(f"/api/chunks/{_CHUNK}/pm-items")
@@ -95,13 +95,13 @@ def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path) -> N
 @pytest.mark.component
 def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
     """The forward carries the same bearer credential as the loop's own hub client."""
-    seen_headers: list[httpx.Headers] = []
+    seen_headers: list[httpx2.Headers] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_ITEMS)
+        return httpx2.Response(200, json=_ITEMS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
     resp = runner_client(create_runner_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}/work-items")
 
@@ -112,13 +112,13 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_
 @pytest.mark.component
 def test_proxy_sends_no_authorization_header_when_no_token_is_configured(tmp_path: Path) -> None:
     """A runner holding no ``hub_token`` sends no ``Authorization`` header at all."""
-    seen_headers: list[httpx.Headers] = []
+    seen_headers: list[httpx2.Headers] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_ITEMS)
+        return httpx2.Response(200, json=_ITEMS)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -146,10 +146,10 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(tmp_path: Pat
         ]
     }
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=degraded)
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=degraded)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
@@ -162,10 +162,10 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(tmp_path: Pat
 def test_proxy_passes_through_the_hub_status(tmp_path: Path) -> None:
     """A hub 404 (unknown chunk / no pointer) surfaces as a 404 with the hub's detail."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={"detail": "unknown chunk ch_pass"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, json={"detail": "unknown chunk ch_pass"})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 404
@@ -176,10 +176,10 @@ def test_proxy_passes_through_the_hub_status(tmp_path: Path) -> None:
 def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
     """A transport failure to the hub is a 502 — never a pretend answer."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 502

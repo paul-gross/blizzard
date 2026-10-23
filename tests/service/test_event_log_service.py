@@ -11,7 +11,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -26,13 +26,13 @@ from tests.support import free_port
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _events(hub: httpx.Client, **params) -> list[dict]:
+def _events(hub: httpx2.Client, **params) -> list[dict]:
     resp = hub.get("/api/events", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["events"]
 
 
-def _activity(hub: httpx.Client, **params) -> list[dict]:
+def _activity(hub: httpx2.Client, **params) -> list[dict]:
     resp = hub.get("/api/activity", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["activity"]

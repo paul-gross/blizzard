@@ -13,7 +13,7 @@ import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
@@ -44,7 +44,7 @@ _OTHER = JoinedRunner(runner_id="rn_01JX00000000000000000HALTB", runner_name="ru
 @contextlib.contextmanager
 def _host(
     root: Path, hub_url: str, token: str, *, subscription: str | None = None, store_names: str | None = None
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """``blizzard-runner host`` over ``root``, its one runner configured as ``_CONFIGURED`` and holding ``token``,
     naming ``subscription`` when given and over a store whose identity row names ``store_names`` when given; yields a client to its port once it answers ``/api/health``."""
     port = free_port()
@@ -74,7 +74,7 @@ def _host(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -83,7 +83,7 @@ def _host(
         terminate(proc)
 
 
-def _identity_state(local: httpx.Client) -> str | None:
+def _identity_state(local: httpx2.Client) -> str | None:
     view = local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner")
     return view.json()["identity"]["state"] if view.status_code == 200 else None
 
@@ -173,19 +173,19 @@ class _Added:
         return {"Authorization": f"Bearer {self.token}"}
 
 
-def _add_project(hub: httpx.Client, slug: str) -> str:
+def _add_project(hub: httpx2.Client, slug: str) -> str:
     added = hub.post("/_seed/projects", json={"slug": slug, "name": slug})
     assert added.status_code == 201, added.text
     return str(added.json()["project_id"])
 
 
-def _add_host(hub: httpx.Client, name: str = "host-under-test") -> tuple[str, str]:
+def _add_host(hub: httpx2.Client, name: str = "host-under-test") -> tuple[str, str]:
     added = hub.post("/api/hosts", json={"name": name})
     assert added.status_code == 201, added.text
     return str(added.json()["host_id"]), str(added.json()["token"])
 
 
-def _add(hub: httpx.Client, name: str, project: str, *, host_id: str | None = None) -> _Added:
+def _add(hub: httpx2.Client, name: str, project: str, *, host_id: str | None = None) -> _Added:
     body: dict[str, object] = {"name": name, "projects": [project]}
     if host_id is not None:
         body["host_id"] = host_id
@@ -196,7 +196,7 @@ def _add(hub: httpx.Client, name: str, project: str, *, host_id: str | None = No
     )
 
 
-def _seed_chunk(hub: httpx.Client, project_id: str) -> str:
+def _seed_chunk(hub: httpx2.Client, project_id: str) -> str:
     seeded = hub.post("/_seed/chunk", json={**mock_hub_chunk_spec(f"{REPO}/issues/1"), "project_id": project_id})
     assert seeded.status_code == 201, seeded.text
     return str(seeded.json()["chunk_id"])
@@ -205,7 +205,7 @@ def _seed_chunk(hub: httpx.Client, project_id: str) -> str:
 @contextlib.contextmanager
 def _token_host(
     root: Path, bin_dir: Path, hub_port: int, workspace: Path, host_token: str, runners: tuple[_Added, ...]
-) -> Iterator[httpx.Client]:
+) -> Iterator[httpx2.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token``, its host file one ``[[runner]]`` per
     ``runners`` entry — each bound to its own project in the fixture workspace and holding its own token in
     ``.env`` — on the mock harness; yields a client to its port once it answers ``/api/health``."""
@@ -240,7 +240,7 @@ def _token_host(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{base.port}", timeout=10.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{base.port}", timeout=10.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -258,30 +258,30 @@ def _leased(root: Path, runner_id: str, chunk_id: str) -> bool:
     return bool(_rows(root, "SELECT 1 FROM leases WHERE runner_id = ? AND chunk_id = ?", runner_id, chunk_id))
 
 
-def _chunk_status(hub: httpx.Client, chunk_id: str) -> str:
+def _chunk_status(hub: httpx2.Client, chunk_id: str) -> str:
     detail = hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub))
     assert detail.status_code == 200, detail.text
     return str(detail.json()["status"])
 
 
-def _registration(local: httpx.Client) -> dict:
+def _registration(local: httpx2.Client) -> dict:
     answer = local.get("/api/host/registration")
     assert answer.status_code == 200, answer.text
     return answer.json()
 
 
-def _runner_identity(local: httpx.Client, runner_id: str) -> str | None:
+def _runner_identity(local: httpx2.Client, runner_id: str) -> str | None:
     view = local.get(f"/runners/{runner_id}/api/runner")
     return view.json()["identity"]["state"] if view.status_code == 200 else None
 
 
-def _host_runner(local: httpx.Client, runner_id: str) -> dict:
+def _host_runner(local: httpx2.Client, runner_id: str) -> dict:
     listed = local.get("/api/host/runners")
     assert listed.status_code == 200, listed.text
     return next(item for item in listed.json()["items"] if item["runner_id"] == runner_id)
 
 
-def _own_view(hub: httpx.Client, runner: _Added) -> dict:
+def _own_view(hub: httpx2.Client, runner: _Added) -> dict:
     """The hub's read of ``runner`` as itself, once its first registration has landed."""
     url = f"/api/fleet/runners/{runner.runner_id}"
     assert poll_until(lambda: hub.get(url, headers=runner.bearer).status_code == 200, timeout=30.0)

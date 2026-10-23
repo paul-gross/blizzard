@@ -1,7 +1,7 @@
 """The runner-local chunk-detail pass-through proxy — route + forward shape.
 
 Proves the *runner's* half of pause/resume: the runner route over a real app, the hub
-reached through a stubbed ``httpx.Client``, and the 202/404/409 + 502-on-unreachable
+reached through a stubbed ``httpx2.Client``, and the 202/404/409 + 502-on-unreachable
 pass-through. The hub half (the domain refusal, the pause fact) is ``tests/test_chunks_api.py``'s.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -64,7 +64,7 @@ _SUMMARY: dict[str, object] = {
 }
 
 
-def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None) -> TestClient:
+def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx2.Client | None = None) -> TestClient:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL)
     return runner_client(create_runner_app(config, hub_proxy_client=hub_proxy_client, hub_retry_clock=no_retry_clock()))
 
@@ -73,11 +73,11 @@ def _runner_app(tmp_path: Path, *, hub_proxy_client: httpx.Client | None = None)
 def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path) -> None:
     seen: list[tuple[str, str]] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append((request.method, str(request.url)))
-        return httpx.Response(200, json=_DETAIL)
+        return httpx2.Response(200, json=_DETAIL)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 200, resp.text
@@ -92,10 +92,10 @@ def test_get_chunk_forwards_to_the_fleet_route(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_get_chunk_passes_through_a_hub_404(tmp_path: Path) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={"detail": "unknown chunk ch_pass"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, json={"detail": "unknown chunk ch_pass"})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 404
@@ -104,10 +104,10 @@ def test_get_chunk_passes_through_a_hub_404(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_get_chunk_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("connection refused")
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).get(f"/api/chunks/{_CHUNK}")
 
     assert resp.status_code == 502
@@ -119,11 +119,11 @@ def test_get_chunk_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
 def test_pause_and_resume_forward_to_the_fleet_route(tmp_path: Path, verb: str) -> None:
     seen: list[tuple[str, str]] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append((request.method, str(request.url)))
-        return httpx.Response(202, json=_SUMMARY)
+        return httpx2.Response(202, json=_SUMMARY)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).post(f"/api/chunks/{_CHUNK}/{verb}")
 
     assert resp.status_code == 202, resp.text
@@ -133,10 +133,10 @@ def test_pause_and_resume_forward_to_the_fleet_route(tmp_path: Path, verb: str) 
 
 @pytest.mark.component
 def test_pause_passes_through_a_hub_409(tmp_path: Path) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(409, json={"detail": "chunk ch_pass is not pausable"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(409, json={"detail": "chunk ch_pass is not pausable"})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     resp = _runner_app(tmp_path, hub_proxy_client=client).post(f"/api/chunks/{_CHUNK}/pause")
 
     assert resp.status_code == 409
@@ -145,13 +145,13 @@ def test_pause_passes_through_a_hub_409(tmp_path: Path) -> None:
 
 @pytest.mark.component
 def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(tmp_path: Path) -> None:
-    seen_headers: list[httpx.Headers] = []
+    seen_headers: list[httpx2.Headers] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen_headers.append(request.headers)
-        return httpx.Response(200, json=_DETAIL)
+        return httpx2.Response(200, json=_DETAIL)
 
-    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
     resp = runner_client(create_runner_app(config, hub_proxy_client=client)).get(f"/api/chunks/{_CHUNK}")
 

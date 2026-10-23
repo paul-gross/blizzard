@@ -4,7 +4,7 @@ resolution from the environment (unit tier).
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.hub.auth.oauth.internal.factory import ProviderEntry
@@ -15,8 +15,8 @@ from blizzard.hub.config import ConfigError, OAuthProviderConfig
 pytestmark = pytest.mark.unit
 
 
-def _client() -> httpx.Client:
-    return httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
+def _client() -> httpx2.Client:
+    return httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(404)))
 
 
 def test_provider_registry_builds_a_conformer_per_entry(monkeypatch: pytest.MonkeyPatch) -> None:

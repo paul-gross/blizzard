@@ -1,5 +1,5 @@
 """The ``oidc``/``github`` provider conformers — driven against a fake transport via
-``httpx.MockTransport`` (unit tier).
+``httpx2.MockTransport`` (unit tier).
 
 The whole authorize-url/exchange dance runs against canned responses, including a
 real RSA signature verification of the ``oidc`` conformer's ``id_token`` — no network,
@@ -13,7 +13,7 @@ import hmac
 import json
 from datetime import UTC, datetime, timedelta
 
-import httpx
+import httpx2
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -57,10 +57,10 @@ def _oidc_transport(id_token_claims: dict[str, object] | None, *, token_status: 
     private_key, jwk = _rsa_keypair()
     token = _id_token(private_key, claims=id_token_claims) if id_token_claims is not None else None
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
         if path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "authorization_endpoint": f"{_ISSUER}/authorize",
@@ -70,16 +70,16 @@ def _oidc_transport(id_token_claims: dict[str, object] | None, *, token_status: 
             )
         if path == "/token":
             if token_status != 200:
-                return httpx.Response(token_status, json={"error": "invalid_grant"})
-            return httpx.Response(200, json={"id_token": token})
+                return httpx2.Response(token_status, json={"error": "invalid_grant"})
+            return httpx2.Response(200, json={"id_token": token})
         if path == "/jwks":
-            return httpx.Response(200, json={"keys": [jwk]})
-        return httpx.Response(404)
+            return httpx2.Response(200, json={"keys": [jwk]})
+        return httpx2.Response(404)
 
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
 
 
-def _oidc_provider(client: httpx.Client, *, emails_authoritative: bool = False) -> OidcProvider:
+def _oidc_provider(client: httpx2.Client, *, emails_authoritative: bool = False) -> OidcProvider:
     return OidcProvider(
         name="oidc-co",
         display_name="Example SSO",
@@ -199,10 +199,10 @@ def test_oidc_exchange_raises_on_a_signature_that_does_not_verify() -> None:
     other_private_key, _ = _rsa_keypair()
     forged = _id_token(other_private_key, claims={"sub": "attacker"})
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
         if path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "authorization_endpoint": f"{_ISSUER}/authorize",
@@ -211,14 +211,14 @@ def test_oidc_exchange_raises_on_a_signature_that_does_not_verify() -> None:
                 },
             )
         if path == "/token":
-            return httpx.Response(200, json={"id_token": forged})
+            return httpx2.Response(200, json={"id_token": forged})
         if path == "/jwks":
             # A JWKS whose kid never matches the forged token's kid (`_KID`).
             _, real_jwk = _rsa_keypair()
-            return httpx.Response(200, json={"keys": [real_jwk]})
-        return httpx.Response(404)
+            return httpx2.Response(200, json={"keys": [real_jwk]})
+        return httpx2.Response(404)
 
-    provider = _oidc_provider(httpx.Client(transport=httpx.MockTransport(handler)))
+    provider = _oidc_provider(httpx2.Client(transport=httpx2.MockTransport(handler)))
     with pytest.raises(OAuthExchangeError):
         provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
 
@@ -251,10 +251,10 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
     signature_b64 = base64.urlsafe_b64encode(signature).rstrip(b"=")
     forged = (signing_input + b"." + signature_b64).decode()
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
         if path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "authorization_endpoint": f"{_ISSUER}/authorize",
@@ -263,12 +263,12 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
                 },
             )
         if path == "/token":
-            return httpx.Response(200, json={"id_token": forged})
+            return httpx2.Response(200, json={"id_token": forged})
         if path == "/jwks":
-            return httpx.Response(200, json={"keys": [jwk]})
-        return httpx.Response(404)
+            return httpx2.Response(200, json={"keys": [jwk]})
+        return httpx2.Response(404)
 
-    provider = _oidc_provider(httpx.Client(transport=httpx.MockTransport(handler)))
+    provider = _oidc_provider(httpx2.Client(transport=httpx2.MockTransport(handler)))
     with pytest.raises(OAuthExchangeError):
         provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
 
@@ -285,24 +285,24 @@ def test_oidc_exchange_raises_when_id_token_carries_no_sub() -> None:
 def _github_transport(  # type: ignore[no-untyped-def]
     *, user: dict[str, object] | None, emails: list[dict[str, object]], token_status: int = 200
 ):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path
         if path == "/login/oauth/access_token":
             if token_status != 200:
-                return httpx.Response(token_status, json={"error": "bad_verification_code"})
-            return httpx.Response(200, json={"access_token": "gho_token"})
+                return httpx2.Response(token_status, json={"error": "bad_verification_code"})
+            return httpx2.Response(200, json={"access_token": "gho_token"})
         if path == "/user":
             if user is None:
-                return httpx.Response(404, json={"message": "not found"})
-            return httpx.Response(200, json=user)
+                return httpx2.Response(404, json={"message": "not found"})
+            return httpx2.Response(200, json=user)
         if path == "/user/emails":
-            return httpx.Response(200, json=emails)
-        return httpx.Response(404)
+            return httpx2.Response(200, json=emails)
+        return httpx2.Response(404)
 
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
 
 
-def _github_provider(client: httpx.Client) -> GithubProvider:
+def _github_provider(client: httpx2.Client) -> GithubProvider:
     return GithubProvider(
         name="github", display_name="GitHub", client_id="cid", client_secret="secret", http_client=client
     )

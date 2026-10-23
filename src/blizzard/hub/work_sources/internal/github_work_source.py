@@ -1,7 +1,7 @@
 """The GitHub-shaped work-source binding (``bzh:pluggable-seams``).
 
 Implements :class:`~blizzard.hub.work_sources.source.IWorkSource` against a GitHub REST
-v3 surface. Confined to ``internal/`` (``bzh:dependency-inversion``); ``httpx`` is used
+v3 surface. Confined to ``internal/`` (``bzh:dependency-inversion``); ``httpx2`` is used
 only here. One instance per work-source record revision, pinned to its own ``repo``
 and ``web_base`` and carrying its own credentialed client."""
 
@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import ClassVar
 
-import httpx
+import httpx2
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model
@@ -63,7 +63,7 @@ class GitHubWorkSource:
     Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
     :class:`~blizzard.hub.work_sources.closer.IWorkCloser` over the same client."""
 
-    def __init__(self, client: httpx.Client, *, source_id: str, slug: str, repo: str, web_base: str) -> None:
+    def __init__(self, client: httpx2.Client, *, source_id: str, slug: str, repo: str, web_base: str) -> None:
         """``source_id`` is the key every pointer it parses holds; ``slug`` is the source's current slug, which its
         labels and error text render — the adapter is rebuilt when the record's revision moves."""
         self._client = client
@@ -94,7 +94,7 @@ class GitHubWorkSource:
             issue.raise_for_status()
             comments = self._client.get(f"{base}/comments")
             comments.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("work-item fetch failed", source=pointer.source, ref=pointer.ref, error=str(exc))
             raise WorkSourceError(f"failed to read {self._name}#{pointer.ref}: {exc}") from exc
         return WorkItem(
@@ -130,7 +130,7 @@ class GitHubWorkSource:
                 resp = self._client.post(f"/repos/{self._repo}/labels", json={"name": label.name, "color": label.color})
                 if resp.status_code != 422:
                     resp.raise_for_status()
-            except httpx.HTTPError as exc:
+            except httpx2.HTTPError as exc:
                 _log.error("label bootstrap failed", source=self._name, label=label.name, error=str(exc))
                 raise WorkAnnotateError(f"failed to bootstrap label {label.name!r} for {self._name}: {exc}") from exc
         self._labels_bootstrapped = True
@@ -146,7 +146,7 @@ class GitHubWorkSource:
             resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
             if resp.status_code != 404:
                 resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("set-status failed", source=self._name, ref=pointer.ref, marker=marker.value, error=str(exc))
             raise WorkAnnotateError(f"failed to set {marker.value} on {self._name}#{pointer.ref}: {exc}") from exc
 
@@ -159,7 +159,7 @@ class GitHubWorkSource:
                 resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{Label(marker).name}")
                 if resp.status_code != 404:
                     resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("clear-status failed", source=self._name, ref=pointer.ref, error=str(exc))
             raise WorkAnnotateError(f"failed to clear status on {self._name}#{pointer.ref}: {exc}") from exc
 
@@ -189,7 +189,7 @@ class GitHubWorkSource:
                     next_link = resp.links.get("next")
                     url = next_link["url"] if next_link else None
                     params = None  # the Link header's next URL already carries the query
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("marked-refs discovery failed", source=self._name, error=str(exc))
             raise WorkAnnotateError(f"failed to discover marked refs for {self._name}: {exc}") from exc
         return {ref: frozenset(markers) for ref, markers in found.items()}
@@ -208,7 +208,7 @@ class GitHubWorkSource:
             if resp.status_code in (404, 410):
                 raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             _log.error("close failed", source=self._name, ref=pointer.ref, error=str(exc))
             raise WorkCloseError(f"failed to close {self._name}#{pointer.ref}: {exc}") from exc
 

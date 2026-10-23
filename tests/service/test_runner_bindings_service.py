@@ -3,7 +3,7 @@ service tier's check that the mock hub still speaks the shapes the real hub acce
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
@@ -30,7 +30,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _seed_chunk(hub: httpx.Client, ref: str, project_id: str | None = None) -> str:
+def _seed_chunk(hub: httpx2.Client, ref: str, project_id: str | None = None) -> str:
     spec = mock_hub_chunk_spec(ref)
     if project_id is not None:
         spec["project_id"] = project_id
@@ -39,7 +39,7 @@ def _seed_chunk(hub: httpx.Client, ref: str, project_id: str | None = None) -> s
     return str(seeded.json()["chunk_id"])
 
 
-def _peek(hub: httpx.Client, token: str, request: QueuePeekRequest) -> list[str]:
+def _peek(hub: httpx2.Client, token: str, request: QueuePeekRequest) -> list[str]:
     resp = hub.post("/api/fleet/queue/peek", json=request.model_dump(), headers=_bearer(token))
     assert resp.status_code == 200, resp.text
     return [entry.chunk_id for entry in QueuePeekResponse.model_validate(resp.json()).entries]

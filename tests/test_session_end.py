@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
@@ -179,7 +179,7 @@ def test_session_end_verb_soft_fails_when_runner_unreachable(monkeypatch: pytest
     """An unreachable runner is reported and swallowed — exit 0."""
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
-        raise httpx.ConnectError("connection refused")
+        raise httpx2.ConnectError("connection refused")
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(

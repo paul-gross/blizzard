@@ -14,7 +14,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from tests.fleet_launchers import await_http, terminate
@@ -42,7 +42,7 @@ def _require_mock_data_binary() -> Path:
 
 
 @contextlib.contextmanager
-def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
+def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx2.Client]:
     """Host a real hub with **zero** configured work sources.
 
     Mirrors ``tests.fleet_launchers.run_hub`` minus ``create_work_sources`` — every
@@ -56,7 +56,7 @@ def _zero_work_source_hub(hub_dir: Path, port: int) -> Iterator[httpx.Client]:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
+    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -87,13 +87,13 @@ def _parse_ceiling_paused_runner(stdout: str) -> str:
     return match.group(1)
 
 
-def _chunks_by_id(hub: httpx.Client) -> dict[str, dict]:
+def _chunks_by_id(hub: httpx2.Client) -> dict[str, dict]:
     resp = hub.get("/api/chunks")
     assert resp.status_code == 200, resp.text
     return {row["chunk_id"]: row for row in resp.json()["chunks"]}
 
 
-def _chunk_detail(hub: httpx.Client, chunk_id: str) -> dict:
+def _chunk_detail(hub: httpx2.Client, chunk_id: str) -> dict:
     resp = hub.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
