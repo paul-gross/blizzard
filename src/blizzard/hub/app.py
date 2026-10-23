@@ -292,7 +292,10 @@ def _refuse_retired_host(_request: Request, exc: Exception) -> JSONResponse:
 def _log_unhandled_request_error(request: Request, exc: Exception) -> JSONResponse:
     """Write the one JSON line for an exception no handler maps, tagged with the tenant the request
     resolved (read from ``request.state``, so it holds whichever context this runs in), then answer
-    the ``500`` Starlette's server-error middleware answers when no handler exists."""
+    the ``500`` Starlette's server-error middleware answers when no handler exists.
+
+    The traceback lands in ``exception`` (``format_exc_info``'s field), so the class is named in ``exception_class``;
+    nothing downstream reads the class by another name."""
     tenant = getattr(request.state, "tenant_id", None)
     get_logger("blizzard.hub").error(
         "unhandled request error",

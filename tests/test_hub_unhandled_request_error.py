@@ -3,9 +3,12 @@ then answers the plain ``500`` Starlette's server-error middleware answers."""
 
 from __future__ import annotations
 
+import io
+import json
 from pathlib import Path
 
 import pytest
+import structlog
 from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
@@ -83,3 +86,27 @@ def test_a_failure_on_a_route_resolving_no_tenant_logs_the_line_without_one(tmp_
     assert "tenant_id" not in lines[0]
     assert lines[0]["path"] == "/api/boom-bare"
     assert resp.status_code == 500
+
+
+def test_the_json_line_carries_the_traceback_in_exception(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    client = _mount_failing_routes(hub)
+    headers = _signed_in(hub)
+    sink = io.StringIO()
+    saved = structlog.get_config()
+    # The real JSON chain's exception and render steps, onto a sink the test reads.
+    structlog.configure(
+        processors=[structlog.processors.format_exc_info, structlog.processors.JSONRenderer()],
+        logger_factory=structlog.PrintLoggerFactory(file=sink),
+        cache_logger_on_first_use=False,
+    )
+    try:
+        client.get("/api/boom-tenant", headers=headers)
+    finally:
+        structlog.configure(**saved)
+
+    lines = [json.loads(raw) for raw in sink.getvalue().splitlines()]
+    (line,) = [line for line in lines if line["event"] == _EVENT]
+    assert line["exception_class"] == "_Boom"
+    assert "Traceback (most recent call last)" in line["exception"]
+    assert "_Boom: tenant side" in line["exception"]
