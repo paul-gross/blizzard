@@ -165,11 +165,11 @@ at the next fresh sample that carries it; it never falls back to an older sample
 Before every start the runner asks, in order, the subscription floor, pace, utilization, budget, and schedule, and
 starts only when each says yes. The gate is asked before a claim and before each step, never inside one: a step already
 begun runs to its end, and a continuation of a parked session answers to the floor alone. A chunk whose next step is
-declined waits between steps in its environment, with no retry used, and enters the step once the throttles admit it. With
-`on_decline = "release"` it goes back in the queue instead, cold, with no retry used: it waits `ready` at that step for
-whichever runner's throttles admit it, this one included once they do. A runner whose brake is engaged, or a chunk an
-operator paused, always waits in place. If the hub refuses the release, or is an older one without it, the runner keeps
-the chunk and waits as with `"hold"`.
+declined waits between steps in its environment, with no retry used, and enters the step once the throttles admit it.
+With `on_decline = "release"` it goes back in the queue instead, cold, with no retry used: it waits `ready` at that step
+for whichever runner's throttles admit it, this one included once they do. A runner whose brake is engaged, or a chunk
+an operator paused, always waits in place. If the hub refuses the release, or is an older one without it, the runner
+keeps the chunk and waits as with `"hold"`.
 
 An invalid throttle halts that runner alone and names the key, for example `throttle.pace.taper[2].from_pct`, or
 `throttle.on_decline` set to anything but `"hold"` or `"release"`; `blizzard runner host --check` reports it with the
