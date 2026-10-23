@@ -1,3 +1,25 @@
+<!-- A chunk row's head: its first work item's label left and its short id right, then each
+     item's title — the board card's own reading, a title held by a one-line skeleton until the
+     items are read. A grouped chunk's later items each name their own label over their title. -->
+<ng-template #work let-row>
+  <span class="head">
+    @if (row.lines[0]?.label; as label) {
+      <span class="iss" data-testid="glance-work-ref">{{ label }}</span>
+    }
+    <span class="cid">{{ row.shortId }}</span>
+  </span>
+  @for (line of row.lines; track $index; let first = $first) {
+    @if (!first && line.label) {
+      <span class="iss" data-testid="glance-work-ref">{{ line.label }}</span>
+    }
+    @if (!row.itemsRead) {
+      <fleet-kit-skeleton class="title-skeleton" data-testid="glance-title-skeleton" [rows]="1" />
+    } @else if (line.title) {
+      <span class="title" data-testid="glance-title">{{ line.title }}</span>
+    }
+  }
+</ng-template>
+
 <div class="glance" data-testid="glance-board">
   <div class="vitals" data-testid="glance-vitals">
     <div class="vital" data-testid="vital-needs-you">
@@ -17,6 +39,30 @@
       <span class="v-cap">{{ vitals().liveLabel }}</span>
     </div>
   </div>
+
+  <fleet-kit-panel aria-label="Fleet spend today" data-testid="glance-spend-panel" label="Fleet spend · today">
+    <fleet-kit-async-state
+      [state]="spendState()"
+      loadingText="—"
+      loadingTestid="glance-spend-loading"
+      errorText="FAILED TO LOAD"
+      errorTestid="glance-spend-error"
+    >
+      @if (spend(); as s) {
+        <div class="row" data-testid="glance-spend-row">
+          <!-- The combined figure (formatCost) always renders here, whatever mix of
+               billed/estimated/partial the window carries — an estimate-only window
+               reads as its own `~$X.XX` rather than a withheld $0.00. -->
+          <span class="cid" data-testid="glance-spend-value">{{
+            formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial)
+          }}</span>
+          <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
+        </div>
+      } @else {
+        <p class="empty" data-testid="glance-spend-empty">—</p>
+      }
+    </fleet-kit-async-state>
+  </fleet-kit-panel>
 
   <fleet-kit-panel
     aria-label="Needs you"
@@ -39,13 +85,14 @@
         @for (row of needsYou(); track row.chunkId) {
           <li class="row" data-testid="needs-you-row" [attr.data-chunk]="row.chunkId">
             <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
-            <fleet-kit-badge class="pill" [tone]="row.tone" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
-              <span class="cid">{{ row.shortId }}</span>
-              @if (row.runner) {
-                <span class="rid">{{ row.runner }}</span>
-              }
-              <span class="sub">{{ row.sub }}</span>
+              <ng-container *ngTemplateOutlet="work; context: { $implicit: row }" />
+              <span class="meta">
+                @if (row.status) {
+                  <span class="st" data-testid="glance-row-status">{{ row.status }}</span>
+                }
+                <span class="sub">{{ row.sub }}</span>
+              </span>
             </span>
           </li>
         }
@@ -74,16 +121,20 @@
         @for (row of inMotion(); track row.chunkId) {
           <li class="row" data-testid="in-motion-row" [attr.data-chunk]="row.chunkId">
             <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
-            <fleet-kit-badge class="pill" tone="running" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
             <span class="grow">
-              <span class="cid">{{ row.shortId }}</span>
-              <span class="rid">{{ row.runner }} · {{ row.node }}</span>
+              <ng-container *ngTemplateOutlet="work; context: { $implicit: row }" />
+              <span class="meta">
+                <span class="rid">{{ row.node }}</span>
+                @if (row.status) {
+                  <span class="st" data-testid="glance-row-status">{{ row.status }}</span>
+                }
+                @if (hasCostFigure(row.costUsd, row.estimatedCostUsd, row.costPartial)) {
+                  <span class="num" data-testid="in-motion-cost">{{
+                    formatCost(row.costUsd, row.estimatedCostUsd, row.costPartial)
+                  }}</span>
+                }
+              </span>
             </span>
-            @if (hasCostFigure(row.costUsd, row.estimatedCostUsd, row.costPartial)) {
-              <span class="num" data-testid="in-motion-cost">{{
-                formatCost(row.costUsd, row.estimatedCostUsd, row.costPartial)
-              }}</span>
-            }
           </li>
         }
       </ul>
@@ -111,10 +162,11 @@
         @for (row of upNext(); track row.chunkId) {
           <li class="row" data-testid="up-next-row" [attr.data-chunk]="row.chunkId">
             <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
-            <fleet-kit-badge class="pill" tone="idle" variant="soft">ready</fleet-kit-badge>
             <span class="grow">
-              <span class="cid">{{ row.shortId }}</span>
-              <span class="rid up-next-node">{{ row.node }}</span>
+              <ng-container *ngTemplateOutlet="work; context: { $implicit: row }" />
+              <span class="meta">
+                <span class="rid">{{ row.node }}</span>
+              </span>
             </span>
           </li>
         }
@@ -143,11 +195,12 @@
         @for (row of doneToday(); track row.chunkId) {
           <li class="row" data-testid="done-today-row" [attr.data-chunk]="row.chunkId">
             <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
-            <fleet-kit-badge class="pill" tone="done" variant="soft">done</fleet-kit-badge>
             <span class="grow">
-              <span class="cid">{{ row.shortId }}</span>
-              @if (row.pointerLabel) {
-                <span class="rid">{{ row.pointerLabel }}</span>
+              <ng-container *ngTemplateOutlet="work; context: { $implicit: row }" />
+              @if (row.status) {
+                <span class="meta">
+                  <span class="st" data-testid="glance-row-status">{{ row.status }}</span>
+                </span>
               }
             </span>
           </li>
@@ -156,27 +209,4 @@
     </fleet-kit-async-state>
   </fleet-kit-panel>
 
-  <fleet-kit-panel aria-label="Fleet spend today" data-testid="glance-spend-panel" label="Fleet spend · today">
-    <fleet-kit-async-state
-      [state]="spendState()"
-      loadingText="—"
-      loadingTestid="glance-spend-loading"
-      errorText="FAILED TO LOAD"
-      errorTestid="glance-spend-error"
-    >
-      @if (spend(); as s) {
-        <div class="row" data-testid="glance-spend-row">
-          <!-- The combined figure (formatCost) always renders here, whatever mix of
-               billed/estimated/partial the window carries — an estimate-only window
-               reads as its own `~$X.XX` rather than a withheld $0.00. -->
-          <span class="cid" data-testid="glance-spend-value">{{
-            formatCost(s.cost_usd, s.estimated_cost_usd, s.cost_partial)
-          }}</span>
-          <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
-        </div>
-      } @else {
-        <p class="empty" data-testid="glance-spend-empty">—</p>
-      }
-    </fleet-kit-async-state>
-  </fleet-kit-panel>
 </div>

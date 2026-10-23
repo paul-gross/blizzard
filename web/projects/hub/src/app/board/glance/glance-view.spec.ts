@@ -149,9 +149,10 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01estimate0000000000000000',
         shortId: 'C-0001',
-        runner: 'r1',
         node: 'build',
-        pillLabel: 'run',
+        status: null,
+        lines: [],
+        itemsRead: true,
         costUsd: 0,
         costPartial: false,
         estimatedCostUsd: 0.07,
@@ -180,9 +181,10 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01billedandestimate00000000',
         shortId: 'C-0003',
-        runner: 'r1',
         node: 'build',
-        pillLabel: 'run',
+        status: null,
+        lines: [],
+        itemsRead: true,
         costUsd: 0.05,
         costPartial: false,
         estimatedCostUsd: 2,
@@ -200,9 +202,10 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01billedonly000000000000000',
         shortId: 'C-0002',
-        runner: 'r1',
         node: 'build',
-        pillLabel: 'run',
+        status: null,
+        lines: [],
+        itemsRead: true,
         costUsd: 2.03,
         costPartial: false,
         estimatedCostUsd: null,
@@ -230,9 +233,10 @@ describe('GlanceView', () => {
       {
         chunkId: 'ch_01nothingspent0000000000000',
         shortId: 'C-0004',
-        runner: 'r1',
         node: 'build',
-        pillLabel: 'run',
+        status: null,
+        lines: [],
+        itemsRead: true,
         costUsd: 0,
         costPartial: false,
         estimatedCostUsd: null,
@@ -243,5 +247,73 @@ describe('GlanceView', () => {
 
     expect(el.querySelector('[data-testid="in-motion-row"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
+  });
+
+  it("leads a row with its work item's label and title, and names only the status its panel does not", async () => {
+    const fixture = render({ inMotionState: 'ready' });
+    fixture.componentRef.setInput('inMotion', [
+      {
+        chunkId: 'ch_01delivering0000000000000',
+        shortId: 'C-0005',
+        node: 'deliver',
+        status: 'delivering',
+        lines: [{ label: 'toy-web#6', title: 'Announce form errors' }],
+        itemsRead: true,
+        costUsd: 0,
+        costPartial: false,
+        estimatedCostUsd: null,
+      },
+    ]);
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="in-motion-row"]');
+
+    expect(row?.querySelector('[data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-web#6');
+    expect(row?.querySelector('[data-testid="glance-title"]')?.textContent?.trim()).toBe('Announce form errors');
+    expect(row?.querySelector('[data-testid="glance-row-status"]')?.textContent?.trim()).toBe('delivering');
+  });
+
+  it("holds a row's title in a skeleton until its work items are read", async () => {
+    const fixture = render({ upNextState: 'ready' });
+    fixture.componentRef.setInput('upNext', [
+      { chunkId: 'ch_01unread000000000000000000', shortId: 'C-0006', node: 'build', lines: [{ label: 'toy-api#1', title: null }], itemsRead: false },
+    ]);
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+
+    expect(row?.querySelector('[data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-api#1');
+    expect(row?.querySelector('[data-testid="glance-title-skeleton"]')).not.toBeNull();
+    expect(row?.querySelector('[data-testid="glance-title"]')).toBeNull();
+    expect(row?.querySelector('[data-testid="glance-row-status"]')).toBeNull();
+  });
+
+  it('heads a row with no work item with its short id alone, and no empty work-ref', async () => {
+    const fixture = render({ upNextState: 'ready' });
+    fixture.componentRef.setInput('upNext', [{ chunkId: 'ch_01bare00000000000000000000', shortId: 'C-0007', node: 'build', lines: [], itemsRead: true }]);
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+
+    expect(row?.querySelector('.head')?.textContent?.trim()).toBe('C-0007');
+    expect(row?.querySelector('[data-testid="glance-work-ref"]')).toBeNull();
+  });
+
+  it("names a grouped chunk's later work items each under its own label", async () => {
+    const fixture = render({ upNextState: 'ready' });
+    fixture.componentRef.setInput('upNext', [
+      {
+        chunkId: 'ch_01group000000000000000000',
+        shortId: 'C-0008',
+        node: 'build',
+        lines: [
+          { label: 'toy-api#1', title: 'Rate-limit login' },
+          { label: 'toy-web#3', title: 'Drop moment.js' },
+        ],
+        itemsRead: true,
+      },
+    ]);
+    await fixture.whenStable();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+
+    expect([...(row?.querySelectorAll('[data-testid="glance-work-ref"]') ?? [])].map((el) => el.textContent?.trim())).toEqual(['toy-api#1', 'toy-web#3']);
+    expect([...(row?.querySelectorAll('[data-testid="glance-title"]') ?? [])].map((el) => el.textContent?.trim())).toEqual(['Rate-limit login', 'Drop moment.js']);
   });
 });

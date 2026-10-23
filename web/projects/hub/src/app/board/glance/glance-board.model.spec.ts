@@ -1,4 +1,4 @@
-import { type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView } from 'fleet';
+import { type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView, type WorkItemsView } from 'fleet';
 import { chunkUsageTotalView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -40,8 +40,8 @@ const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 's
 });
 
 
-/** No runner's host known — every runner keeps its compact-id name. */
-const NO_HOSTS: ReadonlyMap<string, string> = new Map();
+/** No chunk's work items read yet. */
+const NO_ITEMS: ReadonlyMap<string, WorkItemsView> = new Map();
 
 const NOW = Date.parse('2026-06-01T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -92,36 +92,22 @@ describe('needsYouRows', () => {
         chunk('ch_waiting', 'waiting_on_human', { current_node_id: null }),
         chunk('ch_running', 'running'),
       ],
-      NO_HOSTS,
+      NO_ITEMS,
     );
     expect(rows).toEqual([
-      { chunkId: 'ch_ask', shortId: expect.any(String), runner: 'r1', tone: 'waiting', pillLabel: 'ask', sub: 'Which branch?' },
-      { chunkId: 'ch_gate', shortId: expect.any(String), runner: 'r2', tone: 'waiting', pillLabel: 'gate', sub: 'approve' },
-      { chunkId: 'ch_needs', shortId: expect.any(String), runner: null, tone: 'needs', pillLabel: 'needs human', sub: 'Build' },
-      { chunkId: 'ch_waiting', shortId: expect.any(String), runner: null, tone: 'waiting', pillLabel: 'waiting', sub: '—' },
+      expect.objectContaining({ chunkId: 'ch_ask', status: null, sub: 'Which branch?' }),
+      expect.objectContaining({ chunkId: 'ch_gate', status: 'gate', sub: 'approve' }),
+      expect.objectContaining({ chunkId: 'ch_needs', status: null, sub: 'Build' }),
+      expect.objectContaining({ chunkId: 'ch_waiting', status: null, sub: '—' }),
     ]);
   });
 
-  it('leaves a gate on an unlisted chunk unrouted', () => {
-    expect(needsYouRows([], [decision('ch_gone', 'approve')], [], NO_HOSTS)[0]?.runner).toBeNull();
+  it('names a parked chunk\'s status, which the panel heading does not', () => {
+    const rows = needsYouRows([], [], [chunk('ch_paused', 'paused')], NO_ITEMS);
+    expect(rows.map((r) => [r.chunkId, r.status])).toEqual([['ch_paused', 'paused']]);
   });
 
-  it("names each row's runner by display name, a runner with no name by its compact id", () => {
-    const rows = needsYouRows(
-      [{ ...question('ch_ask', 'Which branch?', 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3'), runner_name: 'r-claude' }],
-      [decision('ch_gate', 'approve')],
-      [
-        chunk('ch_gate', 'waiting_on_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
-        chunk('ch_needs', 'needs_human', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
-      ],
-      NO_HOSTS,
-    );
-    expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
-      ['ch_ask', 'R-ABF3.r-claude'],
-      ['ch_gate', 'R-ABF3.r-claude'],
-      ['ch_needs', 'R-7Q2M'],
-    ]);
-  });
+
 });
 
 describe('inMotionRows', () => {
@@ -136,38 +122,14 @@ describe('inMotionRows', () => {
         chunk('ch_deliver', 'delivering'),
         chunk('ch_ready', 'ready'),
       ],
-      NO_HOSTS,
+      NO_ITEMS,
     );
     expect(rows).toEqual([
-      expect.objectContaining({ chunkId: 'ch_run', runner: 'r1', node: 'Build', pillLabel: 'run', costUsd: 1.5, costPartial: true, estimatedCostUsd: 2 }),
-      expect.objectContaining({ chunkId: 'ch_deliver', runner: null, node: 'nd_build', pillLabel: 'deliver', costUsd: 0, costPartial: false, estimatedCostUsd: null }),
+      expect.objectContaining({ chunkId: 'ch_run', node: 'Build', status: null, costUsd: 1.5, costPartial: true, estimatedCostUsd: 2 }),
+      expect.objectContaining({ chunkId: 'ch_deliver', node: 'nd_build', status: 'delivering', costUsd: 0, costPartial: false, estimatedCostUsd: null }),
     ]);
   });
 
-  it("names each row's runner by display name, a runner with no name by its compact id", () => {
-    const rows = inMotionRows(
-      [
-        chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' }),
-        chunk('ch_deliver', 'delivering', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' }),
-      ],
-      NO_HOSTS,
-    );
-    expect(rows.map((r) => [r.chunkId, r.runner])).toEqual([
-      ['ch_run', 'R-ABF3.r-claude'],
-      ['ch_deliver', 'R-7Q2M'],
-    ]);
-  });
-});
-
-describe('runner host names', () => {
-  it('names a runner host/name in both lists where the host map knows its host', () => {
-    const hosts = new Map([['rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'atlas']]);
-    const held = chunk('ch_run', 'running', { runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' });
-    expect(inMotionRows([held], hosts)[0]?.runner).toBe('atlas/r-claude');
-    expect(
-      needsYouRows([{ ...question('ch_ask', 'Which?', 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3'), runner_name: 'r-claude' }], [], [], hosts)[0]?.runner,
-    ).toBe('atlas/r-claude');
-  });
 });
 
 describe('upNextRows', () => {
@@ -175,6 +137,7 @@ describe('upNextRows', () => {
     const rows = upNextRows(
       [queued('ch_b'), queued('ch_gone'), queued('ch_running'), queued('ch_a')],
       [chunk('ch_a', 'ready'), chunk('ch_b', 'ready', { current_node_name: 'Plan' }), chunk('ch_running', 'running')],
+      NO_ITEMS,
     );
     expect(rows.map((r) => [r.chunkId, r.node])).toEqual([
       ['ch_b', 'Plan'],
@@ -188,21 +151,51 @@ describe('doneTodayRows', () => {
     const rows = doneTodayRows(
       [
         chunk('ch_older', 'stopped', { terminal: true, completed_at: ago(3 * HOUR) }),
-        chunk('ch_newer', 'done', { terminal: true, completed_at: ago(HOUR), work_refs: [{ label: 'a#1' }, { label: null }, { label: 'b#2' }] as ChunkSummary['work_refs'] }),
+        chunk('ch_newer', 'done', { terminal: true, completed_at: ago(HOUR) }),
         chunk('ch_stale', 'done', { terminal: true, completed_at: ago(25 * HOUR) }),
         chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
         chunk('ch_live', 'running', { completed_at: ago(HOUR) }),
       ],
       NOW,
+      NO_ITEMS,
     );
     expect(rows).toEqual([
-      { chunkId: 'ch_newer', shortId: expect.any(String), pointerLabel: 'a#1 b#2' },
-      { chunkId: 'ch_older', shortId: expect.any(String), pointerLabel: '' },
+      expect.objectContaining({ chunkId: 'ch_newer', status: null }),
+      expect.objectContaining({ chunkId: 'ch_older', status: 'stopped' }),
     ]);
   });
 
   it('reads terminality from the wire flag, not the status', () => {
-    expect(doneTodayRows([chunk('ch_x', 'done', { terminal: false, completed_at: ago(HOUR) })], NOW)).toEqual([]);
+    expect(doneTodayRows([chunk('ch_x', 'done', { terminal: false, completed_at: ago(HOUR) })], NOW, NO_ITEMS)).toEqual([]);
+  });
+});
+
+describe('row work items', () => {
+  const refs = [
+    { source: 'wsrc_api', ref: '1', label: 'toy-api#1' },
+    { source: 'wsrc_web', ref: '3', label: 'toy-web#3' },
+  ] as ChunkSummary['work_refs'];
+  const read = new Map([
+    ['ch_1', { items: [{ source: 'wsrc_api', ref: '1', title: 'Rate-limit login' }, { source: 'wsrc_web', ref: '3', title: 'Drop moment.js' }] } as WorkItemsView],
+  ]);
+
+  it('leads every panel\'s row with each work item\'s label and title, as a board card does', () => {
+    const expected = [
+      { label: 'toy-api#1', title: 'Rate-limit login', url: null },
+      { label: 'toy-web#3', title: 'Drop moment.js', url: null },
+    ];
+    const lines = [
+      needsYouRows([], [], [chunk('ch_1', 'needs_human', { work_refs: refs })], read)[0],
+      inMotionRows([chunk('ch_1', 'running', { work_refs: refs })], read)[0],
+      upNextRows([queued('ch_1')], [chunk('ch_1', 'ready', { work_refs: refs })], read)[0],
+      doneTodayRows([chunk('ch_1', 'done', { work_refs: refs, terminal: true, completed_at: ago(HOUR) })], NOW, read)[0],
+    ];
+    for (const row of lines) expect(row).toMatchObject({ lines: expected, itemsRead: true });
+  });
+
+  it('holds each labeled line, title unread, until the chunk\'s items are read', () => {
+    const [row] = inMotionRows([chunk('ch_1', 'running', { work_refs: refs })], NO_ITEMS);
+    expect(row).toMatchObject({ itemsRead: false, lines: [{ label: 'toy-api#1', title: null }, { label: 'toy-web#3', title: null }] });
   });
 });
 

@@ -207,7 +207,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(el.querySelector('[data-testid="needs-you-row"][data-chunk="ch_01running000000000000000000"]')).toBeNull();
   });
 
-  it('lands a running chunk in "In motion" with its runner, node, and spend', async () => {
+  it('lands a running chunk in "In motion" with its node and spend', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -216,7 +216,6 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(rows).toHaveLength(1);
     const row = el.querySelector('[data-testid="in-motion-row"][data-chunk="ch_01running000000000000000000"]');
     expect(row).toBeTruthy();
-    expect(row?.textContent).toContain('r3');
     expect(row?.textContent).toContain('build');
     expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
   });
@@ -352,15 +351,14 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     }
   });
 
-  it('renders status pills in the soft variant (mock screen C\'s muted, fully-rounded pill)', async () => {
+  it('carries no status pill on any row — each panel\'s heading already names its rows\' state', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     for (const testid of ['needs-you-row', 'in-motion-row', 'up-next-row', 'done-today-row']) {
-      const badge = el.querySelector(`[data-testid="${testid}"] .badge`);
-      expect(badge?.classList.contains('soft')).toBe(true);
-      expect(badge?.classList.contains('pill')).toBe(false);
+      expect(el.querySelector(`[data-testid="${testid}"]`)).not.toBeNull();
+      expect(el.querySelector(`[data-testid="${testid}"] .badge`)).toBeNull();
     }
   });
 
@@ -520,10 +518,65 @@ describe('GlanceBoard — open gates in "Needs you"', () => {
 
     const rows = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="needs-you-row"]'));
     expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([ASK, GATE, WAITING]);
-    expect(rows[0].textContent).toContain('ask');
-    expect(rows[1].textContent).toContain('gate');
+    const status = (row: HTMLElement) => row.querySelector('[data-testid="glance-row-status"]')?.textContent?.trim() ?? null;
+    expect(rows[0].textContent).toContain('Which branch?');
+    expect(status(rows[0])).toBeNull();
+    expect(status(rows[1])).toBe('gate');
     expect(rows[1].textContent).toContain('approve-gate');
-    expect(rows[1].textContent).toContain('r2');
-    expect(rows[2].textContent).toContain('waiting');
+    expect(status(rows[2])).toBeNull();
+  });
+});
+
+describe('GlanceBoard — work items', () => {
+  let stub: RequestClientStub;
+  const CHUNK_ID = 'ch_01workitems00000000000000000';
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/chunks') {
+        return {
+          chunks: [
+            {
+              chunk_id: CHUNK_ID,
+              graph_id: 'gr_1',
+              status: 'running',
+              current_node_id: 'nd_build',
+              current_node_name: 'build',
+              runner_id: 'r1',
+              work_refs: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4' }],
+            },
+          ],
+          next_cursor: null,
+        };
+      }
+      if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}/work-items`) {
+        return { items: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments' }] };
+      }
+      if (method === 'GET' && path === '/api/runners') return { runners: [] };
+      if (method === 'GET' && path === '/api/questions') return [];
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [GlanceBoard],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it("heads a row with its work item's label and short id, its title read in under them", async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const row = (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="in-motion-row"][data-chunk="${CHUNK_ID}"]`);
+
+    expect(row?.querySelector('.head [data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-api#4');
+    expect(row?.querySelector('.head .cid')?.textContent?.trim()).toMatch(/^C-/);
+    expect(row?.querySelector('[data-testid="glance-title"]')?.textContent?.trim()).toBe('Add idempotency keys to POST /payments');
+    expect(row?.querySelector('[data-testid="glance-title-skeleton"]')).toBeNull();
+    expect(stub.forRoute(`/api/chunks/${CHUNK_ID}/work-items`, 'GET')).toHaveLength(1);
   });
 });

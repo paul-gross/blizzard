@@ -1,6 +1,7 @@
-import { RunnerConnection, STATUS_TONE, ageMs, compactRef, runnerDisplayName, type ChunkCountsView, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView, type SseStatus } from 'fleet';
+import { RunnerConnection, STATUS_TONE, ageMs, compactRef, type ChunkCountsView, type ChunkStatus, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView, type SseStatus, type WorkItemsView } from 'fleet';
 
-import type { AttentionRow, DoneRow, MotionRow, UpNextRow, Vitals } from './glance-view';
+import { workLines } from '../board-card/board-card.model';
+import type { AttentionRow, DoneRow, MotionRow, RowWork, UpNextRow, Vitals } from './glance-view';
 
 /** How far back "Done today" reaches — a rolling window, not a calendar day. */
 const DONE_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -11,9 +12,18 @@ export function liveRunners(runners: readonly RunnerRegistryView[]): readonly Ru
   return runners.filter((runner) => !runner.retired && runner.connection !== RunnerConnection.NEVER_CONNECTED);
 }
 
-/** The display name of the runner holding a chunk's route, or `null` when none does. */
-function chunkRunner(chunk: ChunkSummary, hostNames: ReadonlyMap<string, string>): string | null {
-  return chunk.runner_id ? runnerDisplayName(chunk.runner_id, chunk.runner_name, hostNames.get(chunk.runner_id)) : null;
+/** A chunk's work items as its row names them — the board card's own `workLines`, so a glance row and a
+ * card agree on what a chunk is. */
+function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string, WorkItemsView>): RowWork {
+  if (chunk === undefined) return { lines: [], itemsRead: true };
+  const view = workItems.get(chunk.chunk_id);
+  return { lines: workLines(chunk.work_refs ?? [], view), itemsRead: view !== undefined };
+}
+
+/** The status a row names — only where its panel's heading does not already say it, so a row reads
+ * `paused` or `delivering` but never repeats the panel it sits in. */
+function rowStatus(status: ChunkStatus | undefined, panelNamesakes: readonly ChunkStatus[]): string | null {
+  return status === undefined || panelNamesakes.includes(status) ? null : status.replaceAll('_', ' ');
 }
 
 /**
@@ -25,28 +35,26 @@ export function needsYouRows(
   questions: readonly QuestionView[],
   decisions: readonly DecisionView[],
   chunks: readonly ChunkSummary[],
-  hostNames: ReadonlyMap<string, string>,
+  workItems: ReadonlyMap<string, WorkItemsView>,
 ): readonly AttentionRow[] {
   const rows = new Map<string, AttentionRow>();
+  const chunksById = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk]));
   for (const question of questions) {
     rows.set(question.chunk_id, {
       chunkId: question.chunk_id,
       shortId: compactRef(question.chunk_id),
-      runner: runnerDisplayName(question.runner_id, question.runner_name, hostNames.get(question.runner_id)),
-      tone: 'waiting',
-      pillLabel: 'ask',
+      ...rowWork(chunksById.get(question.chunk_id), workItems),
+      status: null,
       sub: question.question,
     });
   }
-  const runnerOf = new Map(chunks.map((chunk) => [chunk.chunk_id, chunkRunner(chunk, hostNames)]));
   for (const decision of decisions) {
     if (rows.has(decision.chunk_id)) continue;
     rows.set(decision.chunk_id, {
       chunkId: decision.chunk_id,
       shortId: compactRef(decision.chunk_id),
-      runner: runnerOf.get(decision.chunk_id) ?? null,
-      tone: 'waiting',
-      pillLabel: 'gate',
+      ...rowWork(chunksById.get(decision.chunk_id), workItems),
+      status: 'gate',
       sub: decision.node_name,
     });
   }
@@ -57,9 +65,8 @@ export function needsYouRows(
     rows.set(chunk.chunk_id, {
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runner: chunkRunner(chunk, hostNames),
-      tone,
-      pillLabel: tone === 'needs' ? 'needs human' : 'waiting',
+      ...rowWork(chunk, workItems),
+      status: rowStatus(chunk.status, ['needs_human', 'waiting_on_human']),
       sub: chunk.current_node_name ?? chunk.current_node_id ?? '—',
     });
   }
@@ -67,15 +74,18 @@ export function needsYouRows(
 }
 
 /** Chunks in `STATUS_TONE`'s running lane (`running` + `delivering`) — the "In motion" rows. */
-export function inMotionRows(chunks: readonly ChunkSummary[], hostNames: ReadonlyMap<string, string>): readonly MotionRow[] {
+export function inMotionRows(
+  chunks: readonly ChunkSummary[],
+  workItems: ReadonlyMap<string, WorkItemsView>,
+): readonly MotionRow[] {
   return chunks
     .filter((chunk) => STATUS_TONE(chunk.status) === 'running')
     .map((chunk) => ({
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      runner: chunkRunner(chunk, hostNames),
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-      pillLabel: chunk.status === 'delivering' ? ('deliver' as const) : ('run' as const),
+      ...rowWork(chunk, workItems),
+      status: rowStatus(chunk.status, ['running']),
       costUsd: chunk.cost?.cost_usd ?? 0,
       costPartial: chunk.cost?.cost_partial ?? false,
       estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
@@ -84,7 +94,11 @@ export function inMotionRows(chunks: readonly ChunkSummary[], hostNames: Readonl
 
 /** READY chunks in the hub's dispatch order. The queue is the ordering fact; the chunk list confirms each
  * entry is still currently ready, so a queue entry with no ready chunk behind it drops. */
-export function upNextRows(queue: readonly QueuePeekEntry[], chunks: readonly ChunkSummary[]): readonly UpNextRow[] {
+export function upNextRows(
+  queue: readonly QueuePeekEntry[],
+  chunks: readonly ChunkSummary[],
+  workItems: ReadonlyMap<string, WorkItemsView>,
+): readonly UpNextRow[] {
   const chunksById = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk]));
   return queue
     .map((entry) => chunksById.get(entry.chunk_id))
@@ -93,12 +107,17 @@ export function upNextRows(queue: readonly QueuePeekEntry[], chunks: readonly Ch
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+      ...rowWork(chunk, workItems),
     }));
 }
 
 /** Terminal chunks (the hub's own `terminal` flag) completed in the rolling 24 hours before `now`, newest
  * first. `ageMs` rejects missing, malformed, and meaningfully future instants. */
-export function doneTodayRows(chunks: readonly ChunkSummary[], now: number): readonly DoneRow[] {
+export function doneTodayRows(
+  chunks: readonly ChunkSummary[],
+  now: number,
+  workItems: ReadonlyMap<string, WorkItemsView>,
+): readonly DoneRow[] {
   return chunks
     .flatMap((chunk) => {
       const age = ageMs(chunk.completed_at, now);
@@ -108,9 +127,8 @@ export function doneTodayRows(chunks: readonly ChunkSummary[], now: number): rea
         row: {
           chunkId: chunk.chunk_id,
           shortId: compactRef(chunk.chunk_id),
-          // Only labeled pointers show, space-joined into one line: the "done today" glance is a denser,
-          // read-only summary.
-          pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
+          ...rowWork(chunk, workItems),
+          status: rowStatus(chunk.status, ['done']),
         },
       }];
     })
