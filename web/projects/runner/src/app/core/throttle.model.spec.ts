@@ -20,6 +20,11 @@ describe('throttle words', () => {
     expect(throttleLines(throttle)[2].text).toBe('hold / release');
   });
 
+  it('names a declining lever and when it expects to admit', () => {
+    const pacing = { ...throttle, declining: ['pace'] } satisfies runnerApi.ThrottleStatusView;
+    expect(throttleSummary(pacing)).toBe('declining — pace, until 2026-10-22T16:00:00Z');
+  });
+
   it('names an unshared floor and a hand clear', () => {
     const open = { ...throttle, state: 'admitting', declining: [], floor: {
       subscription: null, admits: true, hold: null, clear: { by: 'paul', cleared_at: '2026-10-22T09:14:00Z' },

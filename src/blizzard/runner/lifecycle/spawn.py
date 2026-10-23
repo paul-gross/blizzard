@@ -297,7 +297,9 @@ class Spawner:
             return Suppression(SuppressionCause.CHUNK_PAUSED)
         if start is StartKind.ESCALATION:
             return None
-        verdict = ThrottleGate(self.ctx).verdict()
+        gate = ThrottleGate(self.ctx)
+        # A continuation answers to the floor alone, so no lever is read for it.
+        verdict = gate.floor_verdict() if start is StartKind.CONTINUATION else gate.verdict()
         if verdict.admits(start):
             return None
         self._log_suppressed("spawn suppressed — throttle declining", via, chunk_id, lease_id)

@@ -14,7 +14,9 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService
-from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE
+from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer
+from blizzard.runner.throttle.levers import LeverAnswer
+from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.wire.runner import VersionWindowView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
@@ -28,6 +30,7 @@ from blizzard.wire.runner_status import (
     RoutingConflictView,
     RunnerStatusView,
     ServedProjectStatusView,
+    ThrottleLeverView,
     ThrottleStatusView,
     UnmatchedBindingView,
 )
@@ -170,7 +173,7 @@ def _throttle_view(status) -> ThrottleStatusView:
     clear = floor.clear
     return ThrottleStatusView(
         state=status.state,
-        declining=["floor"] if not floor.admits else [],
+        declining=[_declining_name(answer) for answer in status.verdict.declining],
         floor=FloorStatusView(
             subscription=floor.slug,
             admits=floor.admits,
@@ -190,9 +193,23 @@ def _throttle_view(status) -> ThrottleStatusView:
             if clear is not None
             else None,
         ),
-        levers=[],
+        levers=[_lever_view(lever) for lever in status.verdict.levers],
         on_decline=status.on_decline,
         on_usage_limit=status.on_usage_limit,
+    )
+
+
+def _declining_name(answer: FloorAnswer | LeverAnswer) -> str:
+    return answer.lever.value if isinstance(answer, LeverAnswer) else FLOOR_LEVER
+
+
+def _lever_view(lever: LeverAnswer) -> ThrottleLeverView:
+    return ThrottleLeverView(
+        name=lever.lever.value,
+        setting=lever.setting,
+        reading=f"{lever.reading}, {lever.in_force}" if lever.in_force else lever.reading,
+        admits=lever.admits,
+        until=iso_utc(lever.until).replace("+00:00", "Z") if lever.until is not None else None,
     )
 
 

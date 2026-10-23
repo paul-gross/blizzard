@@ -70,12 +70,14 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.throttle.gate import ThrottleGate
+from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
     reset_if_streak_open,
 )
 from blizzard.runner.throttle.pause import PauseService, RunnerBrakes, spend_ceiling_reason
+from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.runner.usage.repository import ContextSampleState
 
 #: This module's public API — the loop steps it owns, in tick order.
@@ -452,7 +454,10 @@ class Fill(Step):
             _log.info(
                 "declining — no new claims this tick",
                 runner_name=ctx.config.runner_name,
-                declining=["floor"],
+                declining=[
+                    answer.lever.value if isinstance(answer, LeverAnswer) else FLOOR_LEVER
+                    for answer in declining.declining
+                ],
                 subscription=declining.floor.slug,
                 hold=hold.kind if hold is not None else None,
                 expected_reset=iso_utc(hold.expected_reset) if hold is not None else None,

@@ -31,6 +31,16 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.route_paths import runner_prefix
+from blizzard.runner.throttle.settings import (
+    DAY_NAMES,
+    DEFAULT_PACE_LEAD_PCT,
+    PaceSettings,
+    ScheduleSettings,
+    Span,
+    TaperStep,
+    ThrottleSettings,
+    UtilizationSettings,
+)
 from blizzard.runner.tracing.config import RunnerTracingConfig
 
 #: Winter's own exporter variables; only the runner sets them, and only under `worker_programs`.
@@ -207,6 +217,129 @@ class Spend:
         """Defaulted whether or not a ceiling is set alongside it."""
         hours = self.table.real("window_hours")
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS if hours is None else hours
+
+
+_SPAN = re.compile(r"(\d{2}):(\d{2})-(\d{2}):(\d{2})")
+
+
+def _percent(view: ConfigView, key: str, *, path: str, above_zero: bool = False) -> float | None:
+    """The number at ``key`` within 0 to 100 (0 exclusive when ``above_zero``), or ``None`` when absent; each refusal
+    names ``path``, the key's full path."""
+    if key not in view:
+        return None
+    value = view.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(f"{path} must be a number, got {value!r}")
+    if not (0 < value <= 100 if above_zero else 0 <= value <= 100):
+        bound = "above 0 and at most 100" if above_zero else "between 0 and 100"
+        raise ConfigError(f"{path} must be {bound}, got {value!r}")
+    return float(value)
+
+
+def _labels(view: ConfigView, key: str, *, path: str) -> tuple[str, ...] | None:
+    """The non-empty list of non-blank strings at ``key``, or ``None`` when absent."""
+    if key not in view:
+        return None
+    value = view.get(key)
+    if not isinstance(value, list) or not value or not all(isinstance(item, str) and item.strip() for item in value):
+        raise ConfigError(f"{path} must be a non-empty list of strings, got {value!r}")
+    return tuple(item.strip() for item in value)
+
+
+def _minute_of_day(hours: str, minutes: str, *, path: str, span: str) -> int:
+    if int(hours) > 23 or int(minutes) > 59:
+        raise ConfigError(f"{path} span {span!r} is not a 24-hour time")
+    return int(hours) * 60 + int(minutes)
+
+
+def _span(text: object, *, path: str) -> Span:
+    match = _SPAN.fullmatch(text.strip()) if isinstance(text, str) else None
+    if match is None or not isinstance(text, str):
+        raise ConfigError(f"{path} span {text!r} must be HH:MM-HH:MM")
+    start = _minute_of_day(match[1], match[2], path=path, span=text)
+    end = _minute_of_day(match[3], match[4], path=path, span=text)
+    if start == end:
+        raise ConfigError(f"{path} span {text!r} has zero length")
+    return Span(start, end)
+
+
+@domain_model
+@dataclass(frozen=True)
+class Throttle:
+    """The ``[runner.throttle]`` table — the throttles a runner's gate asks. Absent, or a table naming no lever,
+    means only the subscription floor holds the runner back."""
+
+    view: ConfigView
+
+    @classmethod
+    def of(cls, view: ConfigView | None) -> Throttle:
+        return cls(ConfigView.blank() if view is None else view)
+
+    def settings(self) -> ThrottleSettings | None:
+        """The configured levers, parsed once; each refusal is a :class:`ConfigError` naming its key."""
+        pace, utilization, schedule = self._pace(), self._utilization(), self._schedule()
+        if pace is None and utilization is None and schedule is None:
+            return None
+        return ThrottleSettings(pace, utilization, schedule)
+
+    def _pace(self) -> PaceSettings | None:
+        if "pace" not in self.view:
+            return None
+        table = self.view.table("pace")
+        window = None
+        if "window" in table:
+            window = table.get("window")
+            if not isinstance(window, str) or not window.strip():
+                raise ConfigError(f"throttle.pace.window must be a non-blank string, got {window!r}")
+            window = window.strip()
+        lead = _percent(table, "lead_pct", path="throttle.pace.lead_pct")
+        steps: list[TaperStep] = []
+        raw = table.get("taper", [])
+        if not isinstance(raw, list):
+            raise ConfigError(f"throttle.pace.taper must be an array of tables, got {raw!r}")
+        for position, step in enumerate(table.entries("taper"), start=1):
+            where = f"throttle.pace.taper[{position}]"
+            from_pct = _percent(step, "from_pct", path=f"{where}.from_pct")
+            step_lead = _percent(step, "lead_pct", path=f"{where}.lead_pct")
+            if from_pct is None or step_lead is None:
+                missing = "from_pct" if from_pct is None else "lead_pct"
+                raise ConfigError(f"{where}.{missing} is required")
+            if steps and from_pct <= steps[-1].from_pct:
+                raise ConfigError(f"{where}.from_pct must be above the previous step's {steps[-1].from_pct:g}")
+            steps.append(TaperStep(from_pct, step_lead))
+        if len(steps) != len(raw):
+            raise ConfigError("throttle.pace.taper must be an array of tables")
+        return PaceSettings(window, DEFAULT_PACE_LEAD_PCT if lead is None else lead, tuple(steps))
+
+    def _utilization(self) -> UtilizationSettings | None:
+        if "utilization" not in self.view:
+            return None
+        table = self.view.table("utilization")
+        below = _percent(table, "below_pct", path="throttle.utilization.below_pct", above_zero=True)
+        if below is None:
+            raise ConfigError("throttle.utilization.below_pct is required")
+        return UtilizationSettings(below, _labels(table, "windows", path="throttle.utilization.windows"))
+
+    def _schedule(self) -> ScheduleSettings | None:
+        if "schedule" not in self.view:
+            return None
+        table = self.view.table("schedule")
+        if "days" not in table and "hours" not in table:
+            raise ConfigError("throttle.schedule must name days, hours, or both")
+        days = ScheduleSettings().days
+        if "days" in table:
+            named = _labels(table, "days", path="throttle.schedule.days")
+            assert named is not None
+            unknown = [name for name in named if name not in DAY_NAMES]
+            if unknown:
+                raise ConfigError(f"throttle.schedule.days names unknown {unknown[0]!r}; use mon to sun")
+            days = tuple(sorted({DAY_NAMES.index(name) for name in named}))
+        spans: tuple[Span, ...] = ()
+        if "hours" in table:
+            listed = _labels(table, "hours", path="throttle.schedule.hours")
+            assert listed is not None
+            spans = tuple(_span(text, path="throttle.schedule.hours") for text in listed)
+        return ScheduleSettings(days, spans)
 
 
 @domain_model
@@ -563,6 +696,8 @@ class RunnerConfig:
     #: How many agents this runner runs at once, shared by every binding: ``[[runner]] agents``, else the sum of the
     #: bindings' deprecated ``agents``. ``0`` — a config built without a host file — runs none.
     agents: int = 0
+    #: The throttles the gate asks beside the subscription floor; ``None`` configures none.
+    throttle: ThrottleSettings | None = None
     #: The session-context warn line; ``None`` disables the lane — nothing is sampled, nothing gated.
     context_warn_tokens: int | None = None
     #: How often a running lease's context is re-read — unused while the lane is off.

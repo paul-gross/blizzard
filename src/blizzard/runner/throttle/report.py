@@ -12,8 +12,9 @@ from datetime import datetime
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import ClaimsAnswer
+from blizzard.runner.throttle.levers import LeverAnswer
 
-__all__ = ["FLOOR_LEVER", "DecliningReason", "declining_report", "floor_reason"]
+__all__ = ["FLOOR_LEVER", "DecliningReason", "declining_report", "floor_reason", "lever_reason"]
 
 #: The lever name the subscription floor reports under.
 FLOOR_LEVER = "floor"
@@ -37,7 +38,18 @@ def declining_report(answer: ClaimsAnswer, *, now: datetime) -> tuple[DecliningR
     verdict = answer.declining
     if verdict is None:
         return ()
-    return tuple(floor_reason(floor, now=now) for floor in verdict.declining)
+    return tuple(
+        lever_reason(answer) if isinstance(answer, LeverAnswer) else floor_reason(answer, now=now)
+        for answer in verdict.declining
+    )
+
+
+def lever_reason(answer: LeverAnswer) -> DecliningReason:
+    """The reason a declining lever gives: its name and the reading it judged, never its setting, and no subscription —
+    a lever's setting is the runner's own, not the plan's state."""
+    if answer.admits:
+        raise ValueError("an admitting lever gives no reason")
+    return DecliningReason(answer.lever.value, answer.reading, None, answer.until)
 
 
 def floor_reason(floor: FloorAnswer, *, now: datetime) -> DecliningReason:

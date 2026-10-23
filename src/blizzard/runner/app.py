@@ -767,7 +767,9 @@ def _wire_runner(
                 stores=read_stores,
                 host_stores=graph.host.host_stores,
                 config=GateReadConfig(
-                    subscription=config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None
+                    subscription=config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None,
+                    throttle=config.throttle,
+                    host_zone=host.zone,
                 ),
                 clock=clock,
                 subscriptions=host.subscriptions,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, tzinfo
 from enum import StrEnum
 from typing import Protocol
 
@@ -16,9 +16,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.subscriptions.subscription_sampler import SAMPLED_PROVIDERS
 from blizzard.runner.throttle.floor import FloorAnswer, floor_answer
+from blizzard.runner.throttle.levers import LeverAnswer, pace_answer, schedule_answer, utilization_answer
 from blizzard.runner.throttle.pause import RunnerBrakes
+from blizzard.runner.throttle.settings import ThrottleSettings
 from blizzard.runner.throttle.usage_limits import IReadRunnerUsageLimitRepository, IReadSubscriptionUsageLimitRepository
-from blizzard.runner.usage.repository import IReadExternalUsageRepository
+from blizzard.runner.usage.repository import ExternalUsageSampleSummary, IReadExternalUsageRepository
 
 __all__ = [
     "ClaimsAnswer",
@@ -32,6 +34,7 @@ __all__ = [
     "GateVerdict",
     "StartKind",
     "ThrottleGate",
+    "floor_from_sample",
     "subscription_floor",
 ]
 
@@ -48,19 +51,24 @@ class StartKind(StrEnum):
 @domain_model
 @dataclass(frozen=True)
 class GateVerdict:
-    """The throttles' answers together — the subscription floor's, the only throttle there is."""
+    """The throttles' answers together — the subscription floor's, and every configured lever's in gate order (pace,
+    utilization, schedule). A claim and a step need every one of them to say yes."""
 
     floor: FloorAnswer
+    levers: tuple[LeverAnswer, ...] = ()
 
     @property
     def admits_claim(self) -> bool:
         """FILL may peek and claim."""
-        return self.floor.admits
+        return self._admits_start()
 
     @property
     def admits_step(self) -> bool:
         """A fresh lease may be minted for a node-step."""
-        return self.floor.admits
+        return self._admits_start()
+
+    def _admits_start(self) -> bool:
+        return self.floor.admits and all(lever.admits for lever in self.levers)
 
     @property
     def admits_continuation(self) -> bool:
@@ -69,12 +77,13 @@ class GateVerdict:
         return self.floor.admits
 
     @property
-    def declining(self) -> tuple[FloorAnswer, ...]:
-        """Every answer saying no, the floor's first."""
+    def declining(self) -> tuple[FloorAnswer | LeverAnswer, ...]:
+        """Every answer saying no, the floor's first and then the levers' in gate order."""
         return self._declining()
 
-    def _declining(self) -> tuple[FloorAnswer, ...]:
-        return () if self.floor.admits else (self.floor,)
+    def _declining(self) -> tuple[FloorAnswer | LeverAnswer, ...]:
+        floor = () if self.floor.admits else (self.floor,)
+        return (*floor, *(lever for lever in self.levers if not lever.admits))
 
     def admits(self, start: StartKind) -> bool:
         """Whether ``start`` may proceed; an escalation spends nothing, so no throttle holds it."""
@@ -124,11 +133,17 @@ class GateSubscription(Protocol):
     def slug(self) -> str: ...
     @property
     def provider(self) -> str: ...
+    @property
+    def sample_interval_seconds(self) -> int: ...
 
 
 class GateConfig(Protocol):
     @property
     def subscription(self) -> str | None: ...
+    @property
+    def throttle(self) -> ThrottleSettings | None: ...
+    @property
+    def host_zone(self) -> tzinfo: ...
 
 
 class GateStores(Protocol):
@@ -162,6 +177,8 @@ class GateContext(Protocol):
 @dataclass(frozen=True)
 class GateReadConfig:
     subscription: str | None
+    throttle: ThrottleSettings | None
+    host_zone: tzinfo
 
 
 @dataclass(frozen=True)
@@ -183,6 +200,16 @@ class ThrottleGate:
 
     def verdict(self) -> GateVerdict:
         """The throttles' verdict as the readings stand now."""
+        ctx = self.ctx
+        now = ctx.clock.now()
+        slug = ctx.config.subscription
+        subscription = next((s for s in ctx.subscriptions if s.slug == slug), None) if slug is not None else None
+        # One read of the newest sample, handed to the floor and to every lever that reads it.
+        sample = self._newest_sample(subscription)
+        return GateVerdict(floor=self._floor(now, sample), levers=self._levers(now, sample, subscription))
+
+    def floor_verdict(self) -> GateVerdict:
+        """The verdict with the floor alone, for a start that continues a step already begun: no lever is read."""
         return GateVerdict(floor=self.floor())
 
     def claims(self, brakes: RunnerBrakes) -> ClaimsAnswer:
@@ -194,7 +221,43 @@ class ThrottleGate:
     def floor(self) -> FloorAnswer:
         """The runner's floor: its subscription's, or its own when it names none."""
         ctx = self.ctx
-        now = ctx.clock.now()
+        slug = ctx.config.subscription
+        subscription = next((s for s in ctx.subscriptions if s.slug == slug), None) if slug is not None else None
+        return self._floor(ctx.clock.now(), self._newest_sample(subscription))
+
+    def _newest_sample(self, subscription: GateSubscription | None) -> ExternalUsageSampleSummary | None:
+        if subscription is None or subscription.provider not in SAMPLED_PROVIDERS:
+            return None
+        return self.ctx.host_stores.external_usage.latest_external_usage_samples_by_slug((subscription.slug,)).get(
+            subscription.slug
+        )
+
+    def _levers(
+        self, now: datetime, sample: ExternalUsageSampleSummary | None, subscription: GateSubscription | None
+    ) -> tuple[LeverAnswer, ...]:
+        ctx = self.ctx
+        settings = ctx.config.throttle
+        if settings is None:
+            return ()
+        slug = subscription.slug if subscription is not None else "its subscription"
+        interval = subscription.sample_interval_seconds if subscription is not None else 0
+        answers: list[LeverAnswer] = []
+        if settings.pace is not None:
+            answers.append(
+                pace_answer(settings.pace, sample=sample, slug=slug, sample_interval_seconds=interval, now=now)
+            )
+        if settings.utilization is not None:
+            answers.append(
+                utilization_answer(
+                    settings.utilization, sample=sample, slug=slug, sample_interval_seconds=interval, now=now
+                )
+            )
+        if settings.schedule is not None:
+            answers.append(schedule_answer(settings.schedule, zone=ctx.config.host_zone, now=now))
+        return tuple(answers)
+
+    def _floor(self, now: datetime, sample: ExternalUsageSampleSummary | None) -> FloorAnswer:
+        ctx = self.ctx
         slug = ctx.config.subscription
         if slug is None:
             runner = ctx.stores.usage_limits
@@ -207,9 +270,10 @@ class ThrottleGate:
                 now=now,
             )
         sampled = any(s.slug == slug and s.provider in SAMPLED_PROVIDERS for s in ctx.subscriptions)
-        return subscription_floor(
+        return floor_from_sample(
             slug,
             sampled=sampled,
+            sample=sample,
             usage_limits=ctx.host_stores.usage_limits,
             external_usage=ctx.host_stores.external_usage,
             now=now,
@@ -227,6 +291,21 @@ def subscription_floor(
     """``slug``'s floor at ``now``, read fresh: its newest mark, newest sample and newest clear — and, when a sample
     came after the clear, the sample standing at the clear, whose exhausted windows the clear set aside."""
     sample = external_usage.latest_external_usage_samples_by_slug((slug,)).get(slug) if sampled else None
+    return floor_from_sample(
+        slug, sampled=sampled, sample=sample, usage_limits=usage_limits, external_usage=external_usage, now=now
+    )
+
+
+def floor_from_sample(
+    slug: str,
+    *,
+    sampled: bool,
+    sample: ExternalUsageSampleSummary | None,
+    usage_limits: IReadSubscriptionUsageLimitRepository,
+    external_usage: IReadExternalUsageRepository,
+    now: datetime,
+) -> FloorAnswer:
+    """:func:`subscription_floor` over a ``sample`` the caller already read."""
     clear = usage_limits.latest_floor_clear(slug)
     clear_sample = None
     if clear is not None and sample is not None and sample.sampled_at > clear.cleared_at:

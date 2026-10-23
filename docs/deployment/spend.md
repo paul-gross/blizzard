@@ -106,6 +106,59 @@ none comes, the floor opens one hour after the expected reset; a window sampled 
 The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk pause leaves a
 chunk, and resumes on its own on the first tick its floor opens.
 
+## Throttles
+
+A runner can also be told when it may start work. Three throttles, each optional, are set in the runner's
+`[runner.throttle]` table in `blizzard-host.toml`; a lever whose sub-table is absent does not exist, and a runner with
+no `[runner.throttle]` is held back by its subscription's floor alone, as before. The table is read when the host
+starts, so an edit takes effect at the host's next restart.
+
+```toml
+[runner.throttle.pace]
+window = "7d"        # a window label the subscription's samples report; its longest when absent
+lead_pct = 5         # points spend may run ahead of the window's elapsed share
+
+[[runner.throttle.pace.taper]]
+from_pct = 90        # once 90% of the window is spent, spend may run only 1 point ahead
+lead_pct = 1
+
+[runner.throttle.utilization]
+below_pct = 95       # work only while every named window is under this
+windows = ["5h", "7d"]
+
+[runner.throttle.schedule]
+days = ["mon", "tue", "wed", "thu", "fri"]
+hours = ["19:00-08:00"]
+```
+
+- **Pace** admits while the window's spent share is at most its elapsed share plus the lead. Five days into a seven-day
+  window the elapsed share is 71, so a window 86 percent spent declines under the default lead of 5. Each taper step
+  narrows the lead from its `from_pct` of spend onward.
+- **Utilization** admits while every named window, or every window the sample reports when none is named, is under
+  `below_pct`. It waits for the soonest reset among the windows over the line.
+- **Schedule** admits while the host's own local time falls inside one of its spans. A span belongs to the day it starts
+  on, so `19:00-08:00` on a Friday runs into Saturday morning. Spans are wall-clock times in the host's zone and follow
+  daylight-saving changes; the `until` a runner prints is in UTC.
+
+Pace and utilization judge the newest sample of the subscription the runner spends, so both need a subscription whose
+provider is sampled. A sample is fresh for three of its subscription's sampling intervals, and a window whose reset has
+passed is not read. A lever whose window is missing or whose sample is stale says no and names why, and says yes again
+at the next fresh sample that carries it; it never falls back to an older sample or a guessed zero.
+
+Before every start the runner asks, in order, the subscription floor, pace, utilization, and schedule, and starts only
+when each says yes. The gate is asked before a claim and before each step, never inside one: a step already begun runs
+to its end, and a continuation of a parked session answers to the floor alone. A chunk whose next step is declined waits
+between steps in its environment, with no retry used, and enters the step once the throttles admit it.
+
+An invalid throttle halts that runner alone and names the key, for example `throttle.pace.taper[2].from_pct`;
+`blizzard runner host --check` reports it with the rest. A `pace` or `utilization` table on a runner that spends no
+sampled subscription is invalid for the same reason.
+
+The runner's status shows each configured lever with its setting, answer, reading, and `until`
+([control-verbs.md](./control-verbs.md)), and the runner panel shows the same. The hub learns only which throttle is
+declining and its reading, never a setting: the board's runner row reads `declining — pace: <reading>`, and
+`blizzard hub status` prints `[declining: pace — <reading>, until <time>Z]`.
+
 ## Partial totals
 
 When a worker dies before the harness emits its final usage envelope, the attempt's tokens are recorded from the
@@ -183,8 +236,9 @@ blizzard spends or caps; the host samples it. `blizzard runner host` samples eve
 many of its runners spend that subscription — and a subscription no runner names is still sampled. Sampling runs on the
 host's own thread, apart from every runner's tick, so a slow provider endpoint never holds a runner up;
 `blizzard runner
-tick` never samples. The usage-limit floor ([Usage limits](#usage-limits) above) judges by the sampled
-utilization; no cost cap consults it, and the hub decides nothing by it.
+tick` never samples. The usage-limit floor ([Usage limits](#usage-limits) above) and the pace and
+utilization throttles ([Throttles](#throttles) below) judge by the sampled utilization; no cost cap consults it, and the
+hub decides nothing by it.
 
 Every sample crosses the wire carrying the `slug` of the subscription it belongs to, and the hub rejects one that does
 not. A runner predating per-subscription reporting therefore needs upgrading before the hub that drops the singular

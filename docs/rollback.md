@@ -40,6 +40,9 @@ blizzard runner migrate --head
 Run this command with the older wheel installed in a separate environment; the runner migration tree is independent of
 the hub's.
 
+An older wheel loads a host file that carries `[runner.throttle]` and ignores it, so the runner would run unthrottled;
+remove the table before installing the older wheel.
+
 ## 3. Downgrade, on the new image
 
 Reverse the store to that revision:

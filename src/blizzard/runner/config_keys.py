@@ -50,6 +50,7 @@ from blizzard.runner.host_layout import (
     RUNNERS_DIRNAME,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.throttle.settings import DEFAULT_PACE_LEAD_PCT
 from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
 HOST_REGISTRY_NAME = "host"
@@ -194,6 +195,19 @@ _HOST_KEYS = (
     ConfigKey("runner[].cost.chunk_cap_usd", NUMBER),
     ConfigKey("runner[].cost.runner_ceiling_usd", NUMBER),
     ConfigKey("runner[].cost.window_hours", NUMBER, default=DEFAULT_RUNNER_CEILING_WINDOW_HOURS),
+    ConfigKey("runner[].throttle", TABLE),
+    ConfigKey("runner[].throttle.pace", TABLE),
+    ConfigKey("runner[].throttle.pace.window", STRING),
+    ConfigKey("runner[].throttle.pace.lead_pct", NUMBER, default=DEFAULT_PACE_LEAD_PCT),
+    ConfigKey("runner[].throttle.pace.taper", ARRAY_OF_TABLES),
+    ConfigKey("runner[].throttle.pace.taper[].from_pct", NUMBER),
+    ConfigKey("runner[].throttle.pace.taper[].lead_pct", NUMBER),
+    ConfigKey("runner[].throttle.utilization", TABLE),
+    ConfigKey("runner[].throttle.utilization.below_pct", NUMBER),
+    ConfigKey("runner[].throttle.utilization.windows", STRING_LIST),
+    ConfigKey("runner[].throttle.schedule", TABLE),
+    ConfigKey("runner[].throttle.schedule.days", STRING_LIST),
+    ConfigKey("runner[].throttle.schedule.hours", STRING_LIST),
     ConfigKey("runner[].context", TABLE),
     ConfigKey("runner[].context.warn_tokens", INTEGER),
     ConfigKey("runner[].context.sample_interval_seconds", INTEGER, default=DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS),

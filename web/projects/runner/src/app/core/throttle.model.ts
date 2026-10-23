@@ -33,6 +33,8 @@ export function throttleLines(throttle: runnerApi.ThrottleStatusView): readonly 
 
 export function throttleSummary(throttle: runnerApi.ThrottleStatusView): string {
   const first = throttle.declining[0];
-  const reset = first === 'floor' ? throttle.floor.hold?.expected_reset : null;
-  return `${throttle.state}${first ? ` — ${first}${reset ? `, resets ${reset}` : ''}` : ''}`;
+  const lever = throttle.levers.find((l) => l['name'] === first && l['admits'] === false);
+  const until = lever && typeof lever['until'] === 'string' ? lever['until'] : null;
+  const reset = first === 'floor' ? throttle.floor.hold?.expected_reset : until;
+  return `${throttle.state}${first ? ` — ${first}${reset ? `, ${first === 'floor' ? 'resets' : 'until'} ${reset}` : ''}` : ''}`;
 }
