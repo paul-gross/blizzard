@@ -31,7 +31,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, WorkspacePromptReader
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import HubClientError, IHubClient
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity
@@ -685,16 +685,14 @@ class Spawner:
     ) -> Preamble:
         # The lease's workspace's runtime override when set, else its configured prompt — read here so a
         # replace applies to the next spawn with no restart. A binding naming no workspace has no prompt.
-        override = (
-            self.ctx.host_stores.workspace_prompt.workspace_prompt_override(workspace_id)
-            if workspace_id is not None
-            else None
+        effective = WorkspacePromptReader(self.ctx.host_stores.workspace_prompt, self.ctx.workspaces).effective(
+            workspace_id
         )
         # `prior` is read ONLY when this spawn resumes a session, so a fresh one can
         # never elide prose it has never seen; nothing recorded reads `None` and renders in full.
         return Preamble.of(
             runner_prompt=self.ctx.config.runner_prompt,
-            workspace_prompt=override if override is not None else self.ctx.workspaces.prompt(workspace_id),
+            workspace_prompt=effective.prompt,
             environments=environments,
             lease_id=lease_id,
             runner_id=registered_runner_id(self.ctx.identity),

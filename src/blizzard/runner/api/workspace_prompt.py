@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.harness.workspace_prompts import EffectiveWorkspacePrompt
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
 
@@ -40,16 +41,16 @@ class WorkspacePromptReplacement(BaseModel):
 _UNKNOWN: dict[int | str, dict[str, Any]] = {404: {"description": "The host declares no such workspace."}}
 
 
+def _response(effective: EffectiveWorkspacePrompt) -> WorkspacePromptResponse:
+    return WorkspacePromptResponse(prompt=effective.prompt, source=effective.source)
+
+
 @router.get("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
 def read_workspace_prompt(workspace_id: str, request: Request) -> WorkspacePromptResponse:
     """The effective spawn preamble prompt: the runtime override if set, else static config."""
     wiring = RunnerWiring.of(request)
-    workspace = wiring.workspace(workspace_id)
-    stores = wiring.maybe_host_read_stores()
-    override = stores.workspace_prompt.workspace_prompt_override(workspace_id) if stores is not None else None
-    if override is not None:
-        return WorkspacePromptResponse(prompt=override, source="override")
-    return WorkspacePromptResponse(prompt=workspace.configured_prompt, source="config")
+    wiring.workspace(workspace_id)
+    return _response(wiring.workspace_prompt_reader().effective(workspace_id))
 
 
 @router.put("/prompt", response_model=WorkspacePromptResponse, responses=_UNKNOWN)
@@ -70,6 +71,6 @@ def clear_workspace_prompt(workspace_id: str, request: Request) -> WorkspaceProm
     Distinct from overriding with empty text, which is itself a standing override; the response
     carries whatever the config now resolves to, effective on subsequent spawns."""
     wiring = RunnerWiring.of(request)
-    workspace = wiring.workspace(workspace_id)
+    wiring.workspace(workspace_id)
     wiring.workspace_prompts().clear(workspace_id)
-    return WorkspacePromptResponse(prompt=workspace.configured_prompt, source="config")
+    return _response(wiring.workspace_prompt_reader().effective(workspace_id))

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol
 from urllib.parse import parse_qs, quote
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -119,26 +118,6 @@ class NeedsFederationBounce(Exception):
         self.return_to = return_to
 
 
-class HubAuthModeCache:
-    """Whether the configured hub runs an IdP surface at all — probed once (a miss costs one
-    ``GET /api/auth/jwks.json``) and held for this process's life. A hub whose mode flips after this
-    runner started is picked up on the next restart, not live."""
-
-    def __init__(self, http_client: httpx.Client) -> None:
-        self._http = http_client
-        self._enabled: bool | None = None
-
-    def enabled(self) -> bool:
-        if self._enabled is None:
-            try:
-                resp = self._http.get("/api/auth/jwks.json")
-                self._enabled = resp.status_code == httpx.codes.OK
-            except httpx.HTTPError as exc:
-                _log.warning("hub auth-mode probe failed", detail=str(exc))
-                self._enabled = False
-        return self._enabled
-
-
 @dataclass(frozen=True)
 class HumanLane:
     """One request's runner-local identity — resolution stays separate from what each surface
@@ -152,7 +131,7 @@ class HumanLane:
 
     @property
     def gated(self) -> bool:
-        """Whether the hub offers an IdP surface to bounce to (:class:`HubAuthModeCache`); an app wired
+        """Whether the hub offers an IdP surface to bounce to (:class:`IHubAuthMode`); an app wired
         with no cache refuses rather than resolving to *ungated*."""
         return self.wiring.hub_auth_mode().enabled()
 
