@@ -2539,6 +2539,10 @@ def _hub_action_purity_violations(actions_dir: Path, src_root: Path) -> list[str
     return sorted(set(violations))
 
 
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps the actions package, whose modules mutmut rewrites to import its generated trampoline names",
+)
 def test_hub_actions_import_only_their_allowlist() -> None:
     violations = _hub_action_purity_violations(_HUB_ACTIONS_DIR, _SRC_DIR.parent)
     assert not violations, f"a hub action may import only its allowlist (bzh:hub-action-purity): {violations}"
