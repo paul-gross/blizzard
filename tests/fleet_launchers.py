@@ -62,6 +62,10 @@ MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PL
 # Workspace-layout discovery (the sibling blizzard-mock worktree)
 
 
+#: Both fences a hub admits the test actions behind (``src/blizzard/hub/delivery/action_registry.py``).
+TEST_ACTION_FENCES = {"BLIZZARD_TEST_ACTIONS": "1", "BLIZZARD_CRASH_FENCE": "1"}
+
+
 def blizzard_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -136,9 +140,11 @@ def run_hub(
     settle_seconds: int = 0,
     egress: EgressConfig | None = None,
     rehost: bool = False,
+    test_actions: bool = True,
 ) -> Iterator[httpx2.Client]:
     """A hub daemon over ``hub_dir``. ``rehost`` hosts a directory an earlier hub already holds, record and all,
-    instead of initializing it; ``egress`` replaces the ``[egress]`` block. Traced (exporting to ``collector``,
+    instead of initializing it; ``egress`` replaces the ``[egress]`` block. The test actions are admitted behind both
+    of their fences unless ``test_actions`` is off, and with no crash point armed the crash fence never kills. Traced (exporting to ``collector``,
     sweeping every second, settling for ``settle_seconds``) when a usable collector is given — with platform spans
     on at a zero root sample ratio when ``platform_spans``, so only spans parented on a sampled context export;
     otherwise every inherited ``OTEL_*`` is stripped so a developer's own endpoint never receives e2e spans."""
@@ -147,8 +153,12 @@ def run_hub(
         **{k: v for k, v in os.environ.items() if not k.startswith("OTEL_")},
         # A short batch delay puts the inline platform spans in the file before the sweep's roots.
         **({"OTEL_EXPORTER_OTLP_ENDPOINT": export_to.endpoint, "OTEL_BSP_SCHEDULE_DELAY": "200"} if export_to else {}),
+        **(TEST_ACTION_FENCES if test_actions else {}),
         **(extra_env or {}),
     }
+    if not test_actions:
+        for fence in TEST_ACTION_FENCES:
+            env.pop(fence, None)
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not rehost:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)

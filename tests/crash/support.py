@@ -50,6 +50,7 @@ def default_work_sources(forge_port: int) -> tuple[WorkSourceDocument, ...]:
 # Env var names the crash mechanism and the mock-harness fence read.
 ENV_CRASH_POINT = "BLIZZARD_CRASH_POINT"
 ENV_CRASH_FENCE = "BLIZZARD_CRASH_FENCE"
+ENV_TEST_ACTIONS = "BLIZZARD_TEST_ACTIONS"
 ENV_HARNESS_FENCE = "BLIZZARD_MOCK_HARNESS_FENCE"
 
 
@@ -811,9 +812,8 @@ def start_hub(
     first_start = not (hub_dir / "blizzard-hub.toml").exists()
     if first_start:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    env = {
-        **os.environ,
-    }
+    # Both test-action fences on every start: a fence with no armed point never kills.
+    env = {**os.environ, ENV_TEST_ACTIONS: "1", ENV_CRASH_FENCE: "1"}
     _apply_crash_env(env, crash_point)
     if extra_env:
         env.update(extra_env)
