@@ -552,6 +552,96 @@ def test_a_completed_task_ending_past_the_invocation_is_cut_at_its_end(spawn_exe
     assert sample.input_tokens == 3 + 20
 
 
+def _boundary_children() -> tuple[FakeExporter, list[dict[str, Any]]]:
+    """Four tasks start 1 ms either side of, and on, the invocation window [1000, 1500]; each child
+    holds one step of a distinct size, so the summed tokens name exactly which tasks were counted."""
+    starts = {"before": 999, "on-start": 1_000, "on-end": 1_500, "after": 1_501}
+    sizes = {"before": 100, "on-start": 20, "on-end": 3_000, "after": 40_000}
+    exporter = FakeExporter(
+        {
+            name: _session(name, "root", [("c1", start, "m", [_step(f"s-{name}", name, "c1", sizes[name])])])
+            for name, start in starts.items()
+        }
+    )
+    tasks = [_task(f"t-{name}", "root", "m0", name, start, start + 100) for name, start in starts.items()]
+    return exporter, tasks
+
+
+def test_a_task_is_counted_on_either_window_bound_and_not_a_millisecond_outside(spawn_executor: Executor) -> None:
+    exporter, tasks = _boundary_children()
+    sample = _adapter(spawn_executor, exporter).parse_usage(
+        _events([*tasks, _step("rs1", "root", "m0", 5)], stamp=1_000),
+        "spawn",
+        invocation_start=_at(1_000),
+        invocation_end=_at(1_500),
+    )
+    assert sample is not None
+    assert sample.input_tokens == 5 + 20 + 3_000
+
+
+def test_the_transcript_fallback_counts_a_task_on_either_window_bound_and_not_a_millisecond_outside(
+    spawn_executor: Executor,
+) -> None:
+    exporter, tasks = _boundary_children()
+    message = json.dumps(
+        {
+            "info": {
+                "id": "m0",
+                "sessionID": "root",
+                "role": "assistant",
+                "providerID": "openai",
+                "modelID": "m",
+                "time": {"created": 900},
+            },
+            "parts": [*tasks, _step("rs1", "root", "m0", 5)],
+        }
+    )
+    sample = _adapter(spawn_executor, exporter).sum_transcript_usage(
+        [message], "spawn", invocation_start=_at(1_000), invocation_end=_at(1_500)
+    )
+    assert sample.input_tokens == 5 + 20 + 3_000
+
+
+def _startless_task_with_child() -> tuple[FakeExporter, dict[str, Any]]:
+    """A task part that never recorded its start, over a child step inside the invocation."""
+    exporter = FakeExporter(
+        {"child": _session("child", "root", [("c1", 1_300, "m", [_step("cs1", "child", "c1", 20)])])}
+    )
+    task = _task("t1", "root", "m0", "child", 0, 1_400)
+    task["state"]["time"] = {"end": 1_400}
+    return exporter, task
+
+
+def test_a_task_with_no_recorded_start_is_not_counted_under_an_end_only_window(spawn_executor: Executor) -> None:
+    exporter, task = _startless_task_with_child()
+    sample = _adapter(spawn_executor, exporter).parse_usage(
+        _events([task, _step("rs1", "root", "m0", 5)], stamp=1_000), "spawn", invocation_end=_at(1_500)
+    )
+    assert sample is not None
+    assert sample.input_tokens == 5
+
+
+def test_the_transcript_fallback_skips_a_task_with_no_recorded_start_under_an_end_only_window(
+    spawn_executor: Executor,
+) -> None:
+    exporter, task = _startless_task_with_child()
+    message = json.dumps(
+        {
+            "info": {
+                "id": "m0",
+                "sessionID": "root",
+                "role": "assistant",
+                "providerID": "openai",
+                "modelID": "m",
+                "time": {"created": 900},
+            },
+            "parts": [task, _step("rs1", "root", "m0", 5)],
+        }
+    )
+    sample = _adapter(spawn_executor, exporter).sum_transcript_usage([message], "spawn", invocation_end=_at(1_500))
+    assert sample.input_tokens == 5
+
+
 def test_recovered_child_estimate_uses_its_model_and_is_all_or_nothing(spawn_executor: Executor) -> None:
     root = _session("root", None, [("m0", 1_100, "root-model", [_task("t1", "root", "m0", "child", 1_200, None)])])
     child = _session("child", "root", [("c1", 1_300, "child-model", [_step("cs1", "child", "c1", 20)])])

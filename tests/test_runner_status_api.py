@@ -32,7 +32,7 @@ from blizzard.runner.hub.identity import (
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.child_env import AllowlistedEnv
-from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.status.view import EscalationView, RunnerStatusService
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
@@ -830,6 +830,92 @@ def test_an_escalation_composes_its_commands_only_under_a_registered_owner(tmp_p
     else:
         assert escalation.resume_command == ""
         assert escalation.wrapped_takeover_command is None
+
+
+@pytest.mark.unit
+def test_an_escalation_view_carries_every_stamp_and_resumes_only_under_a_held_binding(tmp_path: Path) -> None:
+    """One escalation with every stamp seeded, a registered owner and a workspace spawn root; one
+    with a session but no held binding, which has nothing to resume in and so no command."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    service = RunnerStatusService(
+        FixedClock(_NOW),
+        pause=store,
+        daemon_liveness=store,
+        lease_record=store,
+        outbound=store,
+        environments=store,
+        asks=store,
+        takeover=store,
+        escalations=store,
+        identity=registered_identity("rn_status"),
+        runner_name="runner-local",
+        workspace_id="workspace-local",
+        hub_url="http://hub",
+        workspaces=single_workspace(FakeProvider({}), spawn_root="/ws"),
+        runner_dir="/tmp/runner-dir",
+        harnesses=HarnessRegistry(
+            {
+                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
+                    adapter=FakeHarness(
+                        handle=WorkerHandle(session_id="sess-x", pid=1, process_start_time="start-1", pgid=1),
+                        verdict=None,
+                    )
+                )
+            }
+        ),
+    )
+    for suffix in ("1", "2"):
+        _seed_lease(
+            store,
+            lease_id=f"lease_{suffix}",
+            chunk_id=f"ch_{suffix}",
+            session_name="named-session",
+            resolved_model="stamped-model",
+            resolved_effort="high",
+        )
+        store.record_spawn(
+            f"lease_{suffix}",
+            pid=100,
+            process_start_time="start-100",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{suffix}"),
+            spawned_at=_NOW,
+            harness_version="1.2.3",
+        )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    closed_at = _NOW + timedelta(minutes=5)
+    for suffix in ("1", "2"):
+        store.record_closure(
+            lease_id=f"lease_{suffix}",
+            chunk_id=f"ch_{suffix}",
+            node_id="nd_build",
+            reason="escalated",
+            closed_at=closed_at,
+            escalation_cause="retries exhausted",
+        )
+
+    by_chunk = {e.chunk_id: e for e in service.escalations()}
+
+    held = by_chunk["ch_1"]
+    assert held == EscalationView(
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        node_id="nd_build",
+        epoch=1,
+        closed_at=closed_at,
+        resume_command="cd /ws && claude --resume sess-1 --model stamped-model --effort high",
+        session_name="named-session",
+        model="stamped-model",
+        effort="high",
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        harness_version="1.2.3",
+        wrapped_takeover_command="blizzard runner takeover ch_1 --dir /tmp/runner-dir --runner runner-local",
+        cause="retries exhausted",
+    )
+    unheld = by_chunk["ch_2"]
+    assert unheld.resume_command == ""
+    assert unheld.wrapped_takeover_command is None
+    assert (unheld.session_name, unheld.model, unheld.effort) == ("named-session", "stamped-model", "high")
+    assert unheld.cause == "retries exhausted"
 
 
 @pytest.mark.component

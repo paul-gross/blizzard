@@ -1060,3 +1060,10 @@ def test_scope_process_survives_a_process_group_already_gone(monkeypatch: pytest
     monkeypatch.setattr(m.subprocess, "Popen", lambda *a, **k: _Proc())
     monkeypatch.setattr(m.os, "killpg", gone)
     assert m._run_scope_process("cli-surface", "HEAD", 1.0) == m.ScopeRun(None, "last line")
+
+
+def test_the_mutant_tree_carries_the_root_conftest_so_the_suite_plugins_host_isolation_runs() -> None:
+    """Without `conftest.py` copied, the mutant tree runs the suite bare: worker identity, trace and hub
+    coordinates leak into the baseline and the mutation run fails before it kills anything."""
+    config = tomllib.loads((_SCRIPTS.parent / "pyproject.toml").read_text())
+    assert "conftest.py" in config["tool"]["mutmut"]["also_copy"]

@@ -390,7 +390,7 @@ class RunnerStatusService:
         views = []
         for escalation in self._escalations.open_escalations():
             session = escalation.session
-            harness = None
+            harness = None  # pragma: no mutate (equivalent: read only with a session; none resumes to "" first)
             if session is not None:
                 try:
                     harness = self._harnesses.lifecycle(session.harness_id)
