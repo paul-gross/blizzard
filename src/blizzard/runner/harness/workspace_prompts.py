@@ -9,10 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol, Self
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, domain_model
 
 WORKSPACE_PROMPT_FILENAME = "workspace-prompt.md"
 
@@ -76,6 +76,45 @@ class IWriteWorkspacePromptRepository(IReadWorkspacePromptRepository, Protocol):
         Removing the row is what distinguishes clearing from overriding with empty text: the
         absent row is the only state that resolves back to the configured prompt."""
         ...
+
+
+class IConfiguredWorkspacePrompts(Protocol):
+    """The static configured prompt per workspace — the lane an override wins over."""
+
+    def prompt(self, workspace_id: str | None) -> str:
+        """The workspace's configured standing prompt; ``""`` for no workspace or an undeclared one."""
+        ...
+
+
+@domain_model
+@dataclass(frozen=True)
+class EffectiveWorkspacePrompt:
+    """The prompt a spawn reads, and the lane that produced it."""
+
+    prompt: str
+    source: Literal["override", "config"]
+
+    @classmethod
+    def resolve(cls, override: str | None, configured: str) -> Self:
+        """The override when one stands — an empty string is still one — else the configured prompt."""
+        if override is not None:
+            return cls(prompt=override, source="override")
+        return cls(prompt=configured, source="config")
+
+
+class WorkspacePromptReader:
+    """The one owner of which prompt a workspace's spawns read: the store's runtime override, else the configured
+    prompt. Composition-root-wired: the read-only override store and the configured lane."""
+
+    def __init__(self, overrides: IReadWorkspacePromptRepository, configured: IConfiguredWorkspacePrompts) -> None:
+        self._overrides = overrides
+        self._configured = configured
+
+    def effective(self, workspace_id: str | None) -> EffectiveWorkspacePrompt:
+        """The workspace's effective prompt, read fresh so a replace applies to the next spawn with no restart. A
+        binding naming no workspace has no override."""
+        override = self._overrides.workspace_prompt_override(workspace_id) if workspace_id is not None else None
+        return EffectiveWorkspacePrompt.resolve(override, self._configured.prompt(workspace_id))
 
 
 class WorkspacePromptService:

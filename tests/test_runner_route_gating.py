@@ -117,7 +117,7 @@ _RUNNER_ID = "runner-guard"
 
 def _oauth_hub_client() -> httpx.Client:
     """A hermetic hub double whose ``jwks.json`` answers ``200`` — the runner reads that
-    as "the hub runs an IdP surface" (``HubAuthModeCache.enabled()``), engaging the
+    as "the hub runs an IdP surface" (``IHubAuthMode.enabled()``), engaging the
     human-lane gate exactly as a real oauth-mode hub would."""
 
     def handler(request: httpx.Request) -> httpx.Response:

@@ -22,6 +22,7 @@ from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.store.readiness import ReadinessService
+from blizzard.runner.auth.hub_auth_mode import IHubAuthMode
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import IJwksCache
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
@@ -29,7 +30,7 @@ from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.registry import IHarnessRegistry
-from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.client import ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
@@ -58,7 +59,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 
 if TYPE_CHECKING:
     # `src/blizzard/runner/api/federation.py` resolves its own collaborators through this module.
-    from blizzard.runner.api.federation import FederationSettings, HubAuthModeCache
+    from blizzard.runner.api.federation import FederationSettings
 
 _STORE = "runner store"
 
@@ -95,13 +96,11 @@ class RunnerRegistry:
 @dto
 @dataclass(frozen=True)
 class ServedWorkspace:
-    """One workspace the host serves: its environment pool, and its static prompt — what resolves while no runtime
-    override stands."""
+    """One workspace the host serves: its environment pool."""
 
     workspace_id: str
     env_pool: tuple[str, ...]
     max_environments: int
-    configured_prompt: str = ""
 
 
 def bind_runner(request: Request, runner_id: Annotated[str, Path(description="The runner's hub-minted id.")]) -> None:
@@ -172,8 +171,8 @@ class RunnerWiring:
         settings: FederationSettings | None = self._seam("federation")
         return settings if settings is not None else self._refuse("federation settings")
 
-    def hub_auth_mode(self) -> HubAuthModeCache:
-        cache: HubAuthModeCache | None = self._seam("hub_auth_mode")
+    def hub_auth_mode(self) -> IHubAuthMode:
+        cache: IHubAuthMode | None = self._seam("hub_auth_mode")
         return cache if cache is not None else self._refuse("hub auth-mode cache")
 
     def jwks_cache(self) -> IJwksCache:
@@ -330,6 +329,10 @@ class RunnerWiring:
     def workspace_prompts(self) -> WorkspacePromptService:
         service: WorkspacePromptService | None = self._seam("workspace_prompts")
         return service if service is not None else self._refuse("workspace prompt service")
+
+    def workspace_prompt_reader(self) -> WorkspacePromptReader:
+        reader: WorkspacePromptReader | None = self._seam("workspace_prompt_reader")
+        return reader if reader is not None else self._refuse("workspace prompt reader")
 
     def events(self) -> IRunnerEventPublisher | None:
         """The publish seam, typed against :mod:`~blizzard.runner.events.publisher`'s Protocol.

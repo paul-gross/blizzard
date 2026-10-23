@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import difflib
+from dataclasses import dataclass
 from urllib.parse import quote
 
 import click
 
 from blizzard.cli.runtime import click_exception_on
+from blizzard.foundation.roles import collaborator
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
@@ -16,7 +18,10 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
     WORKSPACE_PROMPT_FILENAME,
+    EffectiveWorkspacePrompt,
+    IConfiguredWorkspacePrompts,
     UnknownWorkspacePromptSample,
+    WorkspacePromptReader,
 )
 from blizzard.runner.host_file import repoint_workspace_prompt
 from blizzard.runner.host_layout import HostLayout
@@ -88,7 +93,7 @@ def prompt_install(name: str, directory: str, force: bool, runner: str | None) -
             HostLayout(config.root), config.home_workspace.id, file_path=str(destination), strict=config.strict
         )
     click.echo(f"installed sample {name} to {destination} and set the workspace's prompt_file")
-    if _stored_override(config) is not None:
+    if _effective_prompt_lane(config).source == "override":
         click.echo("a store override stands and wins over this file — clear it first: `blizzard runner prompt clear`")
         return
     click.echo("restart the runner to apply it — the prompt file is read once at `host` startup")
@@ -164,23 +169,40 @@ def _echo_prompt_status(source: str, prompt: str) -> None:
     click.echo(f"workspace prompt: {len(prompt)} characters, from {source}")
 
 
-def _effective_prompt(config: RunnerConfig) -> tuple[str, str]:
+@collaborator
+@dataclass(frozen=True)
+class _ConfiguredPrompts:
+    """The runtime's configured lane, read fresh from its config file rather than a running host's registry."""
+
+    config: RunnerConfig
+
+    def prompt(self, workspace_id: str | None) -> str:
+        workspace = next((w for w in self.config.workspaces if w.id == workspace_id), None)
+        return workspace.resolved_prompt(self.config.root) if workspace is not None else ""
+
+
+def _conforms_configured_prompts(x: _ConfiguredPrompts) -> IConfiguredWorkspacePrompts:
+    return x
+
+
+def _effective_prompt_lane(config: RunnerConfig) -> EffectiveWorkspacePrompt:
     """The prompt a spawn would read, and the lane it came from — the one definition the
-    `prompt` verbs share: a stored override wins first, else the configured resolution."""
-    override = _stored_override(config)
-    if override is not None:
-        return override, _OVERRIDE_SOURCE
-    workspace = config.home_workspace
+    `prompt` verbs share, read through the same owner the host's spawn and route use. A read-only
+    store query, so a live daemon is no bar."""
     try:
-        return workspace.resolved_prompt(config.root), workspace.prompt_source()
+        with read_host_stores(config) as stores:
+            return WorkspacePromptReader(stores.workspace_prompt, _ConfiguredPrompts(config)).effective(
+                config.home_workspace.id
+            )
+    except RunnerStoreError as exc:
+        raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 
 
-def _stored_override(config: RunnerConfig) -> str | None:
-    """The store's runtime override, or ``None``. A read-only query, so a live daemon is no bar."""
-    try:
-        with read_host_stores(config) as stores:
-            return stores.workspace_prompt.workspace_prompt_override(config.home_workspace.id)
-    except RunnerStoreError as exc:
-        raise click.ClickException(f"could not read the runner store at {config.db_url}: {exc}") from exc
+def _effective_prompt(config: RunnerConfig) -> tuple[str, str]:
+    """The effective prompt, and the label of the lane it came from."""
+    effective = _effective_prompt_lane(config)
+    if effective.source == "override":
+        return effective.prompt, _OVERRIDE_SOURCE
+    return effective.prompt, config.home_workspace.prompt_source()

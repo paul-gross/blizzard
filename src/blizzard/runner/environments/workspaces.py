@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import KW_ONLY, dataclass
 from typing import Protocol
 
 from blizzard.runner.environments.provider import IWorkspaceProvider
@@ -92,24 +93,15 @@ class IWorkspaces(IWorkspaceAcquisition, IWorkspaceHomes, IWorkspaceEnvironmentW
     """The host's workspaces, each looked up by its id — every slice composed, for the bundles that hand them on."""
 
 
-class _Workspace:
-    """One registered workspace — the registry's own working state."""
-
-    def __init__(self, provider: IWorkspaceProvider, *, spawn_root: str, prompt: str) -> None:
-        self.provider = provider
-        self.spawn_root = spawn_root
-        self.prompt = prompt
-        self.lock = threading.RLock()
-
-
+@dataclass(frozen=True)
 class WorkspaceEntry:
     """What one workspace is registered with: its id, provider, spawn root and resolved standing prompt."""
 
-    def __init__(self, workspace_id: str, provider: IWorkspaceProvider, *, spawn_root: str, prompt: str = "") -> None:
-        self.workspace_id = workspace_id
-        self.provider = provider
-        self.spawn_root = spawn_root
-        self.prompt = prompt
+    workspace_id: str
+    provider: IWorkspaceProvider
+    _: KW_ONLY
+    spawn_root: str
+    prompt: str = ""
 
 
 class WorkspaceRegistry:
@@ -118,10 +110,8 @@ class WorkspaceRegistry:
     def __init__(self, entries: Sequence[WorkspaceEntry]) -> None:
         if not entries:
             raise ValueError("a workspace registry needs at least one workspace")
-        self._workspaces: Mapping[str, _Workspace] = {
-            entry.workspace_id: _Workspace(entry.provider, spawn_root=entry.spawn_root, prompt=entry.prompt)
-            for entry in entries
-        }
+        self._workspaces: Mapping[str, WorkspaceEntry] = {entry.workspace_id: entry for entry in entries}
+        self._locks: Mapping[str, threading.RLock] = {entry.workspace_id: threading.RLock() for entry in entries}
 
     def ids(self) -> tuple[str, ...]:
         return tuple(self._workspaces)
@@ -146,7 +136,7 @@ class WorkspaceRegistry:
 
     @contextmanager
     def try_acquisition_lock(self, workspace_id: str) -> Iterator[bool]:
-        lock = self._workspaces[workspace_id].lock
+        lock = self._locks[workspace_id]
         taken = lock.acquire(blocking=False)
         try:
             yield taken
@@ -160,7 +150,7 @@ class WorkspaceRegistry:
             for workspace_id, workspace in self._workspaces.items()
         }
 
-    def _get(self, workspace_id: str | None) -> _Workspace | None:
+    def _get(self, workspace_id: str | None) -> WorkspaceEntry | None:
         return self._workspaces.get(workspace_id) if workspace_id is not None else None
 
 

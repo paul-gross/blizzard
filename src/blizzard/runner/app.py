@@ -49,7 +49,6 @@ from blizzard.runner.api.facts import router as facts_router
 from blizzard.runner.api.federation import (
     FederationSettings,
     HostSignInClient,
-    HubAuthModeCache,
     ISignInClient,
     NeedsFederationBounce,
     RunnerSignInClient,
@@ -84,6 +83,7 @@ from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.wiring import RunnerRegistry, ServedRunner, ServedWorkspace, bind_runner
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
+from blizzard.runner.auth.internal.http_hub_auth_mode import HttpHubAuthMode
 from blizzard.runner.auth.internal.http_jwks_cache import JwksCache
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
@@ -92,7 +92,7 @@ from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
-from blizzard.runner.harness.workspace_prompts import WorkspacePromptService
+from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
 from blizzard.runner.host_config import HaltedRunner
 from blizzard.runner.hub.client import BindingDeclaration, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
@@ -361,7 +361,7 @@ def create_app(
 
     With ``runners`` omitted, the app serves one runner composed from the runner seams passed here by
     :func:`runner_seams` — a host of one. ``workspaces`` defaults to each of ``config``'s declared workspaces, over
-    ``workspace_registry``'s pool and prompt for it, and ``subscriptions`` to ``config``'s. A store-free build is
+    ``workspace_registry``'s pool for it, and ``subscriptions`` to ``config``'s. A store-free build is
     possible; the store-backed routes then answer 503 and ``/api/ready`` reports ``ready=false``. ``events`` defaults
     absent, leaving the stream silent. ``platform_tracing`` is off unless the composition root passes a handle.
     ``telemetry_receiver`` is the host's worker telemetry receiver; absent, the OTLP routes answer 503. ``identity`` is
@@ -455,6 +455,11 @@ def create_app(
     app.state.workspace_prompts = workspace_prompts or (
         WorkspacePromptService(host_stores.workspace_prompt, clock) if host_stores is not None else None
     )
+    app.state.workspace_prompt_reader = (
+        WorkspacePromptReader(host_stores.workspace_prompt, workspace_registry)
+        if host_stores is not None and workspace_registry is not None
+        else None
+    )
     app.state.subscription_floor_clears = (
         SubscriptionFloorClearService(host_stores.usage_limits, clock) if host_stores is not None else None
     )
@@ -466,7 +471,7 @@ def create_app(
         # base, and every request here is answered locally by the transport above.
         base_url="http://runner-hub-client-hermetic-default.invalid",
     )
-    app.state.hub_auth_mode = HubAuthModeCache(hub_http_client)
+    app.state.hub_auth_mode = HttpHubAuthMode(hub_http_client)
     app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
     # The monotonic clock the hub retry schedule reads — the system clock unless one is injected.
     app.state.hub_retry_clock = hub_retry_clock or SystemMonotonicClock()
@@ -859,13 +864,12 @@ def _wire_runnerless_app(
 
 
 def _served_workspace(workspace: HostWorkspace, registry: IWorkspaces | None) -> ServedWorkspace:
-    """``workspace`` as the host serves it: its pool and resolved prompt from ``registry``, none without one."""
+    """``workspace`` as the host serves it: its pool from ``registry``, none without one."""
     provider = registry.provider(workspace.id) if registry is not None else None
     return ServedWorkspace(
         workspace_id=workspace.id,
         env_pool=provider.pool() if provider is not None else (),
         max_environments=workspace.max_environments,
-        configured_prompt=registry.prompt(workspace.id) if registry is not None else "",
     )
 
 
