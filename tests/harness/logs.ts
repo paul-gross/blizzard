@@ -87,3 +87,38 @@ export function scanLog(logPath: string, refusals?: string[]): LogLine[] {
   const text = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
   return findBackgroundRefusals(parseLines(text), refusals);
 }
+
+/** The hub's log as a test reads it: filtered to the test's tenant on a shared hub, whole on a fresh one. */
+export interface HubLog {
+  /** The lines written so far that the test may read. */
+  lines(): LogLine[];
+  /** The hub-wide lines no tenant claimed. Refused below `fresh-hub`, where another test's hub-wide act would be read as the test's own. */
+  untagged(): LogLine[];
+}
+
+export function hubLog(options: { logPath: string; tenantId: string; fresh: boolean }): HubLog & { tail(count?: number): string } {
+  const reader = new LogReader(options.logPath);
+  const seen: LogLine[] = [];
+  const refresh = (): LogLine[] => {
+    seen.push(...reader.read());
+    return seen;
+  };
+  return {
+    lines: () => {
+      const all = refresh();
+      return options.fresh ? [...all] : forTenant(all, options.tenantId);
+    },
+    untagged: () => {
+      if (!options.fresh) {
+        throw new Error(
+          'hubLog.untagged() reads hub-wide lines, which another test on the shared hub also writes; declare isolation "fresh-hub" to assert on them.',
+        );
+      }
+      return untagged(refresh());
+    },
+    tail: (count = 30) => {
+      const all = refresh();
+      return (options.fresh ? all : forTenant(all, options.tenantId)).slice(-count).map((line) => line.raw).join('\n');
+    },
+  };
+}

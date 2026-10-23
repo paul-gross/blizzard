@@ -4,7 +4,7 @@ import { runDir } from './env';
 import { startForge } from './daemons/forge';
 import { startHub } from './daemons/hub';
 import { startIdp } from './daemons/idp';
-import type { DaemonRecord } from './daemons/process';
+import { type DaemonRecord, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
 import type { TomlTable } from './profiles';
 
@@ -48,7 +48,15 @@ export function readProjectHubs(project: string): ProjectHubs {
 
 /** A hub, a mock forge, and a stub IdP of its own, started together. */
 export async function startHubStack(dir: string, index: number, profile: TomlTable): Promise<HubCoordinates> {
-  const [hub, forge, idp] = await Promise.all([startHub(dir, profile), startForge(dir), startIdp(dir)]);
+  const started = await Promise.allSettled([startHub(dir, profile), startForge(dir), startIdp(dir)]);
+  const running = started.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
+  const failure = started.find((outcome) => outcome.status === 'rejected');
+  if (failure !== undefined) {
+    // A start that failed stops the daemons beside it, so none is left running with nothing to stop it.
+    await Promise.all(running.map(stopDaemon));
+    throw (failure as PromiseRejectedResult).reason;
+  }
+  const [hub, forge, idp] = running as [DaemonRecord, DaemonRecord, DaemonRecord];
   return {
     index,
     url: hub.url,
