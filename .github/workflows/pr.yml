@@ -109,8 +109,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: echo "cut=$(./scripts/release-cut-in-range.sh "$BASE_SHA" "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
 
-  # The cut's candidate, built as the tag run will build it but unstamped, so it carries the
-  # version the cut sets in pyproject.toml.
+  # The cut's candidate, built from the head with the version the cut sets in
+  # pyproject.toml, just as the tag run explicitly stamps its release version.
   cut-wheel:
     name: build the cut's wheel
     needs: [release-cut]
@@ -119,6 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@v6
         with:
@@ -130,7 +131,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: build the wheel (embedded frontend + node-free install proof)
-        run: ./scripts/build-wheel.sh
+        run: |
+          BLIZZARD_VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" \
+            ./scripts/build-wheel.sh
       - name: export the locked requirements beside the wheel
         run: |
           WHEEL="$(ls dist/blizzard-*.whl)"

@@ -89,14 +89,15 @@ revision is more than 30 days old report as skips in `uv run pytest -n auto`; se
 `BLIZZARD_RUN_RETIRED_MIGRATION_TESTS=1` to run them (`bzh:colocated-migration-tests` in blizzard-context's tier rules).
 
 Locally the mock-backed tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`). One task
-reproduces the whole pull-request pipeline: `mise run gate-full` (`blizzard:gate-full`) runs the merge gate, then
+reproduces the unconditional pull-request tiers: `mise run gate-full` (`blizzard:gate-full`) runs the merge gate, then
 `service-test`, the full `crash-sweep`, `e2e`, `journey`, `image-smoke` and `compose-smoke` serially, since the smokes
 bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on any
-red. The release-cut rehearsal is not part of it (it needs `gh` and Postgres): `mise run rehearsal`. The single-tier
-equivalents are `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`),
-`mise run
-crash-sweep-ci` for the bounded profile `push.yml` runs, and the `e2e`, `journey`, `image-smoke` and
-`compose-smoke` tasks.
+red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
+`mise run rehearsal` for a release cut (both need `gh` and Postgres).
+
+Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
+`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `journey`, `image-smoke` and
+`compose-smoke` tasks can also run alone.
 
 **Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
 tag run the e2e job took 1453s, the full crash sweep 837s, the service tier 613s, and the merge gate's pytest shards

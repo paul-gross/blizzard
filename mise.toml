@@ -122,7 +122,7 @@ description = "Run the local equivalent of the PR-to-master merge gate (ruff, py
 run = "./scripts/ci-gate.sh"
 
 [tasks.gate-full]
-description = "blizzard:gate-full — the local mirror of the pull-request pipeline: the merge gate, then service-test, the FULL crash-sweep, e2e, journey, image-smoke and compose-smoke, run serially (the smokes bind fixed ports). A red tier does not stop the later ones; the run ends with a per-tier verdict and exits non-zero on any red. The release-cut rehearsal is not part of it (`mise run rehearsal`). Needs everything its tiers need: the sibling blizzard-mock worktree, Chromium, a docker daemon with compose v2. GATE_FULL_TIERS narrows the run"
+description = "blizzard:gate-full — the local mirror of the unconditional pull-request tiers: the merge gate, then service-test, the FULL crash-sweep, e2e, journey, image-smoke and compose-smoke, run serially (the smokes bind fixed ports). A red tier does not stop the later ones; the run ends with a per-tier verdict and exits non-zero on any red. Run the conditional checks separately when applicable: mise run store-baseline for store revisions, mise run rehearsal for a release cut. Needs everything its tiers need: the sibling blizzard-mock worktree, Chromium, a docker daemon with compose v2. GATE_FULL_TIERS narrows the run"
 run = "./scripts/gate-full.sh"
 
 [tasks.build]

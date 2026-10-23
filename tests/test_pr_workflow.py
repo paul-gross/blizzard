@@ -95,6 +95,12 @@ def test_the_rehearsal_runs_only_on_a_cut_against_a_wheel_built_from_the_head() 
     jobs = _WORKFLOW["jobs"]
     assert jobs["cut-wheel"]["needs"] == ["release-cut"]
     assert jobs["cut-wheel"]["if"] == "${{ needs.release-cut.outputs.cut == 'true' }}"
+    checkout = next(s for s in jobs["cut-wheel"]["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    build = next(s for s in jobs["cut-wheel"]["steps"] if "build the wheel" in s.get("name", ""))
+    assert "BLIZZARD_VERSION=" in build["run"]
+    assert "tomllib.load(open('pyproject.toml', 'rb'))['project']['version']" in build["run"]
+    assert "./scripts/build-wheel.sh" in build["run"]
     upload = next(
         s for s in jobs["cut-wheel"]["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")
     )
