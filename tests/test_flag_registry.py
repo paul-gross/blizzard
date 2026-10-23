@@ -4,6 +4,7 @@ files, the two ``GET /api/flags`` answers, and the lint tying every flag name in
 from __future__ import annotations
 
 import ast
+import os
 import re
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -319,6 +320,10 @@ def _python_sources() -> dict[str, str]:
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="sweeps the source tree, where mutmut's generated mutant bodies repeat every flag read they mutate",
+)
 def test_the_packaged_registry_agrees_with_every_flag_read_in_source() -> None:
     assert _lint(FLAG_REGISTRY, {**_python_sources(), **_web_sources()}) == []
 
