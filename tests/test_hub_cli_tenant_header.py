@@ -5,6 +5,7 @@ to one tenant — against a real hub holding two."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -202,6 +203,4 @@ def test_an_empty_tenant_variable_sends_no_tenant_header(tmp_path: Path, monkeyp
 
 
 def test_a_tenant_variable_in_the_developers_shell_does_not_reach_a_test(tmp_path: Path) -> None:
-    import os
-
     assert "BZ_HUB_TENANT" not in os.environ

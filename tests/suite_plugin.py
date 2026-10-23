@@ -130,8 +130,8 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _strip_hub_coordinates_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset the hub URL, the hub tenant and every runner token variable — the pre-host unsuffixed one included — so a developer's
-    shell never leaks them into an in-process host config load."""
+    """Unset the hub URL, the hub tenant and every runner token variable — the pre-host unsuffixed one included — so
+    a developer's shell never leaks them into an in-process host config load."""
     monkeypatch.delenv(ENV_HUB_URL, raising=False)
     monkeypatch.delenv(ENV_HUB_TENANT, raising=False)
     for name in list(os.environ):

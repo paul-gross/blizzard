@@ -153,7 +153,8 @@ A signed-in person with no membership at all answers `404` on every tenant route
 names the tenant, or else the hub's only open tenant serves.
 
 The CLI keeps no saved tenant. Every verb that acts in a tenant takes `--tenant <tenant_id>`, by id, never by name, and
-sends it as the header; `BZ_HUB_TENANT` in the shell stands in for the flag, as `BZ_HUB_URL` does for `--hub-url`, and `--tenant` overrides it. Without either, a person with one membership acts there; a person with several gets the verb's
+sends it as the header. `BZ_HUB_TENANT` in the shell stands in for the flag, as `BZ_HUB_URL` does for `--hub-url`, and
+`--tenant` overrides it. Without either, a person with one membership acts there; a person with several gets the verb's
 refusal and a list of their tenants, ids beside names, to pick from. The hub-level verbs — `tenant`, `admin`,
 `graph sync`, `egress`, `traces` and `rotate-signing-key` — take no `--tenant`.
 
