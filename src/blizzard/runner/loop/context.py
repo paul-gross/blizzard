@@ -46,6 +46,7 @@ from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.process.probe import IProcessProbe
 from blizzard.runner.process.worker_scratch import IWorkerScratchDirs
 from blizzard.runner.stores import HostStores, RunnerStores
+from blizzard.runner.throttle.release import ReleaseRefusals
 from blizzard.runner.throttle.settings import ThrottleSettings
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -197,6 +198,8 @@ class LoopContext:
     #: The check-runner seam — ``None`` when not wired, so a node with no
     #: ``checks:`` still ticks; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
+    #: The release offers the hub refused, so a declining gate does not re-ask every tick.
+    release_refusals: ReleaseRefusals = field(default_factory=ReleaseRefusals)
     #: Coarse "any transcript source wired" flag; a read still resolves per-owner via ``transcript_source_for``.
     transcripts_wired: bool = False
     #: The SSE publish seam, typed against the Protocol
@@ -281,6 +284,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
     from blizzard.runner.throttle.gate import GateContext
     from blizzard.runner.throttle.overload import OverloadContext
+    from blizzard.runner.throttle.release import ReleaseContext
     from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfillContext
     from blizzard.runner.transcripts.transcript_drain import TranscriptDrainContext
     from blizzard.runner.transcripts.transcript_pump import TranscriptPumpContext
@@ -304,6 +308,9 @@ if TYPE_CHECKING:
         return ctx
 
     def _conforms_to_gate(ctx: LoopContext) -> GateContext:
+        return ctx
+
+    def _conforms_to_release(ctx: LoopContext) -> ReleaseContext:
         return ctx
 
     def _conforms_to_spawn(ctx: LoopContext) -> SpawnContext:

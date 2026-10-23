@@ -34,15 +34,17 @@ from blizzard.runner.lifecycle.model import (
     park_names_elicitation,
     pause_park_drain_expired,
     restart_disposition,
+    routed_away,
     unpause_move,
 )
 from blizzard.runner.lifecycle.registration import registered_runner_id
-from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner
+from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner, SuppressionCause
 from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
+from blizzard.runner.throttle.release import Release, ReleaseContext, ReleaseReason, releases_usage_limited
 from blizzard.runner.transcripts.invocation_boundaries import worker_boundary_open
 from blizzard.runner.usage.recorder import UsageRecorder
 
@@ -87,7 +89,7 @@ class DormantConfig(SpawnConfig, Protocol):
     def gates(self) -> tuple[str, ...]: ...
 
 
-class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, Protocol):
+class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, ReleaseContext, Protocol):
     @property
     def stores(self) -> DormantStores: ...
     @property
@@ -236,6 +238,21 @@ class DormantSession:
         OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
+    def _offer_usage_limited(self, bindings: list[EnvBinding]) -> None:
+        """Give a usage-limited lease's chunk back to the queue while its floor still declines. The parked
+        generation's usage is booked first — a replay under its invocation's key on a refused offer or a later wake
+        books nothing twice — so letting go loses none of it. Only the hub's acceptance abandons the lease: closed
+        ``released``, its park with it, no epoch bumped and no retry spent."""
+        lease = self.lease
+        self.ctx.usage.record_worker(lease, bindings)
+        Release(self.ctx).offer(
+            lease.chunk_id,
+            epoch=lease.epoch,
+            route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
+            reason=ReleaseReason.USAGE_LIMITED,
+            then=lambda: Attempt(self.ctx, lease).abandon(killed=True, via="release"),
+        )
+
     def on_unpause(
         self,
         park: PausePark,
@@ -277,16 +294,25 @@ class DormantSession:
         runner_id = registered_runner_id(self.ctx.identity)
         if runner_id is None:
             return  # stays parked: whether the route is still ours waits for the first registration
+        suppression = Spawner(self.ctx).suppression(
+            start=StartKind.CONTINUATION,
+            via="pause-resume",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            brakes=brakes,
+        )
+        if not routed_away(view, runner_id) and releases_usage_limited(
+            self.ctx.config.throttle,
+            park,
+            operator_holds=view.pause is not None or ask_parked,
+            declined=suppression is not None and suppression.cause is SuppressionCause.DECLINED,
+        ):
+            self._offer_usage_limited(bindings)
+            return
         move = unpause_move(
             view,
             runner_id,
-            braked=Spawner(self.ctx).suppressed(
-                start=StartKind.CONTINUATION,
-                via="pause-resume",
-                chunk_id=lease.chunk_id,
-                lease_id=lease.lease_id,
-                brakes=brakes,
-            ),
+            braked=suppression is not None,
             ask_parked=ask_parked,
             judge_parked=standing is not None,
             has_env_and_session=bool(bindings) and lease.session is not None,

@@ -698,6 +698,22 @@
       "type": "number"
     },
     {
+      "default": "hold",
+      "deprecated": false,
+      "path": "runner[].throttle.on_decline",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": "hold",
+      "deprecated": false,
+      "path": "runner[].throttle.on_usage_limit",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
       "default": null,
       "deprecated": false,
       "path": "runner[].throttle.pace",

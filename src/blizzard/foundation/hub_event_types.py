@@ -41,6 +41,7 @@ ActivityChunkChangeCause = Literal[
     "requeued",
     "restarted",
     "detached",
+    "released",
     "paused",
     "resumed",
     "stopped",

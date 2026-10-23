@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261022_1000_runner_declining",
+  "head_revision": "20261023_0900_route_released_cause",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -5882,6 +5882,12 @@
     "route_released": {
       "checks": [],
       "columns": {
+        "cause": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "chunk_id": {
           "deprecated": null,
           "nullable": false,
@@ -5893,6 +5899,12 @@
           "nullable": false,
           "server_default": false,
           "type": "Integer"
+        },
+        "reason": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
         },
         "released_at": {
           "deprecated": null,

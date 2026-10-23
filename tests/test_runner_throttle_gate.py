@@ -29,6 +29,7 @@ from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPI
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
 from blizzard.runner.throttle.pause import RunnerBrakes
+from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
 from blizzard.runner.throttle.usage_limits import FloorClear
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -125,6 +126,17 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
     assert cleared.floor.admits
     assert cleared.floor.clear is not None
     assert cleared.floor.clear.cleared_at.endswith("Z")
+
+
+def test_status_holds_on_both_with_no_settings_and_shows_the_configured_choices() -> None:
+    _store, _hub, ctx = _ctx()
+    gate = ThrottleGate(ctx)
+    held = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
+    assert (held.on_decline, held.on_usage_limit) == ("hold", "hold")
+    releasing = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
+    view = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False, settings=releasing))
+    assert (view.on_decline, view.on_usage_limit) == ("release", "hold")
+    assert "on_decline: release; on_usage_limit: hold" in "\n".join(_throttle_lines(view.model_dump()))
 
 
 def test_cli_renders_configured_lever_setting_reading_answer_and_until() -> None:

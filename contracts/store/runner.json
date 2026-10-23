@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261022_1000_usage_limit_floor",
+  "head_revision": "20261023_1000_pause_park_cause",
   "store": "runner",
   "tables": {
     "asks": {
@@ -2025,6 +2025,12 @@
     "pause_parks": {
       "checks": [],
       "columns": {
+        "cause": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "chunk_id": {
           "deprecated": null,
           "nullable": false,

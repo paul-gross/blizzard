@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, holds_claim
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteReleaseCause, holds_claim
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
@@ -72,7 +72,9 @@ class DetachService:
             route = handle.route_of(chunk.chunk_id)
             status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
             refuse_detach(chunk.chunk_id, route, status)
-            return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())
+            return self._route.record_route_released_locked(
+                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.DETACH
+            )
 
     def release_held(self, chunk: Chunk, *, runner_id: str) -> int | None:
         """:meth:`detach`, only while ``runner_id`` still holds the chunk — retirement's
@@ -83,7 +85,9 @@ class DetachService:
             status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
             if not releasable_by(route, status, runner_id=runner_id):
                 return None
-            return self._route.record_route_released_locked(handle, chunk.chunk_id, at=self._clock.now())
+            return self._route.record_route_released_locked(
+                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.RETIREMENT
+            )
 
 
 def _status(facts: ChunkFacts | None) -> ChunkStatus | None:

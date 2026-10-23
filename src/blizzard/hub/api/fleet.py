@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, node_steps
@@ -64,6 +65,7 @@ from blizzard.hub.domain.execution.claim import (
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
 from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
+from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRefused
 from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
@@ -103,6 +105,7 @@ from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.garden_proposal import GardenProposalsPageView, GardenProposalView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
+from blizzard.wire.release import ReleaseRefusal, ReleaseRequest, ReleaseResponse
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
@@ -762,6 +765,52 @@ def rekey_route_token(
     except RekeyDeniedTerminal as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=route_token)
+
+
+_RELEASE_CONFLICT_REASONS = {
+    ReleaseRefusalKind.STALE: ReleaseRefusalReason.STALE,
+    ReleaseRefusalKind.NOT_RUNNING: ReleaseRefusalReason.NOT_RUNNING,
+}
+
+
+@router.post(
+    "/chunks/{chunk_id}/release",
+    response_model=ReleaseResponse,
+    responses={status.HTTP_409_CONFLICT: {"model": ReleaseRefusal}},
+)
+def release_chunk(
+    chunk_id: str,
+    request: ReleaseRequest,
+    services: Services,
+    fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
+) -> object:
+    """Give the chunk's route back at its holder's own request, so it re-derives ``ready`` at its
+    current node: 200 with the id of the release it recorded; 409 when the chunk moved past
+    ``epoch`` or is not running; 403 when the caller does not hold the route or its route token
+    does not match; 404 for a chunk the tenant does not hold."""
+    runner_id = fleet.caller_id()
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    change = chunk_events.ChunkChanged.before(services, chunk_id)
+    try:
+        released_id = services.release.release(
+            chunk,
+            runner_id=runner_id,
+            epoch=request.epoch,
+            route_token=request.route_token,
+            reason=request.reason,
+            route_token_mode=fleet.route_token_mode,
+        )
+    except ReleaseRefused as exc:
+        reason = _RELEASE_CONFLICT_REASONS.get(exc.kind)
+        if reason is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        refusal = ReleaseRefusal(chunk_id=chunk_id, reason=reason, detail=str(exc))
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=refusal.model_dump(mode="json"))
+    change.publish(cause="released", key=f"route_released:{released_id}", released_by=runner_id, reason=request.reason)
+    services.events.publish_queue_changed()  # a released chunk re-enters the ready queue
+    return ReleaseResponse(chunk_id=chunk_id, released_id=released_id)
 
 
 @router.post("/chunks/{chunk_id}/completions", response_model=ApplyResponse)

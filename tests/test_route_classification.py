@@ -339,6 +339,7 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"),
     ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
     ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/release"),
     ("POST", "/api/fleet/chunks/{chunk_id}/completions"),
     ("POST", "/api/fleet/chunks/{chunk_id}/decisions"),
     ("POST", "/api/fleet/events"),

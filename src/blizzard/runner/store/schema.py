@@ -338,6 +338,8 @@ pause_parks = Table(
     # The in-flight elicitation the park's interrupt signalled, or NULL.
     Column("interrupted_elicitation_id", Integer, nullable=True, info={"refers_to": "in_flight_elicitations.id"}),
     Column("runner_id", String, nullable=False),
+    # Why the lease parked: ``usage-limit`` for a usage-limited generation's park, NULL for an operator pause.
+    Column("cause", String, nullable=True),
     info={"scope": "runner"},
 )
 

@@ -15,7 +15,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, NotRouted
@@ -63,9 +63,19 @@ class _FakeChunkRepo:
     Callers wrap an instance in :func:`_as_route` for pyright's structural check."""
 
     released: list[tuple[str, datetime]] = field(default_factory=list)
+    causes: list[RouteReleaseCause | None] = field(default_factory=list)
 
-    def record_route_released_locked(self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime) -> None:
+    def record_route_released_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        at: datetime,
+        cause: RouteReleaseCause | None = None,
+        reason: str | None = None,
+    ) -> None:
         self.released.append((chunk_id, at))
+        self.causes.append(cause)
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"DetachService should not touch {name!r}")
@@ -111,3 +121,19 @@ def test_detach_uses_the_injected_clock_not_the_wall_clock() -> None:
     service.detach(_CHUNK)
 
     assert repo.released == [("chk_1", later)]
+
+
+def test_detach_records_its_own_cause() -> None:
+    service, repo = _service(_route())
+
+    service.detach(_CHUNK)
+
+    assert repo.causes == [RouteReleaseCause.DETACH]
+
+
+def test_retirements_release_records_its_own_cause() -> None:
+    service, repo = _service(_route())
+
+    service.release_held(_CHUNK, runner_id="rn_1")
+
+    assert repo.causes == [RouteReleaseCause.RETIREMENT]

@@ -93,6 +93,7 @@ from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.execution.host_retirement import HostRetirementService
 from blizzard.hub.domain.execution.questions import QuestionService
+from blizzard.hub.domain.execution.release import ReleaseService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import CommitResolver
@@ -263,6 +264,7 @@ class TenantServices:
     requeue: RequeueService
     restart: RestartService
     detach: DetachService
+    release: ReleaseService
     pause: PauseService
     stop: StopService
     complete: CompleteService
@@ -1072,6 +1074,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(movement=chunk_movement, graphs=graph_store, clock=clock, exclusive=chunk_exclusive),
         detach=detach,
+        release=ReleaseService(route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         complete=CompleteService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),

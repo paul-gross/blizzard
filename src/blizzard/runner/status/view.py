@@ -39,6 +39,7 @@ from blizzard.runner.lifecycle.routing import RoutingConflict, RoutingMap, routi
 from blizzard.runner.lifecycle.takeover import EscalationCommands, IReadTakeoverRepository, resolve_resume_command
 from blizzard.runner.throttle.gate import GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import IReadPauseRepository, RunnerBrakes
+from blizzard.runner.throttle.settings import ThrottleSettings
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
@@ -225,8 +226,15 @@ class ThrottleStatus:
     on_usage_limit: str = "hold"
 
     @classmethod
-    def of(cls, verdict: GateVerdict, *, braked: bool) -> ThrottleStatus:
-        return cls(state="braked" if braked else "admitting" if verdict.admits_claim else "declining", verdict=verdict)
+    def of(cls, verdict: GateVerdict, *, braked: bool, settings: ThrottleSettings | None = None) -> ThrottleStatus:
+        """``settings`` names the configured hold-or-release choices; ``None`` holds on both."""
+        settings = settings if settings is not None else ThrottleSettings()
+        return cls(
+            state="braked" if braked else "admitting" if verdict.admits_claim else "declining",
+            verdict=verdict,
+            on_decline=settings.on_decline.value,
+            on_usage_limit=settings.on_usage_limit.value,
+        )
 
 
 @domain_model
@@ -297,6 +305,7 @@ class RunnerStatusService:
         runner_dir: str = "",
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
         throttle_gate: ThrottleGate | None = None,
+        throttle: ThrottleSettings | None = None,
     ) -> None:
         self._pause = pause
         self._daemon_liveness = daemon_liveness
@@ -323,6 +332,7 @@ class RunnerStatusService:
         self._runner_dir = runner_dir
         self._contact_staleness = contact_staleness
         self._throttle_gate = throttle_gate
+        self._throttle = throttle
 
     def summary(self) -> RunnerStatusSummary:
         local_paused = self._pause.local_paused()
@@ -353,7 +363,9 @@ class RunnerStatusService:
             served_projects=served_projects_status(self._projects, answer),
             unmatched_bindings=tuple(b for b in self._environments.held_bindings() if b.workspace_id is None),
             routing_conflicts=routing.conflicts,
-            throttle=ThrottleStatus.of(self._throttle_gate.verdict(), braked=local_paused or hub_paused)
+            throttle=ThrottleStatus.of(
+                self._throttle_gate.verdict(), braked=local_paused or hub_paused, settings=self._throttle
+            )
             if self._throttle_gate is not None
             else None,
         )

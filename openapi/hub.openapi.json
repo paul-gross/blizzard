@@ -29,6 +29,7 @@
           "requeued",
           "restarted",
           "detached",
+          "released",
           "paused",
           "resumed",
           "stopped",
@@ -1499,6 +1500,7 @@
           "requeued",
           "restarted",
           "detached",
+          "released",
           "paused",
           "resumed",
           "stopped",
@@ -1543,6 +1545,7 @@
                   "requeued",
                   "restarted",
                   "detached",
+                  "released",
                   "paused",
                   "resumed",
                   "stopped",
@@ -1635,6 +1638,18 @@
             ],
             "default": null,
             "title": "Project Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           },
           "runner_id": {
             "anyOf": [
@@ -10654,6 +10669,88 @@
           "label"
         ],
         "title": "RecordRefView",
+        "type": "object"
+      },
+      "ReleaseRefusal": {
+        "description": "The ``409`` body: the chunk's state refuses the release.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReleaseRefusalReason"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "reason",
+          "detail"
+        ],
+        "title": "ReleaseRefusal",
+        "type": "object"
+      },
+      "ReleaseRefusalReason": {
+        "enum": [
+          "stale",
+          "not-running"
+        ],
+        "title": "ReleaseRefusalReason",
+        "type": "string"
+      },
+      "ReleaseRequest": {
+        "description": "Give the chunk's route back. ``reason`` is the caller's own, recorded and never interpreted.",
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "route_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Token"
+          }
+        },
+        "required": [
+          "epoch",
+          "reason"
+        ],
+        "title": "ReleaseRequest",
+        "type": "object"
+      },
+      "ReleaseResponse": {
+        "description": "The accepted release: the ``route_released`` row it wrote.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "released_id": {
+            "title": "Released Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "released_id"
+        ],
+        "title": "ReleaseResponse",
         "type": "object"
       },
       "RepositoriesListView": {
@@ -24355,6 +24452,69 @@
           }
         },
         "summary": "Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/release": {
+      "post": {
+        "description": "Give the chunk's route back at its holder's own request, so it re-derives ``ready`` at its\ncurrent node: 200 with the id of the release it recorded; 409 when the chunk moved past\n``epoch`` or is not running; 403 when the caller does not hold the route or its route token\ndoes not match; 404 for a chunk the tenant does not hold.",
+        "operationId": "release_chunk_api_fleet_chunks__chunk_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Chunk",
         "tags": [
           "fleet"
         ]

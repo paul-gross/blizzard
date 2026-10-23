@@ -504,6 +504,16 @@ def registered_identity(runner_id: str = "r1", runner_name: str = "runner-local"
     )
 
 
+@dataclass(frozen=True)
+class ReleaseCall:
+    """One :meth:`FakeHub.release` call, as the runner sent it."""
+
+    chunk_id: str
+    epoch: int
+    route_token: str | None
+    reason: str
+
+
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
@@ -596,6 +606,8 @@ class FakeHub:
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.get_question_calls: list[str] = []  # question ids `get_question` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
+        self.releases: list[ReleaseCall] = []  # one per `release` call the fake reached
+        self.release_refused: set[str] = set()  # chunk ids `release` refuses, as a 409, 403, or 404 would
 
     @property
     def token(self) -> str:
@@ -854,6 +866,12 @@ class FakeHub:
         self.rekey_calls.append(chunk_id)
         token = self.rekey_responses.get(chunk_id, "rtok_rekeyed")
         return token
+
+    def release(self, chunk_id: str, *, epoch: int, route_token: str | None, reason: str) -> bool:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        self.releases.append(ReleaseCall(chunk_id, epoch, route_token, reason))
+        return chunk_id not in self.release_refused
 
 
 class FakeProvider:

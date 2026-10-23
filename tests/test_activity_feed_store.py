@@ -17,7 +17,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.hub_event_types import ActivityChunkChangeCause, ChunkChangeCause
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice
+from blizzard.hub.domain.chunk.model import ActivityEntry, DecisionChoice, RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.events import IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -290,6 +290,36 @@ def test_detached_reads_off_route_released(tmp_path: Path) -> None:
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
     assert row.key.startswith("route_released:")
+
+
+def _route_and_release(
+    store: ChunkStores, *, runner_id: str, at: int, cause: RouteReleaseCause | None, reason: str | None = None
+) -> None:
+    route = Route(chunk_id="ch_1", runner_id=runner_id, workspace_id="w1", environment_ids=[], created_at=_at(at))
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.route.record_route_locked(handle, route, token_hash="h", at=_at(at))
+        store.route.record_route_released_locked(handle, "ch_1", at=_at(at + 1), cause=cause, reason=reason)
+
+
+def test_released_reads_off_a_release_row_naming_its_holder_and_reason(tmp_path: Path) -> None:
+    store, _ = _store(tmp_path)
+    _route_and_release(store, runner_id="rn_first", at=1, cause=RouteReleaseCause.DETACH)
+    _route_and_release(store, runner_id="rn_second", at=3, cause=RouteReleaseCause.RELEASE, reason="throttled")
+    row = _row_for(store, "released")
+    assert row.chunk_id == "ch_1"
+    assert row.graph_id == "gr_1"
+    assert row.runner_id == "rn_second"
+    assert row.reason == "throttled"
+    assert row.key.startswith("route_released:")
+
+
+@pytest.mark.parametrize("cause", [None, RouteReleaseCause.DETACH, RouteReleaseCause.RETIREMENT])
+def test_every_other_route_released_row_still_reads_detached(tmp_path: Path, cause: RouteReleaseCause | None) -> None:
+    store, _ = _store(tmp_path)
+    _route_and_release(store, runner_id="rn_first", at=1, cause=cause)
+    row = _row_for(store, "detached")
+    assert row.runner_id is None
+    assert row.reason is None
 
 
 def test_paused_reads_off_chunk_pause_facts(tmp_path: Path) -> None:

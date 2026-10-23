@@ -101,6 +101,7 @@ from blizzard.wire.host import (
 )
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
+from blizzard.wire.release import ReleaseRequest
 from blizzard.wire.route import (
     RouteClaim,
     RouteClaimConflict,
@@ -163,6 +164,10 @@ _HOST_ADD_REFUSALS: dict[int, HostAddRefusalReason] = {
 }
 
 type _Refusal = Callable[[str, httpx2.Response], HubClientError | None]
+
+
+#: The statuses a release is refused with: stale or not running, not the holder, and an unknown chunk or route.
+_RELEASE_REFUSALS = frozenset({httpx2.codes.CONFLICT, httpx2.codes.FORBIDDEN, httpx2.codes.NOT_FOUND})
 
 
 def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None:
@@ -430,6 +435,20 @@ class HttpHubClient:
             f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True, ended_on_not_found=True
         )
         return RouteTokenRekeyResponse.model_validate(resp.json()).route_token
+
+    def release(self, chunk_id: str, *, epoch: int, route_token: str | None, reason: str) -> bool:
+        path = f"{_FLEET_API}/chunks/{chunk_id}/release"
+        body = ReleaseRequest(epoch=epoch, route_token=route_token, reason=reason).model_dump(mode="json")
+        try:
+            resp = self._client.post(path, json=body)
+        except httpx2.HTTPError as exc:
+            raise self._wrap(exc, f"POST {path}") from exc
+        # Every refusal leaves the route held; which one it was is the hub's to log, not the runner's to act on.
+        if resp.status_code in _RELEASE_REFUSALS:
+            _log.info("hub refused release", chunk_id=chunk_id, status=resp.status_code, detail=_detail(resp))
+            return False
+        self._raise_for_status(resp, f"POST {path}")
+        return True
 
     # --- plumbing -----------------------------------------------------------
 

@@ -23,15 +23,47 @@ from blizzard.runner.lifecycle.model import (
     spawn_hold,
 )
 from blizzard.runner.lifecycle.registration import registered_runner_id
-from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
+from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner, SuppressionCause
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import Completion
+from blizzard.runner.throttle.gate import StartKind
+from blizzard.runner.throttle.release import (
+    Release,
+    ReleaseContext,
+    ReleaseReason,
+    releases_between_steps,
+    releases_on_decline,
+)
 
 _log = get_logger("blizzard.runner.loop")
 
 
-class HeldChunkContext(SpawnContext, Protocol): ...
+class HeldChunkContext(SpawnContext, ReleaseContext, Protocol): ...
+
+
+def offer_between_steps(ctx: HeldChunkContext, chunk_id: str, *, epoch: int, via: str) -> bool:
+    """Give ``chunk_id`` back to the queue ahead of entering its next step, when the gate declines that step and the
+    runner is set to release on a decline; True when the hub took it and the runner let go of its environments. Asked
+    ahead of the envelope fetch, so a released chunk costs no read of a node this runner will not run."""
+    if not releases_on_decline(ctx.config.throttle):
+        return False
+    suppression = Spawner(ctx).suppression(start=StartKind.STEP, via=via, chunk_id=chunk_id)
+    declined = suppression is not None and suppression.cause is SuppressionCause.DECLINED
+    if not releases_between_steps(ctx.config.throttle, declined=declined):
+        return False
+
+    def let_go() -> None:
+        ctx.env_release.release_chunk(chunk_id)
+        ctx.chunk_views.invalidate(chunk_id)
+
+    return Release(ctx).offer(
+        chunk_id,
+        epoch=epoch,
+        route_token=ctx.stores.tokens.route_token(chunk_id),
+        reason=ReleaseReason.THROTTLED,
+        then=let_go,
+    )
 
 
 @dataclass(frozen=True)
@@ -157,6 +189,8 @@ class HeldChunk:
         bindings = self.ctx.stores.environments.bindings_for_chunk(self.chunk_id)
         if not bindings:
             _log.warning("held chunk advanced with no bound env — cannot spawn", chunk_id=self.chunk_id)
+            return
+        if offer_between_steps(self.ctx, self.chunk_id, epoch=latest_epoch, via="advance"):
             return
         try:
             with self.ctx.tracer.under(step_root(StepKey.attempt(self.chunk_id, latest_epoch))):

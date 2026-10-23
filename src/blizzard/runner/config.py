@@ -36,6 +36,7 @@ from blizzard.runner.throttle.settings import (
     DEFAULT_BUDGET_WINDOW_HOURS,
     DEFAULT_PACE_LEAD_PCT,
     BudgetSettings,
+    HoldOrRelease,
     PaceSettings,
     ScheduleSettings,
     Span,
@@ -288,13 +289,30 @@ class Throttle:
         return cls(ConfigView.blank() if view is None else view)
 
     def settings(self, *, ceiling_usd: float | None, ceiling_window_hours: float) -> ThrottleSettings | None:
-        """The configured levers, parsed once; each refusal is a :class:`ConfigError` naming its key. The runner's
-        ``ceiling_usd`` over ``ceiling_window_hours`` is what a budget must stay below."""
+        """The configured levers and hold-or-release choices, parsed once; each refusal is a :class:`ConfigError`
+        naming its key. The runner's ``ceiling_usd`` over ``ceiling_window_hours`` is what a budget must stay below.
+        ``None`` when the table configures none of them."""
         pace, utilization, schedule = self._pace(), self._utilization(), self._schedule()
         budget = self._budget(ceiling_usd, ceiling_window_hours)
-        if pace is None and utilization is None and budget is None and schedule is None:
+        on_decline, on_usage_limit = self._hold_or_release("on_decline"), self._hold_or_release("on_usage_limit")
+        if (pace, utilization, budget, schedule) == (None, None, None, None) and HoldOrRelease.RELEASE not in (
+            on_decline,
+            on_usage_limit,
+        ):
             return None
-        return ThrottleSettings(pace, utilization, budget, schedule)
+        return ThrottleSettings(
+            pace, utilization, budget, schedule, on_decline=on_decline, on_usage_limit=on_usage_limit
+        )
+
+    def _hold_or_release(self, key: str) -> HoldOrRelease:
+        if key not in self.view:
+            return HoldOrRelease.HOLD
+        raw = self.view.get(key)
+        try:
+            return HoldOrRelease(raw)
+        except ValueError:
+            choices = " or ".join(repr(choice.value) for choice in HoldOrRelease)
+            raise ConfigError(f"throttle.{key} must be {choices}, got {raw!r}") from None
 
     def _pace(self) -> PaceSettings | None:
         if "pace" not in self.view:

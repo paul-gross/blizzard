@@ -4,7 +4,8 @@ const { ChunkChangeCause } = hubApi;
 
 /** A `chunk-changed` frame shaped into the Activity feed's two-line block. */
 export interface ChunkChangeSummary {
-  /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`. */
+  /** Line 1 — the chunk shortname and its transition, e.g. `C-1RJ1 review → failed → build`, or
+   * `C-1RJ1 released (throttled)` for a runner's own release. */
   readonly transition: string;
   /** Line 2 — who acted: the runner's display name, e.g. `atlas/r-claude`, or, on a
    * runnerless deletion, the deleting actor; omitted otherwise. */
@@ -20,6 +21,12 @@ export function summarizeChunkChange(data: LoggedEvent['data'], hostNames: Reado
   if (data.cause === ChunkChangeCause.CLAIMED) {
     return {
       transition: `${compactRef(data.chunk_id ?? '—')} claimed`,
+      ...(data.runner_id ? { runner: runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) } : {}),
+    };
+  }
+  if (data.cause === ChunkChangeCause.RELEASED) {
+    return {
+      transition: `${compactRef(data.chunk_id ?? '—')} released${data.reason ? ` (${data.reason})` : ''}`,
       ...(data.runner_id ? { runner: runnerDisplayName(data.runner_id, data.runner_name, hostNames.get(data.runner_id)) } : {}),
     };
   }

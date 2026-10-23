@@ -285,6 +285,18 @@ class RouteCreatedFact:
     seq: int = 0
 
 
+class RouteReleaseCause(StrEnum):
+    """Which write gave a ``route.released`` fact's tenure back, as its row records it. A row
+    written by any other release — or before the cause was recorded — carries none."""
+
+    #: The operator's detach.
+    DETACH = "detach"
+    #: Retirement's release of a retiring runner's held chunks.
+    RETIREMENT = "retirement"
+    #: The holding runner's own mid-graph release.
+    RELEASE = "release"
+
+
 @domain_model
 @dataclass(frozen=True)
 class RouteReleasedFact:
@@ -977,6 +989,8 @@ class ChunkVerb(StrEnum):
     #: Answer a node question; the chunk ending leaves no session to hear it.
     ANSWER_QUESTION = "answer-question"
     HUB_ADVANCE = "hub-advance"
+    #: The holding runner's own mid-graph release of its route.
+    RELEASE = "release"
 
 
 _EVERY_STATUS: frozenset[ChunkStatus] = frozenset(ChunkStatus)
@@ -1008,6 +1022,7 @@ CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyTy
         ChunkVerb.RESOLVE_DECISION: _NON_TERMINAL,
         ChunkVerb.ANSWER_QUESTION: _NON_TERMINAL,
         ChunkVerb.HUB_ADVANCE: _NON_TERMINAL - {ChunkStatus.NOT_READY},
+        ChunkVerb.RELEASE: frozenset({ChunkStatus.RUNNING}),
     }
 )
 

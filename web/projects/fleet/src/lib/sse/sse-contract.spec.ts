@@ -193,6 +193,7 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
       graph_id: true,
       by: true,
       key: true,
+      reason: true,
       project_id: true,
     }),
   },

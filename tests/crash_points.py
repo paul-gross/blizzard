@@ -26,6 +26,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.tracing.sweep",
     "blizzard.runner.lifecycle.host_lane_drain",
     "blizzard.runner.ingest",
+    "blizzard.runner.throttle.release",
     "blizzard.hub.delivery.hub_node",
     "blizzard.hub.domain.execution.claim",
     "blizzard.hub.domain.execution.apply",

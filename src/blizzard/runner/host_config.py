@@ -89,7 +89,7 @@ from blizzard.runner.host_layout import (
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, SAMPLED_PROVIDERS
-from blizzard.runner.throttle.settings import DAY_NAMES, ThrottleSettings
+from blizzard.runner.throttle.settings import DAY_NAMES, HoldOrRelease, ThrottleSettings
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
@@ -1307,11 +1307,14 @@ def _runner_toml(entry: RunnerEntry) -> str:
 
 
 def _throttle_toml(settings: ThrottleSettings | None) -> str:
-    """``[runner.throttle]`` and each configured lever's sub-table, and only those; loading the text gives back
-    ``settings``."""
+    """``[runner.throttle]``, each hold-or-release choice that is not ``hold``, and each configured lever's sub-table,
+    and only those; loading the text gives back ``settings``."""
     if settings is None:
         return ""
     text = "\n[runner.throttle]\n"
+    for key, choice in (("on_decline", settings.on_decline), ("on_usage_limit", settings.on_usage_limit)):
+        if choice is not HoldOrRelease.HOLD:
+            text += f"{key} = {json.dumps(choice.value)}\n"
     if (pace := settings.pace) is not None:
         text += "\n[runner.throttle.pace]\n"
         if pace.window is not None:

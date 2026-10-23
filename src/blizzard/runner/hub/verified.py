@@ -129,6 +129,9 @@ class VerifiedHubClient:
     def rekey_route_token(self, chunk_id: str) -> str:
         return self._verified().rekey_route_token(chunk_id)
 
+    def release(self, chunk_id: str, *, epoch: int, route_token: str | None, reason: str) -> bool:
+        return self._verified().release(chunk_id, epoch=epoch, route_token=route_token, reason=reason)
+
 
 def _conforms_hub_client(x: VerifiedHubClient) -> IHubClient:
     return x

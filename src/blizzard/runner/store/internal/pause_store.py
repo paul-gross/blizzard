@@ -94,6 +94,7 @@ class PauseStore:
                 pause_parks.c.chunk_id,
                 pause_parks.c.parked_at,
                 pause_parks.c.interrupted_elicitation_id,
+                pause_parks.c.cause,
             )
         )
         parks: dict[str, PausePark] = {}
@@ -105,6 +106,7 @@ class PauseStore:
                 interrupted_elicitation_id=(
                     int(r.interrupted_elicitation_id) if r.interrupted_elicitation_id is not None else None
                 ),
+                cause=str(r.cause) if r.cause is not None else None,
             )
         return parks
 
@@ -212,7 +214,13 @@ class PauseStore:
         )
 
     def record_pause_park(
-        self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        parked_at: datetime,
+        interrupted_elicitation_id: int | None = None,
+        cause: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
             conn.execute(
@@ -221,6 +229,7 @@ class PauseStore:
                     chunk_id=chunk_id,
                     parked_at=parked_at,
                     interrupted_elicitation_id=interrupted_elicitation_id,
+                    cause=cause,
                 )
             )
         _log.info(

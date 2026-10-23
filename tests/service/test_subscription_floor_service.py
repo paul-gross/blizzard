@@ -10,7 +10,7 @@ import contextlib
 import dataclasses
 import json
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -97,10 +97,13 @@ def _two_plan_host(
     plans: tuple[SubscriptionDeclaration, ...],
     throttle: ThrottleSettings | None = None,
     spend: dict[str, float] | None = None,
+    *,
+    throttles: Mapping[str, ThrottleSettings | None] | None = None,
 ) -> Iterator[httpx2.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token`` and declaring ``plans``, one ``[[runner]]`` per
-    ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots, with any ``spend`` fields (the ceiling and its window) set;
-    yields a client to its port once it answers ``/api/health``."""
+    ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots and
+    configuring ``throttle``, or what ``throttles`` names for it, with any ``spend`` fields (the ceiling and its
+    window) set; yields a client to its port once it answers ``/api/health``."""
     hub_url = f"http://127.0.0.1:{hub_port}"
     base = runner_config(root, workspace, bin_dir, hub_port, join=False)
     envs = tuple(f"e{i + 1}" for i in range(len(runners) * _AGENTS))
@@ -119,7 +122,11 @@ def _two_plan_host(
             subscription=slug,
             bindings=(ProjectBinding(runner.project, workspace_id, _AGENTS),),
             own=dataclasses.replace(
-                base, name=runner.name, runner_id=runner.runner_id, throttle=throttle, **(spend or {})
+                base,
+                name=runner.name,
+                runner_id=runner.runner_id,
+                throttle=(throttles or {}).get(runner.name, throttle),
+                **(spend or {}),
             ),
         )
         for runner, slug in runners

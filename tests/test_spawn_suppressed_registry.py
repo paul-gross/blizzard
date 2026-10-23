@@ -39,7 +39,9 @@ _SCANNED = (
 #: produces resume-once, is likewise reached only from `Judgement._enter`, past its gate.
 _ALLOWED_UNGATED = frozenset({"_launch", "_relaunch", "_elicit", "_nudge", "_wake", "resume_on_unmet_produces"})
 
-_GATE_NAME = "suppressed"
+#: The gate's two calls: the boolean ``suppressed``, and ``suppression``, which also says why — either takes the gate.
+_GATE_NAMES = frozenset({"suppressed", "suppression"})
+_GATE_NAME = "suppressed` or `Spawner.suppression"
 _GATED_METHODS = frozenset({"spawn", "resume_with_message", "judge"})
 
 
@@ -57,7 +59,7 @@ def _is_harness_spawn_call(node: ast.AST) -> bool:
 
 def _is_gate_call(node: ast.AST) -> bool:
     """True for a call to the gate — always an attribute of a `Spawner`, never a bare name."""
-    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == _GATE_NAME
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in _GATE_NAMES
 
 
 def _calls_in_own_scope(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
@@ -149,10 +151,15 @@ def _start_is_named(call: ast.Call) -> bool:
     )
 
 
+#: ``Spawner.suppressed`` is the boolean face of ``suppression``, passing its caller's named start straight through.
+_GATE_DELEGATE = "suppressed"
+
+
 def _unnamed_starts(functions: Sequence[ast.FunctionDef | ast.AsyncFunctionDef]) -> list[str]:
     return [
         f"{node.name}:{call.lineno}"
         for node in functions
+        if node.name != _GATE_DELEGATE
         for call in _calls_in_own_scope(node)
         if _is_gate_call(call) and not _start_is_named(call)
     ]
@@ -174,6 +181,8 @@ def test_every_gate_call_names_its_start() -> None:
         'Spawner(self.ctx).suppressed(via="planted", chunk_id=chunk_id)',
         'Spawner(self.ctx).suppressed(**{"start": StartKind.STEP}, via="planted", chunk_id=chunk_id)',
         'Spawner(self.ctx).suppressed(start=kind, via="planted", chunk_id=chunk_id)',
+        'Spawner(self.ctx).suppression(via="planted", chunk_id=chunk_id)',
+        'Spawner(self.ctx).suppression(start=kind, via="planted", chunk_id=chunk_id)',
     ],
 )
 def test_a_planted_start_without_its_kind_fails_the_rule(call: str) -> None:
@@ -183,8 +192,9 @@ def test_a_planted_start_without_its_kind_fails_the_rule(call: str) -> None:
     assert _unnamed_starts(functions) == ["planted:2"]
 
 
-def test_a_planted_start_naming_its_kind_passes_the_rule() -> None:
-    planted = 'def planted(self, chunk_id):\n    Spawner(self.ctx).suppressed(start=StartKind.STEP, via="p", chunk_id=chunk_id)\n'
+@pytest.mark.parametrize("gate", sorted(_GATE_NAMES))
+def test_a_planted_start_naming_its_kind_passes_the_rule(gate: str) -> None:
+    planted = f'def planted(self, chunk_id):\n    Spawner(self.ctx).{gate}(start=StartKind.STEP, via="p", chunk_id=chunk_id)\n'
     functions = [n for n in ast.walk(ast.parse(planted)) if isinstance(n, ast.FunctionDef)]
 
     assert _unnamed_starts(functions) == []

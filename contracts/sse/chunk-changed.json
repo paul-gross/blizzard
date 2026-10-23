@@ -45,5 +45,19 @@
     "cause": "stopped",
     "key": "chunk_stopped:1",
     "project_id": "proj_1"
+  },
+  "released": {
+    "chunk_id": "ch_1",
+    "status": "ready",
+    "terminal": false,
+    "prev_status": "running",
+    "node": "build",
+    "runner_id": "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB",
+    "runner_name": "r-claude",
+    "cause": "released",
+    "graph_id": "adv-dwf",
+    "key": "route_released:1",
+    "reason": "throttled",
+    "project_id": "proj_1"
   }
 }
