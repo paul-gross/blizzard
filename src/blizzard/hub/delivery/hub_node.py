@@ -35,6 +35,7 @@ from blizzard.hub.domain.actions.effects import (
     Effect,
     EffectResult,
     EffectStatus,
+    LandingRecord,
     Marker,
     Pass,
     RecordGardenDelivery,
@@ -68,6 +69,7 @@ from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryOutcome,
     RepositoryResolution,
+    ResolvedRepository,
     resolve_chunk_repositories,
 )
 from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
@@ -109,6 +111,8 @@ _EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 _EVENT_ACTION_OVERRAN: EventLogKind = "hub-action-overran"
 # What a delivery the chunk has moved past answers its action with.
 _FENCED_DETAIL = "not recorded: the chunk is terminal or has moved past this visit"
+# A landing record is written however the fence answers; this names why it answers `fenced` anyway.
+_LANDED_PAST_FENCE_DETAIL = "the chunk is terminal or has moved past this visit"
 
 # Generous bound: reclaim only a slot abandoned without a matching release.
 DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
@@ -439,7 +443,7 @@ class HubNodeExecutor:
         review_findings: ReviewFindingsRecorder,
         garden_delivery: GardenDeliveryRecorder,
         run_context: IReadRunContextRepository,
-        forge_handles: ForgeHandleFactory | None = None,
+        forge_handles: ForgeHandleFactory,
         marker_callback_base_url: str = "",
         public_url: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
@@ -743,8 +747,10 @@ class HubNodeExecutor:
         refusal = self._resolution_refusal(resolution)
         forges: dict[str, IGitHubHandle] = {}
         if refusal is None and spec.lands:
+            refusal = self._ambiguity_refusal(resolution)
+        if refusal is None and spec.lands:
             tokens, refusal = self._reveal_tokens(resolution)
-            if refusal is None and self._forge_handles is not None:
+            if refusal is None:
                 forges = {
                     target.record: self._forge_handles(target, tokens[target.record]) for target in resolution.targets
                 }
@@ -877,6 +883,22 @@ class HubNodeExecutor:
                 ):
                     return EffectResult(EffectStatus.RECORDED)
                 return EffectResult(EffectStatus.FENCED, _FENCED_DETAIL)
+            case LandingRecord(repository=repository, repo=repo, revision=revision):
+                refused = self._artifacts.record_landing(
+                    chunk.chunk_id,
+                    node_id=node.node_id,
+                    node_name=node.name,
+                    epoch=epoch,
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    repo=repo,
+                    revision=revision,
+                    repository_id=repository,
+                    at=self._clock.now(),
+                )
+                _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN.reached()
+                if refused:
+                    return EffectResult(EffectStatus.FENCED, _LANDED_PAST_FENCE_DETAIL)
+                return EffectResult(EffectStatus.RECORDED)
             case RecordReviewFindings():
                 try:
                     findings = self._review_findings.record(chunk=chunk, node=node, epoch=epoch)
@@ -924,6 +946,22 @@ class HubNodeExecutor:
         if REFUSAL_EVENT[resolution.outcome] is None:
             return None
         return resolution.outcome.value, resolution.detail
+
+    @staticmethod
+    def _ambiguity_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
+        """The refusal a resolution holding one ``owner/repo`` for two records routes with: both landings
+        would write the one ``merged/<repo>`` marker. ``None`` when every ``owner/repo`` is one record's."""
+        held: dict[str, ResolvedRepository] = {}
+        for repo, target in zip(resolution.qualified, resolution.targets, strict=True):
+            first = held.setdefault(repo, target)
+            if first.record != target.record:
+                return (
+                    "repository-ambiguous",
+                    f"the repo {repo!r} resolves to two repository records, and so to one marker name: "
+                    f"record {first.record!r} ({first.forge_api_url}) and record {target.record!r} "
+                    f"({target.forge_api_url})",
+                )
+        return None
 
     def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
         kind = REFUSAL_EVENT[resolution.outcome]

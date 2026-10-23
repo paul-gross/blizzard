@@ -70,7 +70,9 @@ from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
+from blizzard.hub.delivery.forge_handle import ForgeHandleFactory
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
+from blizzard.hub.delivery.internal.github_handle import GitHubHandle
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
@@ -898,6 +900,7 @@ class TenantServiceParts:
     versions: IVersionWindow
     actions: HubActions
     action_passes: ActionPassDriver
+    forge_handles: ForgeHandleFactory
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -1022,6 +1025,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         secrets=live.secrets,
         actions=parts.actions,
         passes=parts.action_passes,
+        forge_handles=parts.forge_handles,
         review_findings=review_findings,
         garden_delivery=garden_delivery,
         run_context=run_context_store,
@@ -1303,6 +1307,7 @@ def build_services(
     actions: HubActions = HUB_ACTIONS,
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
+    forge_handles: ForgeHandleFactory = GitHubHandle.of,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1312,7 +1317,7 @@ def build_services(
     mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
     may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
-    later."""
+    later; ``forge_handles`` builds a landing action's handle on each repository's forge."""
     clock = core.clock
     # One per hub process, shared by every tenant's executor.
     action_loop = ActionLoop()
@@ -1345,6 +1350,7 @@ def build_services(
         versions=HubVersionWindow(hub_version, version_window),
         actions=actions,
         action_passes=ActionPassDriver(action_loop, PassBound(action_pass_seconds, action_pass_grace)),
+        forge_handles=forge_handles,
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)

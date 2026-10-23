@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.graphs.scripts import base_merge, land_common, land_default, land_pr_ci
+from blizzard.hub.delivery.actions import base_merge
+from blizzard.hub.graphs.scripts import land_common, land_default, land_pr_ci
 
 pytestmark = pytest.mark.unit
 
