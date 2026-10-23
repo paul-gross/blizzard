@@ -254,8 +254,9 @@ def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> N
                     tenant_id=tenant, chunk_id=chunk, graph_id="gr_1", minted_at=carried_mint, model="m"
                 )
             )
+            # The store here predates ``work_source_id``, which the current model's table already carries.
             conn.execute(
-                insert(hub.work_sources).values(
+                insert(sa.Table("work_sources", sa.MetaData(), autoload_with=conn)).values(
                     tenant_id=tenant,
                     name="acme",
                     provider="github",

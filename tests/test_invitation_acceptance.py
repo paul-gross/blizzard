@@ -70,10 +70,17 @@ def _hub(tmp_path: Path, identity: ProviderIdentity) -> tuple[HubHarness, FakeOA
 
 
 def _sign_in(hub: HubHarness, token: str, *, session: str | None = None) -> Any:
-    cookies = {"bz_session": session} if session is not None else None
-    authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False, cookies=cookies)
+    if session is not None:
+        hub.client.cookies.set("bz_session", session)
+    authorize = hub.client.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=False)
     state = _state_from_redirect(authorize.headers["location"])
-    return hub.client.get(f"/api/auth/github/callback?code=code&state={state}", follow_redirects=False, cookies=cookies)
+    return hub.client.get(f"/api/auth/github/callback?code=code&state={state}", follow_redirects=False)
+
+
+def _me(hub: HubHarness, session: str) -> Any:
+    """``/api/me`` as the holder of ``session``, the cookie set on the client rather than per request."""
+    hub.client.cookies.set("bz_session", session)
+    return hub.client.get("/api/me")
 
 
 def _refused(landed: Any, refusal: SignInRefusal) -> None:
@@ -133,7 +140,7 @@ def test_a_new_person_lands_in_the_invited_tenant_with_the_invited_role(tmp_path
         "accepted",
         user.id,
     )
-    me = hub.client.get("/api/me", cookies={"bz_session": landed.cookies["bz_session"]})
+    me = _me(hub, landed.cookies["bz_session"])
     assert me.status_code == 200, me.text
     assert me.json()["username"] == "ada"
 
@@ -318,7 +325,7 @@ def test_an_acceptance_claims_the_superuser_only_through_an_identity_vouching_fo
     landed = _sign_in(hub, token)
 
     assert parse_qs(urlsplit(landed.headers["location"]).query) == {"tenant": [other.tenant]}
-    me = hub.client.get("/api/me", cookies={"bz_session": landed.cookies["bz_session"]})
+    me = _me(hub, landed.cookies["bz_session"])
     assert me.status_code == 200, me.text
     assert (me.json()["username"], me.json()["hub_admin"]) == ("ada", claims)
     [bootstrap] = _rows(hub, schema.superuser_bootstrap)
@@ -355,7 +362,7 @@ def test_a_signed_in_person_whose_account_lacks_the_address_is_refused_and_keeps
 
     assert _written(hub) == before
     assert hub.hub_services.memberships.role_in(other.tenant, member.user_id) is None
-    me = hub.client.get("/api/me", cookies={"bz_session": session})
+    me = _me(hub, session)
     assert me.status_code == 200, me.text
 
 
