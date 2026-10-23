@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 import structlog
+from fastapi import Request
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -177,7 +178,7 @@ def test_the_resolved_tenant_joins_every_log_line_and_the_requests_span() -> Non
     provider.add_span_processor(SimpleSpanProcessor(exporter))
 
     async def request() -> dict[str, object]:
-        await tenant_bound(resolved)
+        await tenant_bound(Request({"type": "http"}), resolved)
         return structlog.contextvars.get_contextvars()
 
     with provider.get_tracer(__name__).start_as_current_span("request"):

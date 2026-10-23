@@ -20,7 +20,7 @@ import httpx2
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import Engine
 
 from blizzard import __version__
@@ -289,6 +289,22 @@ def _refuse_retired_host(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
+def _log_unhandled_request_error(request: Request, exc: Exception) -> JSONResponse:
+    """Write the one JSON line for an exception no handler maps, tagged with the tenant the request
+    resolved (read from ``request.state``, so it holds whichever context this runs in), then answer
+    the ``500`` Starlette's server-error middleware answers when no handler exists."""
+    tenant = getattr(request.state, "tenant_id", None)
+    get_logger("blizzard.hub").error(
+        "unhandled request error",
+        **({} if tenant is None else {"tenant_id": tenant}),
+        method=request.method,
+        path=request.url.path,
+        exception_class=type(exc).__qualname__,
+        exc_info=exc,
+    )
+    return PlainTextResponse("Internal Server Error", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 def open_hub_engine(db_url: str) -> Engine:
     """The hub process's engine, opened after the tenant statement guard is installed — so a hub started with
     ``BLIZZARD_TENANT_GUARD=1`` checks every statement it runs."""
@@ -422,6 +438,7 @@ def create_app(
     app.add_exception_handler(MembershipRoleRefused, refuse_membership_role)
     app.add_exception_handler(BuiltInWorkSource, refuse_built_in_work_source)
     app.add_exception_handler(FlagOffError, refuse_flag_off)
+    app.add_exception_handler(Exception, _log_unhandled_request_error)
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)

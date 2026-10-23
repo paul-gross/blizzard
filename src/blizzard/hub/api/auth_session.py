@@ -205,10 +205,12 @@ def resolve_tenant(request: Request, hub: Hub) -> TenantRequest:
     return _served(hub, only.tenant_id, in_tenant(identity, only.tenant_id, only.role))
 
 
-async def tenant_bound(tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
+async def tenant_bound(request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
     """A router dependency: resolve the request's tenant, and record it on every log line and span
-    the request produces. Async, so the log binding lands in the request's own context rather than
+    the request produces, and on ``request.state.tenant_id`` for a handler that runs outside the
+    request's log context. Async, so the log binding lands in the request's own context rather than
     a worker thread's copy of it."""
+    request.state.tenant_id = tenant.scope.tenant
     structlog.contextvars.bind_contextvars(tenant_id=tenant.scope.tenant)
     annotate_tenant(tenant.scope.tenant, tenant.name)
 
@@ -232,8 +234,8 @@ class TenantBoundAdmitting:
         if self.permission not in HUB_PERMISSIONS:
             raise ValueError(f"{self.permission!r} is no hub-level permission; only one of those admits a non-member")
 
-    async def __call__(self, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
-        await tenant_bound(tenant)
+    async def __call__(self, request: Request, tenant: Annotated[TenantRequest, Depends(resolve_tenant)]) -> None:
+        await tenant_bound(request, tenant)
 
 
 def _route_admission(request: Request) -> Permission | None:
