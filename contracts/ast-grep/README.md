@@ -28,9 +28,9 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     with `# ast-grep-ignore: bzh:domain-takes-objects` immediately above the `def`.
 
 - **`bzh:cli-httpx-confined`** (`rules/cli-httpx-confined.yml`) — the CLI trees import httpx2 only in
-  `src/blizzard/cli/collaborators.py`, which builds the client factory and re-exports the httpx2 types the commands name.
-  The rule's own prose home is `blizzard-context:/architecture/clean-architecture.md` § Dependency injection; this file
-  states none of that prose, only what the rule mechanically checks.
+  `src/blizzard/cli/collaborators.py`, which builds the client factory and re-exports the httpx2 types the commands
+  name. The rule's own prose home is `blizzard-context:/architecture/clean-architecture.md` § Dependency injection; this
+  file states none of that prose, only what the rule mechanically checks.
   - Scoped to `src/blizzard/cli/**`, `src/blizzard/hub/cli/**` and `src/blizzard/runner/cli/**`, except
     `src/blizzard/cli/collaborators.py`.
   - Matches `import httpx2`, `import httpx2 as …`, `from httpx2 import …` and `from httpx2.<module> import …`, including
