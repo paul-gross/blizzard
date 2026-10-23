@@ -2,7 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { SubscriptionBlocks } from './subscription-blocks';
-import { paceLine, type SubscriptionLine } from './subscription-blocks.model';
+import { type PaceLine, type SubscriptionLine } from './subscription-blocks.model';
+
+const paceLine = (window: string, utilizationPct: number, elapsedPct: number): PaceLine => ({ window, utilizationPct, elapsedPct });
 
 const PACED: SubscriptionLine = {
   slug: 'claude-max',
@@ -36,7 +38,8 @@ describe('SubscriptionBlocks', () => {
     expect(windows[0].querySelectorAll('.cell.on')).toHaveLength(6);
     expect(windows[0].querySelector('.cell.clock')).not.toBeNull();
     expect(windows.map((w) => w.classList.contains('ahead'))).toEqual([false, true]);
-    expect(windows[0].getAttribute('title')).toBe('5h · 62% used · 70% of window');
+    expect(windows[0].querySelector('[role="img"]')?.getAttribute('title')).toBe('5h · 62% used · 70% of window');
+    expect(windows[0].querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Claude Max 5h · 62% used · 70% of window');
     expect(el.querySelector('[data-testid="subscription-blocks-name"]')?.textContent).toBe('Claude Max');
     expect(el.querySelector('[data-testid="subscription-blocks-age"]')?.textContent).toBe('[5m]');
   });

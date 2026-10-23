@@ -60,8 +60,8 @@ export class BoardListRow {
   /** When a done-lane chunk finished, or `null` — the row's closing line. */
   protected readonly finishedAt = computed(() => (this.card().terminal ? this.card().completedAt : null));
 
-  /** The closing line's color: the chunk's status tone, as its lane icon takes. */
-  protected readonly finishedColor = computed(() => toneColor(STATUS_TONE(this.card().status)));
+  /** The chunk's status tone as a color — the row's left edge and closing line read it, as its lane icon does. */
+  protected readonly statusColor = computed(() => toneColor(STATUS_TONE(this.card().status)));
 
   protected toggleFold(): void {
     this.expanded.update((open) => !open);

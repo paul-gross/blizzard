@@ -4,7 +4,6 @@
   grid-template-columns: 2fr 3fr;
   align-items: start;
   gap: 6px;
-  --on: var(--amber);
 }
 :host(.stale) {
   opacity: 0.45;
@@ -33,59 +32,6 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-}
-.window {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.window.ahead {
-  --on: var(--red);
-}
-.wl {
-  flex: none;
-  width: 2ch;
-  font-size: var(--fs-label);
-  color: var(--label-dim);
-}
-/* The slot bar's named gap, packed closer past ten blocks as its cells are. */
-.cells {
-  display: flex;
-  flex: 1;
-  gap: 2px;
-  min-width: 0;
-}
-.cells.dense {
-  gap: 1px;
-}
-/* An empty block carries a very dark hint of its fill, as the slot bar's do. */
-.cell {
-  position: relative;
-  flex: 1;
-  height: 7px;
-  border: 1px solid color-mix(in srgb, var(--on) 22%, var(--panel-deep));
-  background: color-mix(in srgb, var(--on) 10%, var(--panel-deep));
-}
-.cell.on {
-  background: var(--on);
-  border-color: color-mix(in srgb, var(--on) 60%, var(--panel-deep));
-}
-/* The window's clock: a cyan tick, as the pace bar draws its window, in the gap before this
-   block — or after the last. */
-.cell.clock::before,
-.cell.clock-end::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: var(--cyan);
-}
-.cell.clock::before {
-  left: -2px;
-}
-.cell.clock-end::after {
-  right: -2px;
 }
 .miss {
   font-size: var(--fs-label);

@@ -82,6 +82,19 @@ def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path
     assert summaries[unrouted]["environment_count"] == 0
 
 
+def test_summary_carries_the_routes_workspace_while_in_progress(tmp_path: Path) -> None:
+    """``ChunkSummary.workspace_id`` is the live route's workspace — what lets a surface attribute
+    a chunk to the binding it was claimed for; an unrouted chunk reads ``None``."""
+    hub = build_hub(tmp_path)
+    routed = _ingest(hub, ref="7")
+    unrouted = _ingest(hub, ref="8")
+    hub.client.post("/api/fleet/routes", json=_claim_body(routed))
+
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()["chunks"]}
+    assert summaries[routed]["workspace_id"] == "w1"
+    assert summaries[unrouted]["workspace_id"] is None
+
+
 # A graph whose single **runner** node authors `pass -> done` — landing the terminal
 # from a runner node stamps no `route.released` (only a hub node landing does, #140).
 _RUNNER_TERMINAL_YAML = """
@@ -103,7 +116,7 @@ nodes:
 
 
 def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
-    """A terminal chunk holds no claim, so its ``runner_id``/
+    """A terminal chunk holds no claim, so its ``runner_id``/``workspace_id``/
     ``environment_count`` read unrouted even while its route facts still show a route —
     proven through a real completion, not a hand-written transition row."""
     hub = build_hub(tmp_path)
@@ -137,6 +150,7 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     assert (summaries[running]["runner_id"], summaries[running]["environment_count"]) == ("r1", 2)
     assert summaries[finished]["status"] == "done"
     assert (summaries[finished]["runner_id"], summaries[finished]["environment_count"]) == (None, 0)
+    assert (summaries[running]["workspace_id"], summaries[finished]["workspace_id"]) == ("w1", None)
     assert summaries[stopped]["status"] == "stopped"
     assert (summaries[stopped]["runner_id"], summaries[stopped]["environment_count"]) == (None, 0)
 

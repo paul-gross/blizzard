@@ -3004,7 +3004,7 @@
         "type": "object"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
+        "description": "One row of the fleet chunk list \u2014 the derived status and current node. ``current_node_name`` is\nthe node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.\n``runner_id``/``workspace_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads\nunrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null.",
         "properties": {
           "awaiting_external_merge": {
             "default": false,
@@ -3202,6 +3202,17 @@
             },
             "title": "Work Refs",
             "type": "array"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
           }
         },
         "required": [
@@ -3217,6 +3228,7 @@
           "default_effort",
           "default_harnesses",
           "runner_id",
+          "workspace_id",
           "runner_name",
           "environment_count",
           "cost",

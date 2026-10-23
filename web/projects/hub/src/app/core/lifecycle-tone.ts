@@ -1,4 +1,4 @@
-import type { Tone } from 'fleet';
+import { type GraphLifecycle, openLookup, type Tone } from 'fleet';
 
 /**
  * A hub record's enabled/retired lifecycle → badge {@link Tone} — the one owner
@@ -12,3 +12,12 @@ import type { Tone } from 'fleet';
 export function lifecycleTone(retired: boolean): Tone {
   return retired ? 'stale' : 'spawning';
 }
+
+/**
+ * A graph version's wire `lifecycle` → badge {@link Tone}. `effective` and `retired` come from
+ * {@link lifecycleTone}; `superseded`, and a lifecycle this build does not know, reuse `idle`'s dim.
+ */
+export const graphLifecycleTone = openLookup<GraphLifecycle, Tone>(
+  { effective: lifecycleTone(false), superseded: 'idle', retired: lifecycleTone(true) },
+  () => 'idle',
+);

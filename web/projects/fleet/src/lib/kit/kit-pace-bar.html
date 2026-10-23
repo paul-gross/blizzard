@@ -1,25 +1,36 @@
-<div class="pace-lbl" data-testid="pace-bar-label">{{ label() }}</div>
-<div
-  class="bar util"
-  data-testid="pace-bar-utilization"
-  role="progressbar"
-  aria-valuemin="0"
-  aria-valuemax="100"
-  [attr.aria-valuenow]="clampedUtilization()"
-  [attr.aria-label]="label() + ' utilization'"
->
-  <div class="fill" [style.width.%]="clampedUtilization()"></div>
-</div>
-<div
-  class="bar elapsed"
-  data-testid="pace-bar-elapsed"
-  role="progressbar"
-  aria-valuemin="0"
-  aria-valuemax="100"
-  [attr.aria-valuenow]="clampedElapsed()"
-  [attr.aria-label]="label() + ' window elapsed'"
->
-  <div class="fill" [style.width.%]="clampedElapsed()"></div>
-</div>
-<!-- The utilization's reading in figures; the progressbar above already announces it. -->
-<div class="pace-val" data-testid="pace-bar-value" aria-hidden="true">{{ utilizationLabel() }}</div>
+@if (blocks()) {
+  <div class="window" data-testid="pace-bar-blocks" role="img" [attr.title]="hint()" [attr.aria-label]="ariaLabel()">
+    <span class="wl" data-testid="pace-bar-label">{{ label() }}</span>
+    <span class="cells" [class.dense]="cells().length > denseAfter">
+      @for (cell of cells(); track $index) {
+        <span class="cell" [class.on]="cell.on" [class.clock]="cell.clockBefore" [class.clock-end]="cell.clockAfter"></span>
+      }
+    </span>
+  </div>
+} @else {
+  <div class="pace-lbl" data-testid="pace-bar-label">{{ label() }}</div>
+  <div
+    class="bar util"
+    data-testid="pace-bar-utilization"
+    role="progressbar"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    [attr.aria-valuenow]="clampedUtilization()"
+    [attr.aria-label]="label() + ' utilization'"
+  >
+    <div class="fill" [style.width.%]="clampedUtilization()"></div>
+  </div>
+  <div
+    class="bar elapsed"
+    data-testid="pace-bar-elapsed"
+    role="progressbar"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    [attr.aria-valuenow]="clampedElapsed()"
+    [attr.aria-label]="label() + ' window elapsed'"
+  >
+    <div class="fill" [style.width.%]="clampedElapsed()"></div>
+  </div>
+  <!-- The utilization's reading in figures; the progressbar above already announces it. -->
+  <div class="pace-val" data-testid="pace-bar-value" aria-hidden="true">{{ utilizationLabel() }}</div>
+}

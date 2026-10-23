@@ -136,26 +136,14 @@ const pace = (slug: string, over: Partial<SubscriptionPace> = {}): SubscriptionP
 const withPaces = (id: string, paces: SubscriptionPace[]): HostCard => ({ ...card(id, []), subscriptionPaces: paces }) as HostCard;
 
 describe('subscriptionLines', () => {
-  it('draws each window as ten blocks filled to its usage, its clock a notch, ahead when usage passes the clock', () => {
+  it("carries each window's figures for the pace bar to draw", () => {
     const [line] = subscriptionLines(groups([{ card: withPaces('h1', [pace('claude')]), rows: [] }]));
 
     expect(line.state).toBe('paced');
-    const [five, seven] = line.windows;
-    expect(five.cells.map((c) => c.on)).toEqual([true, true, true, true, true, true, false, false, false, false]);
-    expect(five.cells.findIndex((c) => c.clockBefore)).toBe(7);
-    expect(five.ahead).toBe(false);
-    expect(five.hint).toBe('5h · 62% used · 70% of window');
-    expect(seven.cells.filter((c) => c.on)).toHaveLength(8);
-    expect(seven.ahead).toBe(true);
-  });
-
-  it('marks a window whose clock has run out after its last block', () => {
-    const [line] = subscriptionLines(
-      groups([{ card: withPaces('h1', [pace('c', { paceBars: [{ window: '5h', utilizationPct: 10, elapsedPct: 100 }] })]), rows: [] }]),
-    );
-
-    expect(line.windows[0].cells.some((c) => c.clockBefore)).toBe(false);
-    expect(line.windows[0].cells.at(-1)?.clockAfter).toBe(true);
+    expect(line.windows).toEqual([
+      { window: '5h', utilizationPct: 62, elapsedPct: 70 },
+      { window: '7d', utilizationPct: 80, elapsedPct: 41 },
+    ]);
   });
 
   it('lists each subscription once across hosts and host-less runners, reading the freshest sample', () => {

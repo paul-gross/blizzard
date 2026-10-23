@@ -10,10 +10,11 @@ function runner(id: string, over: Partial<RunnerRegistryView> = {}): RunnerRegis
   return { runner_id: id, runner_name: `${id}-name`, projects: [], ...over } as unknown as RunnerRegistryView;
 }
 
-function chunk(id: string, runnerId: string | null, project: { id?: string; slug?: string }, envs = 1): ChunkSummary {
+function chunk(id: string, runnerId: string | null, project: { id?: string; slug?: string }, envs = 1, workspaceId = 'ws-1'): ChunkSummary {
   return {
     chunk_id: id,
     runner_id: runnerId,
+    workspace_id: workspaceId,
     project_id: project.id ?? null,
     project_slug: project.slug ?? null,
     environment_count: envs,
@@ -52,12 +53,78 @@ describe('bindingLines', () => {
       chunk('ch_a', 'rA', { id: 'pj_default', slug: 'default' }),
       chunk('ch_b', 'rA', { id: 'pj_default' }),
       chunk('ch_c', 'rB', { id: 'pj_default' }),
-      chunk('ch_d', 'rA', { slug: 'glacier', id: 'pj_glacier' }),
+      chunk('ch_d', 'rA', { slug: 'glacier', id: 'pj_glacier' }, 1, 'ws-9'),
     ]);
 
     expect(lines).toEqual([
       { project: 'Default', workspaceId: 'ws-1', agents: 3, agentsInUse: 2, unreported: false },
       { project: 'Glacier', workspaceId: 'ws-9', agents: 1, agentsInUse: 1, unreported: true },
+    ]);
+  });
+
+  it("attributes each chunk to the binding of its own workspace when a runner binds one project in two", () => {
+    const rA = runner('rA', {
+      projects: SERVING,
+      bindings: [
+        { project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false },
+        { project: 'default', workspace_id: 'ws-2', agents: 2, workspace_unreported: false },
+      ],
+    });
+    const lines = bindingLines(rA, [
+      chunk('ch_a', 'rA', { id: 'pj_default' }, 1, 'ws-1'),
+      chunk('ch_b', 'rA', { id: 'pj_default' }, 1, 'ws-2'),
+      chunk('ch_c', 'rA', { id: 'pj_default' }, 1, 'ws-2'),
+      chunk('ch_d', 'rA', { id: 'pj_default' }, 1, 'ws-elsewhere'),
+    ]);
+
+    expect(lines.map((line) => [line.workspaceId, line.agentsInUse])).toEqual([
+      ['ws-1', 1],
+      ['ws-2', 2],
+    ]);
+  });
+
+  it('counts a chunk whose workspace matches no binding toward none, and its environments toward no workspace', () => {
+    const rA = runner('rA', {
+      host_id: 'h1',
+      projects: SERVING,
+      bindings: [
+        { project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false },
+        { project: 'default', workspace_id: 'ws-2', agents: 2, workspace_unreported: false },
+      ],
+    });
+    const stray = chunk('ch_x', 'rA', { id: 'pj_default' }, 2, 'ws-elsewhere');
+
+    expect(bindingLines(rA, [stray]).map((line) => line.agentsInUse)).toEqual([0, 0]);
+    const [card] = foldHostCards([host('h1', { workspaces: [{ workspace_id: 'ws-1' }, { workspace_id: 'ws-2' }] })], [rA], null, [stray], NOW);
+    expect(card.workspaces.map((ws) => ws.inUse)).toEqual([0, 0]);
+    expect([...card.heldChunks.values()].flat()).toEqual([]);
+  });
+
+  it("splits a two-workspace runner's environments and held chunks per workspace on the host card", () => {
+    const rA = runner('rA', {
+      host_id: 'h1',
+      runner_name: 'rA',
+      projects: SERVING,
+      bindings: [
+        { project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false },
+        { project: 'default', workspace_id: 'ws-2', agents: 2, workspace_unreported: false },
+      ],
+    });
+    const [card] = foldHostCards(
+      [host('h1', { workspaces: [{ workspace_id: 'ws-1' }, { workspace_id: 'ws-2' }] })],
+      [rA],
+      null,
+      [chunk('ch_a', 'rA', { id: 'pj_default' }, 2, 'ws-1'), chunk('ch_b', 'rA', { id: 'pj_default' }, 3, 'ws-2')],
+      NOW,
+    );
+
+    expect(card.workspaces.map((ws) => [ws.workspaceId, ws.inUse])).toEqual([
+      ['ws-1', 2],
+      ['ws-2', 3],
+    ]);
+    expect([...card.heldChunks].map(([id, held]) => [id, held.map((h) => h.chunkId)])).toEqual([
+      ['ws-1', ['ch_a']],
+      ['ws-2', ['ch_b']],
     ]);
   });
 

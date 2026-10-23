@@ -2,7 +2,7 @@ import type { ChunkCountsView, ChunkStatus, ChunkSummary } from '../api/hub';
 import type { Tone } from '../kit/tone';
 import { openLookup } from './open-lookup';
 
-/** The board's lanes, left → right: the backlog, the ready queue, then dispatch → done. */
+/** The board's lanes, left → right: the backlog, the ready queue, the two lanes waiting on a human, then running → done. */
 export interface Lane {
   readonly key: string;
   /** The board column's engraved heading. */

@@ -6,6 +6,7 @@
   data-testid="list-row"
   [attr.data-status]="card().status"
   [attr.data-chunk]="card().chunkId"
+  [style.--status-color]="statusColor()"
   [class.selected]="selected()"
   [class.tinted]="projectTint() !== null"
   [style.--project-tint]="projectTint()"
@@ -51,7 +52,7 @@
       </button>
     }
     @if (finishedAt(); as finished) {
-      <span class="finished" data-testid="list-row-finished" [style.color]="finishedColor()">
+      <span class="finished" data-testid="list-row-finished" [style.color]="statusColor()">
         <app-lane-icon class="finished-icon" lane="done" [status]="card().status" />
         {{ finishedWord(card().status) }}
         <fleet-when class="done-at" [iso]="finished" />

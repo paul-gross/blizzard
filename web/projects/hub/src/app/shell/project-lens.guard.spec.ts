@@ -9,8 +9,8 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestCli
 
 import { PAGE_RELOAD, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
-import { ProjectLens } from '../core/project-lens';
-import { PROJECT_SEGMENT_PARAM, projectLensGuard } from './project-lens.guard';
+import { LENSED_ROUTE_PATH, ProjectLens } from '../core/project-lens';
+import { projectLensGuard } from './project-lens.guard';
 
 @Component({ selector: 'app-test-lensed-view', template: '' })
 class TestLensedView {}
@@ -47,7 +47,7 @@ describe('the project lens guard', () => {
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([
           {
-            path: `p/:${PROJECT_SEGMENT_PARAM}`,
+            path: LENSED_ROUTE_PATH,
             canActivate: [projectLensGuard],
             children: [{ path: '**', component: TestLensedView }],
           },

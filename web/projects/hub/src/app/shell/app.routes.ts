@@ -1,7 +1,8 @@
 import type { Routes } from '@angular/router';
 import { matchesMobileViewport } from 'fleet/shell';
 import { enterInvitedTenant } from '../core/auth/invite-accepted';
-import { PROJECT_SEGMENT_PARAM, projectLensGuard } from './project-lens.guard';
+import { LENSED_ROUTE_PATH } from '../core/project-lens';
+import { projectLensGuard } from './project-lens.guard';
 
 /**
  * The board's views, mounted twice by {@link routes}: at the root, the lens on All, and under `p/:projectSlug`, the
@@ -74,7 +75,7 @@ export const VIEW_ROUTES: Routes = [
  * whose guard settles the segment on the project's current slug, and the public pages, which carry no lens.
  */
 export const routes: Routes = [
-  { path: `p/:${PROJECT_SEGMENT_PARAM}`, canActivate: [projectLensGuard], children: VIEW_ROUTES },
+  { path: LENSED_ROUTE_PATH, canActivate: [projectLensGuard], children: VIEW_ROUTES },
   // The login surface — public, reached directly or via the 401
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.

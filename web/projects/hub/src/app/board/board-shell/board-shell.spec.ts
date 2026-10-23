@@ -27,7 +27,7 @@ const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 's
   project_slug: null,
   promotable: false,
   runner_id: null,
-  runner_name: null,
+  runner_name: null, workspace_id: null,
   terminal: false,
   work_refs: [],
   ...overrides,

@@ -163,7 +163,7 @@ class LandedRepoView(WireModel):
 class ChunkSummary(WireModel):
     """One row of the fleet chunk list — the derived status and current node. ``current_node_name`` is
     the node's human graph name beside the raw ``nd_`` ULID, null when unresolvable.
-    ``runner_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
+    ``runner_id``/``workspace_id``/``environment_count`` are **in-progress-only**: a terminal chunk reads
     unrouted even while its route facts stand. ``completed_at`` is the terminal instant, else null."""
 
     chunk_id: str
@@ -183,6 +183,8 @@ class ChunkSummary(WireModel):
     # The chunk's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
     runner_id: str | None = None
+    # The workspace the chunk's live route claimed in — the routed binding's workspace; `None` when unrouted.
+    workspace_id: str | None = None
     # The routed runner's name — not unique, never a key; `None` when the registry holds no such runner.
     runner_name: str | None = None
     # The count of environments the chunk's live route holds — 0 when unrouted; a grouped

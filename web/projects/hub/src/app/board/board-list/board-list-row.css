@@ -12,7 +12,7 @@
   /* The left inset clears room for an armed row's reorder grip (`board-list.css`), on every row
      so the columns line up whether or not a row is armed. */
   padding: 7px 10px 7px 18px;
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--status-color);
   border-bottom: 1px solid var(--line);
   --bg-resting: var(--surface-resting);
   --bg-hover: var(--surface-hover);
@@ -55,16 +55,6 @@
   border-left-color: var(--cyan);
   background: var(--bg-selected);
 }
-.row[data-status='done'],
-.row[data-status='stopped'] {
-  border-left-color: var(--green);
-}
-.row[data-status='needs_human'] {
-  border-left-color: var(--red);
-}
-.row[data-status='not_ready'] {
-  border-left-color: var(--label-dim);
-}
 
 /* The lane icon, centred in its fixed track on the row's first line. */
 .lane {
@@ -82,9 +72,6 @@
   color: var(--amber);
   font-size: var(--fs-xs);
   letter-spacing: 0.04em;
-}
-.row[data-status='needs_human'] .id {
-  color: var(--red);
 }
 /* A work item: its work-ref label over its title. */
 .item {

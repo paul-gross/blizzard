@@ -5,10 +5,10 @@ import { KitPaceBar } from './kit-pace-bar';
 const meta: Meta<KitPaceBar> = {
   title: 'Kit/Pace bar',
   component: KitPaceBar,
-  args: { label: '5h', utilizationPct: 32, elapsedPct: 55 },
+  args: { label: '5h', utilizationPct: 32, elapsedPct: 55, variant: 'bars' },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-pace-bar [label]="label" [utilizationPct]="utilizationPct" [elapsedPct]="elapsedPct" />`,
+    template: `<div style="width: 280px"><fleet-kit-pace-bar [label]="label" [utilizationPct]="utilizationPct" [elapsedPct]="elapsedPct" [variant]="variant" /></div>`,
   }),
 };
 export default meta;
@@ -32,3 +32,12 @@ export const OutOfRangeClamped: Story = {
 export const FractionalUtilization: Story = {
   args: { utilizationPct: 66.6, elapsedPct: 50 },
 };
+
+/** The compact block gauge: usage filled, the window's clock a notch. */
+export const Blocks: Story = { args: { variant: 'blocks' } };
+/** Usage past the clock turns the blocks red. */
+export const BlocksAheadOfPace: Story = { args: { variant: 'blocks', utilizationPct: 81, elapsedPct: 40 } };
+export const BlocksEmpty: Story = { args: { variant: 'blocks', utilizationPct: 0, elapsedPct: 0 } };
+/** A window fully spent, its clock notched past the last block. */
+export const BlocksSpent: Story = { args: { variant: 'blocks', utilizationPct: 100, elapsedPct: 100 } };
+export const BlocksOutOfRangeClamped: Story = { args: { variant: 'blocks', utilizationPct: 140, elapsedPct: -20 } };

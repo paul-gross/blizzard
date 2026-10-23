@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
 import { SubscriptionBlocks } from './subscription-blocks';
-import { paceLine, type SubscriptionLine } from './subscription-blocks.model';
+import { type PaceLine, type SubscriptionLine } from './subscription-blocks.model';
+
+const paceLine = (window: string, utilizationPct: number, elapsedPct: number): PaceLine => ({ window, utilizationPct, elapsedPct });
 
 const PACED: SubscriptionLine = {
   slug: 'claude-max',

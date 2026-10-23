@@ -8,22 +8,15 @@
   @switch (line().state) {
     @case ('paced') {
       @for (pace of line().windows; track pace.window) {
-        <div
-          class="window"
+        <fleet-kit-pace-bar
           data-testid="subscription-blocks-window"
-          role="img"
-          [class.ahead]="pace.ahead"
+          variant="blocks"
           [attr.data-window]="pace.window"
-          [attr.title]="pace.hint"
-          [attr.aria-label]="line().name + ' ' + pace.hint"
-        >
-          <span class="wl">{{ pace.window }}</span>
-          <span class="cells" [class.dense]="pace.cells.length > denseAfter">
-            @for (cell of pace.cells; track $index) {
-              <span class="cell" [class.on]="cell.on" [class.clock]="cell.clockBefore" [class.clock-end]="cell.clockAfter"></span>
-            }
-          </span>
-        </div>
+          [label]="pace.window"
+          [utilizationPct]="pace.utilizationPct"
+          [elapsedPct]="pace.elapsedPct"
+          [subject]="line().name"
+        />
       }
     }
     @case ('lapsed') {
