@@ -29,6 +29,7 @@ from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, Clai
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.escalations import ParkedEscalation
 from blizzard.runner.leases.operator_requests import IReadRequeueRepository
+from blizzard.runner.lifecycle.held_chunk import offer_between_steps
 from blizzard.runner.lifecycle.model import (
     ClaimVerdict,
     InterruptedClaimMove,
@@ -436,6 +437,10 @@ class InterruptedClaims:
                 return  # hub unreachable — the binding is durable; retry next tick
             self.ctx.chunk_views.invalidate(chunk_id)  # named alongside the other writes
             self.ctx.stores.tokens.set_route_token(chunk_id, token=rekeyed, at=self.ctx.clock.now())
+        if view.latest_epoch is not None and offer_between_steps(
+            self.ctx, chunk_id, epoch=view.latest_epoch, via="adopt"
+        ):
+            return
         envelope = self._envelope(chunk_id, "adopted", view.latest_epoch)
         if envelope is None:
             return

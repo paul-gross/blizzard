@@ -104,7 +104,11 @@ none comes, the floor opens one hour after the expected reset; a window sampled 
 `blizzard runner clear-floor` opens it by hand ([control-verbs.md](./control-verbs.md)).
 
 The limited lease is not failed and consumes no retry: it is parked in place, exactly like a per-chunk pause leaves a
-chunk, and resumes on its own on the first tick its floor opens.
+chunk, and resumes on its own on the first tick its floor opens. With `on_usage_limit = "release"` in the runner's
+`[runner.throttle]` table ([Throttles](#throttles) below), a parked lease whose floor still holds is let go instead: the
+half-done step is abandoned, its spend kept on the runner's books, and the chunk goes back in the queue for whichever
+runner's floor admits it, which starts the step over, with no retry used. A chunk an operator paused, or one waiting on
+an answer, is never let go this way.
 
 ## Throttles
 
@@ -114,6 +118,10 @@ no `[runner.throttle]` is held back by its subscription's floor alone, as before
 starts, so an edit takes effect at the host's next restart.
 
 ```toml
+[runner.throttle]
+on_decline = "release"   # "hold" (the default) keeps a declined chunk waiting in its environment
+on_usage_limit = "hold"  # "release" lets go of a lease a usage limit parks mid-step
+
 [runner.throttle.pace]
 window = "7d"        # a window label the subscription's samples report; its longest when absent
 lead_pct = 5         # points spend may run ahead of the window's elapsed share
@@ -157,16 +165,20 @@ at the next fresh sample that carries it; it never falls back to an older sample
 Before every start the runner asks, in order, the subscription floor, pace, utilization, budget, and schedule, and
 starts only when each says yes. The gate is asked before a claim and before each step, never inside one: a step already
 begun runs to its end, and a continuation of a parked session answers to the floor alone. A chunk whose next step is
-declined waits between steps in its environment, with no retry used, and enters the step once the throttles admit it.
+declined waits between steps in its environment, with no retry used, and enters the step once the throttles admit it. With
+`on_decline = "release"` it goes back in the queue instead, cold, with no retry used: it waits `ready` at that step for
+whichever runner's throttles admit it, this one included once they do. A runner whose brake is engaged, or a chunk an
+operator paused, always waits in place. If the hub refuses the release, or is an older one without it, the runner keeps
+the chunk and waits as with `"hold"`.
 
-An invalid throttle halts that runner alone and names the key, for example `throttle.pace.taper[2].from_pct`;
-`blizzard runner host --check` reports it with the rest. A `pace` or `utilization` table on a runner that spends no
-sampled subscription is invalid for the same reason.
+An invalid throttle halts that runner alone and names the key, for example `throttle.pace.taper[2].from_pct`, or
+`throttle.on_decline` set to anything but `"hold"` or `"release"`; `blizzard runner host --check` reports it with the
+rest. A `pace` or `utilization` table on a runner that spends no sampled subscription is invalid for the same reason.
 
-The runner's status shows each configured lever with its setting, answer, reading, and `until`
-([control-verbs.md](./control-verbs.md)), and the runner panel shows the same. The hub learns only which throttle is
-declining and its reading, never a setting: the board's runner row reads `declining — pace: <reading>`, and
-`blizzard hub status` prints `[declining: pace — <reading>, until <time>Z]`.
+The runner's status shows each configured lever with its setting, answer, reading, and `until`, and its `on_decline` and
+`on_usage_limit` choices ([control-verbs.md](./control-verbs.md)), and the runner panel shows the same. The hub learns
+only which throttle is declining and its reading, never a setting: the board's runner row reads
+`declining — pace: <reading>`, and `blizzard hub status` prints `[declining: pace — <reading>, until <time>Z]`.
 
 ## Partial totals
 

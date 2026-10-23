@@ -36,6 +36,7 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "register_runner": ("POST", "/api/fleet/runners"),
     "fetch_runner_paused": ("GET", "/api/fleet/runners/{runner_id}"),
     "rekey_route_token": ("POST", "/api/fleet/chunks/{chunk_id}/route-token"),
+    "release": ("POST", "/api/fleet/chunks/{chunk_id}/release"),
 }
 
 #: One table per runner setup port and the host's own client, rows verbatim from the same reference binding.

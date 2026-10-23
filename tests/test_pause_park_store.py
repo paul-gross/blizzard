@@ -262,3 +262,15 @@ def test_open_pause_parks_reads_one_row_per_lease_whatever_the_repark_depth(tmp_
     assert set(shallow) == set(deep) == {"lease_a", "lease_b"}
     assert shallow_rows == deep_rows == 2
     assert deep == {"lease_a": _NOW + timedelta(minutes=7), "lease_b": _NOW + timedelta(minutes=7)}
+
+
+def test_open_pause_parks_reads_each_parks_cause(tmp_path):  # type: ignore[no-untyped-def]
+    """A usage-limited park names its cause; an operator-pause park, and a re-park's newest park, name their own."""
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, cause="usage-limit")
+    store.record_pause_park(lease_id="lease_2", chunk_id="ch_2", parked_at=_NOW)
+    store.record_pause_park(lease_id="lease_2", chunk_id="ch_2", parked_at=_NOW + timedelta(seconds=1), cause="x")
+
+    parks = store.open_pause_parks()
+
+    assert (parks["lease_1"].cause, parks["lease_2"].cause) == ("usage-limit", "x")

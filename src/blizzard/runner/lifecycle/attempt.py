@@ -37,6 +37,7 @@ from blizzard.runner.lifecycle.session import SkippedHarness
 from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
 from blizzard.runner.lifecycle.takeover import EscalationCommands, resolve_resume_command
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
+from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE
 from blizzard.runner.transcripts.transcript_pump import PUMP_LEASE_MAX_SECONDS, TranscriptPump
 
 _log = get_logger("blizzard.runner.loop")
@@ -450,7 +451,9 @@ class Attempt:
         once its floor opens on the mark the caller wrote ahead of this call."""
         lease = self.lease
         now = self.ctx.clock.now()
-        self.ctx.stores.pause.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
+        self.ctx.stores.pause.record_pause_park(
+            lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now, cause=USAGE_LIMIT_PARK_CAUSE
+        )
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         if self.ctx.events is not None:
             # Same "dormant" cause `park_paused` publishes — this write flips the same

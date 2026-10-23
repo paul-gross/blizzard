@@ -24,6 +24,7 @@ from blizzard.runner.events.publisher import IRunnerEventPublisher
 
 __all__ = [
     "BRAKE_TRANSITIONS",
+    "USAGE_LIMIT_PARK_CAUSE",
     "BrakeState",
     "BrakeVerb",
     "BrakeVerdict",
@@ -188,6 +189,10 @@ def needs_pause_park(lease_id: str, pause_parked: Container[str]) -> bool:
     return lease_id not in pause_parked
 
 
+#: The :attr:`PausePark.cause` of a park a usage-limited generation wrote.
+USAGE_LIMIT_PARK_CAUSE = "usage-limit"
+
+
 def spend_ceiling_reason(*, cap: float, window_hours: float, spend: SpendFigure) -> str:
     """The spend-ceiling engagement's durable reason, its spend rendered as the one figure."""
     return f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h (spend {spend.rendered()})"
@@ -204,6 +209,8 @@ class PausePark:
     parked_at: datetime
     #: The elicitation record this park's interrupt signalled; unnamed-and-standing means a usage-limit judge park.
     interrupted_elicitation_id: int | None
+    #: Why the lease parked — :data:`USAGE_LIMIT_PARK_CAUSE`, or ``None`` for an operator pause.
+    cause: str | None = None
 
 
 class IReadPauseRepository(Protocol):
@@ -280,12 +287,18 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         ...
 
     def record_pause_park(
-        self, *, lease_id: str, chunk_id: str, parked_at: datetime, interrupted_elicitation_id: int | None = None
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        parked_at: datetime,
+        interrupted_elicitation_id: int | None = None,
+        cause: str | None = None,
     ) -> None:
         """Park a lease on an operator pause — dormant, its env bindings held.
-        ``interrupted_elicitation_id`` names the in-flight elicitation the park's own
-        interrupt signalled, in the same insert (``bzh:facts-not-status``); ``None`` when it
-        signalled none."""
+        ``interrupted_elicitation_id`` names the in-flight elicitation the park's own interrupt signalled, in the same
+        insert (``bzh:facts-not-status``); ``None`` when it signalled none. ``cause`` is why it parked, ``None`` for an
+        operator pause."""
         ...
 
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:

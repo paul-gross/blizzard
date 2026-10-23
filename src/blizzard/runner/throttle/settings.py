@@ -6,6 +6,7 @@ a store. A lever whose record is ``None`` does not exist: it is not asked and sh
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from blizzard.foundation.roles import domain_model
 
@@ -15,6 +16,7 @@ __all__ = [
     "DEFAULT_PACE_LEAD_PCT",
     "MINUTES_PER_DAY",
     "BudgetSettings",
+    "HoldOrRelease",
     "PaceSettings",
     "ScheduleSettings",
     "Span",
@@ -93,12 +95,22 @@ class ScheduleSettings:
     spans: tuple[Span, ...] = ()
 
 
+class HoldOrRelease(StrEnum):
+    """What a runner does with a chunk it holds when its gate says no: keep the route and wait, or give it back."""
+
+    HOLD = "hold"
+    RELEASE = "release"
+
+
 @domain_model
 @dataclass(frozen=True)
 class ThrottleSettings:
-    """The levers a runner configures, each ``None`` when absent."""
+    """The levers a runner configures, each ``None`` when absent, and what it does with a chunk its gate parks:
+    ``on_decline`` between steps, ``on_usage_limit`` once a usage limit parks a step mid-way."""
 
     pace: PaceSettings | None = None
     utilization: UtilizationSettings | None = None
     budget: BudgetSettings | None = None
     schedule: ScheduleSettings | None = None
+    on_decline: HoldOrRelease = HoldOrRelease.HOLD
+    on_usage_limit: HoldOrRelease = HoldOrRelease.HOLD

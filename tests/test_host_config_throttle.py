@@ -3,13 +3,15 @@ name their key, and that rendering a runner back out keeps its levers."""
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, _throttle_toml
 from blizzard.runner.throttle.settings import (
     BudgetSettings,
+    HoldOrRelease,
     PaceSettings,
     ScheduleSettings,
     Span,
@@ -52,6 +54,12 @@ _SETTINGS = ThrottleSettings(
     utilization=UtilizationSettings(95.0, ("5h", "7d")),
     budget=BudgetSettings(40.0, 12.0),
     schedule=ScheduleSettings((0, 4), (Span(19 * 60, 8 * 60), Span(12 * 60 + 30, 13 * 60))),
+)
+
+
+_CHOICES = '[runner.throttle]\non_decline = "release"\non_usage_limit = "release"\n'
+_SETTINGS_RELEASING = dataclasses.replace(
+    _SETTINGS, on_decline=HoldOrRelease.RELEASE, on_usage_limit=HoldOrRelease.RELEASE
 )
 
 
@@ -138,6 +146,9 @@ def test_rendering_a_runner_and_loading_it_keeps_its_levers(tmp_path: Path) -> N
         ("[runner.throttle.schedule]\nhours = ['25:00-26:00']", "throttle.schedule.hours"),
         ("[runner.throttle.schedule]\nhours = ['7am-9am']", "throttle.schedule.hours"),
         ("[runner.throttle.schedule]\nhours = ['08:00-08:00']", "throttle.schedule.hours"),
+        ("[runner.throttle]\non_decline = 'drop'", "throttle.on_decline"),
+        ("[runner.throttle]\non_decline = true", "throttle.on_decline"),
+        ("[runner.throttle]\non_usage_limit = 'RELEASE'", "throttle.on_usage_limit"),
     ],
 )
 def test_a_mistake_halts_the_runner_and_names_its_key(tmp_path: Path, runner: str, key: str) -> None:
@@ -203,3 +214,47 @@ def test_a_budget_at_or_above_the_ceiling_over_the_same_hours_halts_the_runner(
     assert isinstance(projection, HaltedRunner) is refused
     if refused:
         assert "throttle.budget.usd" in "\n".join(projection.errors)  # type: ignore[union-attr]
+
+
+def test_neither_choice_set_holds_on_both_and_configures_nothing(tmp_path: Path) -> None:
+    built = _projected(tmp_path, 'subscription = "plan"\n[runner.throttle]\non_decline = "hold"')
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle is None
+
+
+def test_each_choice_parses_beside_the_levers(tmp_path: Path) -> None:
+    built = _projected(tmp_path, _EVERY_LEVER.replace("[runner.throttle.pace]", _CHOICES + "[runner.throttle.pace]"))
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == _SETTINGS_RELEASING
+
+
+def test_a_choice_alone_configures_the_table(tmp_path: Path) -> None:
+    built = _projected(tmp_path, '[runner.throttle]\non_usage_limit = "release"')
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == ThrottleSettings(on_usage_limit=HoldOrRelease.RELEASE)
+
+
+def test_a_release_on_decline_alone_round_trips_through_its_table() -> None:
+    settings = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
+    assert _throttle_toml(settings) == '\n[runner.throttle]\non_decline = "release"\n'
+
+
+def test_rendering_a_runner_and_loading_it_keeps_its_choices(tmp_path: Path) -> None:
+    runner = _EVERY_LEVER.replace("[runner.throttle.pace]", _CHOICES + "[runner.throttle.pace]")
+    write_minimal_host(tmp_path / "a", top=_SUBSCRIPTION.format(provider="anthropic"), runner=runner)
+    rendered = load_host_config(tmp_path / "a").to_toml()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "blizzard-host.toml").write_text(rendered)
+    (built,) = load_host_config(tmp_path / "b").projections(_TOKEN)
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == _SETTINGS_RELEASING
+
+
+def test_a_choice_alone_survives_rendering(tmp_path: Path) -> None:
+    write_minimal_host(tmp_path / "a", top="", runner='[runner.throttle]\non_decline = "release"')
+    rendered = load_host_config(tmp_path / "a").to_toml()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "blizzard-host.toml").write_text(rendered)
+    (built,) = load_host_config(tmp_path / "b").projections(_TOKEN)
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == ThrottleSettings(on_decline=HoldOrRelease.RELEASE)

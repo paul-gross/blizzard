@@ -173,6 +173,7 @@ _HUB_CLIENT: dict[str, Callable[[HttpHubClient], object]] = {
     "fetch_runner_paused": lambda c: c.fetch_runner_paused("rn_1"),
     "identity": lambda c: c.identity(),
     "rekey_route_token": lambda c: c.rekey_route_token("ch_1"),
+    "release": lambda c: c.release("ch_1", epoch=1, route_token=None, reason="throttled"),
 }
 _ADMIN: dict[str, Callable[[HttpHubRunnerAdmin], object]] = {
     "tenants": lambda a: a.tenants(),

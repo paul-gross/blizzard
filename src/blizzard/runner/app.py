@@ -775,6 +775,7 @@ def _wire_runner(
                 subscriptions=host.subscriptions,
             )
         ),
+        throttle=config.throttle,
     )
     takeover = TakeoverService(
         clock,

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
@@ -62,7 +62,7 @@ def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
 
 def _release(  # type: ignore[no-untyped-def]
     hub, chunk_id: str, *, epoch: int = 1, route_token: str | None, runner_id: str = "r1", reason: str = "throttled"
-) -> httpx.Response:
+) -> httpx2.Response:
     # The harness authenticates as the body's `runner_id`; the hub itself never reads it.
     body: dict[str, object] = {"epoch": epoch, "reason": reason, "runner_id": runner_id}
     if route_token is not None:

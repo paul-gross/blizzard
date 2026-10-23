@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,7 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner_schema
+from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings, UtilizationSettings
 from blizzard.tools.invariants import Invariants
 from tests.config_inputs import init_host, load_host_config, load_hub_config
 from tests.crash.support import (
@@ -82,7 +83,7 @@ from tests.crash.support import (
 )
 from tests.crash_points import discover_crash_points
 from tests.fleet_world import BUILD_BRANCH, scripted_build, world_repos
-from tests.host_files import load_runner_config
+from tests.host_files import load_runner_config, with_runner
 from tests.otlp_sink import OtlpSink, otlp_sink
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -122,6 +123,7 @@ _DEDICATED_PREFIXES = (
     "egress.",
     "teardown.",
     "ingest.",
+    "release.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -171,6 +173,9 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 # `ingest.*` fires inside `blizzard runner ingest`, between its store copy, its configuration edits and its removal
 # from the source.
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
+# `release.*` fires once the hub accepts a gate-parked chunk back: between steps, on a runner set to release on a
+# decline, and from a usage-limited park, on a runner set to release on a usage limit.
+_RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -264,6 +269,10 @@ _TEARDOWN_CI_SUBSET = ("teardown.after-batch.before-next",)
 # The ingest CI subset: the later window, where the source has lost its token but still holds the runner's rows.
 _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
+# The release CI subset: the between-steps window, whose recovery runs through InterruptedClaims; the full sweep
+# runs the usage-limited window too.
+_RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -297,6 +306,7 @@ _HOST_LANE_SWEEP = _select(_HOST_LANE_POINTS, _HOST_LANE_CI_SUBSET)
 _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 _INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
+_RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -326,6 +336,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_EGRESS_POINTS, _EGRESS_CI_SUBSET))
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
         | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
+        | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -2390,6 +2401,212 @@ def test_kill9_at_usage_limit_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         hub.close()
         if runner is not None:
             runner.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --- Release of a gate-parked chunk — the release.* crash points ---
+
+#: The utilization line the between-steps scenario's runner works under, and a reading on each side of it.
+_RELEASE_LINE_PCT = 95.0
+_UNDER_LINE_PCT = 40.0
+_OVER_LINE_PCT = 96.0
+
+
+_JUDGEMENT_SCRIPT_PASS = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
+
+
+def _wait_then_build_script(landed_file: str, go_marker: Path) -> str:
+    """:func:`build_script`, held until ``go_marker`` exists — so a sample crossing the line lands while the step is
+    in flight, and the gate declines the node after it, never this one."""
+    return (
+        f"import pathlib, time\nwhile not pathlib.Path({str(go_marker)!r}).exists():\n    time.sleep(0.2)\n"
+    ) + build_script(landed_file)
+
+
+def _usage_limited_once_build_script(landed_file: str, marker: Path) -> str:
+    """Usage-limited on its first call, before touching the repo; :func:`build_script` on every later one — so the
+    chunk a usage limit gave back is built from its step's start once it is claimed again."""
+    first = (
+        "import pathlib\n"
+        f"_marker = pathlib.Path({str(marker)!r})\n"
+        "if not _marker.exists():\n"
+        "    _marker.write_text('limited once\\n')\n"
+        "    usage_limited()\n"
+        "else:\n"
+    )
+    return first + "".join(f"    {line}\n" for line in build_script(landed_file).splitlines())
+
+
+def _release_graph_yaml(build_prompt: str, *, review: bool) -> str:
+    """A ``build -> [review ->] deliver`` graph; ``review`` gives the step the gate declines a node to enter."""
+    import yaml
+
+    judged = {
+        "prompt": _JUDGEMENT_SCRIPT_PASS,
+        "choices": {"pass": {"description": "Committed and green.", "to": "review" if review else "deliver"}},
+    }
+    nodes: dict[str, object] = {
+        "build": {
+            "executor": "runner",
+            "prompt": build_prompt,
+            "judgement": judged,
+            "retries": {"max": 1, "exhausted": "escalate"},
+        }
+    }
+    if review:
+        nodes["review"] = {
+            "executor": "runner",
+            "prompt": "print('reviewed')\n",
+            "judgement": {
+                "prompt": _JUDGEMENT_SCRIPT_PASS,
+                "choices": {"pass": {"description": "Ready to land.", "to": "deliver"}},
+            },
+            "retries": {"max": 1, "exhausted": "escalate"},
+        }
+    nodes["deliver"] = {
+        "executor": "hub",
+        "run": [{"command": LAND_STEP}],
+        "judgement": {
+            "choices": {
+                "success": {"description": "Delivered.", "to": "done"},
+                "failure": {"description": "Failed to deliver.", "to": "build"},
+            }
+        },
+    }
+    return yaml.safe_dump({"name": "default-delivery", "entry": "build", "nodes": nodes}, sort_keys=False)
+
+
+def _ingest_release_chunk(hub: httpx2.Client, forge: httpx2.Client, title: str, graph: str) -> str:
+    minted = hub.post("/api/graphs", json={"definition_yaml": graph})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "a release crash chunk"})
+    assert issue.status_code == 201, issue.text
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
+
+
+def _utilization_sample(runner_dir: Path, utilization_pct: float) -> None:
+    """A successful sample of the runner's subscription taken now, its one window at ``utilization_pct``."""
+    config = load_runner_config(runner_dir)
+    window = {
+        "window": "five_hour",
+        "utilization_pct": utilization_pct,
+        "resets_at": (datetime.now(UTC) + timedelta(hours=3)).isoformat(),
+        "window_seconds": 5 * 3600,
+    }
+    engine = create_engine_from_url(config.db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                insert(runner_schema.external_usage_samples).values(
+                    slug=config.subscriptions[0].slug,
+                    sampled_at=datetime.now(UTC),
+                    payload=json.dumps({"windows": [window]}),
+                )
+            )
+    finally:
+        engine.dispose()
+
+
+def _holds_environments(runner_dir: Path, chunk_id: str) -> bool:
+    store, engine = _runner_store(runner_dir)
+    try:
+        return chunk_id in store.live_tenure_chunk_ids()
+    finally:
+        engine.dispose()
+
+
+def _spawn_usage_facts(runner_dir: Path, lease_id: str) -> int:
+    with _audit_connection(runner_dir) as conn:
+        rows = conn.execute(
+            select(runner_schema.usage_facts.c.id)
+            .where(runner_schema.usage_facts.c.lease_id == lease_id)
+            .where(runner_schema.usage_facts.c.kind.in_(("spawn", "resume")))
+        ).all()
+    return len(rows)
+
+
+@pytest.mark.parametrize("point", _RELEASE_SWEEP)
+def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` after the hub took a gate-parked chunk back, before the runner let go of it, converges: no lease,
+    park, or environment kept that the hub no longer routes here, and the chunk lands once, cold, when its gate reopens."""
+    usage_limited = point.startswith("release.usage-limited")
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    marker = tmp_path / "release-marker"
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        if usage_limited:
+            graph = _release_graph_yaml(_usage_limited_once_build_script(landed_file, marker), review=False)
+            throttle = ThrottleSettings(on_usage_limit=HoldOrRelease.RELEASE)
+        else:
+            graph = _release_graph_yaml(_wait_then_build_script(landed_file, marker), review=True)
+            throttle = ThrottleSettings(
+                utilization=UtilizationSettings(below_pct=_RELEASE_LINE_PCT), on_decline=HoldOrRelease.RELEASE
+            )
+        chunk_id = _ingest_release_chunk(hub, crash_env.forge, landed_file, graph)
+        config = write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        with_runner(config, throttle=throttle)
+        _utilization_sample(runner_dir, _UNDER_LINE_PCT)
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        lease_id, _epoch, _session, _pid = _lease_for_chunk(runner_dir, chunk_id)
+        if not usage_limited:
+            # The line is crossed while the first step runs; that step finishes, and its next node is declined.
+            _utilization_sample(runner_dir, _OVER_LINE_PCT)
+            marker.write_text("go\n")
+
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "the hub never took the chunk back"
+        assert _holds_environments(runner_dir, chunk_id), "the environments were let go before the crash point"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+
+        # Restart UNARMED, the gate still declining: a usage-limited lease is abandoned at once, and an interrupted
+        # claim's binding is held unclaimed until the gate admits again; either way the chunk stays ready.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        await_host(runner_port, runner_proc)
+        if usage_limited:
+            assert _wait_for_closure(runner_dir, lease_id) == "released"
+            deadline = time.monotonic() + 30.0
+            while time.monotonic() < deadline and _holds_environments(runner_dir, chunk_id):
+                time.sleep(0.25)
+            assert not _holds_environments(runner_dir, chunk_id), f"recovery past {point} kept the environments"
+            assert _spawn_usage_facts(runner_dir, lease_id) == 1, "the half-done step's usage was not booked once"
+        else:
+            time.sleep(5.0)
+            assert _closure_reason(runner_dir, lease_id) is not None, "the finished step's lease never closed"
+        assert _open_pause_parks(runner_dir) == set(), "a park outlived the release"
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "the declining runner claimed it back"
+        assert len(_leases_for_chunk(runner_dir, chunk_id)) == 1, "a node was entered while the gate declined"
+        _assert_invariants(runner_dir, hub_dir, when=f"after recovery past {point}", after_recovery=True)
+
+        # The gate reopens: the chunk is claimed cold and lands once.
+        if usage_limited:
+            _clear_subscription_floor(runner_dir, runner_port)
+        else:
+            _utilization_sample(runner_dir, _UNDER_LINE_PCT)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+        # Two leases and no more: the abandoned build and its cold re-entry, or one per runner node.
+        assert len(_leases_for_chunk(runner_dir, chunk_id)) == 2
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
 

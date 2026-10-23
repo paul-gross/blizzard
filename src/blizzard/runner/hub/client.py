@@ -671,6 +671,13 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         ended chunk (409) or the chunk has no live route (404)."""
         ...
 
+    def release(self, chunk_id: str, *, epoch: int, route_token: str | None, reason: str) -> bool:
+        """``POST /api/fleet/chunks/{id}/release`` — give the route this runner holds back, so the chunk re-derives
+        ``ready`` at its current node. True only when the hub accepted it; a refusal — stale or not running (409), not
+        the holder (403), or an unknown chunk or route (404, which a hub predating the route also answers) — is
+        False, and leaves the route this runner's. A transport error raises :class:`HubClientError`."""
+        ...
+
 
 class ITokenIdentityReader(Protocol):
     """Ask the hub who this client's runner bearer token belongs to (``bzh:seam-size-ceiling``)."""
