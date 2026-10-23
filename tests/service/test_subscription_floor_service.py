@@ -96,9 +96,10 @@ def _two_plan_host(
     runners: tuple[tuple[_Added, str], ...],
     plans: tuple[SubscriptionDeclaration, ...],
     throttle: ThrottleSettings | None = None,
+    spend: dict[str, float] | None = None,
 ) -> Iterator[httpx.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token`` and declaring ``plans``, one ``[[runner]]`` per
-    ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots;
+    ``runners`` entry spending the subscription it names, each bound to its own project at :data:`_AGENTS` slots, with any ``spend`` fields (the ceiling and its window) set;
     yields a client to its port once it answers ``/api/health``."""
     hub_url = f"http://127.0.0.1:{hub_port}"
     base = runner_config(root, workspace, bin_dir, hub_port, join=False)
@@ -117,7 +118,9 @@ def _two_plan_host(
             id=runner.runner_id,
             subscription=slug,
             bindings=(ProjectBinding(runner.project, workspace_id, _AGENTS),),
-            own=dataclasses.replace(base, name=runner.name, runner_id=runner.runner_id, throttle=throttle),
+            own=dataclasses.replace(
+                base, name=runner.name, runner_id=runner.runner_id, throttle=throttle, **(spend or {})
+            ),
         )
         for runner, slug in runners
     )

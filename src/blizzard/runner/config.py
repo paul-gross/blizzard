@@ -33,7 +33,9 @@ from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.runner.throttle.settings import (
     DAY_NAMES,
+    DEFAULT_BUDGET_WINDOW_HOURS,
     DEFAULT_PACE_LEAD_PCT,
+    BudgetSettings,
     PaceSettings,
     ScheduleSettings,
     Span,
@@ -236,6 +238,16 @@ def _percent(view: ConfigView, key: str, *, path: str, above_zero: bool = False)
     return float(value)
 
 
+def _positive(view: ConfigView, key: str, *, path: str) -> float | None:
+    """The number at ``key`` above zero, or ``None`` when absent."""
+    if key not in view:
+        return None
+    value = view.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise ConfigError(f"{path} must be a positive number, got {value!r}")
+    return float(value)
+
+
 def _labels(view: ConfigView, key: str, *, path: str) -> tuple[str, ...] | None:
     """The non-empty list of non-blank strings at ``key``, or ``None`` when absent."""
     if key not in view:
@@ -275,12 +287,14 @@ class Throttle:
     def of(cls, view: ConfigView | None) -> Throttle:
         return cls(ConfigView.blank() if view is None else view)
 
-    def settings(self) -> ThrottleSettings | None:
-        """The configured levers, parsed once; each refusal is a :class:`ConfigError` naming its key."""
+    def settings(self, *, ceiling_usd: float | None, ceiling_window_hours: float) -> ThrottleSettings | None:
+        """The configured levers, parsed once; each refusal is a :class:`ConfigError` naming its key. The runner's
+        ``ceiling_usd`` over ``ceiling_window_hours`` is what a budget must stay below."""
         pace, utilization, schedule = self._pace(), self._utilization(), self._schedule()
-        if pace is None and utilization is None and schedule is None:
+        budget = self._budget(ceiling_usd, ceiling_window_hours)
+        if pace is None and utilization is None and budget is None and schedule is None:
             return None
-        return ThrottleSettings(pace, utilization, schedule)
+        return ThrottleSettings(pace, utilization, budget, schedule)
 
     def _pace(self) -> PaceSettings | None:
         if "pace" not in self.view:
@@ -319,6 +333,23 @@ class Throttle:
         if below is None:
             raise ConfigError("throttle.utilization.below_pct is required")
         return UtilizationSettings(below, _labels(table, "windows", path="throttle.utilization.windows"))
+
+    def _budget(self, ceiling_usd: float | None, ceiling_window_hours: float) -> BudgetSettings | None:
+        if "budget" not in self.view:
+            return None
+        table = self.view.table("budget")
+        usd = _positive(table, "usd", path="throttle.budget.usd")
+        if usd is None:
+            raise ConfigError("throttle.budget.usd is required")
+        hours = _positive(table, "window_hours", path="throttle.budget.window_hours")
+        hours = DEFAULT_BUDGET_WINDOW_HOURS if hours is None else hours
+        # Both summed over the budget's hours: the ceiling would trip before the budget ever throttled.
+        if ceiling_usd is not None and usd >= ceiling_usd * hours / ceiling_window_hours:
+            raise ConfigError(
+                f"throttle.budget.usd {usd:g} over {hours:g}h must stay below the runner_ceiling_usd {ceiling_usd:g} "
+                f"over {ceiling_window_hours:g}h, or the ceiling trips before the budget throttles"
+            )
+        return BudgetSettings(usd, hours)
 
     def _schedule(self) -> ScheduleSettings | None:
         if "schedule" not in self.view:

@@ -9,6 +9,7 @@ import pytest
 
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner
 from blizzard.runner.throttle.settings import (
+    BudgetSettings,
     PaceSettings,
     ScheduleSettings,
     Span,
@@ -38,6 +39,9 @@ lead_pct = 1
 [runner.throttle.utilization]
 below_pct = 95
 windows = ["5h", "7d"]
+[runner.throttle.budget]
+usd = 40
+window_hours = 12
 [runner.throttle.schedule]
 days = ["mon", "fri"]
 hours = ["19:00-08:00", "12:30-13:00"]
@@ -46,6 +50,7 @@ hours = ["19:00-08:00", "12:30-13:00"]
 _SETTINGS = ThrottleSettings(
     pace=PaceSettings("7d", 3.0, (TaperStep(50.0, 2.0), TaperStep(90.0, 1.0))),
     utilization=UtilizationSettings(95.0, ("5h", "7d")),
+    budget=BudgetSettings(40.0, 12.0),
     schedule=ScheduleSettings((0, 4), (Span(19 * 60, 8 * 60), Span(12 * 60 + 30, 13 * 60))),
 )
 
@@ -82,7 +87,7 @@ def test_the_defaults_fill_what_a_lever_leaves_out(tmp_path: Path) -> None:
     )
     assert isinstance(built, BuiltRunner)
     assert built.config.throttle == ThrottleSettings(
-        PaceSettings(), UtilizationSettings(100.0), ScheduleSettings((5,), ())
+        PaceSettings(), UtilizationSettings(100.0), schedule=ScheduleSettings((5,), ())
     )
 
 
@@ -123,6 +128,10 @@ def test_rendering_a_runner_and_loading_it_keeps_its_levers(tmp_path: Path) -> N
         ("[runner.throttle.utilization]\nbelow_pct = 0", "throttle.utilization.below_pct"),
         ("[runner.throttle.utilization]\nbelow_pct = 101", "throttle.utilization.below_pct"),
         ("[runner.throttle.utilization]\nbelow_pct = 90\nwindows = []", "throttle.utilization.windows"),
+        ("[runner.throttle.budget]", "throttle.budget.usd"),
+        ("[runner.throttle.budget]\nusd = 0", "throttle.budget.usd"),
+        ("[runner.throttle.budget]\nusd = -5", "throttle.budget.usd"),
+        ("[runner.throttle.budget]\nusd = 5\nwindow_hours = 0", "throttle.budget.window_hours"),
         ("[runner.throttle.schedule]", "throttle.schedule"),
         ("[runner.throttle.schedule]\ndays = ['funday']", "throttle.schedule.days"),
         ("[runner.throttle.schedule]\ndays = []", "throttle.schedule.days"),
@@ -166,3 +175,31 @@ def test_a_sampled_lever_needs_a_provider_that_is_sampled(tmp_path: Path) -> Non
 def test_a_schedule_needs_no_subscription(tmp_path: Path) -> None:
     built = _projected(tmp_path, "[runner.throttle.schedule]\ndays = ['mon']")
     assert isinstance(built, BuiltRunner)
+
+
+def test_a_budget_defaults_to_a_day_and_needs_no_subscription(tmp_path: Path) -> None:
+    built = _projected(tmp_path, "[runner.throttle.budget]\nusd = 5")
+    assert isinstance(built, BuiltRunner)
+    assert built.config.throttle == ThrottleSettings(budget=BudgetSettings(5.0, 24.0))
+
+
+@pytest.mark.parametrize(
+    ("cost", "budget", "refused"),
+    [
+        ("runner_ceiling_usd = 50", "usd = 50", True),
+        ("runner_ceiling_usd = 50", "usd = 60", True),
+        ("runner_ceiling_usd = 50", "usd = 49.99", False),
+        # The ceiling's 50 over 24h is 25 over 12h: a 12h budget of 25 meets it, of 24 stays under it.
+        ("runner_ceiling_usd = 50", "usd = 25\nwindow_hours = 12", True),
+        ("runner_ceiling_usd = 50", "usd = 24\nwindow_hours = 12", False),
+        ("runner_ceiling_usd = 50\nwindow_hours = 48", "usd = 24", False),
+        ("runner_ceiling_usd = 50\nwindow_hours = 48", "usd = 25", True),
+    ],
+)
+def test_a_budget_at_or_above_the_ceiling_over_the_same_hours_halts_the_runner(
+    tmp_path: Path, cost: str, budget: str, refused: bool
+) -> None:
+    projection = _projected(tmp_path, f"[runner.cost]\n{cost}\n[runner.throttle.budget]\n{budget}")
+    assert isinstance(projection, HaltedRunner) is refused
+    if refused:
+        assert "throttle.budget.usd" in "\n".join(projection.errors)  # type: ignore[union-attr]

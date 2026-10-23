@@ -1153,7 +1153,7 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
         chunk_cap_usd=spend.chunk_cap_usd,
         runner_ceiling_usd=spend.ceiling_usd,
         runner_ceiling_window_hours=spend.window_hours,
-        throttle=throttle.settings(),
+        throttle=throttle.settings(ceiling_usd=spend.ceiling_usd, ceiling_window_hours=spend.window_hours),
         context_warn_tokens=context.warn_tokens,
         context_sample_interval_seconds=context.sample_interval_seconds,
         worker_env_passthrough=worker.names("env_passthrough"),
@@ -1326,6 +1326,11 @@ def _throttle_toml(settings: ThrottleSettings | None) -> str:
         text += f"\n[runner.throttle.utilization]\nbelow_pct = {json.dumps(utilization.below_pct)}\n"
         if utilization.windows is not None:
             text += f"windows = {json.dumps(list(utilization.windows))}\n"
+    if (budget := settings.budget) is not None:
+        text += (
+            f"\n[runner.throttle.budget]\nusd = {json.dumps(budget.usd)}\n"
+            f"window_hours = {json.dumps(budget.window_hours)}\n"
+        )
     if (schedule := settings.schedule) is not None:
         days = [DAY_NAMES[day] for day in schedule.days]
         spans = [f"{_clock(span.start_minute)}-{_clock(span.end_minute)}" for span in schedule.spans]

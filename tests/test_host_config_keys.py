@@ -306,6 +306,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "runner[].harness.autonomy": "dangerous",
     "runner[].harness.config_dir": "/opt/harness",
     "runner[].worker.path_prepend": ["/opt/bin"],
+    "runner[].throttle.budget.usd": 0.25,
     "runner[].throttle.schedule.days": ["mon"],
     "runner[].throttle.schedule.hours": ["19:00-08:00"],
     "tracing.platform_sample_ratio": 0.5,
