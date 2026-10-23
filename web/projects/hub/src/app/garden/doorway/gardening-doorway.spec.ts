@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { type GardenProposalView, type ProjectView, type RoutineView, type RunRowView, type ScopeView, hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { GardeningDoorway } from './gardening-doorway';
 import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
@@ -145,8 +145,8 @@ describe('GardeningDoorway', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  async function render() {
-    stub = stubRequestClient(hubClient, doorwayRoute);
+  async function render(route: (method: string, path: string) => unknown = doorwayRoute) {
+    stub = stubRequestClient(hubClient, route);
     TestBed.configureTestingModule({
       imports: [GardeningDoorway],
       providers: [
@@ -182,30 +182,34 @@ describe('GardeningDoorway', () => {
     expect(paths).not.toContain('/api/runners');
   });
 
-  it('renders a card per project with its standing and the way in', async () => {
+  it('hands the grouped cards to the presentational list', async () => {
     const el = await render();
 
-    const blizzard = el.querySelector('[data-testid="gardening-doorway-card-blizzard"]')!;
-    expect(blizzard.textContent).toContain('garden-weekly');
-    expect(blizzard.querySelector('[data-testid="gardening-doorway-waiting"]')?.textContent).toContain(
-      '1 proposal waiting',
-    );
-    const open = el.querySelector<HTMLAnchorElement>('[data-testid="gardening-doorway-card-blizzard"]')!;
-    expect(open.tagName).toBe('A');
-    expect(open.getAttribute('href')).toBe('/p/blizzard/gardening/proposals');
-    expect(open.getAttribute('aria-label')).toBe("Open Blizzard's garden");
-    expect(open.querySelector('a'), 'no nested link inside the tile').toBeNull();
-    expect(open.contains(blizzard.querySelector('[data-testid="gardening-doorway-findings-blizzard"]'))).toBe(true);
-    expect(blizzard.querySelector('[data-testid="gardening-doorway-sweeping-blizzard"]')?.textContent).toContain(
-      '1 run in progress',
-    );
-    expect(blizzard.querySelector('[data-testid="gardening-doorway-findings-blizzard"]')?.textContent).toContain(
-      '5 from the last runs',
-    );
-    expect(blizzard.textContent).toContain('last run');
+    const cards = [...el.querySelectorAll('app-gardening-doorway-cards [data-testid^="gardening-doorway-card-"]')];
+    expect(cards.map((card) => card.getAttribute('data-testid'))).toEqual([
+      'gardening-doorway-card-blizzard',
+      'gardening-doorway-card-winter',
+    ]);
+  });
 
-    const winter = el.querySelector('[data-testid="gardening-doorway-card-winter"]')!;
-    expect(winter.textContent).toContain("Gardening isn't set up for this project.");
-    expect(winter.querySelector('[data-testid="gardening-doorway-unserved"]')).toBeNull();
+  it('says it is loading until the reads answer', async () => {
+    const never = new Promise<never>(() => undefined);
+    const el = await render((method, path) => (path === '/api/projects' ? never : doorwayRoute(method, path)));
+
+    expect(el.querySelector('[data-testid="gardening-doorway-loading"]')).not.toBeNull();
+    expect(el.querySelector('app-gardening-doorway-cards')).toBeNull();
+  });
+
+  it('says so when a read fails', async () => {
+    const el = await render((method, path) => (path === '/api/scopes' ? stubError(500, { detail: 'the store is down' }) : doorwayRoute(method, path)));
+
+    expect(el.querySelector('[data-testid="gardening-doorway-error"]')).not.toBeNull();
+    expect(el.querySelector('app-gardening-doorway-cards')).toBeNull();
+  });
+
+  it('says so when the tenant has no projects', async () => {
+    const el = await render((method, path) => (path === '/api/projects' ? { projects: [] } : doorwayRoute(method, path)));
+
+    expect(el.querySelector('[data-testid="gardening-doorway-empty"]')?.textContent).toContain('NO PROJECTS IN THIS TENANT');
   });
 });

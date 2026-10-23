@@ -1,25 +1,11 @@
 import { SampleMissReason } from '../api/hub';
 import type { SubscriptionPace } from './subscription-pace.model';
 
-/** How many blocks a subscription window's pace line draws — one per tenth of the window. */
-export const PACE_CELLS = 10;
-
-/** One block of a pace line: filled to the window's usage, and marked where its clock stands. */
-export interface PaceCell {
-  readonly on: boolean;
-  /** The clock sits on this block's left edge — or, on the last block, `clockAfter` its right. */
-  readonly clockBefore: boolean;
-  readonly clockAfter: boolean;
-}
-
-/** One rate-limit window of a subscription, as blocks: usage filled, the window's clock a notch. */
+/** One rate-limit window of a subscription: the figures `KitPaceBar` draws as blocks. */
 export interface PaceLine {
   readonly window: string;
-  readonly cells: readonly PaceCell[];
-  /** Usage ahead of the clock — on pace to exhaust the window before it resets. */
-  readonly ahead: boolean;
-  /** The figures, for the tooltip: "5h · 62% used · 70% of window". */
-  readonly hint: string;
+  readonly utilizationPct: number;
+  readonly elapsedPct: number;
 }
 
 /** One subscription as a line of blocks: its windows' pace lines, or why it has none. */
@@ -38,26 +24,6 @@ export interface SubscriptionLine {
   readonly note?: string | null;
 }
 
-function toTenths(pct: number): number {
-  return Math.round(Math.min(100, Math.max(0, pct)) / (100 / PACE_CELLS));
-}
-
-/** One window as {@link PACE_CELLS} blocks, its usage filled and its clock notched. */
-export function paceLine(window: string, utilizationPct: number, elapsedPct: number): PaceLine {
-  const used = toTenths(utilizationPct);
-  const clock = toTenths(elapsedPct);
-  return {
-    window,
-    cells: Array.from({ length: PACE_CELLS }, (_unused, i) => ({
-      on: i < used,
-      clockBefore: i === clock,
-      clockAfter: i === PACE_CELLS - 1 && clock === PACE_CELLS,
-    })),
-    ahead: utilizationPct > elapsedPct,
-    hint: `${window} · ${Math.round(utilizationPct)}% used · ${Math.round(elapsedPct)}% of window`,
-  };
-}
-
 /** Whether a subscription's newest reading is a lapsed credential. */
 export const isLapsed = (pace: SubscriptionPace): boolean => pace.condition === SampleMissReason.CREDENTIAL_LAPSED;
 
@@ -69,7 +35,7 @@ export function subscriptionLine(pace: SubscriptionPace): SubscriptionLine {
     slug: pace.slug,
     name: pace.name,
     state: lapsed ? 'lapsed' : paced ? 'paced' : 'unsampled',
-    windows: paced ? pace.paceBars.map((bar) => paceLine(bar.window, bar.utilizationPct, bar.elapsedPct)) : [],
+    windows: paced ? pace.paceBars.map(({ window, utilizationPct, elapsedPct }) => ({ window, utilizationPct, elapsedPct })) : [],
     stale: pace.freshness === 'stale',
     age: pace.refreshedTag ?? null,
   };

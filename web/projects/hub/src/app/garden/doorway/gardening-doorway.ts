@@ -1,8 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 
-import { FLEET_CLOCK, FleetWhen, KitAsyncState, KitBadge, KitLinkTile, KitPanel, asyncStateOf } from 'fleet';
-import { LensLink } from 'fleet/shell';
+import { FLEET_CLOCK, KitAsyncState, KitPanel, asyncStateOf } from 'fleet';
 
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
@@ -10,7 +8,8 @@ import { defaultRoutineWindow } from '../core/routine-window';
 import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectHubGardenProposalsQuery } from '../proposals/garden-proposals.query';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
-import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
+import { GardeningDoorwayCards } from './gardening-doorway-cards';
+import { doorwayCards } from './gardening-doorway.model';
 
 /**
  * The gardening tab on All — a doorway, not a garden. Every scope, routine, run, finding and proposal belongs to one
@@ -18,13 +17,15 @@ import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './ga
  * routines; its scopes and whether a run is sweeping; the findings its recent runs added and when one last finished;
  * proposals waiting) and opens its garden under its lens.
  *
+ * The container reads and groups; {@link GardeningDoorwayCards} draws the cards.
+ *
  * Every count comes from the tenant-wide list reads, grouped by each record's own `project_id`; the run figures cover
  * the reporting window.
  */
 @Component({
   selector: 'app-gardening-doorway',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitLinkTile, KitPanel, LensLink, RouterLink],
+  imports: [GardeningDoorwayCards, KitAsyncState, KitPanel],
   templateUrl: './gardening-doorway.html',
   styleUrl: './gardening-doorway.css',
 })
@@ -52,8 +53,4 @@ export class GardeningDoorway {
       this.cards().length === 0,
     ),
   );
-
-  protected readonly waitingLabel = waitingLabel;
-  protected readonly sweepingLabel = sweepingLabel;
-  protected readonly openGardenLabel = openGardenLabel;
 }

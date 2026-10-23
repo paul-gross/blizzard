@@ -286,7 +286,7 @@ describe('RunnerPanelView', () => {
     expect(subs[0].querySelector('[data-testid="subscription-blocks-name"]')?.textContent?.trim()).toBe('Claude Max');
     expect(subs[0].querySelector('[data-testid="subscription-blocks-age"]')?.textContent?.trim()).toBe('[50s]');
     const window = subs[0].querySelector('[data-testid="subscription-blocks-window"]')!;
-    expect(window.getAttribute('title')).toBe('5h · 90% used · 40% of window');
+    expect(window.querySelector('[role="img"]')?.getAttribute('title')).toBe('5h · 90% used · 40% of window');
     expect(window.classList.contains('ahead')).toBe(true);
     expect(window.querySelectorAll('.cell.on')).toHaveLength(9);
   });

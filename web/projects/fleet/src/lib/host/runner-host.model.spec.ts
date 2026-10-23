@@ -297,6 +297,6 @@ describe('runnerSubscriptionLines', () => {
       ['missed', 'unsampled', 'miss: endpoint unreachable'],
       ['never', 'unsampled', null],
     ]);
-    expect(lines[0].windows.map((w) => [w.window, w.cells.filter((c) => c.on).length, w.ahead])).toEqual([['5h', 6, false]]);
+    expect(lines[0].windows).toEqual([{ window: '5h', utilizationPct: 62, elapsedPct: 70 }]);
   });
 });

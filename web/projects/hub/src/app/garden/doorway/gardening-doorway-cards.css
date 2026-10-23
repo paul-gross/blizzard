@@ -1,0 +1,75 @@
+:host {
+  display: block;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 4px 12px 12px;
+  list-style: none;
+}
+.card {
+  display: flex;
+  min-width: 0;
+}
+.card > a {
+  flex: 1;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+}
+.name {
+  color: var(--snow);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+.waiting {
+  flex: none;
+  color: var(--amber-hi);
+  font-size: var(--fs-xs);
+}
+.facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+.facts li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.fact-label {
+  flex: none;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.fact {
+  min-width: 0;
+  color: var(--snow);
+  overflow-wrap: anywhere;
+}
+.fact-right {
+  flex: none;
+  margin-left: auto;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+.fact-right.sweeping {
+  color: var(--cyan);
+}
+.unplanted {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--fs-sm);
+  color: var(--label);
+}
