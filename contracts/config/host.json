@@ -667,6 +667,110 @@
     },
     {
       "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.pace",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 5.0,
+      "deprecated": false,
+      "path": "runner[].throttle.pace.lead_pct",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.pace.taper",
+      "replaced_by": null,
+      "required": false,
+      "type": "array of tables"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.pace.taper[].from_pct",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.pace.taper[].lead_pct",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.pace.window",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.schedule",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.schedule.days",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.schedule.hours",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.utilization",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.utilization.below_pct",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.utilization.windows",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
       "deprecated": true,
       "path": "runner[].token_env",
       "replaced_by": null,

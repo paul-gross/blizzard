@@ -64,6 +64,7 @@ from blizzard.runner.config import (
     RunnerConfig,
     Spend,
     SubscriptionDeclaration,
+    Throttle,
     Transcripts,
     WorkerStdout,
     _expanded_path_prepend,
@@ -87,7 +88,8 @@ from blizzard.runner.host_layout import (
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
 from blizzard.runner.public_origins import PublicOrigins
-from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
+from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, SAMPLED_PROVIDERS
+from blizzard.runner.throttle.settings import DAY_NAMES, ThrottleSettings
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.transcripts.caps import CHUNK_TRANSCRIPT_MAX_BYTES, TRANSCRIPT_RECORD_MAX_BYTES
 
@@ -361,6 +363,7 @@ class HostConfig:
         declared = {subscription.slug for subscription in self.subscriptions}
         if entry.subscription is not None and entry.subscription not in declared:
             errors.append(f"names subscription {entry.subscription!r}, which the host does not declare")
+        errors.extend(self._unsampled_levers(entry))
         workspaces = {workspace.id: workspace for workspace in self.workspaces}
         for binding in entry.bindings:
             if binding.workspace not in workspaces:
@@ -369,6 +372,27 @@ class HostConfig:
                     "which the host does not declare"
                 )
         return errors
+
+    def _unsampled_levers(self, entry: RunnerEntry) -> list[str]:
+        """The sample-judging levers (pace, utilization) a runner configures without a sampled subscription — they
+        could only ever say no. An undeclared subscription is reported on its own."""
+        settings = entry.own.throttle if entry.own is not None else None
+        if settings is None:
+            return []
+        judging = [name for name in ("pace", "utilization") if getattr(settings, name) is not None]
+        if not judging:
+            return []
+        tables = " and ".join(f"throttle.{name}" for name in judging)
+        if entry.subscription is None:
+            return [f"{tables} judge a subscription's samples, but the runner names no subscription"]
+        declared = {subscription.slug: subscription for subscription in self.subscriptions}
+        subscription = declared.get(entry.subscription)
+        if subscription is None or subscription.provider in SAMPLED_PROVIDERS:
+            return []
+        return [
+            f"{tables} judge a subscription's samples, but subscription {subscription.slug!r} "
+            f"(provider {subscription.provider!r}) is never sampled"
+        ]
 
     def _project(self, entry: RunnerEntry, environ: Mapping[str, str]) -> BuiltRunner | HaltedRunner:
         errors = self._problems(entry)
@@ -1111,6 +1135,7 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
     if not isinstance(gates, list):
         raise ConfigError(f"gates must be a list of node names, got {gates!r}")
     spend = Spend.of(raw.table("cost"))
+    throttle = Throttle.of(raw.table("throttle"))
     context = Context.of(raw.table("context"))
     worker = Table.of(raw.table("worker"))
     return RunnerConfig(
@@ -1128,6 +1153,7 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
         chunk_cap_usd=spend.chunk_cap_usd,
         runner_ceiling_usd=spend.ceiling_usd,
         runner_ceiling_window_hours=spend.window_hours,
+        throttle=throttle.settings(),
         context_warn_tokens=context.warn_tokens,
         context_sample_interval_seconds=context.sample_interval_seconds,
         worker_env_passthrough=worker.names("env_passthrough"),
@@ -1270,6 +1296,7 @@ def _runner_toml(entry: RunnerEntry) -> str:
     ]
     if spend:
         text += "\n[runner.cost]\n" + "".join(spend) + f"window_hours = {own.runner_ceiling_window_hours}\n"
+    text += _throttle_toml(own.throttle)
     if own.context_warn_tokens is not None:
         text += (
             "\n[runner.context]\n"
@@ -1277,6 +1304,39 @@ def _runner_toml(entry: RunnerEntry) -> str:
             f"sample_interval_seconds = {own.context_sample_interval_seconds}\n"
         )
     return text
+
+
+def _throttle_toml(settings: ThrottleSettings | None) -> str:
+    """``[runner.throttle]`` and each configured lever's sub-table, and only those; loading the text gives back
+    ``settings``."""
+    if settings is None:
+        return ""
+    text = "\n[runner.throttle]\n"
+    if (pace := settings.pace) is not None:
+        text += "\n[runner.throttle.pace]\n"
+        if pace.window is not None:
+            text += f"window = {json.dumps(pace.window)}\n"
+        text += f"lead_pct = {json.dumps(pace.lead_pct)}\n"
+        for step in pace.taper:
+            text += (
+                "\n[[runner.throttle.pace.taper]]\n"
+                f"from_pct = {json.dumps(step.from_pct)}\nlead_pct = {json.dumps(step.lead_pct)}\n"
+            )
+    if (utilization := settings.utilization) is not None:
+        text += f"\n[runner.throttle.utilization]\nbelow_pct = {json.dumps(utilization.below_pct)}\n"
+        if utilization.windows is not None:
+            text += f"windows = {json.dumps(list(utilization.windows))}\n"
+    if (schedule := settings.schedule) is not None:
+        days = [DAY_NAMES[day] for day in schedule.days]
+        spans = [f"{_clock(span.start_minute)}-{_clock(span.end_minute)}" for span in schedule.spans]
+        text += f"\n[runner.throttle.schedule]\ndays = {json.dumps(days)}\n"
+        if spans:
+            text += f"hours = {json.dumps(spans)}\n"
+    return text
+
+
+def _clock(minute: int) -> str:
+    return f"{minute // 60:02d}:{minute % 60:02d}"
 
 
 def _under_runner(tables: str) -> str:
