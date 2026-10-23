@@ -1,4 +1,4 @@
-"""The operator-configured levers — pace, utilization line, and schedule, each a pure function over its readings.
+"""The operator-configured levers — pace, utilization line, budget, and schedule, each a pure function of its readings.
 
 A lever takes its settings, the newest sample (with its subscription's interval) or the host's zone, and ``now``; it
 never reads a store, the clock, or another lever. The answer keeps the judged reading apart from the setting: the
@@ -16,17 +16,19 @@ from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscript
 from blizzard.runner.throttle.settings import (
     DAY_NAMES,
     MINUTES_PER_DAY,
+    BudgetSettings,
     PaceSettings,
     ScheduleSettings,
     Span,
     UtilizationSettings,
 )
-from blizzard.runner.usage.repository import ExternalUsageSampleSummary
+from blizzard.runner.usage.repository import ExternalUsageSampleSummary, UsageTotals
 
 __all__ = [
     "FRESH_SAMPLE_INTERVALS",
     "LeverAnswer",
     "LeverName",
+    "budget_answer",
     "pace_answer",
     "schedule_answer",
     "utilization_answer",
@@ -47,6 +49,7 @@ class LeverName(StrEnum):
 
     PACE = "pace"
     UTILIZATION = "utilization"
+    BUDGET = "budget"
     SCHEDULE = "schedule"
 
 
@@ -136,6 +139,18 @@ def utilization_answer(
         return LeverAnswer(LeverName.UTILIZATION, True, reading, setting, in_force)
     reading = ", ".join(f"{w.window}: {w.utilization_pct:.0f}%" for w in over)
     return LeverAnswer(LeverName.UTILIZATION, False, reading, setting, in_force, min(w.resets_at for w in over))
+
+
+def budget_answer(settings: BudgetSettings, *, spend: UsageTotals) -> LeverAnswer:
+    """Whether the spend over the trailing window, the one figure every dollar line reads, is under the budget. No
+    ``until``: when enough spend ages out depends on spend this lever does not read."""
+    reading = f"{spend.figure.rendered()} of ${settings.usd:.2f} over the trailing {settings.window_hours:g}h"
+    return LeverAnswer(
+        LeverName.BUDGET,
+        spend.spend_usd < settings.usd,
+        reading,
+        f"${settings.usd:.2f} over {settings.window_hours:g}h",
+    )
 
 
 def schedule_answer(settings: ScheduleSettings, *, zone: tzinfo, now: datetime) -> LeverAnswer:

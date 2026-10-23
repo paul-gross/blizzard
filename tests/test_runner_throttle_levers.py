@@ -11,9 +11,16 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
-from blizzard.runner.throttle.levers import LeverName, pace_answer, schedule_answer, utilization_answer
-from blizzard.runner.throttle.settings import PaceSettings, ScheduleSettings, Span, TaperStep, UtilizationSettings
-from blizzard.runner.usage.repository import ExternalUsageSampleSummary
+from blizzard.runner.throttle.levers import LeverName, budget_answer, pace_answer, schedule_answer, utilization_answer
+from blizzard.runner.throttle.settings import (
+    BudgetSettings,
+    PaceSettings,
+    ScheduleSettings,
+    Span,
+    TaperStep,
+    UtilizationSettings,
+)
+from blizzard.runner.usage.repository import ExternalUsageSampleSummary, UsageTotals
 
 pytestmark = pytest.mark.unit
 
@@ -271,3 +278,37 @@ def test_a_time_that_occurs_twice_is_taken_at_its_first_occurrence() -> None:
 
     assert not schedule_answer(settings, zone=_PACIFIC, now=first - timedelta(minutes=1)).admits
     assert schedule_answer(settings, zone=_PACIFIC, now=first).admits
+
+
+def _spend(billed: float, *, estimated: float | None = None, partial: bool = False) -> UsageTotals:
+    return UsageTotals(0, 0, 0, 0, billed, partial, estimated)
+
+
+def test_budget_admits_under_the_line_and_declines_at_and_over_it() -> None:
+    settings = BudgetSettings(usd=40.0)
+
+    under = budget_answer(settings, spend=_spend(39.99))
+    at = budget_answer(settings, spend=_spend(40.0))
+    over = budget_answer(settings, spend=_spend(41.2))
+
+    assert [a.admits for a in (under, at, over)] == [True, False, False]
+    assert over.lever is LeverName.BUDGET
+    assert over.reading == "$41.20 of $40.00 over the trailing 24h"
+    assert over.setting == "$40.00 over 24h"
+
+
+def test_budget_gives_no_until_because_it_cannot_read_when_spend_ages_out() -> None:
+    assert budget_answer(BudgetSettings(usd=10.0), spend=_spend(12.0)).until is None
+
+
+def test_budget_counts_billed_plus_estimated_as_the_one_figure() -> None:
+    answer = budget_answer(BudgetSettings(usd=10.0, window_hours=6.0), spend=_spend(4.0, estimated=7.0))
+
+    assert not answer.admits
+    assert answer.reading == "~$11.00 of $10.00 over the trailing 6h"
+
+
+def test_budget_marks_a_lower_bound_with_the_partial_plus() -> None:
+    answer = budget_answer(BudgetSettings(usd=40.0), spend=_spend(41.2, partial=True))
+
+    assert answer.reading == "$41.20+ of $40.00 over the trailing 24h"

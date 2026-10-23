@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 from typing import Protocol
 
@@ -16,11 +16,15 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.subscriptions.subscription_sampler import SAMPLED_PROVIDERS
 from blizzard.runner.throttle.floor import FloorAnswer, floor_answer
-from blizzard.runner.throttle.levers import LeverAnswer, pace_answer, schedule_answer, utilization_answer
+from blizzard.runner.throttle.levers import LeverAnswer, budget_answer, pace_answer, schedule_answer, utilization_answer
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.settings import ThrottleSettings
 from blizzard.runner.throttle.usage_limits import IReadRunnerUsageLimitRepository, IReadSubscriptionUsageLimitRepository
-from blizzard.runner.usage.repository import ExternalUsageSampleSummary, IReadExternalUsageRepository
+from blizzard.runner.usage.repository import (
+    ExternalUsageSampleSummary,
+    IReadExternalUsageRepository,
+    IReadUsageRepository,
+)
 
 __all__ = [
     "ClaimsAnswer",
@@ -52,7 +56,7 @@ class StartKind(StrEnum):
 @dataclass(frozen=True)
 class GateVerdict:
     """The throttles' answers together — the subscription floor's, and every configured lever's in gate order (pace,
-    utilization, schedule). A claim and a step need every one of them to say yes."""
+    utilization, budget, schedule). A claim and a step need every one of them to say yes."""
 
     floor: FloorAnswer
     levers: tuple[LeverAnswer, ...] = ()
@@ -149,6 +153,8 @@ class GateConfig(Protocol):
 class GateStores(Protocol):
     @property
     def usage_limits(self) -> IReadRunnerUsageLimitRepository: ...
+    @property
+    def usage(self) -> IReadUsageRepository: ...
 
 
 class GateHostStores(Protocol):
@@ -252,6 +258,9 @@ class ThrottleGate:
                     settings.utilization, sample=sample, slug=slug, sample_interval_seconds=interval, now=now
                 )
             )
+        if settings.budget is not None:
+            window = timedelta(hours=settings.budget.window_hours)
+            answers.append(budget_answer(settings.budget, spend=ctx.stores.usage.usage_since(now - window)))
         if settings.schedule is not None:
             answers.append(schedule_answer(settings.schedule, zone=ctx.config.host_zone, now=now))
         return tuple(answers)

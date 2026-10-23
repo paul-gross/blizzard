@@ -676,6 +676,30 @@
     {
       "default": null,
       "deprecated": false,
+      "path": "runner[].throttle.budget",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].throttle.budget.usd",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": 24.0,
+      "deprecated": false,
+      "path": "runner[].throttle.budget.window_hours",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
+      "default": null,
+      "deprecated": false,
       "path": "runner[].throttle.pace",
       "replaced_by": null,
       "required": false,

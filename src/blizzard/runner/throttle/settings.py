@@ -11,8 +11,10 @@ from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "DAY_NAMES",
+    "DEFAULT_BUDGET_WINDOW_HOURS",
     "DEFAULT_PACE_LEAD_PCT",
     "MINUTES_PER_DAY",
+    "BudgetSettings",
     "PaceSettings",
     "ScheduleSettings",
     "Span",
@@ -26,6 +28,9 @@ DEFAULT_PACE_LEAD_PCT = 5.0
 
 #: Lower-case day names in weekday order, Monday first — the index is :meth:`datetime.date.weekday`.
 DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+#: The trailing hours a budget is summed over when no ``window_hours`` is set.
+DEFAULT_BUDGET_WINDOW_HOURS = 24.0
 
 MINUTES_PER_DAY = 24 * 60
 
@@ -62,6 +67,15 @@ class UtilizationSettings:
 
 @domain_model
 @dataclass(frozen=True)
+class BudgetSettings:
+    """The dollar budget: work only while the spend over the trailing ``window_hours`` is under ``usd``."""
+
+    usd: float
+    window_hours: float = DEFAULT_BUDGET_WINDOW_HOURS
+
+
+@domain_model
+@dataclass(frozen=True)
 class Span:
     """One span of a day in minutes since midnight; an ``end_minute`` not after ``start_minute`` runs past midnight."""
 
@@ -86,4 +100,5 @@ class ThrottleSettings:
 
     pace: PaceSettings | None = None
     utilization: UtilizationSettings | None = None
+    budget: BudgetSettings | None = None
     schedule: ScheduleSettings | None = None
