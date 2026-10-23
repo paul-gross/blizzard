@@ -13,6 +13,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.api.control import _throttle_view
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.steps import Fill
@@ -23,6 +24,7 @@ from blizzard.runner.throttle.levers import LeverAnswer, LeverName
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.report import declining_report
 from blizzard.runner.throttle.settings import (
+    BudgetSettings,
     PaceSettings,
     ScheduleSettings,
     Span,
@@ -37,6 +39,7 @@ from tests.runner_fakes import (
     FakeProvider,
     make_context,
     make_store,
+    record_usage,
     serving,
     usage_limit_mark,
 )
@@ -83,6 +86,27 @@ def _sample(ctx: LoopContext, pct: float, *, label: str = "5h", seconds: int = 1
         payload=json.dumps({"windows": [window]}),
         report_kind="",
         report_payload="",
+    )
+
+
+def _spend(ctx: LoopContext, billed: float, *, at: datetime) -> None:
+    record_usage(
+        ctx.stores.usage,
+        lease_id=f"lease_{at.isoformat()}",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=UsageSample(
+            kind="spawn",
+            model="gpt-5",
+            input_tokens=10,
+            output_tokens=20,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=billed,
+        ),
+        recorded_at=at,
     )
 
 
@@ -200,3 +224,32 @@ def test_an_admitting_sample_after_a_declining_one_admits_again() -> None:
     verdict: GateVerdict = ThrottleGate(ctx).verdict()
     assert verdict.admits_claim
     assert verdict.declining == ()
+
+
+def test_the_budget_is_asked_after_utilization_and_before_the_schedule_over_the_trailing_window() -> None:
+    ctx = _ctx(
+        ThrottleSettings(
+            utilization=UtilizationSettings(below_pct=95.0),
+            budget=BudgetSettings(usd=10.0, window_hours=6.0),
+            schedule=ScheduleSettings(days=(0, 1, 2, 3, 4, 5, 6), spans=(Span(0, 60),)),
+        )
+    )
+    _sample(ctx, 10.0)
+    _spend(ctx, 12.0, at=_NOW - timedelta(hours=2))
+    _spend(ctx, 30.0, at=_NOW - timedelta(hours=7))
+
+    verdict = ThrottleGate(ctx).verdict()
+
+    assert [lever.lever for lever in verdict.levers] == [LeverName.UTILIZATION, LeverName.BUDGET, LeverName.SCHEDULE]
+    assert verdict.levers[1].reading == "$12.00 of $10.00 over the trailing 6h"
+    assert not verdict.levers[1].admits and verdict.levers[1].until is None
+
+
+def test_the_budget_admits_again_as_its_spend_ages_out_of_the_window() -> None:
+    ctx = _ctx(ThrottleSettings(budget=BudgetSettings(usd=10.0, window_hours=6.0)))
+    _spend(ctx, 12.0, at=_NOW - timedelta(hours=5, minutes=30))
+    assert not ThrottleGate(ctx).verdict().admits_claim
+
+    ctx.clock.advance(timedelta(hours=1))  # type: ignore[attr-defined]
+
+    assert ThrottleGate(ctx).verdict().admits_claim

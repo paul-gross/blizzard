@@ -50,7 +50,7 @@ from blizzard.runner.host_layout import (
     RUNNERS_DIRNAME,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME
-from blizzard.runner.throttle.settings import DEFAULT_PACE_LEAD_PCT
+from blizzard.runner.throttle.settings import DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT
 from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
 HOST_REGISTRY_NAME = "host"
@@ -205,6 +205,9 @@ _HOST_KEYS = (
     ConfigKey("runner[].throttle.utilization", TABLE),
     ConfigKey("runner[].throttle.utilization.below_pct", NUMBER),
     ConfigKey("runner[].throttle.utilization.windows", STRING_LIST),
+    ConfigKey("runner[].throttle.budget", TABLE),
+    ConfigKey("runner[].throttle.budget.usd", NUMBER),
+    ConfigKey("runner[].throttle.budget.window_hours", NUMBER, default=DEFAULT_BUDGET_WINDOW_HOURS),
     ConfigKey("runner[].throttle.schedule", TABLE),
     ConfigKey("runner[].throttle.schedule.days", STRING_LIST),
     ConfigKey("runner[].throttle.schedule.hours", STRING_LIST),
