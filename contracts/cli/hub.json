@@ -939,7 +939,7 @@
           "short_help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID."
         },
         "detach": {
-          "help": "Forcibly release CHUNK from its runner.\n\nThe chunk is released from its runner and can be claimed again at its current node. Refused when\nnothing holds the chunk \u2014 a stopped or done chunk is held by nothing.",
+          "help": "Forcibly release CHUNK from its runner.\n\nThe chunk is released from its runner and can be claimed again at its current node, unless an\nopen escalation or question still holds it. Refused when nothing holds the chunk \u2014 a stopped or\ndone chunk is held by nothing.",
           "params": [
             {
               "hidden": false,
@@ -1335,7 +1335,7 @@
           "short_help": "Set, overwrite, or clear CHUNK's standing migration intent."
         },
         "pause": {
-          "help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim.\n\nThe worker gets a brief grace period to wind down before being force-stopped if it hasn't\nalready exited; its spend so far is recorded when it resumes. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
+          "help": "Pause CHUNK \u2014 hold it where it stands until resumed.\n\nA runner holding the chunk parks its worker after a brief grace period, keeping the claim; an\nunclaimed chunk has no worker and is only held out of the queue. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
           "params": [
             {
               "hidden": false,
@@ -1398,7 +1398,7 @@
             }
           ],
           "path": "hub chunk pause",
-          "short_help": "Pause CHUNK \u2014 the runner interrupts and parks the worker but keeps the claim."
+          "short_help": "Pause CHUNK \u2014 hold it where it stands until resumed."
         },
         "pm": {
           "help": "Deprecated alias for ``blizzard hub chunk work-items``.",
@@ -1766,7 +1766,7 @@
           "short_help": "Force CHUNK onto a node now, on a freshly minted session."
         },
         "resume": {
-          "help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming\nan unpaused chunk is a harmless no-op. 404 only when the chunk is unknown.",
+          "help": "Resume a paused CHUNK \u2014 clear the pause.\n\nA held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client\nof the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming an unpaused chunk is a\nharmless no-op. 404 only when the chunk is unknown.",
           "params": [
             {
               "hidden": false,
@@ -1829,7 +1829,7 @@
             }
           ],
           "path": "hub chunk resume",
-          "short_help": "Resume a paused CHUNK \u2014 the runner resumes the parked worker in place."
+          "short_help": "Resume a paused CHUNK \u2014 clear the pause."
         },
         "set": {
           "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",

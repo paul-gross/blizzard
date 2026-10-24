@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -43,7 +44,9 @@ class ChunkDetail:
             labels = ", ".join(pointer_label(p) for p in pointers)
             yield f"  pointers: {labels}"
         route = body.get("route")
-        if route:
+        # A terminal transition from a runner node leaves the route fact standing; status, not
+        # route liveness, says whether a runner still holds the chunk (`holds_claim`).
+        if route and body["status"] not in TERMINAL_STATUSES:
             yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
         blocked = body.get("blocked")
         if blocked:
@@ -307,10 +310,10 @@ def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Pause CHUNK — the runner interrupts and parks the worker but keeps the claim.
+    """Pause CHUNK — hold it where it stands until resumed.
 
-    The worker gets a brief grace period to wind down before being force-stopped if it hasn't
-    already exited; its spend so far is recorded when it resumes. A pure client of the hub API:
+    A runner holding the chunk parks its worker after a brief grace period, keeping the claim; an
+    unclaimed chunk has no worker and is only held out of the queue. A pure client of the hub API:
     ``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
@@ -320,8 +323,8 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
     )
     cli.finish(
         resp,
-        f"paused {chunk_id} — its worker is interrupted and given a brief grace period to wind down "
-        "before being force-stopped, keeping the claim",
+        f"paused {chunk_id} — a runner holding it parks its worker after a brief grace period, "
+        "keeping the claim; an unclaimed chunk stays out of the queue",
     )
 
 
@@ -329,17 +332,22 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
 def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Resume a paused CHUNK — the runner resumes the parked worker in place.
+    """Resume a paused CHUNK — clear the pause.
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
-    an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
+    A held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client
+    of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming an unpaused chunk is a
+    harmless no-op. 404 only when the chunk is unknown."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/resume",
         "POST /chunks/{id}/resume",
         json_body={"by": by},
         on_status={404: f"no such chunk {chunk_id}"},
     )
-    cli.finish(resp, f"resumed {chunk_id} — its worker resumes in place")
+    cli.finish(
+        resp,
+        f"resumed {chunk_id} — the pause is cleared; a held chunk continues from its current node, "
+        "an unclaimed one rejoins the queue",
+    )
 
 
 @chunk_group.command("detach", cls=FleetCommand)
@@ -347,14 +355,19 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     """Forcibly release CHUNK from its runner.
 
-    The chunk is released from its runner and can be claimed again at its current node. Refused when
-    nothing holds the chunk — a stopped or done chunk is held by nothing."""
+    The chunk is released from its runner and can be claimed again at its current node, unless an
+    open escalation or question still holds it. Refused when nothing holds the chunk — a stopped or
+    done chunk is held by nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",
         on_status={409: "chunk has no live route holding a claim", 404: f"no such chunk {chunk_id}"},
     )
-    cli.finish(resp, f"detached {chunk_id} — released from its runner, re-claimable at its current node")
+    cli.finish(
+        resp,
+        f"detached {chunk_id} — released from its runner, re-claimable at its current node "
+        "unless an open escalation or question still holds it",
+    )
 
 
 @chunk_group.command("depend", cls=FleetCommand)
