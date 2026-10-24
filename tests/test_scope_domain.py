@@ -202,6 +202,37 @@ def test_registry_ensure_returns_a_stored_scope_and_writes_nothing() -> None:
     assert repo.ensured == []
 
 
+def test_registry_ensure_of_a_retired_scope_is_not_refused_and_leaves_it_retired() -> None:
+    stored = _scope(retired=True)
+    repo = _FakeScopeRepo(stored={"blizzard": stored})
+    registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    ensured = registry.ensure(_project(), ScopeSlug.parse("blizzard"), _CTX)
+
+    assert (ensured, ensured.retired) == (stored, True)
+    assert repo.ensured == []
+
+
+def test_registry_resolve_of_a_retired_scope_is_not_refused_and_mints_nothing() -> None:
+    stored = _scope(retired=True)
+    repo = _FakeScopeRepo(stored={"blizzard": stored})
+    registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    scope, mint = registry.resolve(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
+
+    assert (scope.retired, mint) == (True, None)
+
+
+def test_registry_resolve_mints_a_blank_description() -> None:
+    repo = _FakeScopeRepo()
+    registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+
+    scope, mint = registry.resolve(_PROJECT, ScopeSlug.parse("blizzard"), _CTX)
+
+    assert mint is not None
+    assert (scope.description, mint[0].description) == ("", "")
+
+
 def test_registry_resolve_hands_back_an_unseen_slugs_mint_without_writing() -> None:
     repo = _FakeScopeRepo()
     registry = ScopeRegistry(scopes=_as_write_repo(repo), clock=FixedClock(instant=_T0))

@@ -20971,7 +20971,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``) and a source the\nproject is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
+        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``), a source the\nproject is not linked to (``source_not_linked``) and a hub item recorded in another\nproject; 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {

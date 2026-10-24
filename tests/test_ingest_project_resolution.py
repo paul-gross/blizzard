@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.ingest import (
+    IngestItemProjectMismatch,
     IngestProjectAmbiguous,
     IngestProjectUnknown,
     IngestSourceNotLinked,
@@ -83,9 +84,19 @@ def test_an_unlinked_source_refuses_even_when_the_other_sources_agree() -> None:
 
 
 def test_the_hub_source_sits_out_the_inference_beside_a_configured_source() -> None:
-    chosen = choose_ingest_project(None, [_HUB_1, _FORGE_1], {"forge": [_ALPHA]}, {_HUB_1: _BETA})
+    chosen = choose_ingest_project(None, [_HUB_1, _FORGE_1], {"forge": [_ALPHA]}, {_HUB_1: _ALPHA})
 
     assert chosen == _ALPHA
+
+
+def test_a_hub_item_recorded_elsewhere_is_refused_beside_a_configured_source() -> None:
+    with pytest.raises(IngestItemProjectMismatch) as exc_info:
+        choose_ingest_project(None, [_HUB_1, _FORGE_1], {"forge": [_ALPHA]}, {_HUB_1: _BETA})
+    assert (exc_info.value.pointer, exc_info.value.recorded, exc_info.value.chosen) == (_HUB_1, _BETA, _ALPHA)
+
+
+def test_a_hub_item_recording_no_project_is_accepted_beside_a_configured_source() -> None:
+    assert choose_ingest_project(None, [_HUB_1, _FORGE_1], {"forge": [_ALPHA]}, {}) == _ALPHA
 
 
 def test_hub_items_alone_follow_the_project_they_record_when_they_agree() -> None:
@@ -110,8 +121,14 @@ def test_a_named_project_wins_over_the_links_that_would_infer_another() -> None:
     assert choose_ingest_project(_BETA, [_FORGE_1], links, {}) == _BETA
 
 
-def test_a_named_project_takes_hub_items_recorded_elsewhere() -> None:
-    assert choose_ingest_project(_ALPHA, [_HUB_1], {}, {_HUB_1: _BETA}) == _ALPHA
+def test_a_named_project_refuses_hub_items_recorded_elsewhere() -> None:
+    with pytest.raises(IngestItemProjectMismatch) as exc_info:
+        choose_ingest_project(_ALPHA, [_HUB_1], {}, {_HUB_1: _BETA})
+    assert (exc_info.value.pointer, exc_info.value.recorded, exc_info.value.chosen) == (_HUB_1, _BETA, _ALPHA)
+
+
+def test_a_named_project_takes_hub_items_recorded_there_or_nowhere() -> None:
+    assert choose_ingest_project(_ALPHA, [_HUB_1, _HUB_2], {}, {_HUB_1: _ALPHA}) == _ALPHA
 
 
 def test_a_named_project_refuses_the_first_source_not_linked_to_it() -> None:

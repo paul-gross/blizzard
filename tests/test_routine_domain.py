@@ -259,6 +259,40 @@ def test_create_naming_a_stored_default_scope_mints_nothing() -> None:
     assert routines.mints == []
 
 
+def test_create_naming_an_unseen_default_scope_mints_it_with_a_blank_description() -> None:
+    authoring, routines, _, _ = _authoring()
+
+    _create(authoring)
+
+    [(scope, _)] = routines.mints
+    assert scope.description == ""
+
+
+def test_create_with_a_retired_default_scope_is_not_refused_and_mints_nothing() -> None:
+    retired = Scope(
+        scope_id="scp_blizzard", slug="blizzard", description="", created_at=_T0, project_id=_PROJECT, retired=True
+    )
+    authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"blizzard": retired}))
+
+    routine = _create(authoring)
+
+    assert routine.default_scope_slug == "blizzard"
+    assert routines.mints == []
+
+
+def test_edit_to_a_retired_default_scope_is_not_refused_and_mints_nothing() -> None:
+    retired = Scope(
+        scope_id="scp_other", slug="other", description="", created_at=_T0, project_id=_PROJECT, retired=True
+    )
+    authoring, routines, _, _ = _authoring(scopes=_FakeScopeRepo(stored={"other": retired}))
+    routine = _create(authoring)
+
+    edited = authoring.edit(routine, RoutineEdit(default_scope_slug=ScopeSlug.parse("other")), _CTX)
+
+    assert edited.default_scope_slug == "other"
+    assert [scope.slug for scope, _ in routines.mints] == ["blizzard"]
+
+
 def test_create_with_no_harnesses_preference_mints_empty() -> None:
     authoring, _, _, _ = _authoring()
 
