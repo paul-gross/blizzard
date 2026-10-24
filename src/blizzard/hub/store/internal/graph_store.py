@@ -33,7 +33,6 @@ from blizzard.hub.domain.graph.model import (
     Node,
     ProducesSpec,
     RotatePolicy,
-    RunStep,
     SessionDecl,
 )
 from blizzard.hub.store.internal.chunk_rows import lock_keys
@@ -100,21 +99,8 @@ class ProducesColumn(ListColumn[ProducesSpec]):
         return ProducesSpec(name=str(raw["name"]), kind=ArtifactKind(str(raw["kind"])))
 
 
-@adapter_model
-@dataclass(frozen=True)
-class RunColumn(ListColumn[RunStep]):
-    """The ``graph_nodes.run`` column — a hub command node's steps (#65)."""
-
-    def entry(self, item: RunStep) -> Any:
-        return {"command": item.command, "name": item.name, "produces": item.produces}
-
-    def of(self, raw: Any) -> RunStep:
-        return RunStep(command=str(raw["command"]), name=raw.get("name"), produces=raw.get("produces"))
-
-
 TEXTS = TextColumn()
 PRODUCES = ProducesColumn()
-RUN = RunColumn()
 
 
 @adapter_model
@@ -213,8 +199,8 @@ class EdgeRow:
 @adapter_model
 @dataclass(frozen=True)
 class NodeRow:
-    """An empty ``run`` stores NULL rather than ``[]``, and empty ``action_args`` NULL rather
-    than ``{}``; each reads back empty either way."""
+    """Empty ``action_args`` stores NULL rather than ``{}``, and reads back empty either way.
+    ``legacy_run`` is read, never written: only the carry-over migration sets it."""
 
     def values(self, node: Node, *, graph_id: str) -> dict[str, Any]:
         return {
@@ -234,7 +220,6 @@ class NodeRow:
             "checks_cwd": node.checks_cwd,
             "checks_timeout": node.checks_timeout,
             "bounce_cap": node.bounce_cap,
-            "run": RUN.encode(node.run) if node.run else None,
             "poll_interval_seconds": node.poll_interval_seconds,
             "poll_timeout_seconds": node.poll_timeout_seconds,
             "action": node.action,
@@ -259,11 +244,11 @@ class NodeRow:
             retries_exhausted=row.retries_exhausted,
             judgement_prompt=row.judgement_prompt,
             bounce_cap=row.bounce_cap,
-            run=RUN.decode(row.run),
             poll_interval_seconds=row.poll_interval_seconds,
             poll_timeout_seconds=row.poll_timeout_seconds,
             action=row.action,
             action_args={k: tuple(v) for k, v in json.loads(row.action_args).items()} if row.action_args else {},
+            legacy_run=row.legacy_run,
             choices=choices,
         )
 

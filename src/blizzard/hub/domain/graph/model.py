@@ -626,6 +626,8 @@ class Node(NodeShape[RunStep]):
     # See ``NodeDoc.action`` / ``NodeDoc.action_args``.
     action: str | None = None
     action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The stored command a hub node carried over with no action still runs, verbatim; never set at mint.
+    legacy_run: str | None = None
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
