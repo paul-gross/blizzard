@@ -17,7 +17,7 @@ from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_T
 @click.argument("content", required=False, default="")
 @click.pass_context
 def record_marker(ctx: click.Context, name: str, content: str) -> None:
-    """A hub command node's ``run:`` script: record a marker artifact mid-run (#65).
+    """Deprecated: a hub node's ``run:`` script recorded a marker artifact mid-run; a hub node's action now does.
 
     The injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,
     and epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``,

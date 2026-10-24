@@ -213,6 +213,7 @@ def _seed_migration(
                     executor=landed_executor,
                     session="fresh",
                     judged_by="worker",
+                    action="pass" if landed_executor == "hub" else None,
                 )
             )
         )

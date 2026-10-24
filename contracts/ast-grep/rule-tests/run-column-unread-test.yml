@@ -1,0 +1,15 @@
+id: bzh:run-column-unread
+valid:
+  - |
+    node.action = row.action
+  - |
+    select(s.graph_nodes.c.legacy_run)
+  - |
+    select(s.chunks.c.run)
+invalid:
+  - |
+    select(s.graph_nodes.c.run)
+  - |
+    graph_nodes.c.run.is_(None)
+  - |
+    s.graph_nodes.c["run"]

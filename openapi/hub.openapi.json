@@ -4902,7 +4902,9 @@
           "no-acceptable-harness",
           "spend-cap",
           "bounce-cap",
-          "migration-target-unresolvable"
+          "migration-target-unresolvable",
+          "hub-action-missing",
+          "unroutable-outcome"
         ],
         "title": "EscalationCause",
         "type": "string"
@@ -21412,6 +21414,7 @@
     },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
+        "deprecated": true,
         "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it. A delivery the chunk has since been stopped or restarted past is a 409.",
         "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
         "parameters": [
@@ -21536,6 +21539,7 @@
     },
     "/api/chunks/{chunk_id}/hub-markers": {
       "post": {
+        "deprecated": true,
         "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nRecords a marker artifact mid-run, ahead of the producing command's own exit.\nIdempotent per ``(chunk, node, name, epoch)``.",
         "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
         "parameters": [
@@ -21930,6 +21934,7 @@
     },
     "/api/chunks/{chunk_id}/review-findings-delivery": {
       "post": {
+        "deprecated": true,
         "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been\nstopped or restarted past is a 409. Idempotent per chunk.",
         "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
         "parameters": [
@@ -24353,7 +24358,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step, running that node's\nhub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``\nelapsed, or the chunk is not parked at a hub command node it may drive \u2014 ``detail`` names which.\nThe request declares no ``runner_id`` to confine against.",
+        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: another chunk holds the slot, the node is ``pending`` inside ``poll_interval``, the\nchunk is escalated, or it is not parked at a drivable hub node \u2014 ``detail`` names which.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {

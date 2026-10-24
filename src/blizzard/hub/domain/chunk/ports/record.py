@@ -53,6 +53,10 @@ class IReadChunkRecordRepository(Protocol):
         ...
 
     def list_all(self) -> list[Chunk]: ...
+    def pinned_to_actionless_hub_nodes(self) -> list[str]:
+        """The ids of every live chunk pinned to a graph holding a hub node that names no action, in one
+        read — candidates only: whether a chunk stands at that node is the caller's to confirm."""
+        ...
 
     def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
         """The ids of the ``limit`` most recently finished ``done`` chunks, newest first —

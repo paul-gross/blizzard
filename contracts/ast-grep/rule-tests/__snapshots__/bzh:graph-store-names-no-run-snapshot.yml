@@ -1,0 +1,16 @@
+id: bzh:graph-store-names-no-run
+snapshots:
+  ? |
+    row._mapping['run']
+  : labels:
+    - source: '''run'''
+      style: primary
+      start: 13
+      end: 18
+  ? |
+    values = {"run": None}
+  : labels:
+    - source: '"run"'
+      style: primary
+      start: 10
+      end: 15

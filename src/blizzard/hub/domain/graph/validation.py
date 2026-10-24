@@ -216,15 +216,19 @@ class NodeCheck:
         self._check_retired_keys()
 
     def _check_run(self) -> None:
-        # `run:` is legal ONLY on a hub command node (#65): a worker node's step is an agent
-        # turn, not a declared command list.
-        if self.node.run and self.node.executor is not Executor.HUB:
-            self.errors.append(f"node `{self.node.name}`: `run:` is only legal on a hub node (`executor: hub`)")
+        # Refused here, at mint, rather than in parsing, so a stored version that carried
+        # `run:` stays readable and carries over onto its action.
+        node = self.node
+        if not node.names_run:
+            return
+        if node.executor is Executor.HUB:
+            self.errors.append(f"hub node `{node.name}`: `run:` is retired — name an `action:` in its place")
+        else:
+            self.errors.append(f"node `{node.name}`: `run:` is only legal on a hub node (`executor: hub`)")
 
     def _check_action(self) -> None:
-        """A hub node names exactly one of ``action:`` and ``run:``; ``action:`` names a
-        catalogued action, ``with:`` carries only its declared string arguments and every
-        required one, and the node authors a choice for every answer that is not a reserved wait."""
+        """A hub node names a catalogued ``action:``, ``with:`` carries only its declared string
+        arguments and every required one, and the node authors a choice for every answer that is not a reserved wait."""
         node = self.node
         if node.executor is not Executor.HUB:
             if node.action is not None:
@@ -232,12 +236,8 @@ class NodeCheck:
             if node.action_args or node.malformed_action_args:
                 self.errors.append(f"node `{node.name}`: `with:` is only legal on a hub node (`executor: hub`)")
             return
-        if node.action is not None and node.run:
-            self.errors.append(
-                f"hub node `{node.name}`: a hub node names exactly one of `action:` and `run:`, not both"
-            )
         if node.action is None:
-            if not node.run:
+            if not node.names_run:
                 self.errors.append(f"hub node `{node.name}`: a hub node must name an `action:`")
             if node.action_args or node.malformed_action_args:
                 self.errors.append(f"hub node `{node.name}`: `with:` is only legal on a node that names an `action:`")
@@ -275,13 +275,13 @@ class NodeCheck:
 
     def _check_poll(self) -> None:
         """The pending-poll cadence (#66) is legal only on a hub node that can wait — one whose
-        action can answer a reserved wait, or one naming a non-empty ``run:``."""
+        action can answer a reserved wait."""
         node = self.node
         interval, timeout = node.poll_interval_seconds, node.poll_timeout_seconds
         if (interval is not None or timeout is not None) and not self._can_wait():
             self.errors.append(
                 f"node `{node.name}`: `poll_interval`/`poll_timeout` are only legal on a hub command node that can "
-                f"wait (an `action:` that can answer a reserved wait, or a non-empty `run:`)"
+                f"wait (an `action:` that can answer a reserved wait)"
             )
         if interval is not None and interval <= 0:
             self.errors.append(f"node `{node.name}`: `poll_interval` must be a positive number of seconds")
@@ -292,10 +292,8 @@ class NodeCheck:
 
     def _can_wait(self) -> bool:
         node = self.node
-        if not node.is_hub_command_node:
+        if not node.is_hub_command_node or node.action is None:
             return False
-        if node.action is None:
-            return bool(node.run)
         spec = self.catalogue.get(node.action)
         return spec is not None and spec.can_wait_for(node.action_args)
 

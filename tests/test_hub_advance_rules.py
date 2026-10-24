@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import CHUNK_VERB_LEGALITY, ChunkFacts, ChunkVerb, TransitionFact
-from blizzard.hub.domain.graph.model import Node, RunStep
+from blizzard.hub.domain.graph.model import Node
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _node(node_id: str, executor: Executor, run: list[RunStep]) -> Node:
+def _node(node_id: str, executor: Executor, action: str | None) -> Node:
     return Node(
         node_id=node_id,
         graph_id="gr_a",
@@ -33,12 +33,12 @@ def _node(node_id: str, executor: Executor, run: list[RunStep]) -> Node:
         retries_max=None,
         retries_exhausted=None,
         choices=[],
-        run=run,
+        action=action,
     )
 
 
-_BUILD = _node("nd_build", Executor.RUNNER, [])
-_SHIP = _node("nd_ship", Executor.HUB, [RunStep(command="make ship")])
+_BUILD = _node("nd_build", Executor.RUNNER, None)
+_SHIP = _node("nd_ship", Executor.HUB, "land")
 _GRAPH = make_graph("gr_a", "work", entry_node_id="nd_build", nodes=[_BUILD, _SHIP])
 
 

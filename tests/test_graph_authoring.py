@@ -52,7 +52,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
     assert deliver_targets == {"record-findings", "pre-push", "build"}
-    assert deliver.action == "land" and not deliver.run
+    assert deliver.action == "land" and deliver.legacy_run is None
     # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.
     assert deliver.bounce_cap is None
@@ -319,7 +319,7 @@ def test_every_packaged_hub_node_names_its_action_and_none_names_run(graph_name:
     hub_nodes = {n.name: n for n in graph.nodes if n.executor is Executor.HUB}
 
     assert {name: (n.action, dict(n.action_args)) for name, n in hub_nodes.items()} == _PACKAGED_HUB_NODES[graph_name]
-    assert all(not n.run for n in hub_nodes.values())
+    assert all(n.legacy_run is None for n in hub_nodes.values())
 
 
 def test_the_packaged_set_is_the_set_the_hub_node_census_names() -> None:

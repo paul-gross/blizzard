@@ -1,11 +1,9 @@
-"""Reconcile the packaged graph set against the store — ``blizzard hub graph sync`` (#146).
+"""Reconcile the packaged graph set against the store — ``blizzard hub graph sync``.
 
-The edge half: walk the packaged set, load and inline each ``graph.yaml`` (filesystem and
-the config codec, both outside the domain — ``bzh:domain-core``), and hand it with the stored definition
-to the domain, which owns the mint-only-if-changed rule. Per-graph isolated — one graph
-failing to load is a report row, not a stop — and additive: nothing re-pins a chunk. A hub reconciles every open
-tenant in turn, each through its own stores (:func:`reconcile_open_tenants`), and a tenant's creation mints the set
-into it on the creation's own transaction (:func:`packaged_minter`)."""
+The edge half: load and inline each packaged ``graph.yaml`` and hand it with the stored definition to
+the domain, which owns the mint-only-if-changed rule. Per-graph isolated and additive: nothing re-pins
+a chunk. Every open tenant reconciles through its own stores (:func:`reconcile_open_tenants`); a new
+tenant is minted the set on its creation's transaction (:func:`packaged_minter`)."""
 
 from __future__ import annotations
 
@@ -20,6 +18,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS
 from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
 from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.legacy_run import translated
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.graph.validation import GraphValidationError
 from blizzard.hub.graphs import PACKAGED, GraphFile
@@ -98,13 +97,13 @@ class GraphReconciliation:
     def _parsed(self, stored: str | None, name: str) -> GraphDoc | None:
         """A stored definition re-parsed into an authoring doc, or ``None``.
 
-        ``None`` means "nothing to compare against", which mints. It covers both the
-        never-minted name and the stored definition that no longer parses — that one stays in
-        the store, superseded rather than lost."""
+        ``None`` — a never-minted name, or a stored definition that no longer parses — mints. A
+        stored ``run:`` reads as the action it named
+        (:func:`~blizzard.hub.domain.graph.legacy_run.translated`)."""
         if stored is None:
             return None
         try:
-            return GraphDoc.of(self.yaml.decode(stored.encode("utf-8")))
+            return translated(GraphDoc.of(self.yaml.decode(stored.encode("utf-8"))))
         except (ConfigDecodeError, GraphParseError):
             _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
             return None

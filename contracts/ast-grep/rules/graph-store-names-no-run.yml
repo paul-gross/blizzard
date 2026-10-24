@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:graph-store-names-no-run
+language: Python
+severity: error
+message: >-
+  The graph store neither reads nor writes the deprecated `graph_nodes.run` column, so it names no `"run"` key: a
+  minted node's row leaves it NULL, and a carried-over node's stored command reads from `legacy_run`
+  (`bzh:store-expand-contract`, blizzard-context:/standards/persistence.md).
+files:
+  - src/blizzard/hub/store/internal/graph_store.py
+rule:
+  kind: string
+  regex: ^["']run["']$

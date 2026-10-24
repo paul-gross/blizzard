@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:run-column-unread
+language: Python
+severity: error
+message: >-
+  `graph_nodes.run` is deprecated: only the store migrations read or write it, and the hub writes it NULL. Read the
+  node's `action`, or `legacy_run` for one the carry-over could not translate
+  (`bzh:store-expand-contract`, blizzard-context:/standards/persistence.md).
+files:
+  - src/blizzard/hub/**
+ignores:
+  # The revisions that carry a stored `run` onto an action, and the tests beside them.
+  - src/blizzard/hub/store/migrations/**
+rule:
+  any:
+    - pattern: $T.c.run
+    - pattern: $T.c["run"]
+constraints:
+  T:
+    regex: (^|\.)graph_nodes$

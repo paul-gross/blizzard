@@ -913,6 +913,39 @@ class OneLiveExecSlot(HubQueryCheck):
         ]
 
 
+class HubNodeHasAction(HubQueryCheck):
+    """``hub:hub-node-has-action`` — every hub node of a graph a live chunk is pinned to names an action. A node
+    naming none is one the carry-over could not translate, and a chunk reaching it escalates to a person. A chunk
+    is live here while no stop, completion, deletion, grouping, or transition into the reserved terminal names it — a
+    floor: a terminal transition a later restart superseded reads as ended."""
+
+    def run(self) -> list[Violation]:
+        nodes, chunks = hub.graph_nodes, hub.chunks
+        ended = [
+            select(table.c.chunk_id)
+            for table in (hub.chunk_stopped, hub.chunk_completed, hub.chunk_deleted, hub.chunk_grouped)
+        ]
+        ended.append(select(hub.transitions.c.chunk_id).where(hub.transitions.c.to_node_id == RESERVED_TERMINAL))
+        pinned = select(chunks.c.graph_id).where(*(chunks.c.chunk_id.not_in(q) for q in ended))
+        rows = self.rows(
+            select(nodes.c.tenant_id, nodes.c.graph_id, nodes.c.name)
+            .where(
+                nodes.c.executor == Executor.HUB.value,
+                nodes.c.action.is_(None),
+                nodes.c.graph_id.in_(pinned),
+            )
+            .order_by(nodes.c.tenant_id, nodes.c.graph_id, nodes.c.name)
+        ).all()
+        return [
+            Violation(
+                "hub:hub-node-has-action",
+                f"tenant {row.tenant_id}: graph {row.graph_id}'s hub node {row.name!r} names no action, "
+                "and a live chunk is pinned to the graph",
+            )
+            for row in rows
+        ]
+
+
 class NoRowOfADeletedTenant(QueryCheck):
     """``hub:no-row-of-a-deleted-tenant`` — a tenant's deletion removes every row it owns before it
     removes the tenant, and its memberships with it, so no row naming a tenant — of a tenant-owned table, or of a
@@ -1713,6 +1746,7 @@ class HubInvariants:
                 PerRepoMarkerIdempotent(conn),
                 NoDoubleDelivery(conn),
                 OneLiveExecSlot(conn),
+                HubNodeHasAction(conn),
                 NoDoubleTerminalClosure(conn),
                 NoPendingIntentAgainstATerminalRef(conn),
                 NoUnenqueuedClosableRef(conn),

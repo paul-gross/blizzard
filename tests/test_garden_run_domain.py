@@ -78,6 +78,9 @@ class _FakeChunkRecords:
     def list_all(self) -> list[Chunk]:
         return list(self.chunks.values())
 
+    def pinned_to_actionless_hub_nodes(self) -> list[str]:
+        return []
+
     def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
         raise NotImplementedError
 

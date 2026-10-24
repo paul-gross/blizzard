@@ -124,16 +124,19 @@ graph_nodes = Table(
     Column("checks_timeout", Integer, nullable=True),
     # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
     Column("bounce_cap", Integer, nullable=True),
-    # Hub commands (#65), JSON ``{command, name, produces}`` list.
-    Column("run", Text, nullable=True),
+    # A hub node's stored commands, JSON ``{command, name, produces}`` list — read and written only by the
+    # migrations; the hub writes it NULL.
+    Column("run", Text, nullable=True, info={"deprecated": "0.3"}),
     # Pending-poll cadence (#66); null uses the executor defaults.
     Column("poll_interval_seconds", Integer, nullable=True),
     Column("poll_timeout_seconds", Integer, nullable=True),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_graph_nodes_tenant_id"), nullable=False),
-    # The hub action a hub node names in place of ``run``; null on a runner node or one naming ``run``.
+    # The hub action a hub node names; null on a runner node or a hub node the carry-over could not translate.
     Column("action", String, nullable=True),
     # The action's ``with:`` arguments, a JSON map of name -> list of strings; null when none.
     Column("action_args", Text, nullable=True),
+    # The ``run`` of a hub node the carry-over could not name an action for, verbatim; null on every other node.
+    Column("legacy_run", Text, nullable=True),
     # Null/false disallows proposed work items.
 )
 Index("ix_graph_nodes_tenant_graph_id", graph_nodes.c.tenant_id, graph_nodes.c.graph_id)

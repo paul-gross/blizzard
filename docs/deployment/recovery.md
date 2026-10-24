@@ -109,10 +109,10 @@ elicitation fails the attempt as usual, spending a retry only there.
 ## How the contract is exercised
 
 The recovery contract is exercised end-to-end by the whole-process cases of the kill-9 crash sweep — cases signalling a
-whole daemon process rather than arming a registry crash point, plus one registry-armed case for a generic hub command
-node's delivery: each runs the real build-then-deliver scenario with hub and runner as real subprocesses, restarts a
-whole daemon from the same store directory (systemd's job, done by hand in the test), and asserts the chunk still
-converges and lands exactly once, the facts-level invariant checker green after the crash and after recovery. In
+whole daemon process rather than arming a registry crash point, plus one registry-armed case for a hub node's `land`
+pass: each runs the real build-then-deliver scenario with hub and runner as real subprocesses, restarts a whole daemon
+from the same store directory (systemd's job, done by hand in the test), and asserts the chunk still converges and lands
+exactly once, the facts-level invariant checker green after the crash and after recovery. In
 [tests/crash/test_kill9_sweep.py](../../tests/crash/test_kill9_sweep.py):
 
 - `test_graceful_restart_resumes_in_flight_session` gracefully restarts the supervisor while a worker is in flight; the
@@ -121,9 +121,9 @@ converges and lands exactly once, the facts-level invariant checker green after 
 - `test_kill9_runner_daemon_after_session_end` kill-9s the supervisor strictly after the worker's commit is declared and
   its SessionEnd durably recorded; the restart reads that fact directly — no resume, no re-run — and the chunk
   converges.
-- `test_kill9_at_hub_command_node_crash_point[hubnode.after-step.before-marker]` kill-9s the hub mid-delivery inside a
-  generic hub command node's per-step window; the restart re-drives the executor off the re-flushed build completion and
-  the change lands once.
+- `test_kill9_between_land_repositories` kill-9s the hub between a two-repository `land`'s repositories, the first
+  repository's landing record durable and the second not yet merged; the restart lands the second without merging the
+  first twice.
 
 Run just those three cases with `BLIZZARD_CRASH_SWEEP=1 uv run pytest` naming them; the run needs the sibling
 blizzard-mock worktree and a local winter source, per the crash-sweep header.

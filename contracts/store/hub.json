@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261023_0901_hub_actions",
+  "head_revision": "20261024_0900_hub_legacy_run",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -3372,6 +3372,12 @@
           "server_default": false,
           "type": "Text"
         },
+        "legacy_run": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Text"
+        },
         "name": {
           "deprecated": null,
           "nullable": false,
@@ -3421,7 +3427,7 @@
           "type": "Integer"
         },
         "run": {
-          "deprecated": null,
+          "deprecated": "0.3",
           "nullable": true,
           "server_default": false,
           "type": "Text"

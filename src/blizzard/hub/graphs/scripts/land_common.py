@@ -57,7 +57,7 @@ _CLOSED_PULLS_PAGE_MAX = 10
 class ScriptEnv:
     """The env a hub node injects (``bzh:hub-node-env-contract``) — a land script's only
     channel in. A required var that is missing, or malformed JSON, exits non-zero with a
-    diagnostic naming it (``bzh:hub-node-run-shape``)."""
+    diagnostic naming it (``bzh:hub-node-action-shape``)."""
 
     environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
 
@@ -258,7 +258,7 @@ class LandRun:
 
     def at(self, commit: dict[str, str]) -> LandRun:
         """This run bound to ``commit``'s own target. A missing or malformed per-entry field, or a
-        record with no token, exits non-zero naming it (``bzh:hub-node-run-shape``)."""
+        record with no token, exits non-zero naming it (``bzh:hub-node-action-shape``)."""
         repo = commit.get("repo", "?")
         fields: dict[str, str] = {}
         for name in ("forge_url", "owner", "base_branch", "record"):

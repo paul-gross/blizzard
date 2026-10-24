@@ -1,0 +1,11 @@
+id: bzh:graph-store-names-no-run
+valid:
+  - |
+    values = {"action": node.action, "legacy_run": None}
+  - |
+    legacy_run = row.legacy_run
+invalid:
+  - |
+    values = {"run": None}
+  - |
+    row._mapping['run']

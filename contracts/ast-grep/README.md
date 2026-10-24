@@ -142,3 +142,20 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     because a syntactic rule cannot resolve the constant. A constant naming `yield_per` or `stream_results` is the
     residual lookalike.
   - No exemption stands.
+
+- **`bzh:run-column-unread`** (`rules/run-column-unread.yml`) — outside the store migrations, the hub never reads or
+  writes the deprecated `graph_nodes.run` column. The rule's own prose home is `bzh:store-expand-contract` in
+  `blizzard-context:/standards/persistence.md`; this file states none of that prose, only what the rule mechanically
+  checks.
+  - Scoped to `src/blizzard/hub/**`, except `src/blizzard/hub/store/migrations/**` (the revisions that carry a stored
+    `run` onto an action, and their colocated tests).
+  - Matches `<x>.c.run` and `<x>.c["run"]` where `<x>` is `graph_nodes` or ends in `.graph_nodes`. A column reached by a
+    rebound name, or through a reflected table, slips past — a floor, not a proof.
+  - No exemption stands.
+
+- **`bzh:graph-store-names-no-run`** (`rules/graph-store-names-no-run.yml`) — the graph store's row mapping names no
+  `"run"` key, so a minted node's row leaves the deprecated column NULL. Its prose home is the same as
+  `bzh:run-column-unread`'s.
+  - Scoped to `src/blizzard/hub/store/internal/graph_store.py`.
+  - Matches any string literal that is exactly `run`.
+  - No exemption stands.

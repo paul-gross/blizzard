@@ -128,10 +128,6 @@ class RetriesExhausted(StrEnum):
 HUB_DEFAULT_SUCCESS_CHOICE = "success"
 HUB_DEFAULT_FAILURE_CHOICE = "failure"
 
-# The reserved **pending** outcome (#66), signalled on a step's last stdout line at
-# exit 0; a nonzero exit is always a failure, never pending.
-HUB_PENDING_CHOICE = "pending"
-
 # The default kick-back cap a hub node omitting ``bounce_cap`` tolerates before the
 # chunk escalates (#64). Per-node, not global.
 DEFAULT_BOUNCE_CAP = 5
@@ -292,23 +288,21 @@ class ProducesSpec:
         return cls(name=name, kind=kind)
 
 
-class NodeShape[StepT]:
+class NodeShape:
     """What the authored and the reified node share — the one owner of the predicate
     keyed on that pair."""
 
     executor: Executor
-    run: list[StepT]
 
     @property
     def is_hub_command_node(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
-        """True for every hub node — one naming an action, one naming ``run:``, and one
-        stored with an empty ``run:``, which the step loop's empty run drives."""
+        """True for every hub node — one naming an action, and one stored naming none."""
         return self.executor is Executor.HUB
 
 
 @domain_model
 @dataclass(frozen=True)
-class NodeDoc(NodeShape[RunStepDoc]):
+class NodeDoc(NodeShape):
     name: str
     executor: Executor
     prompt: str | None
@@ -322,6 +316,8 @@ class NodeDoc(NodeShape[RunStepDoc]):
     bounce_cap: int | None = None
     # The hub command node's declared commands (#65, #67); empty on a worker node.
     run: list[RunStepDoc] = field(default_factory=list)
+    # Whether the node declares ``run:`` at all, an empty list included — what mint refuses.
+    names_run: bool = False
     # The hub action this node names, in place of ``run:``, and its ``with:`` arguments,
     # each one value or a list read as a tuple.
     action: str | None = None
@@ -371,6 +367,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
             bounce_cap=bounce_cap,
             judgement=JudgementDoc.of(body.get("judgement")),
             run=run,
+            names_run="run" in body.body,
             action=body.text("action"),
             action_args=action_args,
             malformed_action_args=malformed_action_args,
@@ -590,17 +587,7 @@ class Edge:
 
 @domain_model
 @dataclass(frozen=True)
-class RunStep:
-    """One reified command a hub command node executes, in authored order (#65)."""
-
-    command: str
-    name: str | None = None
-    produces: str | None = None
-
-
-@domain_model
-@dataclass(frozen=True)
-class Node(NodeShape[RunStep]):
+class Node(NodeShape):
     """One station in one immutable graph."""
 
     node_id: str
@@ -618,11 +605,11 @@ class Node(NodeShape[RunStep]):
     choices: list[Choice] = field(default_factory=list)
     # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
     bounce_cap: int | None = None
-    # The generic hub command node's declared commands (#65) — see ``NodeDoc.run``.
-    run: list[RunStep] = field(default_factory=list)
     # See ``NodeDoc.action`` / ``NodeDoc.action_args``.
     action: str | None = None
     action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The stored command a hub node carried over with no action still runs, verbatim; never set at mint.
+    legacy_run: str | None = None
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None

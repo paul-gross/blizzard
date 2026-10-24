@@ -12,3 +12,5 @@ class EscalationCause(StrEnum):
     SPEND_CAP = "spend-cap"
     BOUNCE_CAP = "bounce-cap"
     MIGRATION_TARGET_UNRESOLVABLE = "migration-target-unresolvable"
+    HUB_ACTION_MISSING = "hub-action-missing"
+    UNROUTABLE_OUTCOME = "unroutable-outcome"

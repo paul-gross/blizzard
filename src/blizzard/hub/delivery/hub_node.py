@@ -1,14 +1,14 @@
 """The generic hub command node executor — THE primitive (#65).
 
-Walk a node's declared ``run:`` list, skipping any step whose ``produces:`` marker is already
-durable, and map the outcome to an authored edge. Structurally agentless
+Take one pass of a hub node's action and map its answer to an authored edge; a node naming no
+action, or an answer no edge routes, escalates its chunk to a person. Structurally agentless
 (``bzh:deterministic-shell``); a pure step function over injected seams (``bzh:steppable-loop``,
 ``bzh:domain-core``). Serialization is a fact: ``run`` returns ``None`` if the slot is held."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType
@@ -26,10 +26,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.forge_handle import ForgeHandleFactory, IGitHubHandle
 from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     Effect,
@@ -65,6 +63,7 @@ from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome,
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryOutcome,
@@ -84,24 +83,14 @@ from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
 from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
-    HUB_DEFAULT_SUCCESS_CHOICE,
-    HUB_PENDING_CHOICE,
     RESERVED_TERMINAL,
     Graph,
+    IReadManyGraphs,
     Node,
-    RunStep,
 )
-from blizzard.hub.domain.observability.tracing.platform import (
-    ACTION_CHOICE,
-    ACTION_NAME,
-    ACTION_PASS_SPAN,
-    RUN_STEP_EXIT_CODE,
-    RUN_STEP_NAME,
-    RUN_STEP_SPAN,
-)
+from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
-from blizzard.hub.tenancy import TenantId
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
@@ -109,6 +98,10 @@ _HUB_RUNNER_ID = "hub"
 _UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
 _EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 _EVENT_ACTION_OVERRAN: EventLogKind = "hub-action-overran"
+_EVENT_ACTION_MISSING: EventLogKind = "hub-action-missing"
+_HUB_LOG_PREFIX = "hub-log."
+# The one reserved wait a pass answers; the executor never authors it.
+(_PENDING,) = RESERVED_WAITS
 # What a delivery the chunk has moved past answers its action with.
 _FENCED_DETAIL = "not recorded: the chunk is terminal or has moved past this visit"
 # A landing record is written however the fence answers; this names why it answers `fenced` anyway.
@@ -121,13 +114,6 @@ DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
 DEFAULT_POLL_TIMEOUT = timedelta(hours=3)
 
-# Crash points for the per-step re-run windows (`bzh:crash-point-registry`).
-_CP_HUBNODE_AFTER_STEP_BEFORE_MARKER = crashpoint(
-    "hubnode.after-step.before-marker", "a run: step exited 0; its produces: marker is not yet durable"
-)
-_CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT = crashpoint(
-    "hubnode.after-marker.before-next", "a run: step's marker is durable; the next step has not started"
-)
 # A kill leaves the slot live; the stale bound reclaims it, with pending derived from the poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
     "hubnode.after-poll.before-slot-release",
@@ -388,37 +374,8 @@ class PollPolicy:
         return max(due, row.next_poll_at) if row.next_poll_at is not None else due
 
 
-@domain_model
-@dataclass(frozen=True)
-class PrintedChoice:
-    """The choice a step explicitly selected, read off its stdout."""
-
-    name: str | None
-
-    @classmethod
-    def of(cls, stdout: str, known_names: frozenset[str]) -> PrintedChoice:
-        """The last non-blank stdout line, iff it names one of the node's authored choices
-        (#65's outcome-mapping vocabulary) or the machinery-reserved ``pending`` outcome
-        (#66), recognized regardless of whether the node authors a matching choice. Only
-        ``pending`` is never an authored edge; ``success``/``failure`` are reserved names
-        whose edges a node authors."""
-        lines = [line.strip() for line in stdout.splitlines() if line.strip()]
-        if not lines:
-            return cls(None)
-        last = lines[-1]
-        return cls(last if last == HUB_PENDING_CHOICE or last in known_names else None)
-
-
-@domain_model
-@dataclass(frozen=True)
-class _NoopStep:
-    command: str = ""
-    name: str | None = None
-    produces: str | None = None
-
-
 class HubNodeExecutor:
-    """Runs a generic hub command node's ``run:`` list to completion, once."""
+    """Takes one pass of a hub node's action and routes what it answers."""
 
     def __init__(
         self,
@@ -429,11 +386,10 @@ class HubNodeExecutor:
         hub_exec: IWriteChunkHubExecRepository,
         escalations: IWriteChunkEscalationsRepository,
         events: EventLogService,
-        runner: IHubCommandRunner,
-        workdir: IHubWorkdir,
+        record: IReadChunkRecordRepository,
+        graphs: IReadManyGraphs,
         clock: IClock,
         marker_authority: MarkerAuthority,
-        tenant: Callable[[], TenantId],
         repositories: IReadRepositoryRecordRepository,
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
@@ -444,7 +400,6 @@ class HubNodeExecutor:
         garden_delivery: GardenDeliveryRecorder,
         run_context: IReadRunContextRepository,
         forge_handles: ForgeHandleFactory,
-        marker_callback_base_url: str = "",
         public_url: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
@@ -456,11 +411,10 @@ class HubNodeExecutor:
         self._hub_exec = hub_exec
         self._escalations = escalations
         self._events = events
-        self._runner = runner
-        self._workdir = workdir
+        self._record = record
+        self._graphs = graphs
         self._clock = clock
         self._marker_authority = marker_authority
-        self._tenant = tenant
         self._repositories = repositories
         self._links = links
         self._projects = projects
@@ -471,20 +425,15 @@ class HubNodeExecutor:
         self._garden_delivery = garden_delivery
         self._run_context = run_context
         self._forge_handles = forge_handles
-        self._marker_callback_base_url = marker_callback_base_url
         self._public_url = public_url
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
         self._tracer = tracer or NoopPlatformTracer()
 
-    @staticmethod
-    def _log_name(index: int, step_name: str | None, produces: str | None) -> str:
-        return f"hub-log.{step_name or produces or index}"
-
     def record_marker(
         self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
     ) -> bool:
-        """Record a ``run:`` step's marker ahead of its exit, idempotently per
+        """Record a hub node visit's marker, idempotently per
         ``(chunk, node, name, epoch)``. A superseded epoch writes nothing, preventing
         its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``).
         :class:`AmbiguousMarkerRepository` — before anything is written — when a landed marker names
@@ -516,12 +465,12 @@ class HubNodeExecutor:
         return wrote
 
     def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> HubRunResult | None:
-        """Execute ``node``'s ``run:`` list once, to completion; ``None`` if deferred.
+        """Take one pass of ``node``'s action, or escalate a node naming none; ``None`` if deferred.
 
         Deferred — the slot is held (by this chunk's own run too), ``node``'s visit at ``epoch`` already
-        recorded its exit or was superseded, or this visit is pending and not yet due (#66) — is neither an error
-        nor a retry-consuming failure. The due check runs BEFORE the slot is acquired,
-        so a pending chunk never contends for it."""
+        recorded its exit or was superseded, the chunk is escalated to a person, or this visit is pending
+        and not yet due (#66) — is neither an error nor a retry-consuming failure. The due check runs
+        BEFORE the slot is acquired, so a pending chunk never contends for it."""
         now = self._clock.now()
         facts = self._facts.load_facts(chunk.chunk_id)
         poll_history = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch) if facts is not None else []
@@ -536,7 +485,7 @@ class HubNodeExecutor:
             # After the acquire: a run that finished between a caller's read and the acquire
             # has recorded its exit by now, so a replay cannot re-run a node it already left.
             facts = self._facts.load_facts(chunk.chunk_id)
-            if facts is None or not facts.awaits_exit_from(node, epoch=epoch):
+            if facts is None or not facts.awaits_exit_from(node, epoch=epoch) or facts.open_escalation() is not None:
                 return None
             return self._run_acquired(chunk, graph, node, epoch=epoch, poll_history=poll_history, slot_id=slot_id)
         finally:
@@ -548,6 +497,26 @@ class HubNodeExecutor:
         in, so the chunk resumes on its next request rather than after ``slot_stale_after``. Sound
         while one hub process serves the store."""
         return self._hub_exec.release_live_hub_exec_slots(at=self._clock.now())
+
+    def escalate_actionless(self) -> int:
+        """Escalate every chunk of this executor's tenant standing at a hub node that names no action — a boot
+        step beside :meth:`release_orphaned_slots`, so a chunk the carry-over left stranded reaches a person
+        without waiting to be driven. Answers how many it escalated; takes no hub-execution slot."""
+        chunks = self._record.get_many(self._record.pinned_to_actionless_hub_nodes())
+        graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
+        escalated = 0
+        for chunk in chunks.values():
+            facts = self._facts.load_facts(chunk.chunk_id)
+            graph = graphs.get(chunk.graph_id)
+            node = facts.hub_advance_node(graph) if facts is not None and graph is not None else None
+            if facts is None or node is None or node.action is not None or facts.open_escalation() is not None:
+                continue
+            epoch = facts.latest_epoch() or 0
+            if not facts.awaits_exit_from(node, epoch=epoch):
+                continue
+            if self._record_action_missing(chunk, node, epoch=epoch)[1] is BounceEscalationOutcome.RECORDED:
+                escalated += 1
+        return escalated
 
     def _run_acquired(
         self,
@@ -573,137 +542,39 @@ class HubNodeExecutor:
         poll_history: list[HubNodePollFact],
         hub_exec: DerivedContext,
     ) -> HubRunResult:
+        if node.action is None:
+            return self._escalate_action_missing(chunk, node, epoch=epoch)
         if poll_history and self._clock.now() - poll_history[0].polled_at >= PollPolicy.of(node).timeout:
             # The bound is elapsed since the FIRST pending attempt of this visit: stop
-            # polling, and never run the `run:` list again this call.
+            # polling, and never take a pass again this call.
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
-        if node.action is not None:
-            return self._take_pass(chunk, graph, node, node.action, epoch=epoch, hub_exec=hub_exec)
-        workdir = self._workdir.ensure(chunk.chunk_id)
-        artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        # Minted before the env is built and revoked once this call is done with it, so
-        # it is live only for this (chunk, node, epoch) visit.
-        marker_token = self._marker_authority.issue(
-            chunk.chunk_id, node_id=node.node_id, epoch=epoch, tenant=self._tenant()
-        )
-        try:
-            try:
-                git_commits = GitCommits.of(artifacts)
-            except UnconvergedDeliveryError as exc:
-                # Routed as a `failure` rather than allowed to escape, which would
-                # crash-loop the tick (tests/test_pin_hub_delivery.py).
-                return self._refuse(chunk, graph, node, epoch=epoch, step="unconverged-delivery", detail=str(exc))
-            project = self._landing_project(chunk)
-            resolution = resolve_chunk_repositories(
-                git_commits.origins(),
-                self._repositories.list_all(include_retired=True),
-                minted_at=chunk.minted_at,
-                linked=project.linked,
-                project=project.slug,
+        return self._take_pass(chunk, graph, node, node.action, epoch=epoch, hub_exec=hub_exec)
+
+    def _escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int) -> HubRunResult:
+        return self._escalated(*self._record_action_missing(chunk, node, epoch=epoch))
+
+    def _record_action_missing(
+        self, chunk: Chunk, node: Node, *, epoch: int
+    ) -> tuple[ActionEscalation, BounceEscalationOutcome]:
+        """A hub node naming no action — one the carry-over could not translate — escalates its chunk, its
+        stored command named, and records ``hub-action-missing`` with the escalation."""
+        stored = f"its stored run: {node.legacy_run}" if node.legacy_run else "no `run:`"
+        detail = f"hub node `{node.name}` names no action ({stored})"
+        escalation = ActionEscalation(EscalationCause.HUB_ACTION_MISSING, detail)
+        outcome = self._record_escalation(chunk, escalation, epoch=epoch)
+        if outcome is BounceEscalationOutcome.RECORDED:
+            self._events.record(
+                kind=_EVENT_ACTION_MISSING,
+                runner_id=None,
+                chunk_id=chunk.chunk_id,
+                project_id=chunk.project_id,
+                lease_id=None,
+                node_name=node.name,
+                message=detail,
+                detail={"epoch": epoch, "legacy_run": node.legacy_run},
+                at=self._clock.now(),
             )
-            refusal = self._resolution_refusal(resolution)
-            tokens: dict[str, str] = {}
-            if refusal is None:
-                tokens, refusal = self._reveal_tokens(resolution)
-            if refusal is not None:
-                step, detail = refusal
-                self._record_refusal_event(chunk, node, resolution, epoch=epoch)
-                return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
-            # The records the visit's landed markers name, fixed as it starts: an unlink while a
-            # step runs does not change what the step lands in.
-            self._marker_authority.hold_repositories(
-                chunk.chunk_id,
-                node_id=node.node_id,
-                epoch=epoch,
-                records=[
-                    (repo, target.record, target.slug)
-                    for repo, target in zip(resolution.qualified, resolution.targets, strict=True)
-                ],
-            )
-            env = HubEnv(
-                chunk=chunk,
-                node=node,
-                workdir=workdir,
-                epoch=epoch,
-                artifacts=artifacts,
-                marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
-                garden_delivery_url=self._garden_delivery_url(chunk.chunk_id, node.node_id, epoch),
-                review_findings_url=self._review_findings_url(chunk.chunk_id, node.node_id, epoch),
-                resolution=resolution,
-                forge_tokens=tokens,
-                feature_title=self._resolve_feature_title(chunk),
-                expects_git_commits=graph.declares_git_commit,
-                marker_token=marker_token,
-                work_items=self._resolve_work_items(chunk),
-                public_url=self._public_url,
-                project=project,
-            ).vars
-
-            choice_names = frozenset(c.name for c in node.choices)
-            chosen: str | None = None
-            failed_step: FailedStep | None = None
-            for index, step in enumerate(node.run or [_NoopStep()], start=1):
-                if step.produces and self._artifacts.has_hub_artifact(
-                    chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces
-                ):
-                    continue  # already done — the at-least-once-per-step skip (#65)
-
-                result = self._run_step(step, workdir=workdir, env=env, hub_exec=hub_exec)
-                self._artifacts.record_hub_artifact(
-                    chunk.chunk_id,
-                    node_id=node.node_id,
-                    node_name=node.name,
-                    epoch=epoch,
-                    admission=EpochAdmission.AT_OR_ABOVE,
-                    name=self._log_name(index, step.name, step.produces),
-                    content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
-                    at=self._clock.now(),
-                )
-                if result.exit_code != 0:
-                    failed_step = FailedStep(
-                        name=step.name or step.produces or str(index),
-                        exit_code=result.exit_code,
-                        output=f"{result.stdout}{result.stderr}",
-                        log_key=self._log_name(index, step.name, step.produces),
-                    )
-                    chosen = PrintedChoice.of(result.stdout, choice_names).name or HUB_DEFAULT_FAILURE_CHOICE
-                    break
-                printed = PrintedChoice.of(result.stdout, choice_names).name
-                if printed == HUB_PENDING_CHOICE:
-                    # Pending (#66): NOT a step success — no marker, no transition, no
-                    # edge lookup; the slot is released on the way out.
-                    return self._record_pending(chunk, node, epoch=epoch)
-                _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER.reached()
-                if step.produces:
-                    self._artifacts.record_hub_artifact(
-                        chunk.chunk_id,
-                        node_id=node.node_id,
-                        node_name=node.name,
-                        epoch=epoch,
-                        admission=EpochAdmission.AT_OR_ABOVE,
-                        name=step.produces,
-                        content="done",
-                        at=self._clock.now(),
-                    )
-                _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT.reached()
-                if step.produces and step.produces.startswith(_MARKER_PREFIX):
-                    _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN.reached()
-                if printed:
-                    chosen = printed
-                    break
-            if chosen is None:
-                # A silent run succeeds only where the node authors `success`; otherwise it
-                # routes `failure`, which every hub node authors.
-                chosen = (
-                    HUB_DEFAULT_SUCCESS_CHOICE
-                    if HUB_DEFAULT_SUCCESS_CHOICE in choice_names
-                    else HUB_DEFAULT_FAILURE_CHOICE
-                )
-
-            commits: list[dict[str, str]] = json.loads(env[ENV_GIT_COMMITS])
-            return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits, step=failed_step)
-        finally:
-            self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
+        return escalation, outcome
 
     def _reveal_tokens(self, resolution: RepositoryResolution) -> tuple[dict[str, str], tuple[str, str] | None]:
         """Each resolved record's revealed secret by record id, or the refusal a secret that cannot be revealed
@@ -722,8 +593,8 @@ class HubNodeExecutor:
     def _take_pass(
         self, chunk: Chunk, graph: Graph, node: Node, action_name: str, *, epoch: int, hub_exec: DerivedContext
     ) -> HubRunResult:
-        """Take one pass of the node's action, in place of the step loop: resolve and refuse as the step loop
-        does, read the visit, and route what the pass answers. A repository's secret is revealed only for an
+        """Take one pass of the node's action: resolve the chunk's repositories and refuse as the visit
+        cannot run, read the visit, and route what the pass answers. A repository's secret is revealed only for an
         action that lands."""
         action = self._actions.action(action_name)
         if action is None:
@@ -811,9 +682,8 @@ class HubNodeExecutor:
         if run.traceback is not None:
             return Pass(choice=HUB_DEFAULT_FAILURE_CHOICE, log=(run.traceback,))
         self._record_overrun(chunk, node, spec, epoch=epoch)
-        (wait,) = RESERVED_WAITS
         if spec.can_wait_for(node.action_args):
-            return Pass(choice=wait)
+            return Pass(choice=_PENDING)
         return Pass(choice=HUB_DEFAULT_FAILURE_CHOICE, log=(f"`{spec.name}` overran its pass bound",))
 
     def _record_overrun(self, chunk: Chunk, node: Node, spec: ActionSpec, *, epoch: int) -> None:
@@ -839,15 +709,18 @@ class HubNodeExecutor:
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
-            name=self._log_name(1, action_name, None),
+            name=f"{_HUB_LOG_PREFIX}{action_name}",
             content="\n".join(answer.log) + "\n",
             at=self._clock.now(),
         )
 
     def _escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int) -> HubRunResult:
-        """An action's escalation, written as a bounce-cap escalation is — at the next epoch, beside the hub's
-        lease — and routing nothing."""
-        outcome = self._escalations.record_bounce_escalation(
+        """An escalation the hub authors, routing nothing."""
+        return self._escalated(escalation, self._record_escalation(chunk, escalation, epoch=epoch))
+
+    def _record_escalation(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int) -> BounceEscalationOutcome:
+        """``escalation`` written as a bounce-cap escalation is — at the next epoch, beside the hub's lease."""
+        return self._escalations.record_bounce_escalation(
             chunk.chunk_id,
             epoch=epoch + 1,
             admission=EpochAdmission.ABOVE,
@@ -857,6 +730,9 @@ class HubNodeExecutor:
             cause=escalation.cause,
             detail=escalation.detail,
         )
+
+    @staticmethod
+    def _escalated(escalation: ActionEscalation, outcome: BounceEscalationOutcome) -> HubRunResult:
         return HubRunResult(
             outcome_choice=escalation.cause.value,
             to_node_name="",
@@ -987,24 +863,11 @@ class HubNodeExecutor:
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
-            name=self._log_name(1, step, None),
+            name=f"{_HUB_LOG_PREFIX}{step}",
             content=f"[{step.replace('-', ' ')}]\n{detail}\n",
             at=self._clock.now(),
         )
         return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
-
-    def _run_step(
-        self, step: RunStep | _NoopStep, *, workdir: str, env: dict[str, str], hub_exec: DerivedContext
-    ) -> CommandResult:
-        if isinstance(step, _NoopStep):
-            return self._runner.run(command=step.command, cwd=workdir, env=env)
-        with (
-            self._tracer.under(hub_exec),
-            self._tracer.child(RUN_STEP_SPAN, {RUN_STEP_NAME: step.name} if step.name else None),
-        ):
-            result = self._runner.run(command=step.command, cwd=workdir, env=env)
-            annotate({RUN_STEP_EXIT_CODE: result.exit_code})
-        return result
 
     def _record_pending(
         self, chunk: Chunk, node: Node, *, epoch: int, next_poll_at: datetime | None = None
@@ -1022,7 +885,7 @@ class HubNodeExecutor:
             HubNodePollFact(node_id=node.node_id, epoch=epoch, polled_at=now, next_poll_at=next_poll_at)
         )
         return HubRunResult(
-            outcome_choice=HUB_PENDING_CHOICE,
+            outcome_choice=_PENDING,
             to_node_name=node.name,
             wrote_transition=False,
             detail=f"pending — next poll at {iso_utc(next_poll_at)}",
@@ -1048,7 +911,7 @@ class HubNodeExecutor:
         )
         envelope_payload = BounceEnvelope.of(
             cause=cause,
-            summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{HUB_PENDING_CHOICE}`",
+            summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{_PENDING}`",
             commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified)],
             sources=self._delivery_sources(chunk),
             step=None,
@@ -1103,13 +966,11 @@ class HubNodeExecutor:
         choice: str,
         extra_artifacts: list[StoredArtifact] | None = None,
         commits: list[dict[str, str]] | None = None,
-        step: FailedStep | None = None,
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
             # Reachable only for a stored graph that lacks an edge mint now requires: nothing
-            # routes, so the same outcome re-polls forever. Announced once per (node, epoch)
-            # rather than once per poll.
+            # routes, so the chunk escalates to a person rather than taking the pass again.
             now = self._clock.now()
             detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
             authored = sorted(c.name for c in node.choices)
@@ -1123,8 +984,7 @@ class HubNodeExecutor:
                 content=(
                     f"{detail}\n\n"
                     f"authored choices: {', '.join(authored) or '<none>'}\n"
-                    "This node will re-poll the same outcome until the graph authors an "
-                    "edge for it — nothing else will move it.\n"
+                    "The chunk is escalated to a person; nothing routes it on.\n"
                 ),
                 at=now,
             )
@@ -1140,12 +1000,10 @@ class HubNodeExecutor:
                     detail={"choice": choice, "epoch": epoch, "authored_choices": authored},
                     at=now,
                 )
-            return HubRunResult(
-                outcome_choice=choice,
-                to_node_name="",
-                wrote_transition=False,
-                detail=detail,
+            unroutable = ActionEscalation(
+                EscalationCause.UNROUTABLE_OUTCOME, f"hub node `{node.name}` answered `{choice}`, which no edge routes"
             )
+            return self._escalate(chunk, unroutable, epoch=epoch)
         if edge.to_node_name == RESERVED_TERMINAL:
             to_node_id: str | None = RESERVED_TERMINAL
         else:
@@ -1172,7 +1030,7 @@ class HubNodeExecutor:
                     summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
                     commits=commits,
                     sources=self._delivery_sources(chunk),
-                    step=step,
+                    step=None,
                 ).serialize()
                 self._escalations.record_bounce(
                     chunk.chunk_id, epoch=hub_epoch, cause=choice, envelope=envelope_payload, at=now
@@ -1263,21 +1121,3 @@ class HubNodeExecutor:
                 }
             )
         return tuple(items)
-
-    def _marker_callback_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
-        if not self._marker_callback_base_url:
-            return ""
-        base = self._marker_callback_base_url.rstrip("/")
-        return f"{base}/api/chunks/{chunk_id}/hub-markers?node_id={node_id}&epoch={epoch}"
-
-    def _garden_delivery_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
-        if not self._marker_callback_base_url:
-            return ""
-        base = self._marker_callback_base_url.rstrip("/")
-        return f"{base}/api/chunks/{chunk_id}/garden-delivery?node_id={node_id}&epoch={epoch}"
-
-    def _review_findings_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
-        if not self._marker_callback_base_url:
-            return ""
-        base = self._marker_callback_base_url.rstrip("/")
-        return f"{base}/api/chunks/{chunk_id}/review-findings-delivery?node_id={node_id}&epoch={epoch}"

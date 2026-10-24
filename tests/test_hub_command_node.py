@@ -1,8 +1,8 @@
 """The generic hub command node primitive (#65) — unit + component tiers.
 
-Unit tier: graph parsing/validation plus the pure outcome-mapping/env-injection
-helpers. Component tier: the executor wired with a FAKE command runner + workdir over
-a real hub store, including the serialization barrier every parked chunk must honor.
+Unit tier: graph validation plus the pure poll-policy and env-injection helpers. Component
+tier: the executor taking actions' passes over a real hub store, including the
+serialization barrier every parked chunk must honor.
 """
 
 from __future__ import annotations
@@ -15,33 +15,24 @@ from typing import cast
 
 import pytest
 import yaml
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import insert
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
-from blizzard.foundation.trace_export.config import TracingConfig
-from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
-from blizzard.hub.delivery.command_runner import CommandResult
+from blizzard.hub.delivery.action_registry import HubActions
+from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
     ENV_CHUNK_URL,
-    ENV_GARDEN_DELIVERY_URL,
     ENV_MARKER_TOKEN,
-    ENV_REVIEW_FINDINGS_URL,
     ENV_WORK_ITEMS,
     HubEnv,
-    HubNodeExecutor,
     PollPolicy,
-    PrintedChoice,
-    _NoopStep,
 )
-from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
+from blizzard.hub.domain.actions.effects import IEffectSink, Pass
+from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError, Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -54,20 +45,19 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
+from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
-from blizzard.hub.domain.graph.model import HUB_PENDING_CHOICE, GraphDoc, RunStep
+from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points
 from tests.support import (
     TEST_CATALOGUE,
-    FakeHubCommandRunner,
-    FakeHubWorkdir,
+    TEST_HUB_ACTIONS,
     FakeWorkSource,
+    HubHarness,
     build_hub,
     default_project,
-    emitted_events,
     hub_store_connections,
     link_project,
     pointer_token,
@@ -100,10 +90,8 @@ nodes:
           to: build
   merge:
     executor: hub
-    run:
-      - name: land
-        command: land-the-repo
-        produces: merged
+    action: test.answer
+    with: {choice: [success]}
     judgement:
       choices:
         success:
@@ -115,6 +103,11 @@ nodes:
 """
 
 
+def _answering(choice: str) -> str:
+    """:data:`_HUB_CMD_GRAPH_YAML` with ``merge`` answering ``choice``."""
+    return _HUB_CMD_GRAPH_YAML.replace("with: {choice: [success]}", f"with: {{choice: [{choice}]}}")
+
+
 # Unit — validation
 
 
@@ -123,7 +116,7 @@ def _errors(yaml_nodes: dict) -> list[str]:
     return Validator.of(doc, TEST_CATALOGUE).result.errors
 
 
-def test_hub_node_with_run_and_choices_is_valid() -> None:
+def test_hub_node_naming_an_action_and_choices_is_valid() -> None:
     doc = GraphDoc.of(
         {
             "name": "g",
@@ -135,7 +128,8 @@ def test_hub_node_with_run_and_choices_is_valid() -> None:
                 },
                 "merge": {
                     "executor": "hub",
-                    "run": [{"command": "echo hi", "produces": "done-marker"}],
+                    "action": "test.answer",
+                    "with": {"choice": ["success"]},
                     "judgement": {
                         "choices": {
                             "success": {"description": "ok", "to": "done"},
@@ -150,7 +144,7 @@ def test_hub_node_with_run_and_choices_is_valid() -> None:
     assert result.errors == []
 
 
-def test_hub_node_with_run_rejects_prompt() -> None:
+def test_hub_node_naming_an_action_rejects_prompt() -> None:
     errors = _errors(
         {
             "build": {
@@ -160,7 +154,8 @@ def test_hub_node_with_run_rejects_prompt() -> None:
             "merge": {
                 "executor": "hub",
                 "prompt": "not allowed",
-                "run": [{"command": "echo hi"}],
+                "action": "test.answer",
+                "with": {"choice": ["success"]},
                 "judgement": {"choices": {"success": {"description": "ok", "to": "done"}}},
             },
         }
@@ -168,7 +163,7 @@ def test_hub_node_with_run_rejects_prompt() -> None:
     assert any("must not declare `prompt`" in e for e in errors)
 
 
-def test_hub_node_with_run_rejects_checks() -> None:
+def test_hub_node_naming_an_action_rejects_checks() -> None:
     errors = _errors(
         {
             "build": {
@@ -178,7 +173,8 @@ def test_hub_node_with_run_rejects_checks() -> None:
             "merge": {
                 "executor": "hub",
                 "checks": ["mise run test"],
-                "run": [{"command": "echo hi"}],
+                "action": "test.answer",
+                "with": {"choice": ["success"]},
                 "judgement": {"choices": {"success": {"description": "ok", "to": "done"}}},
             },
         }
@@ -186,7 +182,7 @@ def test_hub_node_with_run_rejects_checks() -> None:
     assert any("must not declare `checks`" in e for e in errors)
 
 
-def test_hub_node_with_run_rejects_judgement_prompt() -> None:
+def test_hub_node_naming_an_action_rejects_judgement_prompt() -> None:
     errors = _errors(
         {
             "build": {
@@ -195,7 +191,8 @@ def test_hub_node_with_run_rejects_judgement_prompt() -> None:
             },
             "merge": {
                 "executor": "hub",
-                "run": [{"command": "echo hi"}],
+                "action": "test.answer",
+                "with": {"choice": ["success"]},
                 "judgement": {"prompt": "assess it", "choices": {"success": {"description": "ok", "to": "done"}}},
             },
         }
@@ -203,35 +200,22 @@ def test_hub_node_with_run_rejects_judgement_prompt() -> None:
     assert any("must not declare `judgement.prompt`" in e for e in errors)
 
 
-def test_hub_node_with_run_requires_a_judgement() -> None:
+def test_hub_node_naming_an_action_requires_a_judgement() -> None:
     errors = _errors(
         {
             "build": {
                 "executor": "runner",
                 "judgement": {"prompt": "p", "choices": {"pass": {"description": "d", "to": "merge"}}},
             },
-            "merge": {"executor": "hub", "run": [{"command": "echo hi"}]},
+            "merge": {"executor": "hub", "action": "test.answer", "with": {"choice": ["success"]}},
         }
     )
     assert any("must declare a judgement" in e for e in errors)
 
 
-def test_run_on_a_runner_node_is_rejected() -> None:
-    errors = _errors(
-        {
-            "build": {
-                "executor": "runner",
-                "run": [{"command": "echo hi"}],
-                "judgement": {"prompt": "p", "choices": {"pass": {"description": "d", "to": "done"}}},
-            },
-        }
-    )
-    assert any("`run:` is only legal on a hub node" in e for e in errors)
-
-
-def test_a_bare_hub_node_with_no_run_and_no_judgement_is_rejected() -> None:
+def test_a_bare_hub_node_with_no_action_and_no_judgement_is_rejected() -> None:
     """An ``executor: hub`` node must declare a judgement (its outcome choices)
-    whether or not it also declares ``run:`` — no node name is privileged (#67)."""
+    whether or not it also names an ``action:`` — no node name is privileged (#67)."""
     errors = _errors(
         {
             "build": {
@@ -256,7 +240,8 @@ _BUILD_TO_MERGE = {
 def _merge_with(**overrides: object) -> dict:
     node = {
         "executor": "hub",
-        "run": [{"command": "check-ci"}],
+        "action": "test.sequence",
+        "with": {"choices": ["pending", "success"]},
         "judgement": {
             "choices": {
                 "success": {"description": "ok", "to": "done"},
@@ -319,14 +304,6 @@ def test_poll_interval_and_timeout_are_valid_when_well_formed() -> None:
         }
     )
     assert errors == []
-
-
-def test_pending_is_recognized_regardless_of_authored_choice_names() -> None:
-    """The reserved ``pending`` outcome (#66) is recognized on its last stdout line
-    even when no choice named it — like ``success``/``failure``, never an authored edge."""
-    assert PrintedChoice.of("doing work\npending", frozenset({"success", "failure"})).name == HUB_PENDING_CHOICE
-    assert PrintedChoice.of("pending", frozenset()).name == HUB_PENDING_CHOICE
-    assert PrintedChoice.of("unrelated-line", frozenset()).name is None
 
 
 def test_poll_policy_defaults_when_unauthored() -> None:
@@ -638,7 +615,7 @@ def test_build_hub_env_takes_the_board_url_from_the_shared_helper(monkeypatch: p
     assert env[ENV_CHUNK_URL] == "via-helper:https://blizzard.example.com:ch_x"
 
 
-# Component — the executor wired with fakes over a real hub store
+# Component — the executor taking passes over a real hub store
 
 
 def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML, tokens=None):  # type: ignore[no-untyped-def]
@@ -646,7 +623,7 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML,
 
     Returns ``(chunk_id, build_node_id, graph)``. The completion's own apply already
     runs the hub node executor synchronously (``src/blizzard/hub/domain/execution/apply.py``'s hub-node branch) — most
-    tests below want that; the barrier test bypasses it (see its own helper)."""
+    tests below want that; the barrier test bypasses it (:func:`_park_at_merge`)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": tokens or [pointer_token(pointer)]})
     assert resp.status_code == 201, resp.text
@@ -681,40 +658,10 @@ def _submit_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # t
 
 
 @pytest.mark.component
-def test_produces_marker_skips_an_already_run_step(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
-    chunk_id, build_node_id, graph = _to_merge_node(hub)
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-
-    # Pre-record the step's marker, as if a prior (crashed) run already completed it.
-    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id=merge_node.node_id,
-        node_name="merge",
-        epoch=1,
-        name="merged",
-        content="done",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
-    assert apply.json()["outcome"] == "hub_node_taken"
-
-    assert runner.calls == []
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["status"] == "done"
-
-
-@pytest.mark.component
 def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Path) -> None:
-    """A restart during ``run:`` fences a stale merged marker and its landing
+    """A restart during a visit fences a stale merged marker and its landing
     side effect (``bzh:epoch-fencing``)."""
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = _to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
@@ -739,9 +686,7 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
 @pytest.mark.component
 def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = _to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
@@ -772,9 +717,7 @@ def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path)
 def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path) -> None:
     """Stop mints no epoch: terminality must fence the still-current run's marker
     (``bzh:epoch-fencing``), landing and close intent."""
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = _to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
@@ -801,11 +744,9 @@ def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path)
 @pytest.mark.component
 def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Path) -> None:
     """``record_hub_step_transition`` mirrors ``record_hub_artifact``'s guards (#65) — the
-    sibling of the marker-write case above: a stop landing mid-``run:`` must fence the
-    step's own exit transition too, not just its marker."""
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+    sibling of the marker-write case above: a stop landing mid-visit must fence the
+    node's own exit transition too, not just its marker."""
+    hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = _to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
@@ -832,26 +773,82 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
     assert all(t["from_node_name"] != "merge" for t in detail["history"])
 
 
+class _Gate:
+    """An in-process action holding each pass until released, counting the passes it took and how many ran at
+    once."""
+
+    spec = ActionSpec(
+        name="test.gate",
+        args=frozenset(),
+        required_args=frozenset(),
+        answers=frozenset({"success"}),
+        answers_from_arg=None,
+        lands=False,
+    )
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self._lock = threading.Lock()
+        self.passes = 0
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
+        with self._lock:
+            self.passes += 1
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        self.entered.set()
+        self.release.wait(timeout=5)
+        with self._lock:
+            self.in_flight -= 1
+        return Pass(choice="success")
+
+
+class _Recorded:
+    """An in-process action answering ``pending`` on its first pass and ``success`` after, keeping every visit
+    it was handed."""
+
+    spec = ActionSpec(
+        name="test.recorded",
+        args=frozenset(),
+        required_args=frozenset(),
+        answers=frozenset({"pending", "success"}),
+        answers_from_arg=None,
+        lands=False,
+    )
+
+    def __init__(self) -> None:
+        self.visits: list[Visit] = []
+
+    async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
+        self.visits.append(visit)
+        return Pass(choice="pending" if len(self.visits) == 1 else "success")
+
+
+def _hub_with(tmp_path: Path, *extra: object, **kwargs: object) -> HubHarness:
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), *extra])  # type: ignore[list-item]
+    return build_hub(tmp_path, actions=actions, **kwargs)  # type: ignore[arg-type]
+
+
+def _gated(choice_action: str = "test.gate") -> str:
+    return _HUB_CMD_GRAPH_YAML.replace("action: test.answer\n    with: {choice: [success]}", f"action: {choice_action}")
+
+
+def _passes(hub: HubHarness, chunk_id: str) -> int:
+    """How many ``test.sequence`` passes the chunk's node took — one marker each."""
+    names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    return sum(1 for name in names if name.startswith("test-sequence/"))
+
+
 @pytest.mark.component
-def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=workdir)
+def test_a_pass_maps_its_answer_to_the_authored_edge(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_merge_node(hub)
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
-
-    assert len(runner.calls) == 1
-    command, _cwd, env = runner.calls[0]
-    assert command == "land-the-repo"
-    assert env["BZ_HUB_CHUNK_ID"] == chunk_id
-    # The chunk's work ref resolves through the default FakeWorkSource, feeding
-    # BZ_HUB_FEATURE_TITLE.
-    assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
-    # The mid-run marker-write capability token.
-    assert env[ENV_MARKER_TOKEN]
-    assert workdir.ensured == [chunk_id]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
@@ -864,7 +861,7 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_a_hub_node_landing_done_releases_the_route(tmp_path: Path) -> None:
     """The hub node's ``done`` is the release a runner-authored ``done`` never writes."""
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_merge_node(hub)
 
     assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
@@ -874,81 +871,22 @@ def test_a_hub_node_landing_done_releases_the_route(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_the_env_addresses_this_visits_garden_delivery_route(tmp_path: Path) -> None:
-    """`garden_deliver` reaches the hub only through the injected
-    ``BZ_HUB_GARDEN_DELIVERY_URL``, so the executor must address this
-    chunk, node and epoch — an absent or mis-built URL fails the node at runtime."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, graph = _to_merge_node(hub)
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-
-    _command, _cwd, env = runner.calls[0]
-    assert env[ENV_GARDEN_DELIVERY_URL].endswith(
-        f"/api/chunks/{chunk_id}/garden-delivery?node_id={merge_node.node_id}&epoch=1"
-    )
-    # The route it addresses is served: a POST there answers, rather than 404ing a path
-    # only this test believes in.
-    delivery = hub.client.post(env[ENV_GARDEN_DELIVERY_URL], json={"delta": [], "proposals": []})
-    assert delivery.status_code == 200, delivery.text
-
-
-@pytest.mark.component
-def test_the_env_addresses_this_visits_review_findings_route(tmp_path: Path) -> None:
-    """``review_deliver`` reaches the hub only through the injected
-    ``BZ_HUB_REVIEW_FINDINGS_URL``. The route 404s here (this fixture
-    chunk carries no `review-finding-delta`), enough to prove the address is live."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, graph = _to_merge_node(hub)
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-
-    _command, _cwd, env = runner.calls[0]
-    assert env[ENV_REVIEW_FINDINGS_URL].endswith(
-        f"/api/chunks/{chunk_id}/review-findings-delivery?node_id={merge_node.node_id}&epoch=1"
-    )
-    delivery = hub.client.post(env[ENV_REVIEW_FINDINGS_URL])
-    assert delivery.status_code == 200, delivery.text
-
-
-@pytest.mark.component
 def test_a_failed_work_item_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
-    """A forge read failing while resolving the feature title must never break
-    delivery (best-effort, #bzh design note above :meth:`HubNodeExecutor._resolve_feature_title`):
-    the hub node still runs its ``run:`` step, just with no ``BZ_HUB_FEATURE_TITLE``."""
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub = build_hub(
-        tmp_path,
-        hub_command_runner=runner,
-        hub_workdir=workdir,
-        work_sources={"default": FakeWorkSource(fail_refs={"42"})},
-    )
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+    """A forge read failing while resolving the feature title must never break delivery
+    (:meth:`HubNodeExecutor._resolve_feature_title`): the pass is still taken, its visit naming no title."""
+    recorded = _Recorded()
+    hub = _hub_with(tmp_path, recorded, work_sources={"default": FakeWorkSource(fail_refs={"42"})})
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_gated("test.recorded"))
 
-    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
-    assert apply.json()["outcome"] == "hub_node_taken"
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
-    assert len(runner.calls) == 1
-    _command, _cwd, env = runner.calls[0]
-    assert "BZ_HUB_FEATURE_TITLE" not in env
-
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["status"] == "done"
+    assert [visit.feature_title for visit in recorded.visits] == [None]
 
 
 @pytest.mark.component
-def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+def test_a_failure_answer_maps_to_the_failure_edge(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_answering("failure"))
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
@@ -956,131 +894,6 @@ def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     # Routed back to `build` (the `failure` edge's target) — running again, not done.
     assert detail["status"] == "running"
-    assert detail["current_node_name"] == "build"
-
-
-#: No `failure` edge for a non-zero merge exit — a graph mint now refuses, standing in for a
-#: legacy stored graph.
-_UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
-    """        failure:
-          description: Failed to land.
-          to: build
-""",
-    "",
-)
-
-
-def _event_logged_frames(hub, *, since: int = 0) -> list[dict]:  # type: ignore[no-untyped-def]
-    return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.EVENT_LOGGED]
-
-
-@pytest.mark.component
-def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """An unroutable failure strands the node but emits one critical event per
-    (node, epoch), even on repeat polls (event-recording-publishes AC3). Mint refuses a hub
-    node with no `failure` edge, so the legacy stored graph is minted past validation."""
-    assert Validator.of(GraphDoc.of(yaml.safe_load(_UNROUTABLE_GRAPH_YAML)), TEST_CATALOGUE).result.errors
-    monkeypatch.setattr(Validator, "require_valid", lambda self: self.result)
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_UNROUTABLE_GRAPH_YAML)
-    since = int(emitted_events(hub)[-1]["id"]) if emitted_events(hub) else 0
-
-    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
-    assert apply.json()["outcome"] == "hub_node_taken"
-
-    # Unrouted `merge` still reads as `delivering`.
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["status"] == "delivering"
-    assert detail["current_node_name"] == "merge"
-
-    def _announcements() -> tuple[list[dict], list]:
-        art = [
-            a
-            for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
-            if a["name"] == "hub-unroutable-outcome"
-        ]
-        ev = [
-            e
-            for e in hub.services.chunks.events.list_events(chunk_id=chunk_id)
-            if e.kind == "hub-node-unroutable-outcome"
-        ]
-        return art, ev
-
-    artifacts, events = _announcements()
-    assert len(artifacts) == 1, "the gap must surface in chunk detail"
-    assert len(events) == 1, "and once in the operational event feed"
-    # In-vocabulary, so the severity filter reaches it (tests/test_event_log.py::…_sinks_below_info).
-    assert events[0].severity == "critical"
-    assert [
-        e.kind for e in hub.services.chunks.events.list_events(chunk_id=chunk_id, severity=EventLogSeverity.CRITICAL)
-    ] == ["hub-node-unroutable-outcome"]
-    assert "no authored edge for choice `failure`" in events[0].message
-    assert events[0].detail["authored_choices"] == ["success"]
-
-    frames = _event_logged_frames(hub, since=since)
-    assert len(frames) == 1, "and once on the live SSE stream"
-    assert frames[0]["kind"] == "hub-node-unroutable-outcome"
-    assert frames[0]["severity"] == "critical"
-    assert frames[0]["key"].startswith("event_log:")
-
-    # Re-poll: the node re-runs and fails identically. Still exactly one of each —
-    # the artifact's (chunk, node, name, epoch) idempotency is what gates the event.
-    again = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert again.json()["ran"] is True
-    assert len(runner.calls) == 2
-
-    artifacts, events = _announcements()
-    assert len(artifacts) == 1, "a poll loop must not write an artifact per attempt"
-    assert len(events) == 1, "nor an event per attempt"
-    assert len(_event_logged_frames(hub, since=since)) == 1, "nor a frame per attempt"
-
-
-_SILENT_RUN_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
-    """        success:
-          description: Landed.
-          to: done
-""",
-    """        landed:
-          description: Landed.
-          to: done
-""",
-)
-
-
-@pytest.mark.component
-def test_a_silent_run_routes_success_when_the_node_authors_it(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
-
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-
-
-@pytest.mark.component
-def test_a_silent_run_routes_failure_when_the_node_authors_no_success(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_SILENT_RUN_GRAPH_YAML)
-
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["status"] == "running"
-    assert detail["current_node_name"] == "build"
-
-
-@pytest.mark.component
-def test_a_printed_choice_overrides_the_exit_code_default(tmp_path: Path) -> None:
-    """Exit 0 but the command prints `failure` on its last stdout line: the printed
-    choice wins over the exit-0 default (#65's outcome-mapping vocabulary)."""
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=0, stdout="doing stuff\nfailure\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
-
-    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
-    assert apply.json()["outcome"] == "hub_node_taken"
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["current_node_name"] == "build"
 
 
@@ -1112,12 +925,9 @@ def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch
 @pytest.mark.component
 def test_a_non_terminal_route_with_nothing_landed_records_a_bounce(tmp_path: Path) -> None:
     """A non-terminal route with nothing landed is a delivery kick-back (#64) — by
-    the domain fact (no ``merged/<repo>`` marker), never by choice name: ``failure``
-    here is the plain exit-code default, not a specially-recognized string."""
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+    the domain fact (no ``merged/<repo>`` marker), never by choice name."""
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_answering("failure"))
 
     apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
     assert apply.json()["outcome"] == "hub_node_taken"
@@ -1136,9 +946,7 @@ def test_a_fully_landed_non_terminal_route_records_no_bounce(tmp_path: Path) -> 
     """The counterpart: every repo already carries its ``merged/<repo>`` marker, so a
     non-terminal continuation (an authored ``landed -> <node>`` edge, #63) is forward
     progress, never a kick-back — no bounce fact, whatever the outcome's name."""
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=0, stdout="landed\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     graph_yaml = """
 name: default-delivery
 entry: build
@@ -1159,10 +967,8 @@ nodes:
           to: build
   merge:
     executor: hub
-    run:
-      - name: land
-        command: land-the-repo
-        produces: merged
+    action: test.answer
+    with: {choice: [landed]}
     judgement:
       choices:
         landed:
@@ -1186,8 +992,7 @@ nodes:
     chunk_id, build_node_id, graph = _to_merge_node(hub, graph_yaml=graph_yaml)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
-    # The repo already landed — pre-record the marker as if the mid-run callback
-    # wrote it ahead of this node's own run.
+    # The repo already landed — pre-record the marker as an earlier pass would have.
     cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=merge_node.node_id,
@@ -1209,22 +1014,8 @@ nodes:
 
 
 @pytest.mark.component
-def test_stdout_stderr_are_captured_as_an_asset_artifact_visible_in_chunk_detail(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm("land-the-repo", CommandResult(exit_code=0, stdout="merged cleanly", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
-
-    _submit_build_pass(hub, chunk_id, build_node_id, 1)
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    logs = [a for a in detail["artifacts"] if a["name"].startswith("hub-log.")]
-    assert logs, detail["artifacts"]
-    assert "merged cleanly" in logs[0]["content"]
-
-
-@pytest.mark.component
 def test_mid_run_marker_callback_records_a_marker(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     chunk_id = resp.json()["chunk_id"]
@@ -1258,7 +1049,7 @@ def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) 
     """A `merged/<repo>` marker is the sole production choke point for
     `count_landed_since` — a fresh write records it, a replay never double-counts, and a
     non-`merged/` marker never touches it at all."""
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     chunk_id = resp.json()["chunk_id"]
@@ -1322,156 +1113,26 @@ def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) 
 # Component — the serialization barrier (REQUIRED, flagged)
 
 
-@pytest.mark.component
-def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tmp_path: Path) -> None:
-    """Two chunks parked at a hub command node both call the executor; the fleet-wide
-    slot (#65) MUST ensure exactly one runs commands at a time — proven with a shared
-    in-flight counter the fake runner maintains, never observed above 1."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
-
-    def _ingest_claim_and_park_at_merge(pointer_ref: str) -> tuple:  # type: ignore[no-untyped-def]
-        resp = hub.client.post(
-            "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": pointer_ref})]}
-        )
-        chunk_id = resp.json()["chunk_id"]
-        assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-        claim = hub.client.post(
-            "/api/fleet/routes",
-            json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-        )
-        build_node_id = claim.json()["envelope"]["node"]["node_id"]
-        report_lease(hub, chunk_id, epoch=1, seq=1)
-        chunk = hub.services.chunks.record.get(chunk_id)
-        assert chunk is not None
-        graph = hub.services.graphs.get(chunk.graph_id)
-        assert graph is not None
-        merge_node = graph.node_by_name("merge")
-        assert merge_node is not None
-        build_node = graph.node_by_id(build_node_id)
-        assert build_node is not None
-        # Park directly at `merge`, bypassing the executor's own auto-run on
-        # transition — the shape "two held chunks both poll hub-advance" needs.
-        cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-            transition_id=f"tr_test_{pointer_ref}",
-            chunk_id=chunk_id,
-            from_node_id=build_node.node_id,
-            to_node_id=merge_node.node_id,
-            choice_name="pass",
-            epoch=1,
-            runner_id="r1",
-            at=hub.clock.now(),
-            artifacts=[],
-            admission=EpochAdmission.AT_OR_ABOVE,
-        )
-        return chunk, graph, merge_node
-
-    chunk_a, graph_a, merge_node = _ingest_claim_and_park_at_merge("100")
-    chunk_b, _graph_b, _ = _ingest_claim_and_park_at_merge("200")
-
-    entered = threading.Event()
-    release = threading.Event()
-    lock = threading.Lock()
-    in_flight = 0
-    max_in_flight = 0
-
-    def before_run(_command: str) -> None:
-        nonlocal in_flight, max_in_flight
-        with lock:
-            in_flight += 1
-            max_in_flight = max(max_in_flight, in_flight)
-        entered.set()
-        release.wait(timeout=5)
-        with lock:
-            in_flight -= 1
-
-    runner.before_run = before_run
-
-    result_a: dict = {}
-
-    def run_a() -> None:
-        result_a["value"] = hub.services.hub_node.run(chunk_a, graph_a, merge_node, epoch=1)
-
-    thread = threading.Thread(target=run_a)
-    thread.start()
-    assert entered.wait(timeout=5), "chunk A never entered its command"
-
-    # Chunk B's concurrent attempt: the slot is live (held by chunk A) — deferred,
-    # not run alongside it.
-    result_b = hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1)
-    assert result_b is None
-
-    release.set()
-    thread.join(timeout=5)
-
-    assert result_a["value"] is not None
-    assert max_in_flight == 1, "two chunks' hub commands ran concurrently — serialization slot failed"
-
-    # Now that A released the slot, B can run to completion on its own call.
-    result_b2 = hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1)
-    assert result_b2 is not None
-    assert len(runner.calls) == 2
-
-
-@pytest.mark.component
-def test_a_chunks_own_live_run_is_never_reentered_and_a_finished_one_never_replays(tmp_path: Path) -> None:
-    """The slot is not reentrant: while a chunk's hub node runs, a second ``run`` of that same
-    chunk starts no command; once it finished, a replay finds the chunk past the node and starts none."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, graph = _to_merge_node(hub)
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-
-    entered = threading.Event()
-    release = threading.Event()
-
-    def before_run(_command: str) -> None:
-        entered.set()
-        release.wait(timeout=5)
-
-    runner.before_run = before_run
-    applied: dict = {}
-    thread = threading.Thread(target=lambda: applied.update(r=_submit_build_pass(hub, chunk_id, build_node_id, 1)))
-    thread.start()
-    assert entered.wait(timeout=5), "the hub node never started"
-
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
-    assert len(runner.calls) == 1
-    # The deferred attempt freed no slot but its own: the first run's is still live.
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 1
-
-    release.set()
-    thread.join(timeout=5)
-    assert applied["r"].json()["outcome"] == "hub_node_taken"
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
-
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-    assert len(runner.calls) == 1
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert len([t for t in detail["history"] if t["from_node_name"] == "merge"]) == 1
-
-
-@pytest.mark.component
-def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, graph = _to_merge_node(hub)
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
-    # A run the previous process died in left its slot live; park the chunk at the node.
-    assert hub_exec.acquire_hub_exec_slot(
-        chunk_id, node_id=merge_node.node_id, at=hub.clock.now(), stale_after=timedelta(hours=1)
+def _park_at_merge(hub: HubHarness, pointer_ref: str):  # type: ignore[no-untyped-def]
+    """Ingest, claim, and park one chunk directly at ``merge``, bypassing the executor's own pass on
+    transition — the shape "two held chunks both poll hub-advance" needs."""
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": pointer_ref})]})
+    chunk_id = resp.json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
+    build_node_id = claim.json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    graph = hub.services.graphs.get(chunk.graph_id)
+    assert graph is not None
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
     cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id="tr_test_boot",
+        transition_id=f"tr_test_{pointer_ref}",
         chunk_id=chunk_id,
         from_node_id=build_node_id,
         to_node_id=merge_node.node_id,
@@ -1482,18 +1143,96 @@ def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path:
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
     )
+    return chunk, graph, merge_node
+
+
+@pytest.mark.component
+def test_serialization_barrier_two_chunks_never_take_passes_concurrently(tmp_path: Path) -> None:
+    """Two chunks parked at a hub node both call the executor; the fleet-wide slot (#65) MUST
+    ensure exactly one pass runs at a time — proven with the gate's in-flight count, never above 1."""
+    gate = _Gate()
+    hub = _hub_with(tmp_path, gate)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _gated()}).status_code == 201
+    chunk_a, graph_a, merge_node = _park_at_merge(hub, "100")
+    chunk_b, _graph_b, _ = _park_at_merge(hub, "200")
+
+    result_a: dict = {}
+    thread = threading.Thread(
+        target=lambda: result_a.update(value=hub.services.hub_node.run(chunk_a, graph_a, merge_node, epoch=1))
+    )
+    thread.start()
+    assert gate.entered.wait(timeout=5), "chunk A never entered its pass"
+
+    # Chunk B's concurrent attempt: the slot is live (held by chunk A) — deferred, not run alongside it.
+    assert hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1) is None
+
+    gate.release.set()
+    thread.join(timeout=5)
+
+    assert result_a["value"] is not None
+    assert gate.max_in_flight == 1, "two chunks' passes ran concurrently — serialization slot failed"
+    # Now that A released the slot, B takes its pass on its own call.
+    assert hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1) is not None
+    assert gate.passes == 2
+
+
+@pytest.mark.component
+def test_a_chunks_own_live_pass_is_never_reentered_and_a_finished_one_never_replays(tmp_path: Path) -> None:
+    """The slot is not reentrant: while a chunk's hub node takes its pass, a second ``run`` of that same
+    chunk takes none; once it finished, a replay finds the chunk past the node and takes none."""
+    gate = _Gate()
+    hub = _hub_with(tmp_path, gate)
+    chunk_id, build_node_id, graph = _to_merge_node(hub, graph_yaml=_gated())
+    merge_node = graph.node_by_name("merge")
+    assert merge_node is not None
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+
+    applied: dict = {}
+    thread = threading.Thread(target=lambda: applied.update(r=_submit_build_pass(hub, chunk_id, build_node_id, 1)))
+    thread.start()
+    assert gate.entered.wait(timeout=5), "the hub node never started"
+
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+    assert gate.passes == 1
+    # The deferred attempt freed no slot but its own: the first pass's is still live.
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 1
+
+    gate.release.set()
+    thread.join(timeout=5)
+    assert applied["r"].json()["outcome"] == "hub_node_taken"
+    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
+
+    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
+    assert gate.passes == 1
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len([t for t in detail["history"] if t["from_node_name"] == "merge"]) == 1
+
+
+@pytest.mark.component
+def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
+    chunk, graph, merge_node = _park_at_merge(hub, "boot")
+    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
+    # A pass the previous process died in left its slot live.
+    assert hub_exec.acquire_hub_exec_slot(
+        chunk.chunk_id, node_id=merge_node.node_id, at=hub.clock.now(), stale_after=timedelta(hours=1)
+    )
     assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
 
     assert hub.services.hub_node.release_orphaned_slots() == 1
 
     assert hub_exec.count_live_hub_exec_slots() == 0
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is not None
-    assert len(runner.calls) == 1
+    result = hub.services.hub_node.run(chunk, graph, merge_node, epoch=1)
+    assert result is not None
+    assert result.outcome_choice == "success"
 
 
 @pytest.mark.component
 def test_two_projects_linking_one_repository_share_the_tenants_hub_exec_slot(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, hub_command_runner=FakeHubCommandRunner(), hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     first = default_project(hub.engine)
     second = seed_project(hub.engine, "second")
     link_project(hub.engine, project=second, repository="acme-widget")
@@ -1538,9 +1277,8 @@ nodes:
     executor: hub
     poll_interval: 30
     poll_timeout: 90
-    run:
-      - name: check-ci
-        command: check-ci
+    action: test.sequence
+    with: {choices: [pending, success]}
     judgement:
       choices:
         success:
@@ -1551,35 +1289,22 @@ nodes:
           to: build
 """
 
+#: ``merge`` answering ``pending`` on every pass.
+_ALWAYS_PENDING_GRAPH_YAML = _POLL_GRAPH_YAML.replace(
+    "with: {choices: [pending, success]}", "with: {choices: [pending]}"
+)
 
-def _to_poll_merge_node(hub, pointer):  # type: ignore[no-untyped-def]
-    """Same shape as ``_to_merge_node`` but minting the pending-capable poll graph."""
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _POLL_GRAPH_YAML}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
-    assert resp.status_code == 201, resp.text
-    chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-    )
-    assert claim.status_code == 201, claim.text
-    build_node_id = claim.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    return chunk_id, build_node_id, graph
+
+def _to_poll_merge_node(hub, pointer, graph_yaml: str = _POLL_GRAPH_YAML):  # type: ignore[no-untyped-def]
+    """Same shape as ``_to_merge_node`` but minting a pending-capable poll graph."""
+    return _to_merge_node(hub, pointer=pointer, graph_yaml=graph_yaml)
 
 
 @pytest.mark.component
 def test_pending_records_no_transition_and_releases_the_slot(tmp_path: Path) -> None:
-    """A ``pending`` outcome parks the chunk without a transition, and the fleet-wide
+    """A ``pending`` answer parks the chunk without a transition, and the fleet-wide
     slot is free immediately after — the #66 property a pending node must hold."""
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-1"})
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
@@ -1597,31 +1322,25 @@ def test_pending_records_no_transition_and_releases_the_slot(tmp_path: Path) -> 
 
 @pytest.mark.component
 def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) -> None:
-    """Re-polling before ``poll_interval`` elapses is a no-op (the command never
-    re-runs); once elapsed, the node re-runs and a subsequent success routes ``done``."""
-    runner = FakeHubCommandRunner()
-    runner.arm(
-        "check-ci",
-        CommandResult(exit_code=0, stdout="pending", stderr=""),
-        CommandResult(exit_code=0, stdout="success", stderr=""),
-    )
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    """Re-polling before ``poll_interval`` elapses is a no-op (no pass is taken); once
+    elapsed, the node takes its next pass and a ``success`` routes ``done``."""
+    hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-2"})
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"
-    assert len(runner.calls) == 1
+    assert _passes(hub, chunk_id) == 1
 
-    # Not yet due (poll_interval: 30) — hub-advance no-ops, the command does not re-run.
+    # Not yet due (poll_interval: 30) — hub-advance no-ops, no pass is taken.
     too_soon = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert too_soon.json()["ran"] is False
-    assert len(runner.calls) == 1
+    assert _passes(hub, chunk_id) == 1
 
     hub.clock.advance(timedelta(seconds=31))
     due = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert due.json()["ran"] is True
     assert due.json()["outcome_choice"] == "success"
-    assert len(runner.calls) == 2
+    assert _passes(hub, chunk_id) == 2
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
@@ -1629,19 +1348,19 @@ def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) ->
 
 
 @pytest.mark.component
-def test_a_slug_renamed_between_two_steps_of_one_chunk_reaches_the_second_step_under_the_same_id(
+def test_a_slug_renamed_between_two_passes_of_one_chunk_reaches_the_second_under_the_same_id(
     tmp_path: Path,
 ) -> None:
-    """Each hub step reads its chunk's project as it starts: a re-poll after a rename names the new slug."""
-    runner = FakeHubCommandRunner()
-    runner.arm(
-        "check-ci",
-        CommandResult(exit_code=0, stdout="pending", stderr=""),
-        CommandResult(exit_code=0, stdout="success", stderr=""),
-    )
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    """Each pass reads its chunk's project as it starts: a re-poll after a rename names the new slug."""
+    recorded = _Recorded()
+    hub = _hub_with(tmp_path, recorded)
     project_id = hub.client.get("/api/projects/default").json()["project_id"]
-    chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-rename"})
+    graph_yaml = _POLL_GRAPH_YAML.replace(
+        "action: test.sequence\n    with: {choices: [pending, success]}", "action: test.recorded"
+    )
+    chunk_id, build_node_id, _graph = _to_poll_merge_node(
+        hub, {"source": "default", "ref": "poll-rename"}, graph_yaml=graph_yaml
+    )
     assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
     renamed = hub.client.patch("/api/projects/default", json={"slug": "widgets"})
@@ -1649,7 +1368,7 @@ def test_a_slug_renamed_between_two_steps_of_one_chunk_reaches_the_second_step_u
     hub.clock.advance(timedelta(seconds=31))
     assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
 
-    assert [(env["BZ_HUB_PROJECT_ID"], env["BZ_HUB_PROJECT"]) for _, _, env in runner.calls] == [
+    assert [(visit.project.project_id, visit.project.slug) for visit in recorded.visits] == [
         (project_id, "default"),
         (project_id, "widgets"),
     ]
@@ -1658,29 +1377,22 @@ def test_a_slug_renamed_between_two_steps_of_one_chunk_reaches_the_second_step_u
 @pytest.mark.component
 def test_pending_chunk_does_not_block_another_chunks_hub_node(tmp_path: Path) -> None:
     """The key #66 property: chunk A parked pending (slot released) must not prevent
-    chunk B's hub node from running to completion on its own hub-advance call."""
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk B's hub node from running to completion on its own pass."""
+    hub = build_hub(tmp_path)
+    chunk_a, build_a, _graph_a = _to_poll_merge_node(
+        hub, {"source": "default", "ref": "poll-a"}, graph_yaml=_ALWAYS_PENDING_GRAPH_YAML
+    )
+    assert _submit_build_pass(hub, chunk_a, build_a, 1).json()["outcome"] == "hub_node_taken"
+    assert hub.client.get(f"/api/chunks/{chunk_a}").json()["pending"] is not None  # parked, slot released
 
-    chunk_a, build_a, _graph_a = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-a"})
-    apply_a = _submit_build_pass(hub, chunk_a, build_a, 1)
-    assert apply_a.json()["outcome"] == "hub_node_taken"
-    detail_a = hub.client.get(f"/api/chunks/{chunk_a}").json()
-    assert detail_a["pending"] is not None  # parked, slot released
+    # B's graph, answering `success`, is minted after A's, so a chunk ingested now pins it.
+    hub.clock.advance(timedelta(seconds=1))
+    chunk_b, build_b, _graph_b = _to_merge_node(hub, pointer={"source": "default", "ref": "poll-b"})
+    assert _submit_build_pass(hub, chunk_b, build_b, 1).json()["outcome"] == "hub_node_taken"
 
-    # Chunk B's own run of the same command is armed to succeed outright.
-    runner.script["check-ci"] = [CommandResult(exit_code=0, stdout="success", stderr="")]
-    chunk_b, build_b, _graph_b = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-b"})
-    apply_b = _submit_build_pass(hub, chunk_b, build_b, 1)
-    assert apply_b.json()["outcome"] == "hub_node_taken"
-
-    detail_b = hub.client.get(f"/api/chunks/{chunk_b}").json()
-    assert detail_b["status"] == "done"  # ran to completion, unblocked by A's pending park
-
+    assert hub.client.get(f"/api/chunks/{chunk_b}").json()["status"] == "done"
     # A is still parked pending, unaffected.
-    detail_a_again = hub.client.get(f"/api/chunks/{chunk_a}").json()
-    assert detail_a_again["pending"] is not None
+    assert hub.client.get(f"/api/chunks/{chunk_a}").json()["pending"] is not None
 
 
 @pytest.mark.component
@@ -1688,10 +1400,10 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     """Pending past ``poll_timeout`` stops polling and kicks back via #64's bounce
     accounting — a bounce fact recorded, routed to the ``failure`` edge's target
     (``build``), below the fleet-wide default ``bounce_cap`` so no escalation yet."""
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-timeout"})
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, _graph = _to_poll_merge_node(
+        hub, {"source": "default", "ref": "poll-timeout"}, graph_yaml=_ALWAYS_PENDING_GRAPH_YAML
+    )
 
     apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
     assert apply.json()["outcome"] == "hub_node_taken"  # poll #1 at t0
@@ -1700,15 +1412,15 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #2 at t0+31
     hub.clock.advance(timedelta(seconds=31))
     hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #3 at t0+62
-    assert len(runner.calls) == 3
+    assert _passes(hub, chunk_id) == 3
 
     # poll_timeout: 90, measured from the FIRST poll (t0) — elapsed is now 62 + 31 = 93 >= 90.
     hub.clock.advance(timedelta(seconds=31))
     timed_out = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert timed_out.json()["ran"] is True
     assert timed_out.json()["outcome_choice"] == "failure"
-    # The command itself is NOT re-run a 4th time — the timeout check pre-empts it.
-    assert len(runner.calls) == 3
+    # No 4th pass is taken — the timeout check pre-empts it.
+    assert _passes(hub, chunk_id) == 3
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
@@ -1726,10 +1438,10 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
 @pytest.mark.component
 @pytest.mark.parametrize("landed", [False, True], ids=["unlanded", "landed"])
 def test_a_poll_timeout_envelope_lists_a_seeded_commit_until_its_repo_lands(tmp_path: Path, landed: bool) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-commit"})
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, graph = _to_poll_merge_node(
+        hub, {"source": "default", "ref": "poll-commit"}, graph_yaml=_ALWAYS_PENDING_GRAPH_YAML
+    )
     _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
@@ -1750,20 +1462,11 @@ def test_a_poll_timeout_envelope_lists_a_seeded_commit_until_its_repo_lands(tmp_
 def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -> None:
     """Repeated poll-timeouts are bounces (#64): crossing ``bounce_cap`` escalates
     ``needs_human`` instead of routing back, exactly as a repeated conflict would."""
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    graph_yaml = _POLL_GRAPH_YAML.replace("poll_timeout: 90", "poll_timeout: 30\n    bounce_cap: 1")
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "poll-cap"})]})
-    chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
+    graph_yaml = _ALWAYS_PENDING_GRAPH_YAML.replace("poll_timeout: 90", "poll_timeout: 30\n    bounce_cap: 1")
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, _graph = _to_poll_merge_node(
+        hub, {"source": "default", "ref": "poll-cap"}, graph_yaml=graph_yaml
     )
-    build_node_id = claim.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
 
     # Bounce #1 (poll_timeout: 30, one poll at t0 then straight past the bound).
     _submit_build_pass(hub, chunk_id, build_node_id, 1)
@@ -1942,105 +1645,31 @@ def _env_for_expectation(*, expects: bool) -> dict[str, str]:
 
 
 @pytest.mark.component
-def test_the_env_names_every_work_item_by_its_forge_reference_and_links_the_board(tmp_path: Path) -> None:
-    """A chunk mixing a forge-sourced item and a built-in ``hub`` item hands the land
-    script one ``{label, reference}`` per item, in ``work_refs`` order, resolved with no
-    forge read — the ``hub`` item has no forge reference to give."""
-    runner = FakeHubCommandRunner()
+def test_the_visit_names_every_work_item_by_its_forge_reference_and_links_the_board(tmp_path: Path) -> None:
+    """A chunk mixing a forge-sourced item and a built-in ``hub`` item hands the pass one
+    ``{label, reference}`` per item, in ``work_refs`` order, resolved with no forge read — the
+    ``hub`` item has no forge reference to give."""
+    recorded = _Recorded()
     source = FakeWorkSource(repo="acme/widget")
-    hub = build_hub(
-        tmp_path,
-        hub_command_runner=runner,
-        hub_workdir=FakeHubWorkdir(),
-        work_sources={"default": source},
-        public_url="https://blizzard.example.com",
-    )
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
+    hub = _hub_with(tmp_path, recorded, work_sources={"default": source}, public_url="https://blizzard.example.com")
+    graph_yaml = _gated("test.recorded")
+    assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     minted = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
     hub_ref = minted["ref"]
     # Minting seats the item on its own chunk; stopping that chunk frees the ref to ride along.
     assert hub.client.post(f"/api/chunks/{minted['chunk_id']}/stop", json={"by": "operator"}).status_code == 202
-    chunk_id, build_node_id, _graph = _to_merge_node(hub, tokens=["default:42", f"hub:{hub_ref}"])
+    chunk_id, build_node_id, _graph = _to_merge_node(
+        hub, graph_yaml=graph_yaml, tokens=["default:42", f"hub:{hub_ref}"]
+    )
     fetched_before = list(source.fetched)
 
     assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
-    _command, _cwd, env = runner.calls[0]
-    assert json.loads(env[ENV_WORK_ITEMS]) == [
+    (visit,) = recorded.visits
+    assert [dict(item) for item in visit.work_items] == [
         {"label": "default#42", "reference": "acme/widget#42"},
         {"label": f"hub:{hub_ref}", "reference": None},
     ]
-    assert env[ENV_CHUNK_URL] == f"https://blizzard.example.com/board/chunk/{chunk_id}"
+    assert visit.public_url == "https://blizzard.example.com"
     # Only the feature title's one read of the first item — the references read nothing.
     assert source.fetched == [*fetched_before, "42"]
-
-
-@pytest.mark.component
-def test_the_env_omits_the_board_link_when_no_public_url_is_declared(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id, _graph = _to_merge_node(hub)
-
-    assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
-
-    _command, _cwd, env = runner.calls[0]
-    assert ENV_CHUNK_URL not in env
-    assert json.loads(env[ENV_WORK_ITEMS]) == [{"label": "default#42", "reference": "acme/widget#42"}]
-
-
-def _traced_executor(runner: FakeHubCommandRunner) -> tuple[HubNodeExecutor, InMemorySpanExporter, IPlatformTracing]:
-    exporter = InMemorySpanExporter()
-    handle = build_platform_tracing(
-        TracingConfig(platform=True, platform_sample_ratio=1.0),
-        {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"},
-        resource={},
-        scope="test",
-        scope_version="0",
-        exporter=exporter,
-    )
-    executor = object.__new__(HubNodeExecutor)
-    executor._runner = runner
-    executor._tracer = handle.tracer
-    return executor, exporter, handle
-
-
-def test_a_named_run_step_is_a_span_naming_it_and_carrying_its_exit_code_and_the_runner_gets_the_step() -> None:
-    runner = FakeHubCommandRunner(default=CommandResult(exit_code=3, stdout="", stderr=""))
-    executor, exporter, handle = _traced_executor(runner)
-    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
-
-    result = executor._run_step(
-        RunStep(command="land-it", name="land"), workdir="/work/dir", env={"K": "V"}, hub_exec=hub_exec
-    )
-
-    handle.shutdown(5.0)
-    assert result.exit_code == 3
-    assert runner.calls == [("land-it", "/work/dir", {"K": "V"})]
-    (span,) = exporter.get_finished_spans()
-    assert span.name == RUN_STEP_SPAN
-    assert dict(span.attributes or {}) == {RUN_STEP_NAME: "land", RUN_STEP_EXIT_CODE: 3}
-    assert span.parent is not None
-    assert (span.parent.trace_id, span.parent.span_id) == (hub_exec.trace_id, hub_exec.span_id)
-
-
-def test_an_unnamed_run_step_carries_only_its_exit_code() -> None:
-    executor, exporter, handle = _traced_executor(FakeHubCommandRunner())
-    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
-
-    executor._run_step(RunStep(command="go"), workdir="/w", env={}, hub_exec=hub_exec)
-
-    handle.shutdown(5.0)
-    (span,) = exporter.get_finished_spans()
-    assert dict(span.attributes or {}) == {RUN_STEP_EXIT_CODE: 0}
-
-
-def test_a_noop_step_runs_untraced() -> None:
-    runner = FakeHubCommandRunner()
-    executor, exporter, handle = _traced_executor(runner)
-    hub_exec = DerivedContext.of(StepKey.attempt("ch_x", 2), SpanRole.HUB_EXEC, "slot")
-
-    executor._run_step(_NoopStep(command="poll"), workdir="/w", env={"A": "B"}, hub_exec=hub_exec)
-
-    handle.shutdown(5.0)
-    assert runner.calls == [("poll", "/w", {"A": "B"})]
-    assert exporter.get_finished_spans() == ()

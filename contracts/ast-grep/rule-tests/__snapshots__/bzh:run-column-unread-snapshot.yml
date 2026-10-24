@@ -1,0 +1,23 @@
+id: bzh:run-column-unread
+snapshots:
+  ? |
+    graph_nodes.c.run.is_(None)
+  : labels:
+    - source: graph_nodes.c.run
+      style: primary
+      start: 0
+      end: 17
+  ? |
+    s.graph_nodes.c["run"]
+  : labels:
+    - source: s.graph_nodes.c["run"]
+      style: primary
+      start: 0
+      end: 22
+  ? |
+    select(s.graph_nodes.c.run)
+  : labels:
+    - source: s.graph_nodes.c.run
+      style: primary
+      start: 7
+      end: 26

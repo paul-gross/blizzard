@@ -639,6 +639,16 @@ def test_the_platform_section_is_the_code_constants() -> None:
     assert all(t == "string" for n, t in declared.items() if n not in platform_attr.CLI_ATTRIBUTES)
 
 
+def test_a_deprecated_platform_attribute_names_the_live_attribute_that_replaces_it() -> None:
+    attributes = {a["name"]: a for a in dictionary()["platform"]["attributes"]}
+    deprecated = {name for name, a in attributes.items() if a.get("deprecated") is True}
+    assert deprecated == {hub_platform.RUN_STEP_EXIT_CODE, hub_platform.RUN_STEP_NAME}
+    for name in deprecated:
+        named = set(re.findall(r"`([^`]+)`", attributes[name]["meaning"])) & set(attributes)
+        assert named, name
+        assert all(attributes[n].get("deprecated") is not True for n in named), name
+
+
 def test_the_published_platform_attribute_table_is_thedictionary() -> None:
     rows = _table_rows(_TRACING_DOC.read_text(), "### Platform attributes")
     published = [(_unticked(r[0]), _unticked(r[1]), r[2]) for r in rows]
