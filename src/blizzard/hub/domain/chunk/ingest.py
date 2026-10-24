@@ -237,17 +237,15 @@ class IngestService:
 
     def choose_project(self, pointers: Sequence[WorkRef], project: ProjectId | None) -> ProjectId:
         """The project an ingest of ``pointers`` naming ``project`` mints into, read before anything
-        is written — :func:`choose_ingest_project` over the configured sources' standing links and,
-        when they decide, the hub items' recorded projects. Raises its refusals and
+        is written — :func:`choose_ingest_project` over the configured sources' standing links and
+        the hub items' recorded projects. Raises its refusals and
         :class:`EmptyIngest`."""
         work_refs = ingest_work_refs(pointers)
         configured = configured_sources(work_refs)
         linking = self._links.projects_linking_sources(configured)
         links = {source: linking.get(source, []) for source in configured}
         try:
-            return choose_ingest_project(
-                project, work_refs, links, self._recorded_projects(project, configured, work_refs)
-            )
+            return choose_ingest_project(project, work_refs, links, self._recorded_projects(work_refs))
         except IngestSourceNotLinked as exc:
             raise exc.labelled(self._labels) from None
 
@@ -277,15 +275,14 @@ class IngestService:
             raise exc.labelled(self._labels) from None
         return chunk.chunk_id
 
-    def _recorded_projects(
-        self, named: ProjectId | None, configured: Sequence[str], work_refs: Sequence[WorkRef]
-    ) -> dict[WorkRef, ProjectId]:
-        """The hub items' recorded projects, read only when they decide: no project named and no
-        configured source among the pointers."""
-        if named is not None or configured:
+    def _recorded_projects(self, work_refs: Sequence[WorkRef]) -> dict[WorkRef, ProjectId]:
+        """The hub items' recorded projects — they decide the project when nothing else names one, and
+        must agree with it otherwise."""
+        hub_refs = [pointer for pointer in work_refs if pointer.source == RESERVED_HUB_SOURCE_NAME]
+        if not hub_refs:
             return {}
         return {
             pointer: item.project_id
-            for pointer, item in self._items.get_many(work_refs).items()
+            for pointer, item in self._items.get_many(hub_refs).items()
             if item.project_id is not None
         }
