@@ -30,10 +30,10 @@ Conventions for the `prompts/` tree are owned by the
   survives, some rationale does not.
 - **`survey` fans out before it bails.** An over-large sweep is split across at most 10 subagent batches before the
   survey may choose `excessive`.
-- **`deliver` authors a `failure` edge.** The plan left the delivery's own `failure` answer (a record the chunk has moved
-  past, a pass that raised) with no edge to route through, which deadlocks the chunk
-  per `bzh:hub-node-outcome-protocol`. Routes to `propose`, which re-affirms the standing docket and retries; bounded by
-  a loop-bound check in its addendum (`propose.from-deliver-failure.md`) the same way the `invalid` bounce is bounded in
+- **`deliver` authors a `failure` edge.** The plan left the delivery's own `failure` answer (a record the chunk has
+  moved past, a pass that raised) with no edge to route through, which deadlocks the chunk per
+  `bzh:hub-node-outcome-protocol`. Routes to `propose`, which re-affirms the standing docket and retries; bounded by a
+  loop-bound check in its addendum (`propose.from-deliver-failure.md`) the same way the `invalid` bounce is bounded in
   `reconcile.from-deliver.md`.
 - **Every system-scope pointer carries the additive fallback `bzh:graph-artifact-pointer-fallback` requires** —
   `survey.md`, `reconcile.md`, `propose.md`, and `reconcile.from-deliver.md` each restate the minimum shape they point
