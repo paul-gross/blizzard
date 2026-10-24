@@ -410,5 +410,16 @@ def test_the_cli_refuses_a_future_until_before_sending_any_window(tmp_path: Path
     )
 
     assert result.exit_code != 0
-    assert "--until must not be in the future" in result.output
+    assert "until must not be in the future" in result.output
+    assert bodies == []
+
+    inverted = bound.runner.invoke(
+        hub_group,
+        ["traces", "replay", "--since", _local(now + timedelta(hours=2)), "--until", _local(now + timedelta(hours=1))],
+        env=_ENV,
+        obj=collaborators,
+    )
+
+    assert inverted.exit_code != 0
+    assert "until must be after since" in inverted.output
     assert bodies == []

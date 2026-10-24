@@ -480,4 +480,21 @@ def test_cli_replay_judges_until_against_the_collaborators_wall_clock(tmp_path: 
     )
 
     assert result.exit_code != 0
-    assert "--until must not be in the future" in result.output
+    assert "until must not be in the future" in result.output
+
+    inverted = CliRunner().invoke(
+        traces_group,
+        [
+            "replay",
+            "--since",
+            (now + timedelta(hours=2)).astimezone().replace(tzinfo=None).isoformat(),
+            "--until",
+            (now + timedelta(hours=1)).astimezone().replace(tzinfo=None).isoformat(),
+            "--runner-url",
+            "http://127.0.0.1:1",
+        ],
+        obj=collaborators,
+    )
+
+    assert inverted.exit_code != 0
+    assert "until must be after since" in inverted.output

@@ -208,8 +208,8 @@ def list_activity(
     lens = _feed_lens(services, project)
     chunk_changed = services.chunks.events.activity_facts_since(since_utc, limit=limit, project=project)
     events = services.chunks.events.activity_events_since(since_utc, limit=limit, lens=lens)
-    runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
-    if lens is not None:
-        runner_changed = [fact for fact in runner_changed if fact.runner_id in lens.runners]
+    runner_changed = services.registry.list_pause_facts_since(
+        since_utc, limit=limit, runners=lens.runners if lens is not None else None
+    )
     rows = ActivityFeed.of(chunk_changed, events, runner_changed, limit=limit).rows
     return Activity(rows, _runner_names(services, (row.runner_id for row in rows))).response()
