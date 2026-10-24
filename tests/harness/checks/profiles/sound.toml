@@ -1,0 +1,8 @@
+action_pass_seconds = 120
+close_forge_writes_enabled = false
+
+[auth]
+mode = "none"
+
+[flags]
+anything = true

@@ -6,6 +6,6 @@
     "strongKind": "asterisks",
     "unorderedListKind": "dashes"
   },
-  "excludes": [],
+  "excludes": ["tests/node_modules", "tests/harness/client/wire", "tests/package-lock.json"],
   "plugins": ["https://plugins.dprint.dev/markdown-0.22.1.wasm"]
 }

@@ -55,6 +55,8 @@ def check_repo_read(path: str | bytes | Path, copied: frozenset[Path] | None = N
         or relative.suffix == ".pyc"
         or "__pycache__" in relative.parts
         or relative.parts[0] in {".venv", ".mutation-env", "mutants"}
+        # The Playwright package's installed dependencies and a run's daemon directories, which hold no test input.
+        or relative.parts[:2] in {("tests", "node_modules"), ("tests", ".run")}
     ):
         return
     # pyproject.toml is read to obtain this very inventory.
