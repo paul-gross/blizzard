@@ -143,7 +143,7 @@ description = "blizzard:mutation — scoped, resumable mutation testing (mutmut)
 run = "UV_PROJECT_ENVIRONMENT=.mutation-env uv run --group mutation python scripts/mutation.py"
 
 [tasks.image-smoke]
-description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, git + psycopg present, store at head before serving, GET /api/health and /api/ready live. Needs a reachable docker daemon; runs in CI on every pull request."
+description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, psycopg present, store at head before serving, GET /api/health and /api/ready live. Needs a reachable docker daemon; runs in CI on every pull request."
 run = "./scripts/image-smoke.sh"
 
 [tasks.compose-smoke]

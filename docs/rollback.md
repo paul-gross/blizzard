@@ -82,8 +82,9 @@ The first reports the older version, the second `"ready":true`.
 A downgrade reverses schema shape, not meaning: data written under the newer schema that the older code has no column
 for does not come back.
 
-It also leaves everything outside the store untouched — signing keys, hub workdirs — so a rollback is not a restore. If
-a bad release also corrupted state outside the store, restore from backup ([`docs/backup.md`](./backup.md)).
+It also leaves everything outside the store untouched — signing keys, and a `data/hub_workdirs/` directory nothing
+writes any more, which stays reclaimable — so a rollback is not a restore. If a bad release also corrupted state outside
+the store, restore from backup ([`docs/backup.md`](./backup.md)).
 
 A rollback past the `chunk_deleted` migration resurrects every chunk deleted after it into the claimable queue — its
 `hub:` items stay withdrawn, so a runner picking it back up runs against dead pointers.

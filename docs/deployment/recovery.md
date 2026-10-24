@@ -130,8 +130,10 @@ blizzard-mock worktree and a local winter source, per the crash-sweep header.
 
 The full sweep — the same recovery asserted at every boundary the crash-point registry enumerates (the test suite's own
 `discover_crash_points`; `bzh:crash-point-registry`), including `kill -9` mid-RESUME at each graceful-restart boundary
-(`test_kill9_at_resume_crash_point`) and mid-abandon at each detach boundary (`test_kill9_at_abandon_crash_point`) — is
-`mise run crash-sweep`, and the tag release workflow runs it in CI.
+(`test_kill9_at_resume_crash_point`), mid-abandon at each detach boundary (`test_kill9_at_abandon_crash_point`), and at
+the hub's own pass boundaries: the effect writer's `action.after-effect.before-write` and
+`action.after-write.before-resume`, and `hubnode.after-poll.before-slot-release` between a pending poll's fact and its
+slot's release — is `mise run crash-sweep`, and the tag release workflow runs it in CI.
 
 [tests/test_systemd_units.py](../../tests/test_systemd_units.py) guards the unit files, holding their `ExecStart` to the
 real shipped entry points and asserting the `Restart=` and boot-enable directives this contract depends on.

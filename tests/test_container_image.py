@@ -31,13 +31,6 @@ def test_dockerfile_and_entrypoint_exist() -> None:
     assert (_DOCKER_DIR / "entrypoint.sh").is_file()
 
 
-def test_image_installs_git() -> None:
-    text = _dockerfile()
-    match = re.search(r"apt-get install.*?(?=\n\n|\nRUN|\nUSER|\nCOPY)", text, re.DOTALL)
-    assert match, "Dockerfile has no apt-get install step"
-    assert re.search(r"\bgit\b", match.group(0)), "the apt-get install step must include git"
-
-
 def test_image_runs_as_a_non_root_user() -> None:
     text = _dockerfile()
     user_lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("USER ")]
