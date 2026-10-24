@@ -61,31 +61,16 @@ def test_section_order_is_stable() -> None:
     assert output.index("## Documentation") < output.index("## Chores")
 
 
-def test_breaking_change_marker_surfaces_at_the_top() -> None:
-    output = _run(
-        [
-            "aaa feat: a normal feature",
-            "bbb feat(hub)!: a breaking one",
-            "ccc fix!: also breaking",
-        ]
-    )
-    breaking_idx = output.index("## Breaking changes")
-    features_idx = output.index("## Features")
-    assert breaking_idx < features_idx
-    breaking_section = output[breaking_idx:features_idx]
-    assert "- a breaking one (bbb)" in breaking_section
-    assert "- also breaking (ccc)" in breaking_section
-    assert "- a normal feature" not in breaking_section
-
-
-def test_no_breaking_changes_section_omitted_when_none_present() -> None:
-    output = _run(["aaa feat: a normal feature"])
+def test_breaking_marker_subjects_stay_listed_under_their_type() -> None:
+    output = _run(["aaa feat: a normal feature", "bbb feat(hub)!: a breaking one", "ccc fix!: also breaking"])
     assert "## Breaking changes" not in output
+    features = output[output.index("## Features") : output.index("## Fixes")]
+    assert "- a breaking one (bbb)" in features
+    assert "- also breaking (ccc)" in output
 
 
-def test_upgrade_notes_placeholder_always_present() -> None:
-    output = _run(["aaa feat: a normal feature"])
-    assert "## Upgrade notes" in output
+def test_upgrade_notes_heading_is_not_emitted() -> None:
+    assert "## Upgrade notes" not in _run(["aaa feat: a normal feature"])
 
 
 def test_non_conventional_subject_lands_in_other() -> None:
@@ -94,8 +79,5 @@ def test_non_conventional_subject_lands_in_other() -> None:
     assert "- a subject with no conventional-commit prefix (aaa)" in output
 
 
-def test_empty_input_still_emits_the_upgrade_notes_placeholder() -> None:
-    output = _run([])
-    assert "## Upgrade notes" in output
-    assert "## Breaking changes" not in output
-    assert "## Other" not in output
+def test_empty_input_emits_no_headings() -> None:
+    assert _run([]).strip() == ""
