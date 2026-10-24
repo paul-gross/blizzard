@@ -21414,6 +21414,7 @@
     },
     "/api/chunks/{chunk_id}/garden-delivery": {
       "post": {
+        "deprecated": true,
         "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it. A delivery the chunk has since been stopped or restarted past is a 409.",
         "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
         "parameters": [
@@ -21538,6 +21539,7 @@
     },
     "/api/chunks/{chunk_id}/hub-markers": {
       "post": {
+        "deprecated": true,
         "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nRecords a marker artifact mid-run, ahead of the producing command's own exit.\nIdempotent per ``(chunk, node, name, epoch)``.",
         "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
         "parameters": [
@@ -21932,6 +21934,7 @@
     },
     "/api/chunks/{chunk_id}/review-findings-delivery": {
       "post": {
+        "deprecated": true,
         "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been\nstopped or restarted past is a 409. Idempotent per chunk.",
         "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
         "parameters": [

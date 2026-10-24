@@ -58,6 +58,10 @@ _DEPRECATED_ALIAS_PAIRS = [
 
 _SANCTIONED_DEPRECATED_OPERATIONS = {f"GET {alias}" for _, alias in _DEPRECATED_ALIAS_PAIRS} | {
     "POST /api/graphs/{graph_id}/follow-latest",
+    # The marker and delivery routes a hub node's `run:` script called, superseded by the node's action.
+    "POST /api/chunks/{chunk_id}/hub-markers",
+    "POST /api/chunks/{chunk_id}/garden-delivery",
+    "POST /api/chunks/{chunk_id}/review-findings-delivery",
     # The tenant-scoped graph sync, superseded by the hub-level one over every open tenant.
     "POST /api/graphs/sync",
     # The users routes, superseded by the members routes of the request's tenant.

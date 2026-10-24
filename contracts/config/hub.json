@@ -528,7 +528,7 @@
       "path": "data/hub.db"
     },
     {
-      "holds": "scratch clones a hub command node uses; reclaimable",
+      "holds": "deprecated: scratch clones a hub `run:` step used; no hub step writes it any more, so it is reclaimable",
       "path": "data/hub_workdirs"
     }
   ]

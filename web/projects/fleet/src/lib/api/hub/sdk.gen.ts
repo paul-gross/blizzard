@@ -525,6 +525,8 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
  * transaction. An unresolvable run context or a failed validation is an ``invalid``
  * outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
  * and routes on it. A delivery the chunk has since been stopped or restarted past is a 409.
+ *
+ * @deprecated
  */
 export const recordGardenDeliveryApiChunksChunkIdGardenDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData, ThrowOnError>): RequestResult<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses, RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/garden-delivery',
@@ -560,6 +562,8 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
  *
  * Records a marker artifact mid-run, ahead of the producing command's own exit.
  * Idempotent per ``(chunk, node, name, epoch)``.
+ *
+ * @deprecated
  */
 export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError extends boolean = false>(options: Options<RecordHubMarkerApiChunksChunkIdHubMarkersPostData, ThrowOnError>): RequestResult<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError> => (options.client ?? client).post<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/hub-markers',
@@ -667,6 +671,8 @@ export const resumeChunkApiChunksChunkIdResumePost = <ThrowOnError extends boole
  * entries in one transaction. A malformed delta or an unresolvable node is an
  * ``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been
  * stopped or restarted past is a 409. Idempotent per chunk.
+ *
+ * @deprecated
  */
 export const recordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPost = <ThrowOnError extends boolean = false>(options: Options<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData, ThrowOnError>): RequestResult<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError> => (options.client ?? client).post<RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses, RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/review-findings-delivery', ...options });
 

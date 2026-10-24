@@ -1252,12 +1252,14 @@
         "type": "string"
       },
       {
-        "meaning": "The exit code of a hub node's `run:` step.",
+        "deprecated": true,
+        "meaning": "Deprecated: the exit code of a hub node's `run:` step, no longer emitted; read `blizzard.hub.action.choice`.",
         "name": "blizzard.hub.run_step.exit_code",
         "type": "int"
       },
       {
-        "meaning": "A hub node's `run:` step's authored name, never its command line; absent when the step authors none.",
+        "deprecated": true,
+        "meaning": "Deprecated: a hub node's `run:` step's authored name, no longer emitted; read `blizzard.hub.action.name`.",
         "name": "blizzard.hub.run_step.name",
         "type": "string"
       },

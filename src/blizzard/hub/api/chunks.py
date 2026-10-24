@@ -444,6 +444,7 @@ def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:
     "/chunks/{chunk_id}/hub-markers",
     response_model=HubMarkerResponse,
     dependencies=[Depends(require_marker_authority)],
+    deprecated=True,
 )
 def record_hub_marker(
     chunk_id: str,
@@ -481,6 +482,7 @@ def record_hub_marker(
     "/chunks/{chunk_id}/garden-delivery",
     response_model=GardenDeliveryResponse,
     dependencies=[Depends(require_marker_authority)],
+    deprecated=True,
 )
 def record_garden_delivery(
     chunk_id: str,
@@ -528,6 +530,7 @@ def record_garden_delivery(
     "/chunks/{chunk_id}/review-findings-delivery",
     response_model=ReviewFindingsDeliveryResponse,
     dependencies=[Depends(require_marker_authority)],
+    deprecated=True,
 )
 def record_review_findings_delivery(
     chunk_id: str,

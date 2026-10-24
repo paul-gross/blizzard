@@ -25,9 +25,9 @@ re-fetches on an unknown `kid`, but the key itself never comes back.
 ciphertext is useless without it, and a lost key means every secret must be set again. It is absent when
 `BZ_HUB_SECRET_KEY` supplies the key, which then belongs in your own secret management.
 
-**Hub workdirs.** `data/hub_workdirs/` — scratch git clones a hub command node uses mid-delivery
-(`config.data_dir / "hub_workdirs"`) — is reclaimable: re-cloned from the delivery forge on next use, carrying no state
-the store lacks, so skip it.
+**Hub workdirs.** `data/hub_workdirs/` (`config.data_dir / "hub_workdirs"`) is deprecated: it held the scratch git
+clones a hub `run:` step used, and no hub step writes it any more. It carries no state the store lacks, so skip it, and
+delete it once the hub has moved.
 
 [`contracts/config/hub.json`](../contracts/config/README.md) lists these paths beside the config keys the hub reads; the
 merge gate fails when one moves without the document.

@@ -109,6 +109,9 @@ HUB_REGISTRY = ConfigRegistry(
         DurablePath(f"{DATA_DIRNAME}/{STORE_FILENAME}", "the default store, with its -wal sidecar when one exists"),
         DurablePath("/".join((DATA_DIRNAME, *SIGNING_KEYS_PARTS)), "the IdP signing keypairs and their meta.json"),
         DurablePath("/".join((DATA_DIRNAME, *SECRET_KEYS_PARTS)), "the keys that seal every stored secret"),
-        DurablePath(f"{DATA_DIRNAME}/{WORKDIRS_DIRNAME}", "scratch clones a hub command node uses; reclaimable"),
+        DurablePath(
+            f"{DATA_DIRNAME}/{WORKDIRS_DIRNAME}",
+            "deprecated: scratch clones a hub `run:` step used; no hub step writes it any more, so it is reclaimable",
+        ),
     ),
 )
