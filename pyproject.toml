@@ -199,6 +199,9 @@ do_not_mutate = [
 pytest_add_cli_args = ["-m", "unit"]
 also_copy = [
     "pyproject.toml",
+    # The winter-free guard scans the Playwright package's TypeScript.
+    "tests/harness",
+    "tests/service",
     # Registers the suite plugin, whose fixtures isolate tests from the host; without it the copied suite runs bare.
     "conftest.py",
     "openapi",
