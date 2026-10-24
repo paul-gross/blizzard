@@ -23,9 +23,11 @@ def _run(tmp_path: Path, tag: str, run_branches: list[str]) -> subprocess.Comple
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text("#!/usr/bin/env bash\n" + "".join(f"echo {branch}\n" for branch in run_branches))
+    gh.write_text(
+        '#!/usr/bin/env bash\necho "$*" > "${GH_ARGV_FILE}"\n' + "".join(f"echo {branch}\n" for branch in run_branches)
+    )
     gh.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GH_REPO": "o/r"}
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GH_REPO": "o/r", "GH_ARGV_FILE": str(tmp_path / "argv")}
     return subprocess.run([str(_SCRIPT), tag, _SHA], capture_output=True, text=True, env=env)
 
 
@@ -61,3 +63,11 @@ def test_a_candidate_tag_never_borrows(tmp_path: Path) -> None:
     result = _run(tmp_path, "v0.2.0-rc.3", ["v0.2.0-rc.2"])
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "borrowed=false"
+
+
+def test_the_runs_query_is_the_release_workflows_successful_push_runs_at_the_commit(tmp_path: Path) -> None:
+    _run(tmp_path, "v0.2.0", ["v0.2.0-rc.1"])
+    argv = (tmp_path / "argv").read_text()
+    assert "repos/o/r/actions/workflows/release.yml/runs?" in argv
+    for param in (f"head_sha={_SHA}", "event=push", "status=success"):
+        assert param in argv
