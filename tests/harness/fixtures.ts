@@ -66,7 +66,7 @@ export const test = tenancy.extend<Fixtures>({
     await use({ id: found.project_id, slug: found.slug });
   },
 
-  fleet: async ({ api, testHub, level, ledger }, use, testInfo) => {
+  fleet: async ({ api, testHub, tenant, level, ledger }, use, testInfo) => {
     await use(async (name) => {
       requireOwnTenant(level.served, 'fleet()');
       const minted = await api.post('/api/runners', { data: { name } });
@@ -77,7 +77,7 @@ export const test = tenancy.extend<Fixtures>({
         testInfo,
         token: minted.body.token as string,
         ledger,
-        logContext: () => testHub.logTail(),
+        logContext: () => testHub.logTail(tenant.id),
       });
       return { ...client, runnerId: minted.body.runner_id as string, token: minted.body.token as string };
     });
