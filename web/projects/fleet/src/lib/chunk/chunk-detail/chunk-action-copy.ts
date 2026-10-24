@@ -13,10 +13,10 @@ export interface ChunkActionCopy {
 export function pauseCopy(runner: string | null): ChunkActionCopy {
   return {
     label: 'Pause',
-    subtitle: 'Park the agent, keep the claim',
+    subtitle: runner ? 'Park the agent, keep the claim' : 'Hold it out of the queue',
     text: runner
       ? `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. ${runner} keeps the claim and its environment. Resume continues the same session.`
-      : `Parks the agent within ~30s: its worker is interrupted and given a brief grace period to wind down before being force-stopped if it hasn't already exited, but its session is kept. No runner has claimed it yet, so pausing just holds it out of the queue. Resume continues the same session.`,
+      : `No runner has claimed it yet, so pausing holds it out of the queue until it is resumed.`,
   };
 }
 
