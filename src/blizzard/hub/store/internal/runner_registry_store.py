@@ -152,7 +152,9 @@ class RunnerRegistryStore:
                 fleet_query = fleet_query.where(s.runner_pause_facts.c.runner_id.in_(sorted(runners)))
                 local_query = local_query.where(s.runner_local_pause_facts.c.runner_id.in_(sorted(runners)))
             fleet_rows = conn.execute(
-                fleet_query.order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc()).limit(limit)
+                fleet_query.order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc()).limit(
+                    limit
+                )
             ).all()
             local_rows = conn.execute(
                 local_query.order_by(

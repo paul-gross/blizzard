@@ -641,6 +641,21 @@ describe('ChunkAwaitingHuman', () => {
     expect(delivery?.textContent).not.toContain('Delivering');
   });
 
+  it('says a restart-superseded answer was never delivered, on a live chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      status: 'running',
+      questions: [answered({ question_id: 'qn_01', superseded: true })],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const delivery = el.querySelector('[data-testid="answer-delivery"]');
+    expect(delivery?.textContent).toContain('Not delivered — the session was restarted');
+    expect(delivery?.textContent).not.toContain('Delivering');
+  });
+
   it('still reads as in flight while the chunk can resume', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', { ...ANSWERED_UNDELIVERED_DETAIL, status: 'running' });

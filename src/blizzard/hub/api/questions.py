@@ -23,7 +23,7 @@ from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed
+from blizzard.hub.domain.chunk.model import ChunkFacts, NodeQuestion, QuestionClosed, QuestionState
 from blizzard.hub.domain.execution.questions import AskedQuestion
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
@@ -32,10 +32,13 @@ router = APIRouter(
 )
 
 
-def question_view(row: NodeQuestion, runner_names: Mapping[str, str], project: ProjectLabelFields) -> QuestionView:
+def question_view(
+    row: NodeQuestion, runner_names: Mapping[str, str], project: ProjectLabelFields, *, superseded_by_restart: bool
+) -> QuestionView:
     """Render a stored question row as its wire view — derived answer + delivery state, the
     asking runner's registered name out of ``runner_names``, the caller's one batched read, and
-    the chunk's project labels."""
+    the chunk's project labels. A restart is a chunk fact the row does not carry, so the caller
+    says whether one answered this question for the system."""
     return QuestionView(
         question_id=row.question_id,
         chunk_id=row.chunk_id,
@@ -54,6 +57,7 @@ def question_view(row: NodeQuestion, runner_names: Mapping[str, str], project: P
         answered_at=iso_utc(row.answered_at) if row.answered_at is not None else None,
         delivered=row.delivered,
         delivered_at=iso_utc(row.delivered_at) if row.delivered_at is not None else None,
+        superseded=row.state(superseded_by_restart=superseded_by_restart) is QuestionState.SUPERSEDED,
         **project,
     )
 
@@ -147,4 +151,7 @@ def list_open_questions(services: Services, project: QueryProject) -> list[Quest
     rows = services.chunks.questions.list_open_questions(project=project)
     runner_names = services.registry.names_for(row.runner_id for row in rows)
     labels = ProjectLabels.read(services, (row.project_id for row in rows))
-    return [question_view(row, runner_names, labels.fields(row.project_id)) for row in rows]
+    # A restart answers every open question in its one write, so an unanswered row is never superseded.
+    return [
+        question_view(row, runner_names, labels.fields(row.project_id), superseded_by_restart=False) for row in rows
+    ]

@@ -254,6 +254,9 @@ def test_restart_answers_an_open_ask_with_the_fixed_system_answer(tmp_path) -> N
     question = detail["questions"][0]
     assert question["answered"] is True
     assert question["answer"] == SUPERSEDED_ANSWER
+    assert question["superseded"] is True
+    assert question["delivered"] is False
+    assert hub.client.get("/api/fleet/questions/qn_1").json()["superseded"] is True
 
 
 def test_a_persons_own_answer_outranks_the_moves(tmp_path) -> None:  # type: ignore[no-untyped-def]

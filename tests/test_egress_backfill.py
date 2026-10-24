@@ -4,14 +4,12 @@ through the live sweep's own row assembly, with the cursors untouched."""
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx2
 import pytest
 
-from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION

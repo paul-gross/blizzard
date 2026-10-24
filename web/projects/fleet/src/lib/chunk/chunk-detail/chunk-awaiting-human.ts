@@ -132,16 +132,19 @@ export class ChunkAwaitingHuman {
   /**
    * The delivery leg of one answered question's trail.
    *
-   * Three states, not two. An answer that has not been delivered is only *in flight*
-   * while the chunk can still resume — a question answered after its runner went down,
-   * or on a chunk since reaped or taken over, has no delivery row and never will. A
-   * two-state ternary reads the present-progressive "Delivering…" forever there, which
-   * is the one place this trail would assert something false rather than merely stale:
-   * it promises a return trip nothing will complete. On a terminal chunk (the wire's
-   * `terminal` — a status the chunk never leaves, so nothing is left to resume) it says so.
+   * Four states, not two. A restart answers every open question for the system and ends its session,
+   * so a superseded answer is named for that cause, ahead of any terminal line.
+   *
+   * An answer that has not been delivered is otherwise only *in flight* while the chunk can still
+   * resume — a question answered after its runner went down, or on a chunk since reaped or taken
+   * over, has no delivery row and never will. A two-state ternary reads the present-progressive
+   * "Delivering…" forever there, which is the one place this trail would assert something false
+   * rather than merely stale: it promises a return trip nothing will complete. On a terminal chunk
+   * (the wire's `terminal` — a status the chunk never leaves, so nothing is left to resume) it says so.
    */
   protected deliveryLine(question: QuestionView): string {
     if (question.delivered) return 'Delivered · agent resumed';
+    if (question.superseded) return 'Not delivered — the session was restarted';
     return this.detail().terminal
       ? 'Not delivered — the chunk ended first'
       : 'Delivering to the agent…';
