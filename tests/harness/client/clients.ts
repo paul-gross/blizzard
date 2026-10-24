@@ -1,4 +1,5 @@
 import type { APIRequestContext, TestInfo } from '@playwright/test';
+import { recorderFor, timed } from './latency';
 import type { Ledger } from './ledger';
 import type { MockIssue, MockRepositoryCreated } from './mock';
 import { RESOURCES } from './resources';
@@ -50,14 +51,26 @@ interface Engine {
   logContext: LogContext;
 }
 
+/** The route as recorded: no query, and no origin on a call that names its full URL. */
+function recordedRoute(route: string): string {
+  return route.replace(/^https?:\/\/[^/]+/, '').split('?')[0] as string;
+}
+
 async function send(engine: Engine, method: string, route: string, options: CallOptions, narrow: boolean, expected?: number): Promise<ApiResponse> {
-  const response = await engine.context.fetch(route, {
+  const response = await timed(
+    recorderFor(engine.testInfo),
     method,
-    params: options.params,
-    data: options.data,
-    headers: { ...engine.headers, ...options.headers },
-    failOnStatusCode: false,
-  });
+    recordedRoute(route),
+    () =>
+      engine.context.fetch(route, {
+        method,
+        params: options.params,
+        data: options.data,
+        headers: { ...engine.headers, ...options.headers },
+        failOnStatusCode: false,
+      }),
+    (answer) => answer.status(),
+  );
   const text = await response.text();
   let body: Json = text;
   try {

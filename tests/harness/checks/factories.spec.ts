@@ -1,3 +1,4 @@
+import { recordsOf } from '../client/latency';
 import { expect, test } from '../fixtures';
 
 test.describe('at common, the factories that would furnish the shared tenant refuse', () => {
@@ -48,6 +49,15 @@ test.describe('at fresh-tenant, the factories make what the tenant is to own', (
     const answered = await runner.get('/api/fleet/identity');
     expect(answered.status).toBe(200);
     expect(JSON.stringify(answered.body)).toContain(runner.runnerId);
+  });
+
+  test('a client call and the tenant’s creation each leave a latency record on the test', async ({ api }, testInfo) => {
+    await api.get('/api/chunks');
+    const records = recordsOf(testInfo);
+    // The tenant is made through the internal client, which no `send()` sees.
+    expect(records.find((record) => record.method === 'POST' && record.route === '/api/admin/tenants')).toMatchObject({ status: 201 });
+    expect(records.find((record) => record.method === 'GET' && record.route === '/api/chunks')).toMatchObject({ status: 200 });
+    expect(records.every((record) => record.ms >= 0)).toBe(true);
   });
 
   test('mockRunner starts a runner against the test’s hub under a token minted in its tenant', async ({ mockRunner, api }) => {
