@@ -912,11 +912,13 @@ class GateDecision:
         taken = next((c for c in self.choices if c.name == choice), None)
         return taken is not None and ChecksGate(taken.requires_checks, self.check_results).violated
 
-    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, choice: str) -> str | None:
+    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, epoch: int, choice: str) -> str | None:
         """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the
-        gate belongs to another chunk or node, is not yet resolved, or resolved to another choice."""
+        gate belongs to another chunk, node or visit, is not yet resolved, or resolved to another choice."""
         if self.chunk_id != chunk_id or self.node_id != node_id:
             return f"decision {self.decision_id} does not match node `{node_name}`"
+        if self.epoch != epoch:
+            return f"decision {self.decision_id} belongs to epoch {self.epoch}, not current visit {epoch}"
         if self.resolved_choice is None:
             return f"decision {self.decision_id} is not yet resolved"
         if choice != self.resolved_choice:

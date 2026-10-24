@@ -38,7 +38,6 @@ from blizzard.hub.domain.execution.completion import (
     NextStepKind,
     ReplayedMigration,
     UnresolvableTarget,
-    decision_choices,
     re_escalates,
     refuse_hub_executed,
     refuse_incoherent_attempt,
@@ -46,6 +45,7 @@ from blizzard.hub.domain.execution.completion import (
     stored_artifacts,
 )
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
+from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.execution.submissions import Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
@@ -332,7 +332,7 @@ class ApplyService:
                     choice_name=submission.choice,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
-                    claimant=Claimant(submission.runner_id, submission.lease_id),
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     runner_id=submission.runner_id,
                     at=self._clock.now(),
                     artifacts=artifact_rows,
@@ -340,6 +340,16 @@ class ApplyService:
                 )
                 if refusal is not None:
                     return ApplyResult.failure(refusal.detail)
+                open_graph_gate_on_arrival(
+                    self._decisions,
+                    handle,
+                    self._clock,
+                    chunk_id=chunk.chunk_id,
+                    graph=graph,
+                    node_id=plan.to_node_id,
+                    epoch=submission.epoch,
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                )
         if raced is not None:
             return self._answer_raced(chunk, graph, from_node, submission, raced)
         return self._respond(
@@ -377,7 +387,7 @@ class ApplyService:
             chunk.chunk_id,
             epoch=submission.epoch,
             admission=EpochAdmission.CURRENT,
-            claimant=Claimant(submission.runner_id, submission.lease_id),
+            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
             takeover_command=draft.takeover_command,
             at=self._clock.now(),
             decision_id=submission.decision_id,
@@ -424,7 +434,7 @@ class ApplyService:
                     source=landing.source,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
-                    claimant=Claimant(submission.runner_id, submission.lease_id),
+                    claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     at=self._clock.now(),
                     artifacts=artifact_rows,
                     release_route=landing.releases_route,
@@ -434,6 +444,15 @@ class ApplyService:
                 if isinstance(outcome, FenceRefusal):
                     return ApplyResult.failure(outcome.detail)
                 landed = outcome
+                open_graph_gate_on_arrival(
+                    self._decisions,
+                    handle,
+                    self._clock,
+                    chunk_id=chunk.chunk_id,
+                    graph=landing.graph,
+                    node_id=landing.node_id,
+                    epoch=submission.epoch,
+                )
         if isinstance(landed, _Raced):
             return self._answer_raced(chunk, graph, from_node, submission, landed)
         _CP_MIGRATE_AFTER_RECORD.reached()
@@ -456,6 +475,20 @@ class ApplyService:
                 migration=replayed_migration(locked, from_node_id=submission.from_node_id, epoch=submission.epoch)
             )
         return None
+
+    def _exit_claimant(self, facts: ChunkFacts, chunk_id: str, submission: Completion) -> Claimant | None:
+        """A restart's gate resolution is carried at its hub-owned epoch, without a new lease.
+
+        The holding route's runner may carry only that visit's resolved decision. Ordinary
+        completions still owe a runner-owned epoch and lease; a later restart fences this out.
+        """
+        if submission.decision_id is not None and any(
+            r.epoch == submission.epoch and r.to_node_id == submission.from_node_id for r in facts.restarts
+        ):
+            route = self._route.route_of(chunk_id)
+            if route is not None and route.runner_id == submission.runner_id:
+                return None
+        return Claimant(submission.runner_id, submission.lease_id)
 
     def _answer_raced(
         self, chunk: Chunk, graph: Graph, from_node: Node, submission: Completion, raced: _Raced
@@ -489,14 +522,6 @@ class ApplyService:
             self._hub_node_executor.run(chunk, graph, step.node, epoch=submission.epoch)
             return ApplyResult.taken_over(step.node, transition_id)
         if step.kind is NextStepKind.GATE:
-            # Only the real apply opens the gate's decision, never a replay.
-            if is_fresh_apply:
-                self._open_graph_gate_decision(
-                    chunk,
-                    step.node,
-                    epoch=submission.epoch,
-                    claimant=Claimant(submission.runner_id, submission.lease_id),
-                )
             return ApplyResult.parked(step.node, transition_id)
         arrival = Arrival(edge) if edge is not None else Arrival.of_choice(graph, from_node, submission.choice)
         envelope = Envelope(
@@ -509,27 +534,6 @@ class ApplyService:
             label=self._label,
         )
         return ApplyResult.advance(envelope, transition_id)
-
-    def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int, claimant: Claimant) -> None:
-        """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch) by the
-        natural-key probe. No artifacts attach: they arrived with the transition into the gate."""
-        if self._decisions.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
-            return
-        # A refusal — the chunk was stopped or restarted since the arrival was recorded —
-        # leaves the decision unopened: it would gate a superseded visit.
-        self._decisions.record_decision(
-            decision_id=Id.mint(IdPrefix.DECISION, self._clock).value,
-            chunk_id=chunk.chunk_id,
-            node_id=gate_node.node_id,
-            node_name=gate_node.name,
-            epoch=epoch,
-            admission=EpochAdmission.CURRENT,
-            claimant=claimant,
-            choices=decision_choices(gate_node),
-            at=self._clock.now(),
-            artifacts=[],
-            imposed_by_runner_id=None,
-        )
 
     def _check_route_token(
         self, chunk: Chunk, facts: ChunkFacts, submission: Completion, *, route_token_mode: str

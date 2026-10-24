@@ -319,6 +319,8 @@ class NodeCheck:
                 self.errors.append(f"hub node `{node.name}`: a hub command node must not declare `checks`")
             if judgement is not None and judgement.prompt:
                 self.errors.append(f"hub node `{node.name}`: a hub command node must not declare `judgement.prompt`")
+            if judgement is not None and judgement.by is JudgedBy.HUMAN:
+                self.errors.append(f"hub node `{node.name}`: a hub executor cannot have a human judgement")
             if judgement is None:
                 self.errors.append(
                     f"hub node `{node.name}`: a hub command node must declare a judgement "

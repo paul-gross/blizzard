@@ -298,6 +298,64 @@ def test_restart_closes_an_open_gate_decision(tmp_path) -> None:  # type: ignore
     assert detail["restarts"][0]["decision_id"] is not None
 
 
+def test_restart_at_the_gate_opens_a_new_visit_and_refuses_its_old_resolution(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub, _GATE_YAML)
+    build = _detail(hub, chunk_id)["current_node_id"]
+    hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build, "artifacts": []},
+    )
+    previous = _detail(hub, chunk_id)["decision"]["decision_id"]
+    gate = _detail(hub, chunk_id)["current_node_id"]
+    assert hub.client.post(f"/api/decisions/{previous}/resolutions", json={"choice": "reject"}).status_code == 200
+
+    assert _restart(hub, chunk_id).status_code == 202
+    detail = _detail(hub, chunk_id)
+    current = detail["decision"]["decision_id"]
+    assert detail["status"] == "waiting_on_human"
+    assert detail["decision"]["epoch"] == 2 and current != previous
+    assert [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]] == [current]
+    stale = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "reject",
+            "epoch": 2,
+            "runner_id": "r1",
+            "from_node_id": gate,
+            "decision_id": previous,
+            "artifacts": [],
+        },
+    )
+    assert stale.json()["outcome"] == "failure" and "current visit" in stale.json()["detail"]
+    assert _detail(hub, chunk_id)["history"] == detail["history"]
+    assert hub.client.post(f"/api/decisions/{current}/resolutions", json={"choice": "reject"}).status_code == 200
+    accepted = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "reject",
+            "epoch": 2,
+            "runner_id": "r1",
+            "from_node_id": gate,
+            "decision_id": current,
+            "artifacts": [],
+        },
+    )
+    assert accepted.json()["outcome"] == "next", accepted.text
+
+
+def test_unclaimed_restart_onto_a_gate_opens_its_decision(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).status_code == 201
+    chunk_id = ingest(hub, [_POINTER])
+
+    assert _restart(hub, chunk_id, node="signoff").status_code == 202
+    detail = _detail(hub, chunk_id)
+    assert detail["status"] == "waiting_on_human"
+    assert detail["decision"]["epoch"] == detail["latest_epoch"] == 1
+    assert len(hub.client.get("/api/decisions").json()["decisions"]) == 1
+
+
 def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A resolved-but-unconsumed gate decision is closed by the restart, so the runner cannot resolve it later."""
     hub = build_hub(tmp_path)
@@ -553,6 +611,20 @@ def test_a_cross_graph_restart_repins_the_chunk_and_lands_it_by_name(tmp_path) -
     assert detail["graph_id"] == target
     assert detail["current_node_name"] == "build"
     assert detail["latest_epoch"] == 3
+
+
+def test_cross_graph_restart_onto_gate_opens_target_decision(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    hub = build_hub(tmp_path)
+    chunk_id = _mint(hub, _GATE_YAML)
+    target_yaml = _GATE_YAML.replace("name: default-delivery", "name: target-delivery")
+    target = hub.client.post("/api/graphs", json={"definition_yaml": target_yaml}).json()["graph_id"]
+
+    assert _restart(hub, chunk_id, node="signoff", to_graph=target).status_code == 202
+    detail = _detail(hub, chunk_id)
+    assert detail["graph_id"] == target
+    assert detail["status"] == "waiting_on_human"
+    assert detail["decision"]["node_name"] == "signoff"
+    assert detail["decision"]["epoch"] == detail["latest_epoch"]
 
 
 def test_a_cross_graph_restart_keeps_the_holding_runners_route(tmp_path) -> None:  # type: ignore[no-untyped-def]

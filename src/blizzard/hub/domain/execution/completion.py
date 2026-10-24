@@ -168,8 +168,7 @@ class CompletionPlan:
         (only its resolving transition may), a runner-configured gate at this node-step that no
         transition has carried yet — open, or resolved and awaiting its resolving transition — an
         unknown choice, a red check on a choice that requires green ones — a cross-graph choice
-        included — then, unless the edge crosses graphs, an unknown destination and the ``produces``
-        backstop."""
+         included — then the ``produces`` backstop, and, for a local edge, its destination."""
         if from_node.judged_by is JudgedBy.HUMAN:
             raise CompletionRefused(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
         if open_gate is not None and open_gate.is_open:
@@ -185,12 +184,12 @@ class CompletionPlan:
         selected = next((c for c in from_node.choices if c.name == submission.choice), None)
         if selected is not None and ChecksGate(selected.requires_checks, submission.check_results).violated:
             raise CompletionRefused(f"choice `{submission.choice}` requires green checks but a check is red")
-        if edge.target_graph is not None:
-            return cls(edge, None)
-        to_node_id = cls._destination(graph, edge, submission.choice)
         produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
         if produces_rejection is not None:
             raise CompletionRefused(produces_rejection)
+        if edge.target_graph is not None:
+            return cls(edge, None)
+        to_node_id = cls._destination(graph, edge, submission.choice)
         return cls(edge, to_node_id)
 
     @classmethod
@@ -209,7 +208,11 @@ class CompletionPlan:
             f"decision {submission.decision_id} does not match node `{gate_node.name}`"
             if decision is None
             else decision.resolving_refusal(
-                chunk_id=chunk.chunk_id, node_id=gate_node.node_id, node_name=gate_node.name, choice=submission.choice
+                chunk_id=chunk.chunk_id,
+                node_id=gate_node.node_id,
+                node_name=gate_node.name,
+                epoch=submission.epoch,
+                choice=submission.choice,
             )
         )
         if detail is not None:

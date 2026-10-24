@@ -79,4 +79,6 @@ separator, and no slash, since it is percent-encoded into a URL path segment.
 explicit declaration matching its kind. `warn` logs the missing names and lets a completion proceed on the
 judgement-assessment fallback; `enforce` rejects the completion as a semantic failure. It is independent of
 `route_token_mode` and no part of that rollout; a hub accepts assessment-fallback completions until an operator sets
-`enforce` and restarts it.
+`enforce` and restarts it. The backstop applies to a source node's plain completion before either a local transition or
+a cross-graph migration: missing explicit source outputs refuse the move under `enforce`, with no artifact or migration
+recorded. The destination graph's outputs are not owed by the source completion.
