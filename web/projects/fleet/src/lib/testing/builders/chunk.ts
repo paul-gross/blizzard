@@ -189,6 +189,7 @@ export function questionView(overrides: Partial<QuestionView> = {}): QuestionVie
     project_slug: null,
     runner_name: null,
     session_id: null,
+    superseded: false,
     ...overrides,
   };
 }

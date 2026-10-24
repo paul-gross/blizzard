@@ -4,14 +4,12 @@ through the live sweep's own row assembly, with the cursors untouched."""
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx2
 import pytest
 
-from blizzard.cli.collaborators import CliCollaborators
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -229,6 +227,9 @@ def test_a_bad_window_or_dataset_is_422_naming_its_bound(tmp_path: Path) -> None
     future = _backfill(hub, hub.clock.now() - timedelta(seconds=1), hub.clock.now() + timedelta(seconds=1))
     assert future.status_code == 422
     assert "until must not be in the future" in future.json()["detail"]
+    inverted_future = _backfill(hub, hub.clock.now() + timedelta(hours=2), hub.clock.now() + timedelta(hours=1))
+    assert inverted_future.status_code == 422
+    assert "until must be after since" in inverted_future.json()["detail"]
 
 
 def test_the_export_off_is_409_for_a_wet_run_and_a_dry_run_still_counts(tmp_path: Path) -> None:
@@ -240,6 +241,9 @@ def test_the_export_off_is_409_for_a_wet_run_and_a_dry_run_still_counts(tmp_path
     dry = _backfill(hub, now - timedelta(seconds=1), now, dry_run=True)
     assert dry.status_code == 200, dry.text
     assert dry.json()["dry_run"] is True
+    future_end = _backfill(hub, now - timedelta(seconds=1), now + timedelta(hours=1))
+    assert future_end.status_code == 409
+    assert "not configured" in future_end.json()["detail"]
 
 
 def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_path: Path) -> None:
@@ -355,29 +359,3 @@ def test_an_events_dry_run_counts_without_writing(tmp_path: Path) -> None:
     assert dry.dry_run
     assert [(c.dataset, c.rows, c.files) for c in dry.datasets] == [(c.dataset, c.rows, c.files) for c in wet.datasets]
     assert [r["record_type"] for r in _rows(written, "events")] == ["dropped"]
-
-
-def test_the_cli_refuses_a_future_until_before_sending(tmp_path: Path) -> None:
-    hub, _ = _hub(tmp_path, _real(tmp_path, backfill_max_window=3600))
-    sent: list[object] = []
-    bound = bind_stubs(post=lambda *a, **k: sent.append(a))
-    now = hub.clock.now()
-    collaborators = replace(CliCollaborators.production(), wall_clock=hub.clock)
-
-    result = bound.runner.invoke(
-        hub_group,
-        [
-            "egress",
-            "backfill",
-            "--since",
-            "2026-07-12T00:00:00",
-            "--until",
-            (now + timedelta(seconds=1)).astimezone().replace(tzinfo=None).isoformat(),
-        ],
-        env=_ENV,
-        obj=collaborators,
-    )
-
-    assert result.exit_code != 0
-    assert "--until must not be in the future" in result.output
-    assert sent == []

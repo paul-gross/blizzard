@@ -407,7 +407,12 @@ class ChunkView:
             resolutions=self._resolutions(),
             requeues=history.requeues(),
             artifacts=self._artifacts(artifacts),
-            questions=[question_view(question, runner_names, project) for question in questions],
+            questions=[
+                question_view(
+                    question, runner_names, project, superseded_by_restart=self.facts.restarted_past(question.epoch)
+                )
+                for question in questions
+            ],
             **self._delivery_fields(self._delivery()),
             cost=self.usage_total(),
             usage=self._usage_history(),

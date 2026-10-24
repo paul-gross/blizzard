@@ -3014,6 +3014,10 @@ export type QuestionView = {
      * Session Id
      */
     session_id: string | null;
+    /**
+     * Superseded
+     */
+    superseded: boolean;
 };
 
 /**

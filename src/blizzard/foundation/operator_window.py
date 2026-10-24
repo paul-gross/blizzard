@@ -24,12 +24,13 @@ class OperatorWindow:
     since: datetime
     until: datetime
 
-    def fault(self, *, max_window: timedelta, now: datetime) -> WindowFault | None:
+    def fault(self, *, max_window: timedelta | None, now: datetime) -> WindowFault | None:
         """The first bound the window breaks — inverted or empty, then too wide, then reaching
-        past ``now`` — or ``None`` when it holds."""
+        past ``now`` — or ``None`` when it holds. No ``max_window`` is no width bound, for a caller
+        that splits a range rather than refusing it."""
         if self.until <= self.since:
             return WindowFault.INVERTED
-        if self.until - self.since > max_window:
+        if max_window is not None and self.until - self.since > max_window:
             return WindowFault.TOO_WIDE
         if self.until > now:
             return WindowFault.FUTURE

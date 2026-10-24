@@ -8,7 +8,7 @@ own fact table.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection
@@ -138,19 +138,28 @@ class RunnerRegistryStore:
             for r in registrations
         ]
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
+    def list_pause_facts_since(
+        self, since: datetime, *, limit: int, runners: Collection[str] | None = None
+    ) -> list[RecordedPause]:
+        if runners is not None and not runners:
+            return []
         with self._store.read("list_pause_facts_since") as conn:
+            fleet_query = self._store.select(s.runner_pause_facts).where(s.runner_pause_facts.c.set_at >= since)
+            local_query = self._store.select(s.runner_local_pause_facts).where(
+                s.runner_local_pause_facts.c.set_at >= since
+            )
+            if runners is not None:
+                fleet_query = fleet_query.where(s.runner_pause_facts.c.runner_id.in_(sorted(runners)))
+                local_query = local_query.where(s.runner_local_pause_facts.c.runner_id.in_(sorted(runners)))
             fleet_rows = conn.execute(
-                self._store.select(s.runner_pause_facts)
-                .where(s.runner_pause_facts.c.set_at >= since)
-                .order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc())
-                .limit(limit)
+                fleet_query.order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc()).limit(
+                    limit
+                )
             ).all()
             local_rows = conn.execute(
-                self._store.select(s.runner_local_pause_facts)
-                .where(s.runner_local_pause_facts.c.set_at >= since)
-                .order_by(s.runner_local_pause_facts.c.set_at.desc(), s.runner_local_pause_facts.c.id.desc())
-                .limit(limit)
+                local_query.order_by(
+                    s.runner_local_pause_facts.c.set_at.desc(), s.runner_local_pause_facts.c.id.desc()
+                ).limit(limit)
             ).all()
         fleet = [
             RecordedPause(

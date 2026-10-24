@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.api import classify_api
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff
+from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
 
 pytestmark = pytest.mark.unit
@@ -761,3 +762,11 @@ def _generated_gain(view: type[BaseModel]) -> tuple[dict, dict]:
 def test_the_mark_the_open_annotation_writes_is_the_one_compat_reads() -> None:
     assert classify_spec_diff(*_generated_gain(_OpenToneView)) == []
     assert _gains(*_generated_gain(_ClosedToneView)) == ["_Tone: response enum gained value(s) ['dark']"]
+
+
+def test_a_question_view_from_an_older_hub_reads_as_not_superseded() -> None:
+    view = QuestionView.model_validate(
+        {"question_id": "qn_1", "chunk_id": "ch_1", "runner_id": "r1", "epoch": 1, "question": "?", "asked_at": "t"}
+    )
+
+    assert view.superseded is False

@@ -5049,6 +5049,11 @@
               }
             ],
             "title": "Session Id"
+          },
+          "superseded": {
+            "default": false,
+            "title": "Superseded",
+            "type": "boolean"
           }
         },
         "required": [
@@ -5069,6 +5074,7 @@
           "answered_at",
           "delivered",
           "delivered_at",
+          "superseded",
           "project_id",
           "project_slug",
           "project_name"

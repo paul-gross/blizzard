@@ -10,7 +10,7 @@ from typing import Any
 import click
 
 from blizzard.cli.collaborators import CliCollaborators, HTTPError
-from blizzard.cli.window import refuse_future_until, replay_windows, resume_since, since_option, until_option
+from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since, since_option, until_option
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
@@ -140,7 +140,7 @@ def traces_replay(
     """Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor
     does not move, so spans the backend already holds arrive again — it dedupes on their ids. A range over
     replay_max_window is told in windows; a failure names the --since to resume from."""
-    refuse_future_until(until, CliCollaborators.of(ctx).wall_clock)
+    refuse_bad_window(since, until, CliCollaborators.of(ctx).wall_clock)
     total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
     with RunnerDaemon.reach("traces replay", directory, runner_url, Door.of(ctx), runner) as daemon:
         status = daemon.get("/api/traces/status").json()

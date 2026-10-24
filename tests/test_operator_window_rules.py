@@ -51,6 +51,12 @@ def test_the_window_names_its_first_broken_bound(since: datetime, until: datetim
     assert OperatorWindow(since, until).fault(max_window=_HOUR, now=_NOW) is fault
 
 
+def test_with_no_width_bound_a_wide_window_holds_and_an_inverted_future_one_is_inverted() -> None:
+    assert OperatorWindow(_NOW - 100 * _HOUR, _NOW).fault(max_window=None, now=_NOW) is None
+    assert OperatorWindow(_NOW + 2 * _HOUR, _NOW + _HOUR).fault(max_window=None, now=_NOW) is WindowFault.INVERTED
+    assert OperatorWindow(_NOW - _HOUR, _NOW + _HOUR).fault(max_window=None, now=_NOW) is WindowFault.FUTURE
+
+
 def test_each_fault_reads_as_the_lanes_message() -> None:
     named = {"max_window_name": "replay_max_window", "max_window_seconds": 3600}
     assert fault_message(WindowFault.INVERTED, **named) == "until must be after since"  # type: ignore[arg-type]

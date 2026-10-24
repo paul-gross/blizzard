@@ -10,6 +10,7 @@ from typing import Any, overload
 import click
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.operator_window import OperatorWindow, fault_message
 from blizzard.foundation.store.utc import iso_utc
 
 _ZONED = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})")
@@ -63,10 +64,12 @@ def until_option(*, required: bool = False) -> Any:
     )
 
 
-def refuse_future_until(until: datetime, clock: IClock) -> None:
-    """Refuse an ``--until`` past the caller's clock before any window is sent, so a range is never half told."""
-    if until.astimezone(UTC) > clock.now():
-        raise click.ClickException("--until must not be in the future")
+def refuse_bad_window(since: datetime, until: datetime, clock: IClock) -> None:
+    """Refuse an inverted or future window before any window is sent, so a range is never half told. The order
+    and wording are the daemon's own (``OperatorWindow``); the width is left to the split."""
+    fault = OperatorWindow(since.astimezone(UTC), until.astimezone(UTC)).fault(max_window=None, now=clock.now())
+    if fault is not None:
+        raise click.ClickException(fault_message(fault, max_window_name="", max_window_seconds=0))
 
 
 def replay_windows(since: datetime, until: datetime, width_seconds: int | None) -> list[tuple[datetime, datetime]]:

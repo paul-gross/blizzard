@@ -217,6 +217,23 @@ def test_the_activity_feed_narrows_each_source_to_the_project(tmp_path: Path) ->
     assert hub.client.get("/api/activity", params={"project": "nope"}).status_code == 422
 
 
+def test_the_activity_feed_keeps_the_projects_pause_when_another_projects_crowd_the_cap(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    seed_runner(hub, "r-default", projects=("default",), register=False)
+    seed_runner(hub, "r-beta", projects=("beta",), register=False)
+    registry = hub.services.registry
+    assert isinstance(registry, RunnerRegistryStore), "pause facts are written through the hub's own registry"
+    registry.record_pause("r-default", paused=True, at=hub.clock.now(), by="op")
+    for _ in range(6):
+        hub.clock.advance(timedelta(seconds=1))
+        registry.record_pause("r-beta", paused=True, at=hub.clock.now(), by="op")
+
+    resp = hub.client.get("/api/activity", params={"project": "default", "limit": "3"})
+
+    assert resp.status_code == 200, resp.text
+    assert [row["runner_id"] for row in resp.json()["activity"] if row["type"] == "runner-changed"] == ["r-default"]
+
+
 def _ask(hub: HubHarness, chunk_id: str, question_id: str, runner_id: str) -> None:
     claim_route(hub, chunk_id, runner_id=runner_id)
     resp = hub.client.post(

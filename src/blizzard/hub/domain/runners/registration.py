@@ -7,7 +7,7 @@ usage**. ``token_hash`` is the one mutable exception; a revoked hash is kept as 
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -736,8 +736,12 @@ class IReadRunnerRegistry(Protocol):
         registration is absent from the result, never mapped to a placeholder."""
         ...
 
-    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[RecordedPause]:
-        """Every fact off the fleet's two pause-family fact tables at or after ``since``. On this seam,
+    def list_pause_facts_since(
+        self, since: datetime, *, limit: int, runners: Collection[str] | None = None
+    ) -> list[RecordedPause]:
+        """Every fact off the fleet's two pause-family fact tables at or after ``since``, narrowed to
+        ``runners`` when given — inside the capped read, so other runners' newer facts never crowd a
+        narrowed read out of its ``limit``; an empty set reads nothing. On this seam,
         not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
         read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
         returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""
