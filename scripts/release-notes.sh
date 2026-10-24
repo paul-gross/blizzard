@@ -9,9 +9,9 @@
 #                                            with no real git history needed
 #
 # A `!` before the colon (`feat!: ...`, `feat(scope)!: ...`) is this project's
-# breaking-change marker (docs/versioning.md) and surfaces at the top. A
-# placeholder **Upgrade notes** heading always leads the notes — hand-write it
-# whenever the release asks something of the operator.
+# breaking-change marker (docs/versioning.md); the commit stays listed under its
+# type. The release notes' breaking and upgrade headings belong to the change
+# notes (changes/README.md), not to this commit list.
 set -euo pipefail
 
 _TYPE_ORDER=(feat fix perf docs refactor test chore style ai)
@@ -28,7 +28,6 @@ declare -A _TYPE_TITLES=(
 )
 
 generate_from_lines() {
-  local breaking=()
   local other=()
   declare -A grouped
 
@@ -39,29 +38,13 @@ generate_from_lines() {
     # Conventional Commit: type(scope)?!?: description
     if [[ "$subject" =~ ^([a-zA-Z]+)(\([^\)]*\))?(\!)?:\ (.*)$ ]]; then
       type="${BASH_REMATCH[1]}"
-      bang="${BASH_REMATCH[3]}"
       desc="${BASH_REMATCH[4]}"
       entry="- ${desc} (${sha})"
-      if [ -n "$bang" ]; then
-        breaking+=("$entry")
-      fi
       grouped["$type"]="${grouped[$type]:-}${entry}"$'\n'
     else
       other+=("- ${subject} (${sha})")
     fi
   done
-
-  if [ "${#breaking[@]}" -gt 0 ]; then
-    echo "## Breaking changes"
-    echo
-    for e in "${breaking[@]}"; do echo "$e"; done
-    echo
-  fi
-
-  echo "## Upgrade notes"
-  echo
-  echo "_Fill in when this release asks something of the operator — see docs/versioning.md._"
-  echo
 
   for type in "${_TYPE_ORDER[@]}"; do
     if [ -n "${grouped[$type]:-}" ]; then

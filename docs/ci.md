@@ -222,6 +222,8 @@ project lines, the image file naming the digest, `compat-breaks.json` (attached 
 or after the one that added it, so not `v0.2.0` or a patch on `release/0.2`), and `SHA256SUMS` over all of them —
 attests the provenance of every attached file, and uploads them as one workflow artifact. `publish` then downloads that
 artifact and makes one `gh release create` call with every file attached; there is no external package-index publish.
+The release body is the file `build` renders from the tag's tree with `blizzard-change-notes render`, and `publish`
+passes it to that call as `--notes-file`; nothing edits the release afterwards, since it is published immutable.
 `verify` runs last, once the release page exists, holding only `contents: read` and a copy of
 [`scripts/verify-release.sh`](../scripts/verify-release.sh) taken from the tag's tree: it proves the image's signature
 and attestations, the attached files, and an install from the release page, so a red `verify` is a red run on a release

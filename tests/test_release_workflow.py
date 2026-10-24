@@ -203,6 +203,19 @@ def test_release_notes_are_generated_not_auto_generated() -> None:
     assert "--generate-notes" not in publish_run
 
 
+def test_the_release_is_published_once_and_never_edited() -> None:
+    """Releases are immutable: `gh release create` is the publish job's last step, and no step
+    anywhere edits, uploads to, or API-mutates a release."""
+    steps = _publish_job()["steps"]
+    assert "gh release create" in str(steps[-1].get("run", ""))
+    mutating = re.compile(
+        r"gh release (edit|upload)|gh api\b[^\n]*(-X|--method)\s+(PATCH|PUT|POST|DELETE)[^\n]*releases"
+    )
+    for job in yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"].values():
+        for step in job.get("steps", []):
+            assert not mutating.search(str(step.get("run", ""))), step
+
+
 def test_build_job_waits_for_each_full_suite_tier() -> None:
     """A tag release must not publish ahead of the full suite — `gate` alone isn't sufficient
     for a release the way it is for the master dev channel. The tiers are upper-tiers.yml's,
