@@ -105,14 +105,45 @@ def test_each_hosted_start_records_one_hub_started_naming_the_version_and_revisi
         engine.dispose()
 
 
-def test_a_migrate_with_nothing_to_apply_records_no_hub_migrated(tmp_path: Path) -> None:
+def test_an_init_of_a_fresh_store_records_one_hub_migrated_from_none(tmp_path: Path) -> None:
+    config = init_hub(tmp_path)
+    head = hub_runtime.migration_runner(config).script_head()
+
+    engine = create_engine_from_url(config.db_url)
+    try:
+        [migrated] = hub_event_rows(engine, "hub-migrated")
+        assert hub_event_detail(migrated) == {"from": None, "to": head}
+        assert migrated.message == f"hub store migrated from revision none to {head}"
+    finally:
+        engine.dispose()
+
+
+def test_an_init_over_a_store_at_head_and_a_migrate_with_nothing_to_apply_add_no_row(tmp_path: Path) -> None:
     config = init_hub(tmp_path)
 
+    init_hub(tmp_path)
     migrate_hub(tmp_path)
 
     engine = create_engine_from_url(config.db_url)
     try:
-        assert hub_event_rows(engine, "hub-migrated") == []
+        assert len(hub_event_rows(engine, "hub-migrated")) == 1
+    finally:
+        engine.dispose()
+
+
+def test_an_init_over_an_older_store_records_the_revisions_it_moved_between(tmp_path: Path) -> None:
+    config = init_hub(tmp_path)
+    runner = hub_runtime.migration_runner(config)
+    head = runner.script_head()
+    runner.downgrade("20261008_1500_scope_surrogate")
+
+    init_hub(tmp_path)
+
+    engine = create_engine_from_url(config.db_url)
+    try:
+        details = [hub_event_detail(row) for row in hub_event_rows(engine, "hub-migrated")]
+        assert {"from": "20261008_1500_scope_surrogate", "to": head} in details
+        assert len(details) == 2
     finally:
         engine.dispose()
 
@@ -127,20 +158,31 @@ def test_a_migrate_from_an_older_store_records_the_revisions_it_moved_between(tm
 
     engine = create_engine_from_url(config.db_url)
     try:
-        [migrated] = hub_event_rows(engine, "hub-migrated")
+        migrated = hub_event_rows(engine, "hub-migrated")[-1]
         assert hub_event_detail(migrated) == {"from": "20261008_1500_scope_surrogate", "to": head}
         assert migrated.message == f"hub store migrated from revision 20261008_1500_scope_surrogate to {head}"
     finally:
         engine.dispose()
 
 
-def test_a_downgrade_records_no_hub_migrated(tmp_path: Path) -> None:
+def test_a_downgrade_records_the_revisions_it_moved_between(tmp_path: Path) -> None:
     config = init_hub(tmp_path)
+    head = hub_runtime.migration_runner(config).script_head()
 
     migrate_hub(tmp_path, down="20261008_1600_hub_event_log_move")
 
     engine = create_engine_from_url(config.db_url)
     try:
-        assert hub_event_rows(engine, "hub-migrated") == []
+        details = [hub_event_detail(row) for row in hub_event_rows(engine, "hub-migrated")]
+        assert {"from": head, "to": "20261008_1600_hub_event_log_move"} in details
     finally:
         engine.dispose()
+
+
+def test_a_downgrade_below_the_hub_log_records_nothing_and_exits_cleanly(tmp_path: Path) -> None:
+    config = init_hub(tmp_path)
+
+    migrate_hub(tmp_path, down="20261008_1000_drop_work_item_proposals")
+    migrate_hub(tmp_path, down="base")
+
+    assert hub_runtime.migration_runner(config).current_revision() is None
