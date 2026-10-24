@@ -78,7 +78,7 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: compute next-train dev version X.(Y+1).0.dev<run>+<sha>
+      - name: compute dev version X.(Y+1).0.dev<run>+<sha>
         id: ver
         run: |
           # pyproject.toml names the release most recently cut on this branch;
@@ -100,9 +100,18 @@ jobs:
           # scripts/build-wheel.sh stamps onto a local build, so both kinds of
           # build name their commit the same way. Tag releases deliberately do
           # NOT get this — a release version is the tag, exactly.
+          #
+          # While src/blizzard/wire/window.toml sets `opening = "X"`, master is
+          # the open major: it builds toward X.0.0 instead of the next minor.
           BASE=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          OPENING=$(python3 -c "import tomllib; print(tomllib.load(open('src/blizzard/wire/window.toml','rb')).get('opening',''))")
           IFS=. read -r MAJOR MINOR _ <<< "$BASE"
-          DEV="${MAJOR}.$((MINOR + 1)).0.dev${{ github.run_number }}+${GITHUB_SHA:0:9}"
+          if [ -n "$OPENING" ]; then
+            TRAIN="${OPENING}.0.0"
+          else
+            TRAIN="${MAJOR}.$((MINOR + 1)).0"
+          fi
+          DEV="${TRAIN}.dev${{ github.run_number }}+${GITHUB_SHA:0:9}"
           echo "version=$DEV" >> "$GITHUB_OUTPUT"
           echo "Dev build version: $DEV"
       - name: build the dev wheel (embedded frontend + node-free install proof)

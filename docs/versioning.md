@@ -127,19 +127,26 @@ Every image below is `ghcr.io/paul-gross/blizzard-hub`.
 
 | Cut                          | Tags published                                                                                                                |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| A stable release, `vX.Y.Z`   | the exact version, its `X.Y` minor line, and `latest`                                                                         |
+| A stable release, `vX.Y.Z`   | the exact version, its `X.Y` minor line, and `latest` when no higher stable version exists                                    |
 | A prerelease, `vX.Y.Z-rc.N`  | the exact version alone — never `latest`, never the `X.Y` minor line                                                          |
 | Every green push to `master` | `edge`, a mutable pointer at the newest proven `master` commit, and `sha-<full-git-sha>`, immutable and pinned to that commit |
 
-`latest` never follows `master`; it moves only on a stable release tag. A deployment that wants a release pins its exact
-version, and its digest where it can hold one — never `latest` or an `X.Y` line, which never carry a candidate.
-[`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable fan-out.
+`latest` never follows `master`; it moves only to the highest stable version, compared numerically per component, so a
+patch on an older line leaves it where it is — for the image and for the GitHub Release's "Latest" mark alike. A
+deployment that wants a release pins its exact version, and its digest where it can hold one — never `latest` or an
+`X.Y` line, which never carry a candidate. [`scripts/image-tags.sh`](../scripts/image-tags.sh) computes the stable
+fan-out.
+
+A tag must sit on its line: its commit has to be an ancestor of `origin/release/X.Y`, or the release workflow fails
+before building anything. The one exception is a `vX.0.0-rc.K` candidate on `master` while
+[`window.toml`](../src/blizzard/wire/window.toml) sets `opening = "X"`.
 
 `pyproject.toml`'s `[project] version` names the release most recently cut on its branch; the minor counts release
 trains. A cut commit carrying `Release-Cut: X.Y.Z` moves it to `X.Y.Z`. Candidate `vX.Y.Z-rc.N` and stable `vX.Y.Z` tags
 can point to that same commit: [`scripts/check-version-tag.sh`](../scripts/check-version-tag.sh) strips the candidate
 suffix when checking against `pyproject.toml`, while the release wheel stamps the full tag version. On `master`, dev
-wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`.
+wheels and images target the *next* minor as `X.(Y+1).0.dev<run>+<sha>`; while the window sets `opening = "X"`, they
+target the open major as `X.0.0.dev<run>+<sha>`.
 
 Release notes are assembled from the tag's `changes/<X.Y.Z>/` notes and the Conventional Commits since the previous tag
 by [`blizzard-change-notes render`](../changes/README.md#cutting-and-rendering). A line-opening release leads with
