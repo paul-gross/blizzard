@@ -43,6 +43,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import (
     EmptyIngest,
     IngestConflict,
+    IngestItemProjectMismatch,
     IngestProjectAmbiguous,
     IngestProjectUnknown,
     IngestSourceNotLinked,
@@ -191,8 +192,9 @@ def ingest_project_refusal(
 def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     """Ingest by source-native token into the project named, or the one the tokens' sources
     agree on; 422 on a project the tenant does not hold, a token no configured source
-    claims, a project the tokens leave open (``project_required``) and a source the
-    project is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;
+    claims, a project the tokens leave open (``project_required``), a source the
+    project is not linked to (``source_not_linked``) and a hub item recorded in another
+    project; 409 on a pointer held by a live chunk;
     503 if every graph named after the packaged default has been retired (the operator's
     brake, not a code bug: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
@@ -216,6 +218,8 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
         return ingest_project_refusal(services, exc)
+    except IngestItemProjectMismatch as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
