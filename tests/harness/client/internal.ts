@@ -3,8 +3,8 @@ import type { ApplyResponse, TenantView } from './wire/hub/types.gen';
 
 /**
  * The internal client: hub-level calls the harness's own fixtures make (tenant creation, furnishing), which no spec can
- * reach. Given a recorder, it leaves a latency record for each call, tenant creation among them. The shared hubs run with authentication off, so the harness acts as the implicit operator and names its tenant
- * in `X-Blizzard-Tenant`.
+ * reach. The shared hubs run with authentication off, so the harness acts as the implicit operator and names its tenant
+ * in `X-Blizzard-Tenant`. Given a recorder, it leaves a latency record for each call, tenant creation among them.
  */
 export class HubInternal {
   constructor(
