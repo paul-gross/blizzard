@@ -8,6 +8,9 @@ never the wall clock (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +25,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 
 # Alembic's default `version_num String(32)` truncates `YYYYMMDD_HHMM_slug` ids on postgres (#191).
@@ -30,6 +34,31 @@ _VERSION_TABLE_COLUMN_LENGTH = 255
 
 # The Alembic ``Config.attributes`` key a runner's clock rides under, for ``migration_clock`` to read.
 MIGRATION_CLOCK_ATTRIBUTE = "blizzard.migration_clock"
+
+#: The logger a revision reports on; alembic's own ``NullHandler`` on ``alembic`` leaves it reaching no stream.
+REVISION_LOGGER = "alembic.runtime.migration"
+
+_log = get_logger(__name__)
+
+
+class _RevisionWarnings(logging.Handler):
+    """Hands each warning a revision logs to structlog, so it reaches the stderr of the migrate command that ran it."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        _log.warning("store migration warning", revision_message=record.getMessage())
+
+
+@contextmanager
+def _revision_warnings_surfaced() -> Iterator[None]:
+    logger, handler = logging.getLogger(REVISION_LOGGER), _RevisionWarnings()
+    logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
 
 
 class MigrationConnectionError(RuntimeError):
@@ -108,14 +137,16 @@ class MigrationRunner:
         try:
             self.refuse_below_floor(store=self._store_label())
             self._ensure_wide_version_table()
-            command.upgrade(self._config(), revision)
+            with _revision_warnings_surfaced():
+                command.upgrade(self._config(), revision)
         except OperationalError as exc:
             raise MigrationConnectionError(str(exc)) from exc
 
     def downgrade(self, revision: str) -> None:
         """Reverse revisions down to ``revision`` (``"base"`` unwinds the whole tree)."""
         self.refuse_below_floor(store=self._store_label())
-        command.downgrade(self._config(), revision)
+        with _revision_warnings_surfaced():
+            command.downgrade(self._config(), revision)
 
     def _store_label(self) -> str:
         """A store location useful to an operator, without URL credentials or query parameters."""

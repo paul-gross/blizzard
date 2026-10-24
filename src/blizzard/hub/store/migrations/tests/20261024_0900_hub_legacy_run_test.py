@@ -130,6 +130,19 @@ def test_the_upgrade_carries_every_translatable_row_and_keeps_the_rest(
         assert part in lines[0]
 
 
+def test_the_kept_rows_line_reaches_the_stderr_of_the_migrate_that_ran_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runner, _, _ = _seeded(tmp_path)
+    capsys.readouterr()
+
+    runner.upgrade(_LEGACY)
+
+    lines = [line for line in capsys.readouterr().err.splitlines() if "kept as legacy_run" in line]
+    assert len(lines) == 1
+    assert "'nd_kept'" in lines[0]
+
+
 def test_the_new_column_matches_the_declared_schema(tmp_path: Path) -> None:
     _, engine = migrate_to(tmp_path, "head")
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
