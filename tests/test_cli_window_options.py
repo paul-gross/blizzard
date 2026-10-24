@@ -5,14 +5,14 @@ Unit tier (blizzard:unit-test)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import click
 import pytest
 from click.testing import CliRunner
 
-from blizzard.cli.window import since_option, until_option
+from blizzard.cli.window import refuse_bad_window, since_option, until_option
 
 pytestmark = pytest.mark.unit
 
@@ -141,3 +141,32 @@ def test_the_only_flag_spelling_is_the_long_name(factory: Callable[..., Any], na
     assert param.secondary_opts == []
     assert param.name == name
     assert CliRunner().invoke(command, [f"-{name[0]}", "2026-08-12T09:30:15"]).exit_code == 2
+
+
+_NOW = datetime(2026, 7, 13, 12, tzinfo=UTC)
+
+
+class _Clock:
+    def now(self) -> datetime:
+        return _NOW
+
+
+def _refusal(since: datetime, until: datetime) -> str | None:
+    try:
+        refuse_bad_window(since, until, _Clock())  # type: ignore[arg-type]
+    except click.ClickException as exc:
+        return exc.message
+    return None
+
+
+def test_a_wide_inverted_future_window_reads_inverted_never_too_wide() -> None:
+    assert _refusal(_NOW + timedelta(days=400), _NOW + timedelta(days=1)) == "until must be after since"
+    assert _refusal(_NOW - timedelta(days=400), _NOW) is None
+
+
+def test_the_window_is_judged_as_instants_in_any_offset() -> None:
+    plus_five = timezone(timedelta(hours=5))
+    just_past = (_NOW + timedelta(seconds=1)).astimezone(plus_five)
+
+    assert _refusal(_NOW.astimezone(plus_five) - timedelta(hours=1), just_past) == "until must not be in the future"
+    assert _refusal(_NOW.astimezone(plus_five) - timedelta(hours=1), _NOW.astimezone(plus_five)) is None

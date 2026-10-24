@@ -182,3 +182,12 @@ def test_a_local_pause_is_stamped_when_the_runner_decided_and_attributed_to_the_
     assert paused == LocalPause(paused=True, at=_T0, by="operator", reason="spend")
     resumed = LocalPause.of(RUNNER_LOCALLY_RESUMED, Payload({"at": "garbled", "by": "op-b"}), now=_NOW)
     assert resumed == LocalPause(paused=False, at=_NOW, by="op-b", reason=None)
+
+
+def test_the_wire_view_never_calls_a_delivered_answer_superseded() -> None:
+    from blizzard.hub.api.questions import question_view
+
+    answered = replace(_ANSWERED, project_id=None)
+    for row, superseded in ((answered, True), (_DELIVERED, False)):
+        view = question_view(row, {}, {}, superseded_by_restart=True)  # type: ignore[arg-type]
+        assert view.superseded is superseded

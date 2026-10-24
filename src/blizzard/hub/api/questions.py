@@ -57,7 +57,9 @@ def question_view(
         answered_at=iso_utc(row.answered_at) if row.answered_at is not None else None,
         delivered=row.delivered,
         delivered_at=iso_utc(row.delivered_at) if row.delivered_at is not None else None,
-        superseded=row.state(superseded_by_restart=superseded_by_restart) is QuestionState.SUPERSEDED,
+        # An answer the runner delivered before the restart was not lost to it, so it is never "superseded".
+        superseded=not row.delivered
+        and row.state(superseded_by_restart=superseded_by_restart) is QuestionState.SUPERSEDED,
         **project,
     )
 
