@@ -3,22 +3,27 @@ whole with a ``422`` body naming what to choose; and a source unlinked under an 
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.wire.chunk import ChunkIngestConflict
 from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
     default_project,
+    hub_store_connections,
     link_project,
     seed_fake_work_sources,
+    seed_graph,
     seed_project,
+    seed_work_item,
 )
 
 pytestmark = pytest.mark.component
@@ -194,3 +199,52 @@ def test_a_source_unlinked_after_the_project_was_chosen_refuses_the_ingest(tmp_p
         ingest.ingest([WorkRef(source="a", ref="7")], graph=graph, project=chosen)
 
     assert (refused.value.source, refused.value.project) == ("a", first)
+
+
+def _hub_item_in(hub: HubHarness, project: ProjectId | None) -> str:
+    """A hub item recorded in ``project`` whose resting chunk is stopped, so the item can be ingested again —
+    its ``hub:<ref>`` token. ``None`` is a project the item records none of."""
+    at = datetime(2026, 9, 2, tzinfo=UTC)
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_hub_item", at=at)
+    item = seed_work_item(
+        WorkItemStore(hub_store_connections(hub.engine)),
+        graph_id="gr_hub_item",
+        author=WorkItemAuthor.user("u_1"),
+        at=at,
+        project_id=project,
+    )
+    stopped = hub.client.post(f"/api/chunks/ch_{item.ref}/stop", json={"by": "operator"})
+    assert stopped.status_code == 202, stopped.text
+    return f"hub:{item.ref}"
+
+
+def test_a_named_project_refuses_a_hub_item_recorded_in_another(tmp_path: Path) -> None:
+    hub, first, second = _two_projects(tmp_path)
+    token = _hub_item_in(hub, second)
+
+    status, body = _ingest(hub, token, project="default")
+
+    assert status == 422
+    assert token in body["detail"] and first in body["detail"] and second in body["detail"]
+
+
+def test_a_hub_item_recorded_elsewhere_is_refused_beside_a_configured_source(tmp_path: Path) -> None:
+    hub, first, second = _two_projects(tmp_path)
+    token = _hub_item_in(hub, second)
+
+    status, body = _ingest(hub, token, "a:1")
+
+    assert status == 422
+    assert token in body["detail"] and first in body["detail"] and second in body["detail"]
+    assert [c for c in hub.client.get("/api/chunks").json()["chunks"] if c["status"] != "stopped"] == []
+
+
+def test_a_hub_item_recorded_in_the_inferred_project_is_accepted_beside_a_configured_source(tmp_path: Path) -> None:
+    hub, first, _ = _two_projects(tmp_path)
+    token = _hub_item_in(hub, first)
+
+    status, body = _ingest(hub, token, "a:1")
+
+    assert status == 201, body
+    assert _project_of(hub, body["chunk_id"]) == first

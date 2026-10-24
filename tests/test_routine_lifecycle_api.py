@@ -88,6 +88,44 @@ def test_create_mints_the_named_default_scope(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
 
 
+def test_create_mints_the_default_scope_with_a_blank_description(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+
+    _create(hub, default_scope_slug="fresh-scope")
+
+    assert hub.client.get("/api/scopes/fresh-scope").json()["description"] == ""
+
+
+def test_create_with_a_retired_default_scope_is_not_refused_and_the_scope_stays_retired(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    hub.client.post("/api/scopes", json={"slug": "old-scope", "description": ""})
+    hub.client.post("/api/scopes/old-scope/retire", json={"by": "operator"})
+
+    body = _create(hub, default_scope_slug="old-scope")
+
+    assert body["default_scope_slug"] == "old-scope"
+    assert hub.client.get("/api/scopes/old-scope").json()["retired"] is True
+
+
+def test_edit_to_a_retired_default_scope_is_not_refused_and_the_scope_stays_retired(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create(hub)
+    hub.client.post("/api/scopes", json={"slug": "old-scope", "description": ""})
+    hub.client.post("/api/scopes/old-scope/retire", json={"by": "operator"})
+
+    resp = hub.client.patch(
+        f"/api/routines/{routine['routine_id']}",
+        json={"name": "nightly", "graph_name": "alpha", "default_scope_slug": "old-scope"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["default_scope_slug"] == "old-scope"
+    assert hub.client.get("/api/scopes/old-scope").json()["retired"] is True
+
+
 def test_create_naming_an_existing_name_is_refused_rather_than_duplicating(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _mint_graph(hub)

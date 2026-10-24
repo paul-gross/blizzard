@@ -383,8 +383,9 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
  *
  * Ingest by source-native token into the project named, or the one the tokens' sources
  * agree on; 422 on a project the tenant does not hold, a token no configured source
- * claims, a project the tokens leave open (``project_required``) and a source the
- * project is not linked to (``source_not_linked``); 409 on a pointer held by a live chunk;
+ * claims, a project the tokens leave open (``project_required``), a source the
+ * project is not linked to (``source_not_linked``) and a hub item recorded in another
+ * project; 409 on a pointer held by a live chunk;
  * 503 if every graph named after the packaged default has been retired (the operator's
  * brake, not a code bug: re-enable one or mint a new one).
  */
@@ -1119,10 +1120,8 @@ export const getGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGet =
  *
  * Drive a chunk parked at a generic hub command node one step, taking one pass of that
  * node's action under the fleet-wide serialization slot. ``ran=False`` is never an
- * error: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``
- * elapsed, the chunk is escalated to a person, or it is not parked at a hub command node it may
- * drive — ``detail`` names which.
- * The request declares no ``runner_id`` to confine against.
+ * error: another chunk holds the slot, the node is ``pending`` inside ``poll_interval``, the
+ * chunk is escalated, or it is not parked at a drivable hub node — ``detail`` names which.
  */
 export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/hub-advance', ...options });
 

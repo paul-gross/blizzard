@@ -142,6 +142,18 @@ def test_retire_does_not_change_the_stored_description(tmp_path: Path) -> None:
     assert hub.client.get("/api/scopes/blizzard").json()["description"] == "the repo"
 
 
+def test_create_naming_a_retired_slug_is_not_refused_and_the_scope_stays_retired(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hub.client.post("/api/scopes", json={"slug": "blizzard", "description": "the repo"})
+    hub.client.post("/api/scopes/blizzard/retire", json={"by": "operator"})
+
+    resp = hub.client.post("/api/scopes", json={"slug": "blizzard", "description": ""})
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["retired"] is True
+    assert hub.client.get("/api/scopes/blizzard").json()["retired"] is True
+
+
 def test_a_second_retire_is_a_harmless_no_op(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     hub.client.post("/api/scopes", json={"slug": "blizzard", "description": ""})
