@@ -20,16 +20,24 @@ pytestmark = pytest.mark.unit
 
 _ROOT = repo_root()
 _PLATFORM_TIERS = ("service", "e2e", "crash", "journey")
+_PLAYWRIGHT_TIERS = ("harness", "service")
 _WORKFLOWS = sorted((_ROOT / ".github" / "workflows").glob("*.yml"))
 
 #: Configures the winter provider or hands a fixture a winter source — what a platform-tier module must never do.
 _WINTER_BOUND = re.compile(r"""provider\s*=\s*["']winter["']|--winter-source|winter_source|WINTER_SOURCE""")
 #: A step command that runs tests.
-_RUNS_TESTS = re.compile(r"pytest|mise run e2e")
+_RUNS_TESTS = re.compile(r"pytest|mise run e2e|mise run playwright|playwright test")
 
 
 def _platform_modules() -> list[Path]:
-    return sorted(path for tier in _PLATFORM_TIERS for path in (_ROOT / "tests" / tier).rglob("*.py"))
+    python = (path for tier in _PLATFORM_TIERS for path in (_ROOT / "tests" / tier).rglob("*.py"))
+    typescript = (
+        path
+        for tier in _PLAYWRIGHT_TIERS
+        for path in (_ROOT / "tests" / tier).rglob("*.ts")
+        if "node_modules" not in path.parts
+    )
+    return sorted((*python, *typescript))
 
 
 @pytest.mark.parametrize("module", _platform_modules(), ids=lambda path: str(path.relative_to(_ROOT)))
@@ -86,6 +94,7 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
     assert {(name, job) for name, job, _ in _test_running_checkouts()} >= {
         ("gate.yml", "python-tests"),
         ("upper-tiers.yml", "service-tier"),
+        ("upper-tiers.yml", "service-playwright"),
         ("upper-tiers.yml", "crash-sweep"),
         ("upper-tiers.yml", "e2e"),
         ("upper-tiers.yml", "journey"),
