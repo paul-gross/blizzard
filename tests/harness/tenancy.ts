@@ -145,8 +145,11 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   isolation: [undefined, { option: true }],
 
-  level: async ({ isolation }, use) => {
-    await use(resolveLevel(isolation, process.env.BLIZZARD_ISOLATION_RAISE === '1'));
+  level: async ({ isolation }, use, testInfo) => {
+    const level = resolveLevel(isolation, process.env.BLIZZARD_ISOLATION_RAISE === '1');
+    // The cross-check names a test by the level it declared, which the report carries only through this.
+    testInfo.annotations.push({ type: 'isolation-level', description: level.declared });
+    await use(level);
   },
 
   testHub: async ({ level, hub, playwright }, use, testInfo) => {

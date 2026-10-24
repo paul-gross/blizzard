@@ -24,6 +24,26 @@ plain('the cross-check serves one level above the declared one, and fresh-hub st
   expect(resolveLevel('common', true)).toEqual({ declared: 'common', served: 'fresh-project' });
 });
 
+// What the `level` fixture serves follows BLIZZARD_ISOLATION_RAISE, so these hold in both runs of the cross-check.
+const raised = process.env.BLIZZARD_ISOLATION_RAISE === '1';
+
+test.describe('a test declared common', () => {
+  test.use({ isolation: 'common' });
+
+  test('is served one level up under the flag, and records the level it declared', async ({ level }, testInfo) => {
+    expect(level).toEqual({ declared: 'common', served: raised ? 'fresh-project' : 'common' });
+    expect(testInfo.annotations).toContainEqual({ type: 'isolation-level', description: 'common' });
+  });
+});
+
+test.describe('a test declared fresh-hub', () => {
+  test.use({ isolation: 'fresh-hub' });
+
+  test('is served at fresh-hub with the flag set or not', async ({ level }) => {
+    expect(level).toEqual({ declared: 'fresh-hub', served: 'fresh-hub' });
+  });
+});
+
 const levels: Record<Level, string> = {
   common: 'the hub’s common tenant and its default project',
   'fresh-project': 'the common tenant and a project created for the test',

@@ -98,6 +98,8 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
         ("upper-tiers.yml", "crash-sweep"),
         ("upper-tiers.yml", "e2e"),
         ("upper-tiers.yml", "journey"),
+        ("isolation-cross-check.yml", "declared"),
+        ("isolation-cross-check.yml", "raised"),
     }
 
 
