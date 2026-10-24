@@ -425,6 +425,27 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("boundary_reason", ["transitioned", "parked"])
+def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path, boundary_reason):  # type: ignore[no-untyped-def]
+    """A completed node-step (`transitioned`, or `parked` on a gate) ends the visit; a failure inside a
+    visit does not, and leases of the new visit spend its budget from zero."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+    _mint(store, lease="lease_2", epoch=2)
+    assert store.attempt_count("ch_1", "nd_build") == 2  # a failure is not a boundary
+    store.record_closure(
+        lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason=boundary_reason, closed_at=_NOW
+    )
+    assert store.attempt_count("ch_1", "nd_build") == 0
+    _mint(store, lease="lease_3", epoch=3)
+    assert store.attempt_count("ch_1", "nd_build") == 1
+    store.record_closure(lease_id="lease_3", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+    _mint(store, lease="lease_4", epoch=4)
+    assert store.attempt_count("ch_1", "nd_build") == 2  # the new visit still spends its budget
+
+
+@pytest.mark.unit
 def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_one(tmp_path):  # type: ignore[no-untyped-def]
     """An owner-unresolvable escalation's own never-spawned mint must not cost the node's
     real attempts a retry — discriminated by its own closure reason from an ordinary,

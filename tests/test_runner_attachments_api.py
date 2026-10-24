@@ -29,7 +29,7 @@ _TOKEN = "the-lease-token"
 def _app_with_attachments(tmp_path: Path):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW))
+    service = AttachmentService(store, FixedClock(_NOW), store)
     return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=service
     ), store
@@ -63,7 +63,7 @@ def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW))
+    service = AttachmentService(store, FixedClock(_NOW), store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_runner_app(config, attachments=service)
@@ -324,3 +324,23 @@ def test_get_returns_newest_content_per_name_sorted_by_name(tmp_path: Path) -> N
         {"name": "a-name", "content": "second"},
         {"name": "z-name", "content": "z"},
     ]
+
+
+@pytest.mark.component
+def test_409_once_the_leases_outcome_is_buffered(tmp_path: Path) -> None:
+    """An attachment after the node-step's outcome is buffered would be recorded and never
+    submitted — refused instead, and nothing is written."""
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    store.enqueue_outbound(
+        kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
+    with runner_client(app) as client:
+        resp = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "note", "content": "late"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 409, resp.text
+    assert "declare assets before the node-step's verdict" in resp.json()["detail"]
+    assert store.attachments_for_lease("lease_1") == {}

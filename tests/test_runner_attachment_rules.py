@@ -8,7 +8,12 @@ import pytest
 
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_lease import WorkerLease
-from blizzard.runner.operator.attachments import AttachmentEmpty, AttachmentOnClosedLease, check_attachable
+from blizzard.runner.operator.attachments import (
+    AttachmentEmpty,
+    AttachmentOnClosedLease,
+    AttachmentTooLate,
+    check_attachable,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -27,19 +32,24 @@ _LEASE = Lease(
 
 def test_content_on_the_active_lease_is_staged() -> None:
     """Even after the worker exited with its judgement still in flight — latest wins."""
-    check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="looks good")
+    check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="looks good", outcome_pending=False)
 
 
 def test_empty_content_is_refused() -> None:
     with pytest.raises(AttachmentEmpty, match="'review' is empty"):
-        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="")
+        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="", outcome_pending=False)
 
 
 def test_an_attach_on_a_takeovers_closed_reference_lease_is_refused() -> None:
     with pytest.raises(AttachmentOnClosedLease, match="lease_1 is closed"):
-        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="c")
+        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="c", outcome_pending=False)
 
 
 def test_empty_content_is_refused_first() -> None:
     with pytest.raises(AttachmentEmpty):
-        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="")
+        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="", outcome_pending=False)
+
+
+def test_content_once_the_outcome_is_buffered_is_refused() -> None:
+    with pytest.raises(AttachmentTooLate, match="lease_1's outcome is already submitted"):
+        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="c", outcome_pending=True)

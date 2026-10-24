@@ -19,6 +19,8 @@ NO_ACCEPTABLE_HARNESS_MINT = "no-acceptable-harness-mint"
 
 PUBLISHED_REASONS: frozenset[str] = frozenset(LeaseClosureReason)
 MINT_REASONS: frozenset[str] = frozenset({ESCALATION_MINT, NO_ACCEPTABLE_HARNESS_MINT})
+#: The reasons that close a completed node-step; the newest one at a node ends its visit and its retry budget.
+COMPLETED_STEP_REASONS: frozenset[str] = frozenset({LeaseClosureReason.TRANSITIONED, LeaseClosureReason.PARKED})
 #: Every reason an open escalation derives from: the ordinary one plus both mints.
 ESCALATION_REASONS: frozenset[str] = frozenset({LeaseClosureReason.ESCALATED, *MINT_REASONS})
 

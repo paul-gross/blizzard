@@ -48,7 +48,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     both to the shared assessment."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    attachments = AttachmentService(store, FixedClock(_NOW))
+    attachments = AttachmentService(store, FixedClock(_NOW), store)
     app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=attachments
     )
