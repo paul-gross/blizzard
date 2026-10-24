@@ -463,7 +463,7 @@ def test_the_isolation_cross_check_gates_the_build_and_never_runs_on_a_pull_requ
 
 def test_proof_runs_first_and_alone_holds_the_actions_scope() -> None:
     jobs = _workflow()["jobs"]
-    assert list(jobs)[0] == "proof"
+    assert next(iter(jobs)) == "proof"
     assert "needs" not in jobs["proof"]
     assert jobs["proof"]["env"] == {"GH_TOKEN": "${{ github.token }}"}
     assert [name for name, job in jobs.items() if "actions" in (job.get("permissions") or {})] == ["proof"]
