@@ -163,7 +163,8 @@ def test_reify_carries_authored_poll_interval_and_timeout() -> None:
             "nodes": {
                 "merge": {
                     "executor": "hub",
-                    "run": [{"command": "check-ci"}],
+                    "action": "test.sequence",
+                    "with": {"choices": ["pending", "success"]},
                     "poll_interval": 15,
                     "poll_timeout": 600,
                     "judgement": {"choices": {"success": {"description": "ok", "to": "done"}}},
@@ -188,7 +189,8 @@ def test_reify_defaults_poll_interval_and_timeout_to_none() -> None:
             "nodes": {
                 "merge": {
                     "executor": "hub",
-                    "run": [{"command": "check-ci"}],
+                    "action": "test.sequence",
+                    "with": {"choices": ["pending", "success"]},
                     "judgement": {"choices": {"success": {"description": "ok", "to": "done"}}},
                 }
             },

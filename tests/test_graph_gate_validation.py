@@ -44,7 +44,7 @@ _GATE_NODES = {
     },
     "deliver": {
         "executor": "hub",
-        "run": [{"command": "true"}],
+        "action": "pass",
         "judgement": {
             "choices": {
                 "success": {"description": "Delivered.", "to": "done"},

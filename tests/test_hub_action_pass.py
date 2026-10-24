@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
+from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.delivery.hub_node import HubRunResult
@@ -32,6 +32,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support import (
+    TEST_HUB_ACTIONS,
     HubHarness,
     build_hub,
     create_repositories,
@@ -106,7 +107,7 @@ class _Raises:
 
 
 def _hub(tmp_path: Path, *extra: IHubAction, **kwargs: object) -> HubHarness:
-    actions = HubActions.of([*SHIPPED_ACTIONS.implementations.values(), *TEST_ACTIONS, *extra])
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), *extra])
     return build_hub(tmp_path, actions=actions, **kwargs)  # type: ignore[arg-type]
 
 

@@ -40,8 +40,8 @@ entry: ship
 nodes:
   ship:
     executor: hub
-    run:
-      - command: "true"
+    action: test.answer
+    with: {choice: landed}
     judgement:
       choices:
         landed:

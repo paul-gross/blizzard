@@ -60,8 +60,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -93,8 +92,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -219,7 +217,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
         f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["approve-gate"], choice="approve", decision_id=decision_id),
     )
-    # approve -> deliver (a generic hub command node): its run: script executes.
+    # approve -> deliver (a hub node): its `pass` action answers.
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
     done_resp = hub.client.get(f"/api/chunks/{chunk_id}")
     done = done_resp.json()

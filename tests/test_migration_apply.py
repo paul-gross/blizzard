@@ -66,8 +66,7 @@ entry: build
 nodes:
   build:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -232,7 +231,7 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
 ) -> None:
     """A migration whose landing node is hub-executed must not release the
     route the way a runner-landing migration does — releasing it would leave the landed
-    hub node's `run:` steps never driven (no holding runner left to poll `hub-advance`)."""
+    hub node never driven (no holding runner left to poll `hub-advance`)."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
     triage_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "triage")
@@ -250,8 +249,6 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
     assert detail["current_node_name"] == "review"
     # The triage node's reasoning asset still carried across the migration.
     assert any(a["name"] == "triage-notes" for a in detail["artifacts"])
-    # The landed hub node's inline run recorded its own run-step log artifact (#65).
-    assert any(a["name"].startswith("hub-log.") for a in detail["artifacts"])
 
     # The observable consequence of a retained route: a fresh claim on this same chunk
     # loses the race — 409, not a hand-out of the landed node.
