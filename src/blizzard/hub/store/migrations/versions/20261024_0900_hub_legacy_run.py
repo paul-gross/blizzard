@@ -1,10 +1,6 @@
-"""hub legacy run — every stored hub node naming no action is carried onto the action its ``run`` already named.
+"""hub legacy run — carry each action-less hub node onto the action its ``run`` named.
 
-Adds nullable `graph_nodes.legacy_run`. Each hub row with no `action` whose `run` ran one packaged script, or no step
-at all, is given that script's action and `with:` arguments (`pass` for no step); every other such row keeps its `run`
-copied into `legacy_run`, logged one line per row. `run` itself is never written. Downgrade clears the action of every
-row still holding a `run`, then drops `legacy_run`; a row translated from no `run` keeps `pass`, which the parent
-revision's downgrade restores.
+Adds nullable `graph_nodes.legacy_run`, holding the `run` of a row it cannot carry; `run` is never written.
 Revision ID: 20261024_0900_hub_legacy_run
 Revises: 20261023_0901_hub_actions
 """

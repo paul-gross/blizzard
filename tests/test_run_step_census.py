@@ -16,8 +16,7 @@ from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-#: The files, relative to ``tests/``, whose subject is a stored pre-action document or a hub that cannot read
-#: ``action:``.
+#: Files under ``tests/`` whose subject is a pre-action document or a hub that cannot read ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(
     {
         "e2e/test_run_carry_over_e2e.py",

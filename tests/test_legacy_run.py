@@ -17,8 +17,7 @@ from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
 
-#: Every distinct hub-node ``run:`` body the packaged graphs have shipped, frozen from their
-#: history, with the action and ``with:`` each was.
+#: Every hub-node ``run:`` body the packaged graphs shipped, with the action and ``with:`` it was.
 _SHIPPED_RUN_BODIES: list[tuple[list[dict[str, str]], str, dict[str, tuple[str, ...]]]] = [
     ([{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}], "land", {}),
     (

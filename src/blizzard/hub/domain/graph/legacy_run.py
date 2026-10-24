@@ -1,10 +1,9 @@
 """The carry-over of a stored ``run:`` onto the action its command already named.
 
-A version minted before hub nodes named actions stores each one's commands as ``run:``.
-:func:`translated` reads such a parsed document as what it already was — each hub node whose
-one step ran a packaged script names that script's action, and a hub node with no step names
-``pass`` — so reconciling it against the packaged graph that names the action finds no change.
-A node it cannot carry keeps its ``run:``, and the document still parses."""
+:func:`translated` reads a pre-action document as what it already was — a hub node whose one
+step ran a packaged script names that script's action, one with no step names ``pass`` — so
+reconciling it against the packaged graph finds no change. A node it cannot carry keeps its
+``run:``, and the document still parses."""
 
 from __future__ import annotations
 
@@ -29,8 +28,7 @@ LEGACY_RUN_COMMANDS: Mapping[str, str] = MappingProxyType(
 
 _INTERPRETERS = frozenset({"python3", "python"})
 
-# The flags a script's command may carry, by action, each read as the ``with:`` argument it
-# names; every value a repeated flag carries joins its argument's list.
+# Each action's command flags, by the ``with:`` argument they name; a repeated flag's values join a list.
 _ACTION_FLAGS: Mapping[str, Mapping[str, str]] = MappingProxyType(
     {GARDEN_DELIVER.name: MappingProxyType({"--delta": "delta", "--proposals": "proposals"})}
 )

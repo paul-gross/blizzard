@@ -614,10 +614,8 @@ def hub_advance(
 ) -> HubAdvanceResponse:
     """Drive a chunk parked at a generic hub command node one step, taking one pass of that
     node's action under the fleet-wide serialization slot. ``ran=False`` is never an
-    error: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``
-    elapsed, the chunk is escalated to a person, or it is not parked at a hub command node it may
-    drive — ``detail`` names which.
-    The request declares no ``runner_id`` to confine against."""
+    error: another chunk holds the slot, the node is ``pending`` inside ``poll_interval``, the
+    chunk is escalated, or it is not parked at a drivable hub node — ``detail`` names which."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
