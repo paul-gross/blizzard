@@ -59,7 +59,10 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        """How many leases have been minted for this chunk at this node (retry budget).
+        """How many leases have been minted for this chunk at this node in the current visit (retry budget).
+
+        A visit ends when the node-step completes (``transitioned`` or ``parked``); a node re-entered
+        through an edge starts its budget afresh.
 
         Excludes an attempt an operator's restart preempted — that attempt was
         superseded rather than spent, so it does not carry the node toward exhaustion."""

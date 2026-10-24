@@ -3409,6 +3409,49 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path, workspace_root, ex
     assert argv[argv.index("--dir") + 1] == runner_dir
 
 
+@pytest.mark.component
+def test_a_node_reentered_through_an_edge_starts_its_retry_budget_afresh(tmp_path):  # type: ignore[no-untyped-def]
+    """Build spent a retry and then passed; review failed back to build. The second visit's first
+    verdict-less exit is its own first attempt — a retry, not an exhaustion of the earlier visit's budget."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
+    # Visit one: a failed attempt, a passing retry; then review passed back to build.
+    _seed_running_lease(store, lease="lease_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+    _seed_running_lease(store, lease="lease_2", epoch=2)
+    store.record_closure(lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_3",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_review",
+            node_name="review",
+            epoch=3,
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(
+        lease_id="lease_3", chunk_id="ch_1", node_id="nd_review", reason="transitioned", closed_at=_NOW
+    )
+    # Visit two: the build re-entry exits verdict-less.
+    _seed_running_lease(store, lease="lease_4", epoch=4, pid=300, start="start-0", session="sess-4")
+    assert store.attempt_count("ch_1", "nd_build") == 1
+
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-4", pid=304, process_start_time="start-4", pgid=304), verdict=None
+    )
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+    Advance(ctx).run()  # launches the detached elicitation
+    Advance(ctx).run()  # collects it — verdict-less -> fails -> retries
+
+    assert [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED] == []
+    assert store.open_escalation_for_chunk("ch_1") is None
+
+
 @pytest.mark.unit
 def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a_runner_dir(tmp_path):  # type: ignore[no-untyped-def]
     """The raw command resumes in the configuration the lease was minted with, and an unknown

@@ -18,10 +18,12 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
+from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
 from tests.runner_fakes import (
     CountingAttachmentStore,
     FakeCheckRunner,
@@ -512,6 +514,44 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     by_name = {a.name: a for a in submission.artifacts}
     assert by_name["review-findings"].content == "already attached before judgement"
     assert by_name["review-findings"].attached is True
+
+
+@pytest.mark.component
+def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_later_one_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The window closes at buffering, not at exit: content declared before the collect reaches the hub,
+    and content declared after it is refused rather than recorded and dropped."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["note"])
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.DONE)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+        clock=FixedClock(_NOW),
+    )
+    service = AttachmentService(store, FixedClock(_NOW), store)
+    worker = WorkerLease(lease=store.lease("lease_r"), active=True)  # type: ignore[arg-type]
+
+    service.attach(worker, name="note", content="first")  # covers `produces`, so the exit is judged
+    Advance(ctx).run()  # the worker has exited; the elicitation is launched
+    service.attach(worker, name="note", content="early")  # a correction, still before the outcome is buffered
+    Advance(ctx).run()  # collects it -> judged -> buffered
+    with pytest.raises(AttachmentTooLate):
+        service.attach(worker, name="note", content="late")
+    Pull(ctx).run()
+
+    _, submission = hub.completions[0]
+    assert {a.name: a.content for a in submission.artifacts}["note"] == "early"
 
 
 @pytest.mark.unit

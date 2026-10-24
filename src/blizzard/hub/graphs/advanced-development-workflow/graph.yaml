@@ -417,9 +417,5 @@ nodes:
           to: resolve
           prompt_addendum: ./prompts/resolve.from-retrospective.md
     retries:
-      # A chunk that round-trips through delivery-incomplete visits this node twice;
-      # attempt_count counts leases minted for the node across all visits, not per-visit
-      # (blizzard-context:/domain/graphs.md), so a single retry budget of 1 would leave
-      # the second visit with none. 2 gives each visit its own retry in the common case.
       max: 2
       exhausted: escalate
