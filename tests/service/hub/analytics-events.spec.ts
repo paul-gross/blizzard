@@ -1,8 +1,7 @@
 import { expect, test } from '../../harness/fixtures';
 
-// exemplar: a Playwright service spec — the isolation declared once for the file, state built only through the fixtures
-// and clients, and every assertion on a response read from the wire.
-//
+// exemplar: bzh:service-fixtures-only, bzh:service-clients-only, bzh:service-isolation-earned.
+
 // The analytics events and counts routes over a real hub: both encodings serve the same derived events in the same
 // order, and a JSON page bounded below the total still covers it exactly once through its cursor. The routes read
 // tenant-wide aggregates, so each test owns its tenant.
