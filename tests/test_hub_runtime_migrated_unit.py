@@ -1,4 +1,4 @@
-""":meth:`Runtime.migrate` records ``hub-migrated`` through the event-log opener it was handed — it opens neither an
+""":meth:`Runtime.init` and :meth:`Runtime.migrate` record ``hub-migrated`` through the event-log opener it was handed — it opens neither an
 engine nor a core itself — stamped from the runtime's clock."""
 
 from __future__ import annotations
@@ -85,4 +85,45 @@ def test_a_migrate_with_nothing_to_apply_opens_no_event_log(tmp_path: Path) -> N
     _runtime(tmp_path, opener).migrate()
 
     assert opener.events.rows == []
+    assert opener.opened == 0
+
+
+def test_a_downgrade_records_one_hub_migrated_into_the_target_revisions_log(tmp_path: Path) -> None:
+    config = init_hub(tmp_path)
+    head = hub_runtime.migration_runner(config).script_head()
+    opener = _FakeOpener()
+
+    _runtime(tmp_path, opener).migrate(down="20261008_1600_hub_event_log_move")
+
+    [row] = opener.events.rows
+    assert (row.kind, row.detail) == ("hub-migrated", {"from": head, "to": "20261008_1600_hub_event_log_move"})
+    assert (opener.opened, opener.closed) == (1, 1)
+
+
+def test_a_downgrade_below_the_hub_log_never_opens_it(tmp_path: Path) -> None:
+    init_hub(tmp_path)
+    opener = _FakeOpener()
+
+    _runtime(tmp_path, opener).migrate(down="20261008_1000_drop_work_item_proposals")
+    _runtime(tmp_path, opener).migrate(down="base")
+
+    assert opener.events.rows == []
+    assert opener.opened == 0
+
+
+def test_an_init_of_a_fresh_store_records_one_hub_migrated_from_none(tmp_path: Path) -> None:
+    opener = _FakeOpener()
+
+    _runtime(tmp_path, opener).init()
+
+    [row] = opener.events.rows
+    assert (row.kind, row.at, (row.detail or {})["from"]) == ("hub-migrated", _AT, None)
+
+
+def test_an_init_over_a_store_at_head_opens_no_event_log(tmp_path: Path) -> None:
+    init_hub(tmp_path)
+    opener = _FakeOpener()
+
+    _runtime(tmp_path, opener).init()
+
     assert opener.opened == 0

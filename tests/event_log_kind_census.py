@@ -88,7 +88,7 @@ HUB_EVENT_KIND_CENSUS: dict[str, tuple[str, ...]] = {
     "egress-config-rejected": ("hub/app.py:_announce_rejected_egress",),
     "egress-cursor-reset": ("hub/domain/observability/egress/reset.py:EgressReset.reset",),
     "hub-started": ("hub/app.py:_announce_started",),
-    "hub-migrated": ("hub/runtime.py:Runtime.migrate",),
+    "hub-migrated": ("hub/runtime.py:Runtime.init", "hub/runtime.py:Runtime.migrate"),
     "tenant-closed": (),
     "tenant-deleted": (),
 }

@@ -15,6 +15,8 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
+
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
@@ -26,6 +28,9 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard hub migrate"
+
+#: The first revision that creates ``hub_event_log``; a store ending below it has nowhere to record a move.
+HUB_LOG_FLOOR_REVISION = "20261008_1100_tenants"
 
 #: Opens the hub's own event log for a resolved config and closes it on exit; the engine URL is known only once the
 #: config has loaded, so the seam is a factory.
@@ -57,7 +62,7 @@ class Runtime:
 
     root: Path
     clock: IClock
-    #: Opens the hub event log the migrate verb records ``hub-migrated`` in.
+    #: Opens the hub event log ``init`` and ``migrate`` record ``hub-migrated`` in.
     open_event_log: HubEventLogOpener = field(kw_only=True)
     allow_external_db: bool = False
     #: The registry every load of the root's config resolves its flags against.
@@ -73,8 +78,9 @@ class Runtime:
     def init(self) -> HubConfig:
         """Scaffold config + data dir + a migrated store + the secret key. Idempotent.
 
-        Re-running leaves an existing config untouched and migrates the store to head. A
-        config whose db_url points outside the root is refused, not reconciled.
+        Re-running leaves an existing config untouched and migrates the store to head, recording the move as
+        ``hub-migrated`` when it changed the revision. A config whose db_url points outside the root is refused,
+        not reconciled.
         """
         root = self.root.resolve()
         try:
@@ -91,34 +97,42 @@ class Runtime:
             raise ConfigError(f"cannot write the hub runtime at {root}: {exc}") from exc
 
         try:
-            Migrations(config, self.clock).runner.upgrade("head")
-        except MigrationConnectionError as exc:
+            runner = Migrations(config, self.clock).runner
+            self._move_store(config, runner, lambda: runner.upgrade("head"))
+        except (MigrationConnectionError, OperationalError) as exc:
+            # The revision read that brackets the move opens the store too, so it can fail before the upgrade does.
             raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
         hub_key_provider(os.environ, data_dir=config.data_dir)
         return config
 
     def migrate(self, *, down: str | None = None) -> None:
-        """Apply pending revisions, or reverse to ``down`` when given. An upgrade that applied any revision records
-        one ``hub-migrated`` in the hub's own event log, naming the revisions it moved between."""
+        """Apply pending revisions, or reverse to ``down`` when given. A move that changed the store's revision, in
+        either direction, records one ``hub-migrated`` in the hub's own event log, naming the revisions it moved
+        between; a store left below the hub log's own revision records nothing."""
         config = self.loaded(self.root)
         runner = Migrations(config, self.clock).runner
         if down is not None:
-            runner.downgrade(down)
+            self._move_store(config, runner, lambda: runner.downgrade(down))
             _log.info("hub store downgraded", root=str(self.root), to=down)
         else:
-            before = runner.current_revision()
-            runner.upgrade("head")
+            self._move_store(config, runner, lambda: runner.upgrade("head"))
             _log.info("hub store upgraded to head", root=str(self.root))
-            after = runner.current_revision()
-            if after != before:
-                with self.open_event_log(config) as event_log:
-                    event_log.record(
-                        kind="hub-migrated",
-                        message=f"hub store migrated from revision {before or 'none'} to {after}",
-                        detail={"from": before, "to": after},
-                        at=self.clock.now(),
-                    )
+
+    def _move_store(self, config: HubConfig, runner: MigrationRunner, move: Callable[[], None]) -> None:
+        """Run ``move``, then record the revision change in the target revision's hub log, in a write of its own."""
+        before = runner.current_revision()
+        move()
+        after = runner.current_revision()
+        if after == before or not runner.reaches(after, HUB_LOG_FLOOR_REVISION):
+            return
+        with self.open_event_log(config) as event_log:
+            event_log.record(
+                kind="hub-migrated",
+                message=f"hub store migrated from revision {before or 'none'} to {after}",
+                detail={"from": before, "to": after},
+                at=self.clock.now(),
+            )
 
 
 def migration_runner(config: HubConfig) -> MigrationRunner:
