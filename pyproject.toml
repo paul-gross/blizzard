@@ -216,6 +216,7 @@ also_copy = [
     ".github/workflows/store-baseline.yml",
     ".github/workflows/release.yml",
     ".github/workflows/upper-tiers.yml",
+    ".github/workflows/isolation-cross-check.yml",
     ".github/actions/resolve-mock-ref",
     "contracts/ast-grep/rules/domain-takes-objects.yml",
     "contracts/ast-grep/rules/seam-answers-binding-facts.yml",

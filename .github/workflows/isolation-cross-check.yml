@@ -1,0 +1,219 @@
+# The isolation cross-check — the service suite run twice, once as declared and once with every test raised a
+# level, and the two runs required to pass the same tests.
+#
+# A test placed at too loose an isolation level can pass because of its neighbours: another test's activity nudges a
+# sweep along, or another test's item satisfies a list it reads. It then fails the day it runs alone. The raised run
+# (`BLIZZARD_ISOLATION_RAISE=1`, which the harness's `level` fixture reads, `fresh-hub` staying `fresh-hub`) exposes
+# that, and `compare` fails when a test passed in one run and not the other.
+#
+# It runs weekly, on demand, and as a release gate (`release.yml` calls it beside the tiers); never on a pull request
+# or a `master` push. Each run is unsharded so both reports hold the whole suite. `compare` runs past a failed run and
+# fails when either report is missing, so a crashed run cannot read as agreement.
+name: isolation-cross-check
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  mock-ref:
+    name: resolve blizzard-mock ref
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.mock.outputs.sha }}
+    steps:
+      - name: checkout blizzard (the resolution action lives here)
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve blizzard-mock
+        id: mock
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+
+  declared:
+    needs: [mock-ref]
+    name: isolation cross-check — the suite as declared
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          sha: ${{ needs.mock-ref.outputs.sha }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: Node from mise.toml
+        uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: true
+          working_directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: Node version (the cache key's)
+        id: node
+        run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
+      - name: cache the Playwright package's dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: blizzard/tests/node_modules
+          key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
+      - name: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: cd blizzard/tests && npm ci
+      - name: isolation cross-check — the suite as declared
+        timeout-minutes: 60
+        env:
+          CI: "1"
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+        run: cd blizzard && mise run playwright -- --project='service-*' --workers=4
+      - name: keep the JSON report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: declared-report
+          path: blizzard/tests/test-results/report.json
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: keep the failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: declared-evidence
+          path: |
+            blizzard/tests/playwright-report/
+            blizzard/tests/test-results/
+            blizzard/tests/.run/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  raised:
+    needs: [mock-ref]
+    name: isolation cross-check — the suite with every test raised a level
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          sha: ${{ needs.mock-ref.outputs.sha }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: Node from mise.toml
+        uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: true
+          working_directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: Node version (the cache key's)
+        id: node
+        run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
+      - name: cache the Playwright package's dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: blizzard/tests/node_modules
+          key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
+      - name: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: cd blizzard/tests && npm ci
+      - name: isolation cross-check — the suite with every test raised a level
+        timeout-minutes: 60
+        env:
+          CI: "1"
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+          BLIZZARD_ISOLATION_RAISE: "1"
+        run: cd blizzard && mise run playwright -- --project='service-*' --workers=4
+      - name: keep the JSON report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: raised-report
+          path: blizzard/tests/test-results/report.json
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: keep the failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: raised-evidence
+          path: |
+            blizzard/tests/playwright-report/
+            blizzard/tests/test-results/
+            blizzard/tests/.run/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  compare:
+    name: isolation cross-check — compare the two runs
+    needs: [declared, raised]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tests/harness/scripts/cross-check.ts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: fetch the declared run's report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: declared-report
+          path: reports/declared
+        continue-on-error: true
+      - name: fetch the raised run's report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: raised-report
+          path: reports/raised
+        continue-on-error: true
+      - name: the two runs passed the same tests (a missing report fails here)
+        run: node tests/harness/scripts/cross-check.ts reports/declared/report.json reports/raised/report.json

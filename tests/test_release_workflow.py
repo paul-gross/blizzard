@@ -175,6 +175,7 @@ def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> N
         "gate",
         "compat",
         "upper-tiers",
+        "isolation-cross-check",
         "wheel",
         "rehearsal",
         "store-baseline",
@@ -447,3 +448,12 @@ def test_a_tag_run_resolves_the_tag_itself() -> None:
     """upper-tiers.yml resolves the mock once without a pinned sha, so a tag run gets the tag's own."""
     step = next(s for s in _tier_job("upper-tiers.yml", "mock-ref")["steps"] if s.get("uses") == _MOCK_ACTION)
     assert "sha" not in (step.get("with") or {})
+
+
+def test_the_isolation_cross_check_gates_the_build_and_never_runs_on_a_pull_request_or_push() -> None:
+    job = _job("isolation-cross-check")
+    assert job["uses"] == "./.github/workflows/isolation-cross-check.yml"
+    workflow = yaml.safe_load((_WORKFLOWS_DIR / "isolation-cross-check.yml").read_text())
+    assert set(workflow[True]) == {"schedule", "workflow_dispatch", "workflow_call"}
+    assert workflow["jobs"]["compare"]["if"] == "${{ !cancelled() }}"
+    assert set(workflow["jobs"]["compare"]["needs"]) == {"declared", "raised"}
