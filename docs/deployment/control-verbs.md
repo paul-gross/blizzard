@@ -76,7 +76,9 @@ The re-entry is stamped by the target graph's declarations — its `sessions:` m
 harness set — which is the point: a chunk thrashing under a stale window moves onto the fixed mint and re-enters under
 it immediately, with no node-step run to manufacture a transition. Whatever parked the chunk goes with a restart: an
 open ask is answered with a fixed system answer, an open gate decision closed, an open escalation superseded — nothing
-is left to re-park it at a node it no longer occupies.
+is left to re-park it at a node it no longer occupies. When the target is a graph-declared human gate, the restart opens
+one new decision at its new epoch, even when it restarts the gate itself. Resolve the new decision; the earlier visit's
+resolution cannot advance it.
 
 `--node` defaults to the chunk's current node — the common case, restarting a thrashing step; on a chunk that has never
 moved, the default is the entry node of whichever graph the move lands on. Like stop and unlike detach, restart needs no

@@ -50,7 +50,7 @@ from blizzard.hub.domain.execution.completion import (
     stored_artifacts,
 )
 from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Choice, Edge, FollowLatest, Node
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Choice, Edge, FollowLatest, Node, ProducesSpec
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -257,6 +257,14 @@ def test_a_plain_completion_lands_on_its_edges_destination() -> None:
 def test_a_cross_graph_choice_migrates_instead() -> None:
     plan = _plain(_submission("hand-off"))
     assert plan.migrates and plan.edge.target_graph == "delivery"
+
+
+def test_cross_graph_plain_completion_checks_the_source_nodes_outputs() -> None:
+    source = replace(_BUILD, produces=[ProducesSpec(name="handoff-notes")])
+    with pytest.raises(CompletionRefused, match="handoff-notes"):
+        _plain(_submission("hand-off"), node=source)
+    attached = CompletionArtifact(name="handoff-notes", kind=ArtifactKind.ASSET, content="ready", attached=True)
+    assert _plain(_submission("hand-off", artifacts=[attached]), node=source).migrates
 
 
 def test_a_cross_graph_choice_that_requires_green_checks_is_refused_over_a_red_one() -> None:

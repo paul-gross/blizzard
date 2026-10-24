@@ -58,6 +58,11 @@ nodes:
           to: build
 """
 
+_GATE_TARGET_YAML = _TARGET_YAML.replace(
+    "    prompt: Triage.\n    judgement:\n      prompt: Assess.",
+    "    judgement:\n      by: human",
+)
+
 # A target graph whose landing node (name-matching the source's `build`) is hub-executed
 # `success` routes onward to a runner node, not straight to `done`.
 _HUB_TARGET_YAML = """
@@ -224,6 +229,53 @@ def test_a_cross_graph_choice_migrates_repins_and_re_queues_at_the_landing_node(
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]
     assert envelope["node"]["node_id"] == detail["current_node_id"]
+
+
+def test_a_cross_graph_gate_landing_opens_one_decision_even_on_replay(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_GATE_TARGET_YAML)
+    assert _migrate(hub, chunk_id, node_id).json()["outcome"] == "migrated"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "waiting_on_human"
+    decision = detail["decision"]
+    assert decision["node_name"] == "build" and decision["epoch"] == 1
+    assert _migrate(hub, chunk_id, node_id).json()["outcome"] == "migrated"
+    assert [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]] == [decision["decision_id"]]
+
+
+@pytest.mark.parametrize("mode,expected", [("enforce", "failure"), ("warn", "migrated")])
+def test_cross_graph_completion_enforces_source_outputs_before_repin(tmp_path: Path, mode: str, expected: str) -> None:
+    source = _SRC_YAML.format(target="triage").replace(
+        "    judgement:\n      prompt: Assess.",
+        "    produces:\n      - name: required-notes\n        kind: asset\n    judgement:\n      prompt: Assess.",
+        1,
+    )
+    hub = build_hub(tmp_path, produces_mode=mode)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": source}).status_code == 201
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    hub.client.post(f"/api/chunks/{chunk_id}/promote")
+    node_id = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    first = _migrate(hub, chunk_id, node_id)
+    assert first.json()["outcome"] == expected, first.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    if mode == "enforce":
+        assert detail["current_node_id"] == node_id and detail["migrations"] == []
+        completed = hub.client.post(
+            f"/api/fleet/chunks/{chunk_id}/completions",
+            json={
+                "choice": "migrate",
+                "epoch": 1,
+                "runner_id": "r1",
+                "from_node_id": node_id,
+                "artifacts": [{"name": "required-notes", "kind": "asset", "content": "ready", "attached": True}],
+            },
+        )
+        assert completed.json()["outcome"] == "migrated", completed.text
 
 
 def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retains_the_route(
