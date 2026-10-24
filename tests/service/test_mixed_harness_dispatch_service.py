@@ -459,7 +459,6 @@ def _opencode_task_chunk_spec(work_ref: str) -> dict:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
