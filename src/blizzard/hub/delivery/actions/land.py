@@ -507,7 +507,8 @@ class Land:
                 run.say(str(exc))
                 wait = True
                 continue
-            if pull.head_sha and not pull.merged:
+            if pull.head_sha:
+                # A merged PR is gated too: one recovered by the live-tip fallback may carry foreign content.
                 try:
                     gate = await gate_head(target, pull.head_sha)
                 except ForgeReadDegraded as exc:
