@@ -1111,10 +1111,11 @@ export const getGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGet =
 /**
  * Hub Advance
  *
- * Drive a chunk parked at a generic hub command node one step, running that node's
- * hub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an
+ * Drive a chunk parked at a generic hub command node one step, taking one pass of that
+ * node's action under the fleet-wide serialization slot. ``ran=False`` is never an
  * error: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``
- * elapsed, or the chunk is not parked at a hub command node it may drive — ``detail`` names which.
+ * elapsed, the chunk is escalated to a person, or it is not parked at a hub command node it may
+ * drive — ``detail`` names which.
  * The request declares no ``runner_id`` to confine against.
  */
 export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/hub-advance', ...options });

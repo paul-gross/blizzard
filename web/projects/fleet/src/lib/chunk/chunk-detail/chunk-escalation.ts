@@ -85,6 +85,8 @@ const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
     [EscalationCause.SPEND_CAP]: 'The worker hit its spend cap',
     [EscalationCause.BOUNCE_CAP]: 'The chunk reached its bounce cap',
     [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",
+    [EscalationCause.HUB_ACTION_MISSING]: 'The hub node the chunk stands at names no action the hub can take',
+    [EscalationCause.UNROUTABLE_OUTCOME]: "The hub node's answer has no edge to route the chunk on",
   },
   (raw) => `Escalated: ${raw}`,
 );

@@ -26,7 +26,6 @@ from blizzard.hub.domain.graph.model import (
     IWriteGraphRepository,
     Node,
     NodeDoc,
-    RunStep,
 )
 from blizzard.hub.domain.graph.validation import Validator, cross_graph_warnings
 
@@ -133,7 +132,6 @@ class Reification:
                 for position, choice in enumerate(self._choice_docs(nd))
             ],
             bounce_cap=nd.bounce_cap,
-            run=[RunStep(command=r.command, name=r.name, produces=r.produces) for r in nd.run],
             action=nd.action,
             action_args=dict(nd.action_args),
             poll_interval_seconds=nd.poll_interval_seconds,

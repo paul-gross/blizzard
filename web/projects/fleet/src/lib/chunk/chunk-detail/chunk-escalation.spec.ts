@@ -255,6 +255,24 @@ describe('ChunkEscalation', () => {
       expect(text).toContain('(epoch 3). bounced 5 times at review');
     });
 
+    it.each([
+      [
+        'hub-action-missing',
+        "hub node `deliver` names no action (its stored run: ./ship.sh)",
+        'The hub node the chunk stands at names no action the hub can take (epoch 3).',
+      ],
+      [
+        'unroutable-outcome',
+        'hub node `deliver` answered `landed`, which no edge routes',
+        "The hub node's answer has no edge to route the chunk on (epoch 3).",
+      ],
+    ])('renders the hub-authored cause %s with its detail', async (cause, given, expected) => {
+      const { sentence, detail } = await causeOf(cause, given);
+      expect(sentence).toBe(expected);
+      expect(sentence?.toLowerCase()).not.toContain('worker');
+      expect(detail).toBe(given);
+    });
+
     it('renders a runner cause with its detail', async () => {
       const { sentence, detail } = await causeOf('retries-exhausted', 'judge failed 3 attempts');
       expect(sentence).toBe('The worker exhausted its retries (epoch 3).');

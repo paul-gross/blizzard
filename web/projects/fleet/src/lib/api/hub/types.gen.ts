@@ -2888,7 +2888,9 @@ export const EscalationCause = {
     NO_ACCEPTABLE_HARNESS: 'no-acceptable-harness',
     SPEND_CAP: 'spend-cap',
     BOUNCE_CAP: 'bounce-cap',
-    MIGRATION_TARGET_UNRESOLVABLE: 'migration-target-unresolvable'
+    MIGRATION_TARGET_UNRESOLVABLE: 'migration-target-unresolvable',
+    HUB_ACTION_MISSING: 'hub-action-missing',
+    UNROUTABLE_OUTCOME: 'unroutable-outcome'
 } as const;
 
 /**

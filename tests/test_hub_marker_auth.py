@@ -13,15 +13,12 @@ from typing import Any
 import pytest
 
 from blizzard.auth_core import Role
-from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
 from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, MarkerWriter
 from tests.support import (
-    FakeHubCommandRunner,
     HubHarness,
     build_hub,
     default_tenant,
     pointer_token,
-    report_lease,
     seed_session,
     seed_user,
 )
@@ -191,109 +188,3 @@ def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_pat
         markers.record("acme-widget", "sha:abc123")
 
     assert _recorded_marker_names(hub, chunk_id) == set()
-
-
-# The executor and ``HubServices`` must share one ``MarkerAuthority`` instance;
-# the test below is the only place a token travels the whole shipped path.
-
-_HUB_NODE_GRAPH_YAML = """
-name: default-delivery
-entry: build
-nodes:
-  build:
-    executor: runner
-    prompt: |
-      Build the change.
-    judgement:
-      prompt: |
-        Assess the build.
-      choices:
-        pass:
-          description: Complete and green.
-          to: merge
-        fail:
-          description: Incomplete.
-          to: build
-  merge:
-    executor: hub
-    run:
-      - name: land
-        command: land-the-repo
-        produces: merged
-    judgement:
-      choices:
-        success:
-          description: Landed.
-          to: done
-        failure:
-          description: Failed to land.
-          to: build
-"""
-
-
-def _drive_to_the_hub_node(hub: HubHarness) -> str:
-    """Ingest, promote, claim, and pass ``build`` so the completion's apply runs the hub
-    node executor synchronously — returning the chunk id. Only the human-plane calls
-    carry the admin session; ``/api/fleet`` sets no cookie, so the marker token stays
-    the only write credential."""
-    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
-    cookie = _cookie(seed_session(hub, admin))
-    assert (
-        hub.client.post("/api/graphs", json={"definition_yaml": _HUB_NODE_GRAPH_YAML}, headers=cookie).status_code
-        == 201
-    )
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}, headers=cookie)
-    assert resp.status_code == 201, resp.text
-    chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=cookie).status_code == 202
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-    )
-    assert claim.status_code == 201, claim.text
-    build_node_id = claim.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-    apply = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/completions",
-        json={
-            "choice": "pass",
-            "epoch": 1,
-            "runner_id": "r1",
-            "from_node_id": build_node_id,
-            "check_results": [],
-            "artifacts": [],
-        },
-    )
-    assert apply.json()["outcome"] == "hub_node_taken", apply.text
-    return chunk_id
-
-
-def test_the_token_the_executor_injects_authorizes_the_route_it_names(tmp_path: Path) -> None:
-    """A hub node step spends the credential its own executor minted, and the marker
-    lands — on a hub with authentication on."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, auth_mode="oauth", hub_command_runner=runner)
-    write_errors: list[MarkerWriteError] = []
-
-    def land_the_repo(_command: str) -> None:
-        """Stand in for a land script at the exact point one runs: build the shipped
-        a ``MarkerWriter`` out of nothing but the injected env, and spend it."""
-        env = runner.calls[-1][2]
-        markers = MarkerWriter(
-            callback_url=env[ENV_MARKER_CALLBACK_URL],
-            token=env.get(ENV_MARKER_TOKEN, ""),
-            request=_hub_request(hub),
-        )
-        try:
-            markers.record("acme-widget", "sha:abc123")
-        except MarkerWriteError as exc:
-            # Captured rather than raised: an exception here would escape into the
-            # completion request, failing on a 500 naming neither status nor refusal.
-            write_errors.append(exc)
-
-    runner.before_run = land_the_repo
-
-    chunk_id = _drive_to_the_hub_node(hub)
-
-    assert write_errors == []
-    assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)

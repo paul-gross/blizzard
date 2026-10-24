@@ -129,10 +129,9 @@ _DEDICATED_PREFIXES = (
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
-# `hubnode.*` (#65) and its narrower `hubnode.after-poll.` carve-out (#66) fire inside the
-# hub's synchronous executor; each is swept by its own dedicated test below.
-_HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
-_HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
+# `hubnode.*` — the between-polls window (#66) — fires inside the hub's synchronous executor; swept by
+# `test_kill9_at_hub_node_pending_crash_point`.
+_HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.")]
 # `action.*` fires inside the hub's action pass driver, as a pass's effect is written. Swept by
 # `test_kill9_at_action_crash_point`.
 _ACTION_POINTS = [p for p in _ALL_POINTS if p.startswith("action.")]
@@ -215,12 +214,7 @@ _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 # issue's central bug.
 _PAUSE_CI_SUBSET = ("pause.after-interrupt.before-park",)
 
-# The hub command node CI subset (#65): the family's first-declared member is its own CI
-# representative.
-_HUBNODE_CI_SUBSET = ("hubnode.after-step.before-marker",)
-
-# The hub-node pending CI subset (#66): the narrower between-polls window carved out of the
-# `hubnode.*` family above; its lone member is its own CI representative.
+# The hub-node pending CI subset (#66): the family's lone member is its own CI representative.
 _HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
 _ACTION_CI_SUBSET = ("action.after-effect.before-write",)
 
@@ -293,7 +287,6 @@ _POINTS = _select(_GENERIC_POINTS, _CI_SUBSET)
 _RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
 _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
 _PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
-_HUBNODE_SWEEP = _select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET)
 _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET)
 _ACTION_SWEEP = _select(_ACTION_POINTS, _ACTION_CI_SUBSET)
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
@@ -324,7 +317,6 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
         | set(_select(_ABANDON_POINTS, _ABANDON_CI_SUBSET))
         | set(_select(_PAUSE_POINTS, _PAUSE_CI_SUBSET))
-        | set(_select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET))
         | set(_select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET))
         | set(_select(_ACTION_POINTS, _ACTION_CI_SUBSET))
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
@@ -2562,116 +2554,6 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-# --- Generic hub command node (#65) — the hubnode.* per-step crash windows ---
-
-
-# The ``merge`` node's ``land`` step: merges each submitted branch to base by pinned SHA against the
-# mock forge; idempotent by construction, and refuses an empty delivery as ``land`` does.
-_LAND_STEP = """python3 - <<'PYEOF'
-import json, os, sys, urllib.error, urllib.request
-
-forge = os.environ.get("BZ_FORGE_URL", "")
-base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
-commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
-
-if not commits and os.environ.get("BZ_HUB_EXPECT_GIT_COMMITS", "1") != "0":
-    print(
-        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
-        "is nothing to open a PR for.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-def call(method, path, payload):
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        forge + path, data=data, headers={"Content-Type": "application/json"}, method=method
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status, json.loads(resp.read().decode() or "null")
-    except urllib.error.HTTPError as exc:
-        return exc.code, None
-
-
-for c in commits:
-    repo = c["repo"] if "/" in c["repo"] else "blizzard/" + c["repo"]
-    status, body = call(
-        "POST",
-        "/repos/%s/pulls" % repo,
-        {"title": "land", "head": c["branch"], "base": base, "body": "", "user": "blizzard-hub"},
-    )
-    if status == 201 and body:
-        call(
-            "PUT",
-            "/repos/%s/pulls/%s/merge" % (repo, body["number"]),
-            {"commit_message": "blizzard: land", "sha": c["commit"], "merge_method": "merge", "user": "blizzard-hub"},
-        )
-print("landed the submitted branches")
-PYEOF
-"""
-
-# A no-op second step, unmarked, so ``hubnode.after-marker.before-next`` has a "next"
-# step to skip the marked land step in favour of.
-_VERIFY_STEP = """python3 - <<'PYEOF'
-print("post-land verification ran")
-PYEOF
-"""
-
-
-def _hub_command_graph_yaml(landed_file: str) -> str:
-    """A ``build -> merge(run:) -> done`` graph whose ``merge`` is a generic hub command node
-    with a two-step ``run:`` list (``land`` then ``verify``), judging the reserved
-    ``success``/``failure`` choices (#65); a clean run ends on ``success -> done`` (#63)."""
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": build_script(landed_file),
-                "judgement": {
-                    "prompt": "verdict('pass', 'the mock harness committed the change; checks are green')\n",
-                    "choices": {"pass": {"description": "Committed and green.", "to": "merge"}},
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "merge": {
-                "executor": "hub",
-                "run": [
-                    {"name": "land", "command": _LAND_STEP, "produces": "merged"},
-                    {"name": "verify", "command": _VERIFY_STEP, "produces": "verified"},
-                ],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Landed cleanly; finish.", "to": "done"},
-                        "failure": {"description": "A step failed; back to build.", "to": "build"},
-                    },
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
-
-
-def _ingest_hub_command_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
-    """Mint the hub-command graph, file a fresh issue, and ingest it to a ready chunk."""
-    minted = hub.post("/api/graphs", json={"definition_yaml": _hub_command_graph_yaml(landed_file)})
-    assert minted.status_code == 201, minted.text
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a hub-command crash-sweep chunk"})
-    assert issue.status_code == 201, issue.text
-    number = issue.json()["number"]
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
-    assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
-    return chunk_id
-
-
 def _live_exec_slots(hub_dir: Path) -> int:
     """The number of un-released ``hub_exec_slot`` rows — the ``hub:one-live-exec-slot``
     invariant's own quantity, read straight off the hub store so a leaked slot is caught
@@ -2689,127 +2571,13 @@ def _live_exec_slots(hub_dir: Path) -> int:
         engine.dispose()
 
 
-def _count_pulls(forge: httpx2.Client) -> int:
-    """Every PR the mock forge holds for the sweep repo, any state (the origins are
-    session-shared, so callers compare a before/after delta, never the absolute count)."""
-    resp = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"})
-    resp.raise_for_status()
-    return len(resp.json())
-
-
-@pytest.mark.parametrize("point", _HUBNODE_SWEEP)
-def test_kill9_at_hub_command_node_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` inside a generic hub command node's per-step window recovers, lands once
-    (#65): a crash before the step's marker is durable re-runs it safely, a crash after skips
-    it, no ``hub:one-live-exec-slot`` leak."""
-    landed_file = f"LANDED-{point.replace('.', '_')}.md"
-    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
-
-    # A hubnode.* point fires inside the hub's synchronous executor — arm the hub.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
-    runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    try:
-        await_http(hub, "/api/health", proc=hub_proc)
-        chunk_id = _ingest_hub_command_chunk(hub, crash_env.forge, landed_file)
-        pulls_before = _count_pulls(crash_env.forge)
-        write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
-        )
-        runner_proc = start_runner(runner_dir, crash_point=None)
-
-        # The hub self-SIGKILLs the instant it reaches the armed per-step window inside the
-        # merge node's run: list — after land ran, at either the pre-marker or post-marker edge.
-        code = wait_death(hub_proc)
-        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
-        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
-
-        # Restart the hub UNARMED: the runner re-flushes the build completion, whose idempotent
-        # replay re-enters the hub-node branch and resumes the interrupted run to completion.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
-        await_http(hub, "/api/health", proc=hub_proc)
-        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
-        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
-
-        # The serialization slot is released — no leaked live slot after the crash-and-resume
-        # (the ``hub:one-live-exec-slot`` invariant, asserted directly off the store).
-        assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
-
-        # Exactly-once delivery: the file is reachable from bare main exactly once, no matter how
-        # many times the land step ran.
-        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
-        commits = [ln for ln in tree.splitlines() if ln.strip()]
-        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
-
-        # The per-step contract, made observable through the forge: the land step opens one PR per
-        # run, so the number of PRs this chunk created is exactly how many times land ran.
-        lands = _count_pulls(crash_env.forge) - pulls_before
-        if point == "hubnode.after-step.before-marker":
-            assert lands == 2, f"land ran {lands}x — the pre-marker crash must re-run the just-run step"
-        elif point == "hubnode.after-marker.before-next":
-            assert lands == 1, f"land ran {lands}x — the post-marker crash must skip the marked step"
-    finally:
-        hub.close()
-        terminate(runner_proc)
-        terminate(hub_proc)
-
-
 # --- Pending hub command node (#66) — the hubnode.after-poll.* between-polls window ---
 
 
-# Reports the reserved ``pending`` outcome on its first poll, lands on every subsequent
-# one, switching on a durable workdir sentinel that survives the crash-forced restart.
-_POLL_THEN_LAND_STEP = """python3 - <<'PYEOF'
-import json, os, pathlib, urllib.error, urllib.request
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-
-sentinel = pathlib.Path(os.environ["BZ_HUB_WORKDIR"]) / "pending-once.marker"
-if not sentinel.exists():
-    sentinel.write_text("polled once\\n")
-    print("pending")
-    raise SystemExit(0)
-
-forge = os.environ["BZ_FORGE_URL"]
-base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
-commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
-
-
-def call(method, path, payload):
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        forge + path, data=data, headers={"Content-Type": "application/json"}, method=method
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status, json.loads(resp.read().decode() or "null")
-    except urllib.error.HTTPError as exc:
-        return exc.code, None
-
-
-for c in commits:
-    repo = c["repo"] if "/" in c["repo"] else "blizzard/" + c["repo"]
-    status, body = call(
-        "POST",
-        "/repos/%s/pulls" % repo,
-        {"title": "land", "head": c["branch"], "base": base, "body": "", "user": "blizzard-hub"},
-    )
-    if status == 201 and body:
-        call(
-            "PUT",
-            "/repos/%s/pulls/%s/merge" % (repo, body["number"]),
-            {"commit_message": "blizzard: land", "sha": c["commit"], "merge_method": "merge", "user": "blizzard-hub"},
-        )
-print("landed the submitted branches")
-PYEOF
-"""
-
-
 def _pending_graph_yaml(landed_file: str) -> str:
-    """A ``build -> merge(run:) -> done`` graph whose ``merge`` hub node polls then lands
-    (#66) — a brisk ``poll_interval`` and generous ``poll_timeout`` keep this scenario on
-    the resume path rather than #64's timeout kick-back."""
+    """A ``build -> deliver(action) -> done`` graph whose ``deliver`` takes ``test.sequence``, answering the
+    reserved ``pending`` on its first pass and ``done`` on every later one (#66) — a brisk ``poll_interval`` and
+    generous ``poll_timeout`` keep this scenario on the resume path rather than #64's timeout kick-back."""
     import yaml
 
     graph = {
@@ -2821,19 +2589,20 @@ def _pending_graph_yaml(landed_file: str) -> str:
                 "prompt": build_script(landed_file),
                 "judgement": {
                     "prompt": "verdict('pass', 'the mock harness committed the change; checks are green')\n",
-                    "choices": {"pass": {"description": "Committed and green.", "to": "merge"}},
+                    "choices": {"pass": {"description": "Committed and green.", "to": "deliver"}},
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "merge": {
+            "deliver": {
                 "executor": "hub",
+                "action": "test.sequence",
+                "with": {"choices": ["pending", "done"]},
                 "poll_interval": 1,
                 "poll_timeout": 600,
-                "run": [{"name": "poll-then-land", "command": _POLL_THEN_LAND_STEP}],
                 "judgement": {
                     "choices": {
-                        "success": {"description": "Landed cleanly; finish.", "to": "done"},
-                        "failure": {"description": "A step failed; back to build.", "to": "build"},
+                        "done": {"description": "Delivered; finish.", "to": "done"},
+                        "failure": {"description": "The pass failed; back to build.", "to": "build"},
                     },
                 },
             },
@@ -2843,7 +2612,7 @@ def _pending_graph_yaml(landed_file: str) -> str:
 
 
 def _ingest_pending_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) -> str:
-    """Mint the poll-then-land graph, file a fresh issue, and ingest it to a ready chunk."""
+    """Mint the pending-then-done graph, file a fresh issue, and ingest it to a ready chunk."""
     minted = hub.post("/api/graphs", json={"definition_yaml": _pending_graph_yaml(landed_file)})
     assert minted.status_code == 201, minted.text
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a pending-poll crash-sweep chunk"})
@@ -2859,9 +2628,9 @@ def _ingest_pending_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file:
 
 @pytest.mark.parametrize("point", _HUBNODE_PENDING_SWEEP)
 def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` in a hub node's between-polls window resumes polling and lands once
-    (#66) — pending-ness is derived from the durable poll fact, so recovery is just "keep
-    polling", releasing the leaked slot and landing the file exactly once."""
+    """A ``kill -9`` in a hub node's between-polls window resumes polling and routes on (#66) —
+    pending-ness is derived from the durable poll fact, so recovery is just "keep polling",
+    releasing the leaked slot and taking the next pass exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -2885,7 +2654,7 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
         # Restart the hub UNARMED: pending-ness is derived from the durable poll fact, so
-        # the chunk just resumes polling and lands.
+        # the chunk just resumes polling and routes `done`.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -2896,24 +2665,20 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         # (the ``hub:one-live-exec-slot`` invariant, asserted directly off the store).
         assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
 
-        # Exactly-once delivery: the file is reachable from bare main exactly once, despite the
-        # merge node's run: step running across the crash and being re-polled to landing.
-        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
-        commits = [ln for ln in tree.splitlines() if ln.strip()]
-        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+        # One pass answered `pending` before the kill and one answered `done` after it: the
+        # re-poll counted past the durable first pass rather than re-taking it.
+        names = [a["name"] for a in hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
+        recorded = sorted(n for n in names if n.startswith("test-sequence/"))
+        assert recorded == ["test-sequence/0", "test-sequence/1"], f"the re-poll must count past it: {recorded}"
     finally:
         hub.close()
         terminate(runner_proc)
         terminate(hub_proc)
 
 
-# --- Mid-script inter-repo-push crash (#67) — the packaged default graph's own window ---
-
-# A window the per-step `hubnode.*` registry points cannot reach: `src/blizzard/hub/graphs/scripts/land_default.py`
-# loops over repos inside ONE `run:` step, marking each through a mid-run callback instead.
+# --- A two-repository delivery — the fixtures a two-repo ``land`` builds on ---
 
 _WEB_REPO_NAME = "toy-web"
-_LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
 
 
 def _two_repo_build_script(landed_file: str) -> str:
@@ -2949,41 +2714,6 @@ def _two_repo_build_script(landed_file: str) -> str:
         "        check=True,\n"
         "    )\n"
     )
-
-
-def _default_graph_two_repo_yaml(landed_file: str) -> str:
-    """A ``build -> deliver`` graph named ``default-delivery`` whose ``deliver`` node runs
-    the REAL packaged ``src/blizzard/hub/graphs/scripts/land_default.py`` script (not the sweep's ``true`` stand-in),
-    mirroring the packaged ``default.yaml``'s ``landed -> done`` / ``conflict -> build``."""
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": _two_repo_build_script(landed_file),
-                "judgement": {
-                    "prompt": "verdict('pass', 'committed the change in both repos; checks are green')\n",
-                    "choices": {"pass": {"description": "Committed and green.", "to": "deliver"}},
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"name": "land-every-repo", "command": _LAND_STEP_COMMAND}],
-                "judgement": {
-                    "choices": {
-                        "landed": {"description": "Every repo merged cleanly.", "to": "done"},
-                        "conflict": {"description": "A repo did not merge; back to build.", "to": "build"},
-                        "failure": {"description": "The land script failed; back to build.", "to": "build"},
-                    }
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
 
 
 def _merged_markers(hub: httpx2.Client, chunk_id: str) -> list[str]:
@@ -3224,252 +2954,6 @@ def test_kill9_between_land_repositories(crash_env: CrashEnv, tmp_path: Path) ->
     """A two-repository ``land`` killed between its repositories — the first landing record durable, the second
     repository not yet merged — lands the second on restart without merging the first twice."""
     _kill_two_repo_land(crash_env, tmp_path, _BETWEEN_REPOSITORIES_POINT, merged_at_kill=1)
-
-
-def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A ``kill -9`` between two repos' pushes in the real ``land_default`` re-merges only
-    the unmarked repo — marker-skipped, not re-merged — landing each exactly once with no
-    leaked ``hub:one-live-exec-slot`` (#67 — the verify finale's closed gap)."""
-    landed_file = "LANDED-mid-script-sweep.md"
-    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
-    api_bare = crash_env.origins / f"{REPO_NAME}.git"
-    web_bare = crash_env.origins / f"{_WEB_REPO_NAME}.git"
-
-    # The hub is a session/group leader (new_session) so its whole tree can be killpg'd,
-    # and carries the land script's test-only pause so the between-repos window is wide.
-    hub_proc = start_hub(
-        hub_dir,
-        forge_port=crash_env.forge_port,
-        port=hub_port,
-        crash_point=None,
-        new_session=True,
-        extra_env={"BZ_HUB_LAND_TEST_PAUSE_SECONDS": "30"},
-    )
-    runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    try:
-        await_http(hub, "/api/health", proc=hub_proc)
-        _create_web_repository(hub, crash_env.forge_port)
-        api_pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
-        web_pulls_before = _repo_pull_count(crash_env.forge, _WEB_REPO_NAME)
-
-        minted = hub.post("/api/graphs", json={"definition_yaml": _default_graph_two_repo_yaml(landed_file)})
-        assert minted.status_code == 201, minted.text
-        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a mid-script chunk"})
-        assert issue.status_code == 201, issue.text
-        number = issue.json()["number"]
-        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
-        assert ingested.status_code == 201, ingested.text
-        chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-
-        write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
-        )
-        runner_proc = start_runner(runner_dir, crash_point=None)
-
-        # Wait until exactly ONE repo's marker is durable — the land script is now paused,
-        # inside the between-repos window, with the second repo not yet merged.
-        deadline = time.monotonic() + 90.0
-        markers: list[str] = []
-        while time.monotonic() < deadline:
-            markers = _merged_markers(hub, chunk_id)
-            if len(markers) == 1:
-                break
-            assert len(markers) < 2, f"both markers landed before the kill — pause too short? ({markers})"
-            time.sleep(0.25)
-        assert len(markers) == 1, f"the land script never reached its one-marker pause window (saw {markers})"
-
-        # kill -9 the WHOLE hub tree (daemon + the paused land subprocess) mid-script.
-        os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
-        assert wait_death(hub_proc) == -9
-
-        # Invariant checker green right after the crash — one marker durable, one repo unlanded.
-        _assert_invariants(runner_dir, hub_dir, when="immediately after mid-script kill -9", after_recovery=False)
-
-        # Restart the hub UNARMED (no pause env): the runner re-flushes the build completion,
-        # land_default re-runs, skips the marked repo, and pushes only the unmarked one.
-        hub_proc = start_hub(
-            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, new_session=True
-        )
-        await_http(hub, "/api/health", proc=hub_proc)
-        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
-        assert status == "done", f"chunk did not converge to done after the mid-script kill (last {status!r})"
-        _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill", after_recovery=True)
-
-        # Both markers are now durable, and no live exec slot leaked.
-        assert _merged_markers(hub, chunk_id) == sorted(
-            [f"merged/{OWNER}/{REPO_NAME}", f"merged/{OWNER}/{_WEB_REPO_NAME}"]
-        )
-        assert _live_exec_slots(hub_dir) == 0, "a hub_exec_slot leaked live after the mid-script recovery"
-
-        # Exactly-once: each repo's change is reachable from its bare main exactly once.
-        for bare in (api_bare, web_bare):
-            tree = git_bare(bare, "log", "--oneline", "--", landed_file)
-            landings = [ln for ln in tree.splitlines() if ln.strip()]
-            assert len(landings) == 1, f"{landed_file} landed {len(landings)}x on {bare.name}:\n{tree}"
-
-        # The marked repo was NOT re-merged: each repo created exactly one PR across the whole run.
-        assert _repo_pull_count(crash_env.forge, REPO_NAME) - api_pulls_before == 1, "toy-api opened != 1 PR"
-        assert _repo_pull_count(crash_env.forge, _WEB_REPO_NAME) - web_pulls_before == 1, "toy-web opened != 1 PR"
-    finally:
-        hub.close()
-        terminate(runner_proc)
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
-        terminate(hub_proc)
-
-
-# --- Mid-script inter-repo-merge crash for the PR + CI-watch lane — `land_pr_ci`'s own
-#     window, covering every lane's fast-forward-free delivery script ---
-
-_LAND_PR_CI_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
-
-
-def _pr_ci_graph_two_repo_yaml(landed_file: str) -> str:
-    """:func:`_default_graph_two_repo_yaml`'s twin for the PR + CI-watch lane: ``deliver``
-    runs the REAL packaged ``src/blizzard/hub/graphs/scripts/land_pr_ci.py`` against the rebase-capable mock forge,
-    with its full outcome set and a poll cadence wired, mirroring the shipped
-    ``adv-dwf``/``bas-dwf`` graphs' ``deliver`` node."""
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": _two_repo_build_script(landed_file),
-                "judgement": {
-                    "prompt": "verdict('pass', 'committed the change in both repos; checks are green')\n",
-                    "choices": {"pass": {"description": "Committed and green.", "to": "deliver"}},
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"name": "land-every-repo", "command": _LAND_PR_CI_STEP_COMMAND}],
-                "poll_interval": 1,
-                "poll_timeout": 90,
-                "judgement": {
-                    "choices": {
-                        "landed": {"description": "Every repo's PR merged cleanly.", "to": "done"},
-                        "conflict": {"description": "A repo's PR read dirty; back to build.", "to": "build"},
-                        "failure": {
-                            "description": "A repo's check run failed, or the land script crashed; back to build.",
-                            "to": "build",
-                        },
-                        "inherited-failure": {
-                            "description": "Every remaining check failure is inherited from the base; back to build.",
-                            "to": "build",
-                        },
-                    }
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
-
-
-def test_kill9_between_pr_ci_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A ``kill -9`` between two repos' merges in the real ``land_pr_ci`` re-runs only the
-    unmarked repo — the marked one is skipped by its durable marker, never re-looked-up —
-    and lands each exactly once with no leaked ``hub:one-live-exec-slot``."""
-    landed_file = "LANDED-mid-script-pr-ci-sweep.md"
-    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
-    hub_port, runner_port = free_port(), free_port()
-    api_bare = crash_env.origins / f"{REPO_NAME}.git"
-    web_bare = crash_env.origins / f"{_WEB_REPO_NAME}.git"
-
-    # The hub is a session/group leader (new_session) so its whole tree can be killpg'd,
-    # and carries the land script's test-only pause so the between-repos window is wide.
-    hub_proc = start_hub(
-        hub_dir,
-        forge_port=crash_env.forge_port,
-        port=hub_port,
-        crash_point=None,
-        new_session=True,
-        extra_env={"BZ_HUB_LAND_TEST_PAUSE_SECONDS": "30"},
-    )
-    runner_proc = None
-    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
-    try:
-        await_http(hub, "/api/health", proc=hub_proc)
-        _create_web_repository(hub, crash_env.forge_port)
-        api_pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
-        web_pulls_before = _repo_pull_count(crash_env.forge, _WEB_REPO_NAME)
-
-        minted = hub.post("/api/graphs", json={"definition_yaml": _pr_ci_graph_two_repo_yaml(landed_file)})
-        assert minted.status_code == 201, minted.text
-        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a mid-script chunk"})
-        assert issue.status_code == 201, issue.text
-        number = issue.json()["number"]
-        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
-        assert ingested.status_code == 201, ingested.text
-        chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-
-        write_runner_config(
-            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
-        )
-        runner_proc = start_runner(runner_dir, crash_point=None)
-
-        # Wait until exactly ONE repo's marker is durable — the land script is now paused,
-        # inside the between-repos window, with the second repo not yet merged.
-        deadline = time.monotonic() + 90.0
-        markers: list[str] = []
-        while time.monotonic() < deadline:
-            markers = _merged_markers(hub, chunk_id)
-            if len(markers) == 1:
-                break
-            assert len(markers) < 2, f"both markers landed before the kill — pause too short? ({markers})"
-            time.sleep(0.25)
-        assert len(markers) == 1, f"the land script never reached its one-marker pause window (saw {markers})"
-
-        # kill -9 the WHOLE hub tree (daemon + the paused land subprocess) mid-script.
-        os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
-        assert wait_death(hub_proc) == -9
-
-        # Invariant checker green right after the crash — one marker durable, one repo unlanded.
-        _assert_invariants(
-            runner_dir, hub_dir, when="immediately after mid-script kill -9 (land_pr_ci)", after_recovery=False
-        )
-
-        # Restart the hub UNARMED: land_pr_ci re-runs, skips the marked repo (marker
-        # already durable) rather than looking its PR up again, and merges only the other.
-        hub_proc = start_hub(
-            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, new_session=True
-        )
-        await_http(hub, "/api/health", proc=hub_proc)
-        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
-        assert status == "done", f"chunk did not converge to done after the mid-script kill (last {status!r})"
-        _assert_invariants(
-            runner_dir, hub_dir, when="after convergence past the mid-script kill (land_pr_ci)", after_recovery=True
-        )
-
-        # Both markers are now durable, and no live exec slot leaked.
-        assert _merged_markers(hub, chunk_id) == sorted(
-            [f"merged/{OWNER}/{REPO_NAME}", f"merged/{OWNER}/{_WEB_REPO_NAME}"]
-        )
-        assert _live_exec_slots(hub_dir) == 0, "a hub_exec_slot leaked live after the mid-script recovery (land_pr_ci)"
-
-        # Exactly-once: each repo's change is reachable from its bare main exactly once.
-        for bare in (api_bare, web_bare):
-            tree = git_bare(bare, "log", "--oneline", "--", landed_file)
-            landings = [ln for ln in tree.splitlines() if ln.strip()]
-            assert len(landings) == 1, f"{landed_file} landed {len(landings)}x on {bare.name}:\n{tree}"
-
-        # The marked repo was NOT re-merged as a duplicate PR: each repo opened exactly
-        # one PR across the whole run, crash and recovery included.
-        assert _repo_pull_count(crash_env.forge, REPO_NAME) - api_pulls_before == 1, "toy-api opened != 1 PR"
-        assert _repo_pull_count(crash_env.forge, _WEB_REPO_NAME) - web_pulls_before == 1, "toy-web opened != 1 PR"
-    finally:
-        hub.close()
-        terminate(runner_proc)
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
-        terminate(hub_proc)
 
 
 # --- Operator chunk restart (#370) — the preempt kill→closure crash point ---

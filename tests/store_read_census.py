@@ -2376,6 +2376,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         statuses=w.read.facts.load_live_statuses()
     ),
     (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
+    (IReadChunkRecordRepository, "pinned_to_actionless_hub_nodes"): lambda w: (
+        w.read.record.pinned_to_actionless_hub_nodes()
+    ),
     (IReadChunkRecordRepository, "newest_done"): lambda w: (
         w.read.record.newest_done(limit=10),
         w.read.record.newest_done(limit=10, project=w.project_id),

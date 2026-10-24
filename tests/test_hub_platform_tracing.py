@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -277,7 +276,7 @@ def test_a_human_route_under_auth_mode_none_starts_a_fresh_root(tmp_path: Path) 
     assert server.context.trace_id != _PLANTED_TRACE
 
 
-_POLLING_GRAPH_YAML = """
+_PASS_GRAPH_YAML = """
 name: default-delivery
 entry: build
 nodes:
@@ -297,13 +296,7 @@ nodes:
           to: build
   merge:
     executor: hub
-    poll_interval: 1
-    poll_timeout: 600
-    run:
-      - name: prepare
-        command: "true"
-        produces: prepared
-      - command: "if [ -f polled ]; then echo success; else touch polled; echo pending; fi"
+    action: pass
     judgement:
       choices:
         success:
@@ -315,13 +308,18 @@ nodes:
 """
 
 
-def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_request_links_it(
+def test_a_hub_action_pass_parents_on_the_derived_hub_exec_span_and_the_driving_request_links_it(
     tmp_path: Path,
 ) -> None:
     from sqlalchemy import select
 
     from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
-    from blizzard.hub.domain.observability.tracing.platform import RUN_STEP_EXIT_CODE, RUN_STEP_NAME, RUN_STEP_SPAN
+    from blizzard.hub.domain.observability.tracing.platform import (
+        ACTION_CHOICE,
+        ACTION_NAME,
+        ACTION_PASS_SPAN,
+        RUN_STEP_SPAN,
+    )
     from blizzard.hub.store import schema as s
 
     exporter = InMemorySpanExporter()
@@ -329,7 +327,7 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
     handle = _handle(config, exporter)
     app = build_hosted_hub_app(config, platform_tracing=handle)
     with RunnerFleetClient(app, services=tenant_services_of(app)) as client:
-        assert client.post("/api/graphs", json={"definition_yaml": _POLLING_GRAPH_YAML}).status_code == 201
+        assert client.post("/api/graphs", json={"definition_yaml": _PASS_GRAPH_YAML}).status_code == 201
         chunk_id = client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()["chunk_id"]
         assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         assert (
@@ -363,43 +361,23 @@ def test_hub_run_steps_parent_on_the_derived_hub_exec_span_and_the_driving_reque
             },
         )
         assert applied.json()["outcome"] == "hub_node_taken", applied.text
-        time.sleep(1.1)
-        advanced = client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-        assert advanced.json()["outcome_choice"] == "success", advanced.text
     with app.state.engine.connect() as conn:
-        slots = conn.execute(
-            hub_scoped(
-                select(s.hub_exec_slot.c.slot_id)
-                .where(s.hub_exec_slot.c.holder_chunk_id == chunk_id)
-                .order_by(s.hub_exec_slot.c.acquired_at)
-            )
+        (slot,) = conn.execute(
+            hub_scoped(select(s.hub_exec_slot.c.slot_id).where(s.hub_exec_slot.c.holder_chunk_id == chunk_id))
         ).all()
     spans = _spans(handle, exporter)
-    assert len(slots) == 2
-    hub_execs = [DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, row.slot_id) for row in slots]
+    hub_exec = DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, slot.slot_id)
 
-    drivers = [
-        _server_span(spans, f"POST /api/fleet/chunks/{{chunk_id}}/{verb}") for verb in ("completions", "hub-advance")
+    driver = _server_span(spans, "POST /api/fleet/chunks/{chunk_id}/completions")
+    assert [(link.context.trace_id, link.context.span_id) for link in driver.links] == [
+        (hub_exec.trace_id, hub_exec.span_id)
     ]
-    for driver, hub_exec in zip(drivers, hub_execs, strict=True):
-        assert [(link.context.trace_id, link.context.span_id) for link in driver.links] == [
-            (hub_exec.trace_id, hub_exec.span_id)
-        ]
-
-    run_steps = [s for s in spans if s.name == RUN_STEP_SPAN]
-    by_parent: dict[int, list] = {}  # type: ignore[type-arg]
-    for span in run_steps:
-        assert span.context.trace_id == span.parent.trace_id
-        by_parent.setdefault(span.parent.span_id, []).append(span)
-    first, second = (by_parent[h.span_id] for h in hub_execs)
-    assert all(span.context.trace_id == hub_execs[0].trace_id for span in run_steps)
-    assert [dict(span.attributes or {}) for span in first] == [
-        {RUN_STEP_NAME: "prepare", RUN_STEP_EXIT_CODE: 0},
-        {RUN_STEP_EXIT_CODE: 0},
-    ]
-    assert [dict(span.attributes or {}) for span in second] == [{RUN_STEP_EXIT_CODE: 0}]
-    assert "polled" not in repr([dict(s.attributes or {}) for s in spans if s.name == RUN_STEP_SPAN])
-    assert not [s for s in spans if "exec" in s.name and s.name != RUN_STEP_SPAN]
+    (action_pass,) = [span for span in spans if span.name == ACTION_PASS_SPAN]
+    assert action_pass.parent is not None
+    assert (action_pass.parent.trace_id, action_pass.parent.span_id) == (hub_exec.trace_id, hub_exec.span_id)
+    assert dict(action_pass.attributes or {}) == {ACTION_NAME: "pass", ACTION_CHOICE: "success"}
+    # The retired step loop emits no step span.
+    assert not [span for span in spans if span.name == RUN_STEP_SPAN]
 
 
 def test_an_operator_command_span_parents_the_hubs_server_span_for_an_authenticated_operator(tmp_path: Path) -> None:

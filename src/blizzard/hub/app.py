@@ -623,7 +623,9 @@ def build_hosted_app(
         KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
         # Before the hub serves, in each open tenant.
         for stores in tenants:
-            services.tenants.open_services(stores.scope).hub_node.release_orphaned_slots()
+            hub_node = services.tenants.open_services(stores.scope).hub_node
+            hub_node.release_orphaned_slots()
+            hub_node.escalate_actionless()
         Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)

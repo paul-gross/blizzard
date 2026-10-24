@@ -16,6 +16,7 @@ from sqlalchemy import Select, and_, or_
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
@@ -37,7 +38,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     is_ephemeral_id,
     work_ref_conn_of,
 )
-from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, settled_done
+from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
@@ -192,6 +193,20 @@ class ChunkRecordStore:
                 )
                 for r in rows
             ]
+
+    def pinned_to_actionless_hub_nodes(self) -> list[str]:
+        nodes = s.graph_nodes
+        actionless = self._store.exists(
+            nodes,
+            nodes.c.graph_id == s.chunks.c.graph_id,
+            nodes.c.executor == Executor.HUB.value,
+            nodes.c.action.is_(None),
+        )
+        stmt = self._store.select(s.chunks, s.chunks.c.chunk_id).where(actionless, maybe_live(self._store))
+        for table in (s.chunk_grouped, s.chunk_deleted):
+            stmt = stmt.where(~self._store.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
+        with self._store.read("pinned_to_actionless_hub_nodes") as conn:
+            return [r.chunk_id for r in conn.execute(stmt.order_by(s.chunks.c.chunk_id)).all()]
 
     def newest_done(self, *, limit: int, project: ProjectId | None = None) -> list[str]:
         """The ids of the ``limit`` most recently finished ``done`` chunks, newest first — one

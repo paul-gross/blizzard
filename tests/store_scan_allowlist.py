@@ -568,6 +568,14 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     IndexWalkAllowance(IReadChunkRecordRepository, "list_page", ("chunks",), _PAGED_LISTING_REASON),
     IndexWalkAllowance(
         IReadChunkRecordRepository,
+        "pinned_to_actionless_hub_nodes",
+        ("chunks",),
+        "the hub's boot pass, once per tenant as the process starts: every live chunk of the tenant whose graph holds "
+        "a hub node naming no action, in one statement — no index leads with the graph a chunk pins, and the read "
+        "runs once per boot, never per request.",
+    ),
+    IndexWalkAllowance(
+        IReadChunkRecordRepository,
         "list_ready",
         (
             "chunk_migrations",

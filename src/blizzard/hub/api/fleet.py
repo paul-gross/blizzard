@@ -612,10 +612,11 @@ def hub_advance(
     chunk_id: str,
     services: Services,
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step, running that node's
-    hub-side command once under the fleet-wide serialization slot. ``ran=False`` is never an
+    """Drive a chunk parked at a generic hub command node one step, taking one pass of that
+    node's action under the fleet-wide serialization slot. ``ran=False`` is never an
     error: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``
-    elapsed, or the chunk is not parked at a hub command node it may drive — ``detail`` names which.
+    elapsed, the chunk is escalated to a person, or it is not parked at a hub command node it may
+    drive — ``detail`` names which.
     The request declares no ``runner_id`` to confine against."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
@@ -643,7 +644,9 @@ def hub_advance(
         next_poll_at = PollPolicy.of(node).due_at(pending) if pending is not None else None
         # A future `next_poll_at` distinguishes "not yet due to poll" from a genuinely busy slot;
         # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
-        if next_poll_at is not None and next_poll_at > services.clock.now():
+        if facts.open_escalation() is not None:
+            detail = "escalated — awaiting a person"
+        elif next_poll_at is not None and next_poll_at > services.clock.now():
             detail = f"pending — next poll at {iso_utc(next_poll_at)}"
         else:
             detail = "hub-execution slot busy — try again"
