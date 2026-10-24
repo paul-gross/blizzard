@@ -451,7 +451,7 @@ def test_a_tag_run_resolves_the_tag_itself() -> None:
 
 
 def test_the_isolation_cross_check_gates_the_build_and_never_runs_on_a_pull_request_or_push() -> None:
-    job = _WORKFLOW["jobs"]["isolation-cross-check"]
+    job = _job("isolation-cross-check")
     assert job["uses"] == "./.github/workflows/isolation-cross-check.yml"
     workflow = yaml.safe_load((_WORKFLOWS_DIR / "isolation-cross-check.yml").read_text())
     assert set(workflow[True]) == {"schedule", "workflow_dispatch", "workflow_call"}
