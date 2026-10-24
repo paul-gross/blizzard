@@ -2762,7 +2762,7 @@ export type EnvelopeChoice = {
 /**
  * EscalationCause
  */
-export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable';
+export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'unroutable-outcome';
 
 /**
  * EventLogSeverity
