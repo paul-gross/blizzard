@@ -297,3 +297,8 @@ dark factory: chunks are ingested, agents build them, and the result lands. Ther
 
 Contribute ideas, plans, and thoughts to [blizzard-product](https://github.com/paul-gross/blizzard-product), the repo
 that drives the work. What is raised there becomes the intent the fleet builds from.
+
+## License
+
+Source-available under the Functional Source License 1.1 (FSL-1.1-ALv2). Each release converts to Apache License 2.0 two
+years after it ships. See [LICENSE](./LICENSE).

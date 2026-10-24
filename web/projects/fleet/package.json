@@ -1,5 +1,7 @@
 {
   "name": "fleet",
+  "private": true,
+  "license": "SEE LICENSE IN ../../../LICENSE",
   "version": "0.0.1",
   "peerDependencies": {
     "@angular/common": "^21.2.0",

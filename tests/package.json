@@ -1,5 +1,6 @@
 {
   "name": "blizzard-tests",
+  "license": "SEE LICENSE IN ../LICENSE",
   "private": true,
   "engines": {
     "node": "22.23.3"
