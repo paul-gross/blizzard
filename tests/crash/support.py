@@ -203,16 +203,7 @@ def usage_limited_judge_graph_yaml(landed_file: str, marker: Path) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -244,16 +235,7 @@ def usage_limited_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -386,7 +368,7 @@ def pre_declare_build_script(landed_file: str, pushed_marker: Path, go_marker: P
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 #: The ``git_commit`` ``produces:`` every genuinely-committing build node declares
-#: (``bzh:crash-sweep``) — arms ``LAND_STEP``'s empty-delivery refusal via ``Graph.declares_git_commit``.
+#: (``bzh:crash-sweep``) — arms ``land``'s empty-delivery refusal.
 _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 
 # The migrate scenario's source-graph judgement (#90): the build node hands the chunk to
@@ -394,52 +376,21 @@ _GIT_COMMIT_PRODUCES = [{"name": "commit", "kind": "git_commit"}]
 _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
 
 
-# Merges each submitted branch to base by pinned SHA against the mock forge; idempotent by
-# construction, and refuses an empty delivery like production's ``LandRun.pending()``.
-LAND_STEP = """python3 - <<'PYEOF'
-import json, os, sys, urllib.error, urllib.request
-
-forge = os.environ.get("BZ_FORGE_URL", "")
-base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
-commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
-
-if not commits and os.environ.get("BZ_HUB_EXPECT_GIT_COMMITS", "1") != "0":
-    print(
-        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
-        "is nothing to open a PR for.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-def call(method, path, payload):
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        forge + path, data=data, headers={"Content-Type": "application/json"}, method=method
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status, json.loads(resp.read().decode() or "null")
-    except urllib.error.HTTPError as exc:
-        return exc.code, None
-
-
-for c in commits:
-    repo = c["repo"] if "/" in c["repo"] else "blizzard/" + c["repo"]
-    status, body = call(
-        "POST",
-        "/repos/%s/pulls" % repo,
-        {"title": "land", "head": c["branch"], "base": base, "body": "", "user": "blizzard-hub"},
-    )
-    if status == 201 and body:
-        call(
-            "PUT",
-            "/repos/%s/pulls/%s/merge" % (repo, body["number"]),
-            {"commit_message": "blizzard: land", "sha": c["commit"], "merge_method": "merge", "user": "blizzard-hub"},
-        )
-print("landed the submitted branches")
-PYEOF
-"""
+def land_node(*, back: str = "build") -> dict[str, object]:
+    """A hub node taking ``land`` against the mock forge, re-polled each second: ``landed`` finishes, the rest go ``back``."""
+    return {
+        "executor": "hub",
+        "action": "land",
+        "poll_interval": 1,
+        "judgement": {
+            "choices": {
+                "landed": {"description": "Every repo landed.", "to": "done"},
+                "conflict": {"description": "A repo's branch conflicts with its base.", "to": back},
+                "failure": {"description": "Failed to deliver.", "to": back},
+                "inherited-failure": {"description": "The base branch's own check is red.", "to": back},
+            }
+        },
+    }
 
 
 def graph_yaml(landed_file: str) -> str:
@@ -469,16 +420,7 @@ def graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -520,16 +462,7 @@ def opencode_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -563,16 +496,7 @@ def checks_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -608,16 +532,7 @@ def nudge_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -667,25 +582,16 @@ def migrate_hub_source_yaml() -> str:
 def migrate_hub_target_yaml() -> str:
     """The hub-landing migration target (`triage-hub`): its **entry** node
     `build` name-matches the source's migrating `build`, so the migration lands there, and
-    is **hub-executed** via :data:`LAND_STEP`. This graph declares no `git_commit` `produces:`,
-    so the land step's empty-delivery refusal never arms here — with nothing submitted, the step stays a
-    clean no-op that prints its success line and routes to `done`."""
+    is **hub-executed** through ``land``. This graph declares no `git_commit` `produces:`, so
+    ``land``'s empty-delivery refusal never arms here — with nothing submitted, it answers ``landed``
+    and routes to `done`."""
     import yaml
 
     graph = {
         "name": "triage-hub",
         "entry": "build",
         "nodes": {
-            "build": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "build": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -716,7 +622,7 @@ def intended_migrate_source_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},
