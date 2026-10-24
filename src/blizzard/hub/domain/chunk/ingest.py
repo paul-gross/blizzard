@@ -96,6 +96,18 @@ class IngestProjectUnknown(Exception):
         self.pointer = pointer
 
 
+class IngestItemProjectMismatch(Exception):
+    """A hub item the ingest wraps records a project other than the one the ingest mints into."""
+
+    def __init__(self, pointer: WorkRef, recorded: ProjectId, chosen: ProjectId) -> None:
+        super().__init__(
+            f"hub item {pointer.source}:{pointer.ref} records project {recorded}, not the ingest's project {chosen}"
+        )
+        self.pointer = pointer
+        self.recorded = recorded
+        self.chosen = chosen
+
+
 def choose_ingest_project(
     named: ProjectId | None,
     pointers: Sequence[WorkRef],
@@ -108,16 +120,23 @@ def choose_ingest_project(
     to the projects a standing link draws from it (a source absent from it links none);
     ``items_projects`` maps each hub pointer to its item's recorded project. Unnamed, the project is
     the one every configured source is linked to alone; with no configured source, the one every hub
-    item records. The hub source is linked to every project and sits out the inference.
+    item records. The hub source is linked to every project and sits out the inference, but its items
+    must agree with the project chosen.
 
     Refuses the whole ingest: :class:`IngestSourceNotLinked` for a configured source linked to no
     project, or to the project named; :class:`IngestProjectAmbiguous` when the pointers disagree;
-    :class:`IngestProjectUnknown` for a hub item recording no project."""
+    :class:`IngestProjectUnknown` for a hub item recording no project when nothing else names one;
+    :class:`IngestItemProjectMismatch` for a hub item recording a project other than the chosen one
+    (a hub item recording none is not refused)."""
     configured = configured_sources(pointers)
     project = named if named is not None else _infer_project(configured, pointers, links, items_projects)
     for source in configured:
         if project not in links.get(source, ()):
             raise IngestSourceNotLinked(source, project)
+    for pointer in pointers:
+        recorded = items_projects.get(pointer)
+        if pointer.source == RESERVED_HUB_SOURCE_NAME and recorded is not None and recorded != project:
+            raise IngestItemProjectMismatch(pointer, recorded, project)
     return project
 
 
