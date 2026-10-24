@@ -334,8 +334,9 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
     """Resume a paused CHUNK — clear the pause.
 
-    A held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
-    an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
+    A held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client
+    of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming an unpaused chunk is a
+    harmless no-op. 404 only when the chunk is unknown."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/resume",
         "POST /chunks/{id}/resume",
@@ -355,8 +356,8 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     """Forcibly release CHUNK from its runner.
 
     The chunk is released from its runner and can be claimed again at its current node, unless an
-    open escalation or question still holds it. Refused when
-    nothing holds the chunk — a stopped or done chunk is held by nothing."""
+    open escalation or question still holds it. Refused when nothing holds the chunk — a stopped or
+    done chunk is held by nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",

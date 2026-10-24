@@ -261,17 +261,6 @@ def test_restart_maps_409_to_the_server_detail() -> None:
 
 
 # `chunk set --default-model/--default-effort` — the CLI-only surface.
-@pytest.mark.unit
-@pytest.mark.parametrize(("status", "shown"), [("running", True), ("done", False), ("stopped", False)])
-def test_show_prints_the_runner_only_while_the_chunk_holds_its_claim(status: str, shown: bool) -> None:
-    route = {"runner_id": "rn_1", "environment_ids": ["env_1"]}
-    bound = bind_stubs(get=lambda *a, **k: _detail("ch_1", status=status, route=route))
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
-
-    assert result.exit_code == 0, result.output
-    assert ("runner: rn_1  environments: 1" in result.output) is shown
-
-
 # --------------------------------------------------------------------------- #
 
 
@@ -530,6 +519,17 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
     assert "blocked" not in result.output
     assert "prerequisites" not in result.output
     assert "dependents" not in result.output
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("status", "shown"), [("running", True), ("done", False), ("stopped", False)])
+def test_show_prints_the_runner_only_while_the_chunk_holds_its_claim(status: str, shown: bool) -> None:
+    route = {"runner_id": "rn_1", "environment_ids": ["env_1"]}
+    bound = bind_stubs(get=lambda *a, **k: _detail("ch_1", status=status, route=route))
+    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert ("runner: rn_1  environments: 1" in result.output) is shown
 
 
 @pytest.mark.unit
