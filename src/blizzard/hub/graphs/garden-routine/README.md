@@ -12,8 +12,8 @@ Conventions for the `prompts/` tree are owned by the
 - **The `survey` session pool is named `sweep`.** Mint validation refuses a pool sharing a node's name — `resume:survey`
   would resolve to the session and never the node — and the plan named both the pool and the entry node `survey`. The
   policy is unchanged: `survey` on `fresh:sweep`, `reconcile` on `fresh:match`, `propose` on `resume:match`.
-- **`deliver` names its artifacts.** The plan invoked `garden_deliver` bare; the shipped script takes the delivering
-  artifact names, so the packaged node runs it with `--delta delta --proposals docket`.
+- **`deliver` names its artifacts.** The plan invoked `garden_deliver` bare; the shipped `garden-deliver` action takes
+  the delivering artifact names, so the packaged node passes them `with: {delta: delta, proposals: docket}`.
 - **`survey` also produces `delta`.** The `clean` choice routes `survey → deliver` with no `reconcile` in between, and
   delivery validates an artifact named `delta` — but a completion publishes only the names its node declares, so
   `survey` declares `delta` and every sweep publishes the empty skeleton carrying the run's scope, revisions, and
@@ -30,8 +30,8 @@ Conventions for the `prompts/` tree are owned by the
   survives, some rationale does not.
 - **`survey` fans out before it bails.** An over-large sweep is split across at most 10 subagent batches before the
   survey may choose `excessive`.
-- **`deliver` authors a `failure` edge.** The plan left `garden_deliver`'s own nonzero-exit paths (a missing env var, a
-  failed POST, an unrecognized response, a failed marker write) with no edge to route through, which deadlocks the chunk
+- **`deliver` authors a `failure` edge.** The plan left the delivery's own `failure` answer (a record the chunk has moved
+  past, a pass that raised) with no edge to route through, which deadlocks the chunk
   per `bzh:hub-node-outcome-protocol`. Routes to `propose`, which re-affirms the standing docket and retries; bounded by
   a loop-bound check in its addendum (`propose.from-deliver-failure.md`) the same way the `invalid` bounce is bounded in
   `reconcile.from-deliver.md`.

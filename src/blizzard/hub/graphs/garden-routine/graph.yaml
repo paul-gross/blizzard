@@ -112,10 +112,9 @@ nodes:
 
   deliver:
     executor: hub
-    run:
-      - name: materialize-garden-artifacts
-        command: python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket
-    # The script validates each artifact's shape and nothing else: that it parses,
+    action: garden-deliver
+    with: {delta: delta, proposals: docket}
+    # The action validates each artifact's shape and nothing else: that it parses,
     # that every finding carries the fields the format requires, that every
     # transformation's id is well-formed and live on this routine, that a proposal's
     # own citation is either such a live fin_ id or a ref this delivery's own add op
@@ -134,6 +133,6 @@ nodes:
           to: reconcile
           prompt_addendum: ./prompts/reconcile.from-deliver.md
         failure:
-          description: garden_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. The delta and docket stand as drafted; routed to propose to re-affirm them and retry, the same recovery point the sibling lanes return to on this outcome.
+          description: The garden-deliver action answered failure rather than a clean outcome — the record was refused because the chunk had moved past this visit, or the pass itself raised. The delta and docket stand as drafted; routed to propose to re-affirm them and retry, the same recovery point the sibling lanes return to on this outcome.
           to: propose
           prompt_addendum: ./prompts/propose.from-deliver-failure.md

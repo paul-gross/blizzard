@@ -16,11 +16,13 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.delivery.forge_handle import ForgeReply
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
+from tests.github_double import GitHubDouble, forge_holding
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -31,11 +33,12 @@ from tests.runner_fakes import (
     make_store,
     registered_identity,
 )
-from tests.support import FakeHubCommandRunner, FakeHubWorkdir, build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
+_COMMIT = "a" * 40
 
 # A build -> deliver graph named `default-delivery`, reused by name on ingest, so a
 # build completion reaches the deliver hub node in one pass.
@@ -59,13 +62,18 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: land
     judgement:
       choices:
-        success:
+        landed:
           description: Delivered.
           to: done
+        conflict:
+          description: Conflicted.
+          to: build
+        inherited-failure:
+          description: Inherited a red base.
+          to: build
         failure:
           description: Failed to deliver.
           to: build
@@ -95,10 +103,25 @@ def _completion(node_id: str, *, epoch: int) -> dict:
                 "kind": "git_commit",
                 "repo": "acme/widget",
                 "branch_name": "b",
-                "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "commit_hash": _COMMIT,
             }
         ],
     }
+
+
+def _slow_land_hub(
+    tmp_path: Path, entered: threading.Event, release: threading.Event
+) -> tuple[HubHarness, GitHubDouble]:
+    """A hub whose ``land`` pass, once it reads the forge's open PRs, holds until ``release`` is set."""
+    double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
+
+    def held() -> ForgeReply:
+        entered.set()
+        release.wait(timeout=5)
+        return ForgeReply(200, [])
+
+    double.repo("acme/widget").replies["open_pulls"] = [held]
+    return build_hub(tmp_path, forge_handles=double.handle), double
 
 
 def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
@@ -136,7 +159,8 @@ def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
 
 def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     """A re-submitted completion (lost-ack replay) lands once — one transition, one merge."""
-    hub = build_hub(tmp_path)
+    double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
+    hub = build_hub(tmp_path, forge_handles=double.handle)
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
@@ -153,6 +177,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1  # still exactly one transition
+    assert len(double.named("merge")) == 1
 
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
@@ -230,20 +255,13 @@ def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Pat
 
 def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_path: Path) -> None:
     """The first completion's answer is withheld while its hub node runs: the runner's re-submit
-    answers ``hub_node_taken`` and ``hub-advance`` answers ``ran=false`` — neither starts a command —
+    answers ``hub_node_taken`` and ``hub-advance`` answers ``ran=false`` — neither starts a pass —
     and the node's exit lands exactly once."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id = _claim(hub)
-    report_lease(hub, chunk_id, epoch=1, seq=1)
     entered = threading.Event()
     release = threading.Event()
-
-    def before_run(_command: str) -> None:
-        entered.set()
-        release.wait(timeout=5)
-
-    runner.before_run = before_run
+    hub, double = _slow_land_hub(tmp_path, entered, release)
+    chunk_id, build_node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
     first: dict = {}
     thread = threading.Thread(
         target=lambda: first.update(
@@ -257,7 +275,7 @@ def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_p
     assert replay.json()["outcome"] == "hub_node_taken"
     advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert advance.json()["ran"] is False
-    assert len(runner.calls) == 1
+    assert len(double.named("open_pulls")) == 1
 
     release.set()
     thread.join(timeout=5)
@@ -269,7 +287,7 @@ def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_p
 
     late = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert late.json()["outcome"] == "hub_node_taken"
-    assert len(runner.calls) == 1
+    assert len(double.named("open_pulls")) == 1
 
 
 def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flushes_the_facts_behind_it(
@@ -278,18 +296,11 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
     """The runner's buffered completion is re-submitted while its hub node is still running: the
     drain acks the ``hub_node_taken`` answer and drains the generic fact queued behind it, before
     the node finishes."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    chunk_id, build_node_id = _claim(hub)
-    report_lease(hub, chunk_id, epoch=1, seq=1)
     entered = threading.Event()
     release = threading.Event()
-
-    def before_run(_command: str) -> None:
-        entered.set()
-        release.wait(timeout=5)
-
-    runner.before_run = before_run
+    hub, double = _slow_land_hub(tmp_path, entered, release)
+    chunk_id, build_node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
     thread = threading.Thread(
         target=lambda: hub.client.post(
             f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1)
@@ -335,7 +346,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
     OutboundDrain(ctx).run()
 
     assert ctx.stores.outbound.pending_outbound() == []
-    assert len(runner.calls) == 1
+    assert len(double.named("open_pulls")) == 1
 
     release.set()
     thread.join(timeout=5)

@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
+from blizzard.hub.delivery.hub_node import PollPolicy
+from blizzard.hub.domain.graph.actions import LAND, RESERVED_WAITS
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, GraphDoc, GraphParseError, ProducesSpec
 from blizzard.hub.graphs import PACKAGED
-from blizzard.hub.graphs.scripts import land_pr_ci
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +52,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure", "inherited-failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
     assert deliver_targets == {"record-findings", "pre-push", "build"}
-    assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
+    assert deliver.action == "land" and not deliver.run
     # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.
     assert deliver.bounce_cap is None
@@ -122,22 +123,16 @@ def test_every_lane_authors_the_inherited_failure_edge_with_its_own_addendum(gra
 @pytest.mark.parametrize(
     "graph_name", ["advanced-development-workflow", "basic-development-workflow", "basic-harness-workflow"]
 )
-def test_every_land_pr_ci_outcome_is_authored_on_the_shipped_deliver_node(graph_name: str) -> None:
-    """#241 recurrence guard, over every lane: `land_pr_ci` must not print an outcome the
-    graph never authors a choice for. Reads the script's own outcome constants rather than
-    hardcoding them; `_PENDING` is machinery-reserved and excluded."""
+def test_every_land_answer_is_authored_on_the_shipped_deliver_node(graph_name: str) -> None:
+    """Recurrence guard, over every lane: `land` must not answer a choice the graph never
+    authors. Reads the action's own answers rather than hardcoding them; a reserved wait is
+    never authored and is excluded."""
     doc = PACKAGED.named(graph_name).doc
     graph = Reification.of(doc, _clock()).graph
     deliver = graph.node_by_name("deliver")
     assert deliver is not None
     authored = {c.name for c in deliver.choices}
-    non_reserved_outcomes = {
-        land_pr_ci._LANDED,
-        land_pr_ci._CONFLICT,
-        land_pr_ci._CI_FAILURE,
-        land_pr_ci._INHERITED_FAILURE,
-    }
-    assert non_reserved_outcomes <= authored
+    assert LAND.answers - RESERVED_WAITS <= authored
 
 
 def test_reify_carries_an_authored_bounce_cap() -> None:
@@ -305,3 +300,57 @@ def test_reify_carries_checks_gating_fields() -> None:
     by_name = {c.name: c for c in build.choices}
     assert by_name["pass"].requires_checks is True
     assert by_name["fail"].requires_checks is False
+
+
+#: Each packaged graph's hub nodes, by name, and the action and ``with:`` each names.
+_PACKAGED_HUB_NODES = {
+    "advanced-development-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},
+    "basic-development-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},
+    "basic-harness-workflow": {"deliver": ("land", {}), "record-findings": ("record-findings", {})},
+    "garden-routine": {"deliver": ("garden-deliver", {"delta": ("delta",), "proposals": ("docket",)})},
+    "ideation": {"deliver": ("garden-deliver", {"delta": ("delta",), "proposals": ("docket",)})},
+    "default": {},
+}
+
+
+@pytest.mark.parametrize("graph_name", sorted(_PACKAGED_HUB_NODES))
+def test_every_packaged_hub_node_names_its_action_and_none_names_run(graph_name: str) -> None:
+    graph = Reification.of(PACKAGED.named(graph_name).doc, _clock()).graph
+    hub_nodes = {n.name: n for n in graph.nodes if n.executor is Executor.HUB}
+
+    assert {name: (n.action, dict(n.action_args)) for name, n in hub_nodes.items()} == _PACKAGED_HUB_NODES[graph_name]
+    assert all(not n.run for n in hub_nodes.values())
+
+
+def test_the_packaged_set_is_the_set_the_hub_node_census_names() -> None:
+    assert sorted(path.parent.name for path in PACKAGED.paths) == sorted(_PACKAGED_HUB_NODES)
+
+
+@pytest.mark.parametrize(
+    "graph_name", ["advanced-development-workflow", "basic-development-workflow", "basic-harness-workflow"]
+)
+def test_every_packaged_land_node_waits_three_hours(graph_name: str) -> None:
+    deliver = Reification.of(PACKAGED.named(graph_name).doc, _clock()).graph.node_by_name("deliver")
+    assert deliver is not None
+    assert deliver.poll_timeout_seconds == 10800
+    assert PollPolicy.of(deliver).timeout == timedelta(hours=3)
+
+
+def test_a_hub_node_naming_no_poll_timeout_waits_three_hours() -> None:
+    doc = GraphDoc.of(
+        {
+            "name": "t",
+            "entry": "deliver",
+            "nodes": {
+                "deliver": {
+                    "executor": "hub",
+                    "action": "land",
+                    "judgement": {"choices": {"failure": {"description": "x", "to": "done"}}},
+                }
+            },
+        }
+    )
+    deliver = Reification.of(doc, _clock()).graph.node_by_name("deliver")
+    assert deliver is not None and deliver.poll_timeout_seconds is None
+
+    assert PollPolicy.of(deliver).timeout == timedelta(hours=3)

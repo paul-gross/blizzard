@@ -14,14 +14,10 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
-from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.graphs.scripts import land_pr_ci
 from tests.support import (
-    FakeHubCommandRunner,
-    FakeHubWorkdir,
     FakeWorkSource,
     HubHarness,
     build_hub,
@@ -32,7 +28,7 @@ from tests.support import (
     seed_user,
 )
 from tests.test_delivery_conflict_routing import (
-    _LAND_COMMAND,
+    _forge,
     _mint_and_claim,
     _seed_at_deliver_with_an_unlanded_commit,
 )
@@ -222,9 +218,7 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
     """A kick-back's own routing transition shares its epoch with the bounce fact by
     construction (`src/blizzard/hub/delivery/hub_node.py` records both). Driven through the REAL hub-node delivery
     path, not a bare bounce write, so the excluded transition actually exists."""
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -248,9 +242,7 @@ def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tm
     """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
     judged choice on the SAME chunk still counts — the hub step claims a synthetic lease
     at its epoch, so the runner's next lease mints strictly above it and never collides."""
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)

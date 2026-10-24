@@ -385,3 +385,67 @@ def test_reconciling_a_fully_retired_name_with_a_changed_definition_mints_a_new_
     listed = {g["graph_id"]: g for g in hub.client.get("/api/graphs").json()}
     assert listed[new_id]["retired"] is False
     assert listed[first.graph_id]["retired"] is True
+
+
+#: The step each packaged action stood for before the packaged graphs named actions.
+_PRE_ACTION_RUN = {
+    "land": [{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],
+    "record-findings": [
+        {"name": "materialize-review-findings", "command": "python3 -m blizzard.hub.graphs.scripts.review_deliver"}
+    ],
+    "garden-deliver": [
+        {
+            "name": "materialize-garden-artifacts",
+            "command": "python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket",
+        }
+    ],
+}
+
+
+def _pre_action_body(body: dict[str, object]) -> dict[str, object]:
+    """``body`` as the packaged set shipped it before its hub nodes named actions: each action back to its
+    step, each land node's wait back to thirty minutes, and ``resolve`` reading the step's own log."""
+    nodes = body["nodes"]
+    assert isinstance(nodes, dict)
+    for node in nodes.values():
+        action = node.pop("action", None)
+        if action is None:
+            continue
+        node.pop("with", None)
+        node["run"] = _PRE_ACTION_RUN[action]
+        if "poll_timeout" in node:
+            node["poll_timeout"] = 1800
+    resolve = nodes.get("resolve")
+    if resolve is not None:
+        assert "the `hub-log.land` log" in resolve["prompt"]
+        resolve["prompt"] = resolve["prompt"].replace("the `hub-log.land` log", "the `hub-log.land-every-repo` log")
+    return body
+
+
+def test_a_store_holding_the_pre_action_packaged_set_mints_one_new_version_of_each_graph_with_a_hub_node(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    pre_action: dict[str, str] = {}
+    for graph in PACKAGED.files:
+        body = _pre_action_body(graph.body)
+        minted, _ = hub.services.graph_mint.mint(GraphDoc.of(body), definition_yaml=YAML_CODEC.encode(body).decode())
+        pre_action[graph.doc.name] = minted.graph_id
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
+    assert hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": pre_action["bas-dwf"]}).status_code == 202
+    hub.clock.advance(timedelta(minutes=1))
+
+    first = _sync(hub, PACKAGED.paths)
+    second = _sync(hub, PACKAGED.paths)
+
+    assert sorted(_statuses(first)) == [
+        ("adv-dwf", "minted"),
+        ("bas-dwf", "minted"),
+        ("bas-hwf", "minted"),
+        ("default-delivery", "up-to-date"),
+        ("garden-routine", "minted"),
+        ("ideation", "minted"),
+    ]
+    assert all(o.graph_id != pre_action[o.name] for o in first if o.status is GraphSyncStatus.MINTED)
+    assert {o.status for o in second} == {GraphSyncStatus.UP_TO_DATE}
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == pre_action["bas-dwf"]

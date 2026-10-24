@@ -201,3 +201,12 @@ class _Handle:
 
 def unreachable() -> ForgeUnreachable:
     return ForgeUnreachable("connection refused")
+
+
+#: A completed check run the base does not share — what turns a head red so ``land`` answers ``failure``.
+RED = [{"id": 1, "name": "build", "status": "completed", "conclusion": "failure", "details_url": "https://ci/1"}]
+
+
+def forge_holding(*repos: str, branch: str, commit: str, **state: Any) -> GitHubDouble:
+    """A double whose every named repository has ``branch`` pushed at ``commit``, each in ``state``."""
+    return GitHubDouble({repo: DoubleRepo(**{"heads": {branch: commit}, **state}) for repo in repos})

@@ -17,15 +17,12 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import func
 
-from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.domain.chunk.model import DecisionChoice
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from tests.support import (
-    FakeHubCommandRunner,
-    FakeHubWorkdir,
     build_hub,
     chunk_facts_of,
     chunk_stores,
@@ -33,7 +30,7 @@ from tests.support import (
     pointer_token,
     report_lease,
 )
-from tests.test_hub_command_node import _POLL_GRAPH_YAML, _submit_build_pass
+from tests.test_hub_command_node import _submit_build_pass
 from tests.test_write_fence import _Chunk, _held_by_a_writer, _restart_under_lock, _stop_under_lock
 
 pytestmark = pytest.mark.component
@@ -47,13 +44,44 @@ def _count(hub, table, chunk_id: str, **where) -> int:  # type: ignore[no-untype
         return conn.execute(query).scalar_one()
 
 
+#: A build -> merge graph whose ``merge`` node waits on every pass, so each visit times out.
+_POLL_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: merge
+        fail:
+          description: Incomplete.
+          to: build
+  merge:
+    executor: hub
+    poll_interval: 30
+    poll_timeout: 30
+    bounce_cap: 1
+    action: test.sequence
+    with: {choices: [pending]}
+    judgement:
+      choices:
+        failure:
+          description: Red.
+          to: build
+"""
+
+
 def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A chunk on the poll graph one poll-timeout away from crossing its ``bounce_cap``."""
-    runner = FakeHubCommandRunner()
-    runner.arm("check-ci", CommandResult(exit_code=0, stdout="pending", stderr=""))
-    graph_yaml = _POLL_GRAPH_YAML.replace("poll_timeout: 90", "poll_timeout: 30\n    bounce_cap: 1")
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
-    assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _POLL_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "cap"})]})
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
