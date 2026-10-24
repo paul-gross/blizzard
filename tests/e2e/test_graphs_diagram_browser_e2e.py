@@ -67,7 +67,8 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "test.answer",
+                "with": {"choice": "landed"},
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
@@ -371,7 +372,8 @@ def _name_bound_graph_yaml() -> str:
             },
             "another-long-node-name-for-the-badge": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "test.answer",
+                "with": {"choice": "landed"},
                 "session": "fresh",
                 "judgement": {
                     "choices": {

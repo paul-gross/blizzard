@@ -1,7 +1,7 @@
 """The self-healing PR + CI-watch delivery policy delivers through the generic path (#67).
 
 Proves delivery **policy lives in YAML**: `_graph_yaml()` differs from the default graph
-only in `deliver`'s `run:` script and poll cadence, yet drives the wait/self-heal/bounce/
+only in `deliver`'s poll cadence and routing, yet drives the wait/self-heal/bounce/
 failure routes below through the same generic `executor: hub` primitive.
 """
 
@@ -48,14 +48,14 @@ _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 def _graph_yaml(poll_timeout: int = 600) -> str:
     """The PR+CI delivery policy's shape, inlined with a re-poll-every-tick cadence.
 
-    Names the SAME real `land_pr_ci` script and choice names the shipped graph authors,
+    Names the SAME `land` action and choice names the shipped graph authors,
     exercising real routing. Differs only in poll cadence and in routing
     `conflict`/`failure` back to `build` (this stand-in has no `resolve` spine)."""
     import yaml
 
     graph = {
         # Named `default-delivery` so the hub's default-graph resolution binds this
-        # graph at ingest; the policy rides `deliver`'s `run:` script, not the name.
+        # graph at ingest; the policy rides `deliver`'s `land` action, not the name.
         "name": "default-delivery",
         "entry": "build",
         "nodes": {
@@ -72,7 +72,7 @@ def _graph_yaml(poll_timeout: int = 600) -> str:
                 "executor": "hub",
                 "poll_interval": 1,  # a brisk 1s cadence so the scenario converges in seconds
                 "poll_timeout": poll_timeout,  # 600: never time out — these prove routing, not #64's timeout kick-back
-                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],
+                "action": "land",
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo's PR merged cleanly.", "to": "done"},
@@ -307,7 +307,7 @@ def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
     forge_port, hub_port = free_port(), free_port()
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         # `behind` — base moved, no conflict. The `stale_branch` lever clears ONLY via
-        # `PUT .../update-branch`, so reaching `done` proves the script self-healed.
+        # `PUT .../update-branch`, so reaching `done` proves the action self-healed.
         assert forge.post("/_levers/stale_branch", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
@@ -340,7 +340,7 @@ def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
 
     forge_port, hub_port = free_port(), free_port()
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        # `dirty` — a real merge conflict. The script bounces to `build` immediately.
+        # `dirty` — a real merge conflict. The action bounces to `build` immediately.
         assert forge.post("/_levers/merge_conflict", json={"repo": REPO}).status_code == 200
         chunk_id = _ingest_and_promote(hub, forge)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)

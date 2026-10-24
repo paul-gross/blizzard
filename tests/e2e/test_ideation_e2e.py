@@ -2,11 +2,12 @@
 standing e2e smoke: ``tests/e2e/test_garden_routine_e2e.py``'s shape for the survey -> reconcile ->
 propose -> deliver loop, ``tests/e2e/test_ask_answer_e2e.py``'s for the ask-parks-then-answer
 mechanics the undeclared-axis path and the delivery-bounce escalation depend on. The real
-packaged YAML is minted with its prompts swapped for scripts and its deliver command wrapped
-in a crash-once shim; every delta carries ``findings: []``, and an undeclared axis ends in `ask`."""
+packaged YAML is minted with its prompts swapped for scripts, and its shipped ``garden-deliver``
+action runs on every run but the failure run; every delta carries ``findings: []``, and an undeclared axis ends in `ask`."""
 
 from __future__ import annotations
 
+import copy
 import os
 import subprocess
 import sys
@@ -44,7 +45,7 @@ _SCOPE_UNDECLARED = "ideation-undeclared"
 _SCOPE_DECLARED_LATER = "ideation-declared-later"
 
 
-def _common(crash_dir: Path) -> str:
+def _common() -> str:
     """The shared preamble: the charge parsed off the real work item and the worker
     artifact verbs — no findings bucket, since this graph has none. `staged()` reads this
     node-step's own not-yet-published submissions (`artifact staged --content`): a
@@ -65,18 +66,6 @@ def _common(crash_dir: Path) -> str:
         "    entries = json.loads(sh('blizzard', 'runner', 'artifact', 'staged', '--content'))\n"
         "    return next(e['content'] for e in entries if e['name'] == name)\n"
         "axis_marker = pathlib.Path(f'.ideation-axis-{chunk_id}')\n"
-        "armed_marker = pathlib.Path(f'.ideation-crash-armed-{chunk_id}')\n"
-        f"crash_trigger = pathlib.Path({str(crash_dir)!r}) / chunk_id\n"
-    )
-
-
-def _crash_once_command(crash_dir: Path) -> str:
-    """The deliver command behind a shim that exits 1 once, iff propose left this chunk's
-    trigger — so the real ``garden_deliver`` runs on every other visit unchanged."""
-    return (
-        f'sh -c \'m={str(crash_dir)!r}/$BZ_HUB_CHUNK_ID; if [ -e "$m" ]; then rm -f "$m"; '
-        'echo "simulated delivery crash" >&2; exit 1; fi; '
-        "exec python3 -m blizzard.hub.graphs.scripts.garden_deliver --delta delta --proposals docket'"
     )
 
 
@@ -203,9 +192,6 @@ _PROPOSE = (
     "         'findings': []}\n"
     "        for c in shortlist\n"
     "    ]\n"
-    "if path == 'failure' and not armed_marker.exists():\n"
-    "    crash_trigger.write_text('crash once')\n"
-    "    armed_marker.write_text('armed')\n"
     "measurement = f'e2e ideation sweep of {scope}: {len(docket)} proposed'\n"
     "delta_scope = ('not-' + scope) if path in ('invalid', 'escalate') else scope\n"
     "publish('docket', json.dumps(docket))\n"
@@ -271,12 +257,12 @@ _ANSWER_ESCALATE_RESOLVED = (
 _ESCALATE_QUESTION_SUBSTR = "bounced invalid twice"
 
 
-def _scripted_ideation_graph_yaml(crash_dir: Path) -> str:
-    """The real packaged ``ideation`` body with its prompts swapped for scripts and its
-    deliver command behind the crash-once shim — nodes, edges, session pools, and the
-    `classes` graph-scoped artifact stay verbatim."""
-    body = PACKAGED.named("ideation").body
-    common = _common(crash_dir)
+def _scripted_ideation_graph_yaml(*, failing_deliver: bool = False) -> str:
+    """The real packaged ``ideation`` body with its prompts swapped for scripts — nodes, edges, session
+    pools, the `classes` graph-scoped artifact, and ``deliver``'s ``garden-deliver`` stay verbatim, unless
+    ``failing_deliver`` puts a ``test.sequence`` answering ``failure`` then ``recorded`` on ``deliver``."""
+    body = copy.deepcopy(PACKAGED.named("ideation").body)
+    common = _common()
     nodes: dict[str, object] = body["nodes"]  # type: ignore[assignment]
     nodes["survey"]["prompt"] = common + _SURVEY  # type: ignore[index]
     nodes["survey"]["judgement"]["prompt"] = common + _SURVEY_JUDGEMENT  # type: ignore[index]
@@ -286,7 +272,10 @@ def _scripted_ideation_graph_yaml(crash_dir: Path) -> str:
     nodes["propose"]["judgement"]["prompt"] = common + _PROPOSE_JUDGEMENT  # type: ignore[index]
     nodes["deliver"]["judgement"]["choices"]["invalid"]["prompt_addendum"] = _PROPOSE_FROM_DELIVER_INVALID  # type: ignore[index]
     nodes["deliver"]["judgement"]["choices"]["failure"]["prompt_addendum"] = _PROPOSE_FROM_DELIVER_FAILURE  # type: ignore[index]
-    nodes["deliver"]["run"][0]["command"] = _crash_once_command(crash_dir)  # type: ignore[index]
+    if failing_deliver:
+        deliver: dict[str, object] = nodes["deliver"]  # type: ignore[assignment]
+        deliver["action"] = "test.sequence"
+        deliver["with"] = {"choices": ["failure", "recorded"]}
     return yaml.safe_dump(body, sort_keys=False)
 
 
@@ -300,7 +289,7 @@ def _edges(hub, chunk_id: str) -> list[tuple[str | None, str | None]]:
 def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
     """One routine, several runs over the packaged `ideation` graph: three classes proposed
     and closed by a person, a drop and a revive off the pass reason, an empty sweep, a
-    decline, an invalid bounce, a crash bounce, a double bounce that asks, both ask branches."""
+    decline, an invalid bounce, a failure bounce, a double bounce that asks, both ask branches."""
     bin_dir = mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -308,8 +297,6 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
     scratch = tmp_path / "scratch"
     mint_world(bin_dir, scratch)
     workspace = scratch / FIXTURE_ENV / "workspace"
-    crash_dir = tmp_path / "crash-once"
-    crash_dir.mkdir()
 
     forge_port, hub_port = free_port(), free_port()
     runner_dir = tmp_path / "runner"
@@ -317,7 +304,7 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         run_forge(bin_dir, scratch / FIXTURE_ENV / "origins", forge_port),
         run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
     ):
-        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_ideation_graph_yaml(crash_dir)})
+        minted = hub.post("/api/graphs", json={"definition_yaml": _scripted_ideation_graph_yaml()})
         assert minted.status_code == 201, minted.text
 
         created = hub.post(
@@ -518,9 +505,15 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
         (invalid_set,) = invalid_delta["sets"]
         assert invalid_set["added"] == [] and invalid_set["observed"] == [] and invalid_set["gone"] == []
 
-        # -- failure: the shim crashes deliver once; the `failure` addendum republishes the
-        #    docket unchanged and the retry records it exactly once -----------------------
+        # -- failure: a `test.sequence` deliver, on a version minted for this run alone, answers
+        #    `failure` once; the `failure` addendum republishes the docket unchanged for the retry --
+        def mint(definition_yaml: str) -> None:
+            minted_version = hub.post("/api/graphs", json={"definition_yaml": definition_yaml})
+            assert minted_version.status_code == 201, minted_version.text
+
+        mint(_scripted_ideation_graph_yaml(failing_deliver=True))
         failure_chunk = run("failure", _SCOPE_FAILURE)
+        mint(_scripted_ideation_graph_yaml())
         assert _edges(hub, failure_chunk) == [
             ("survey", "found"),
             ("reconcile", "novel"),
@@ -529,17 +522,6 @@ def test_ideation_runs_end_to_end_on_all_authored_paths(tmp_path: Path) -> None:
             ("propose", "proposed"),
             ("deliver", "recorded"),
         ]
-        failure_proposals = [
-            p for p in hub.get("/api/garden-proposals").json()["proposals"] if _SCOPE_FAILURE in p["title"]
-        ]
-        assert len(failure_proposals) == 3, failure_proposals
-        assert not list(crash_dir.iterdir()), "the crash trigger was not consumed by the shim"
-        failure_logs = [
-            a
-            for a in hub.get(f"/api/chunks/{failure_chunk}").json()["artifacts"]
-            if "simulated delivery crash" in (a.get("content") or "")
-        ]
-        assert failure_logs, "the deliver exec log did not record the shim's crash"
 
         # -- escalate: two consecutive invalid bounces, then the loop bound asks instead
         #    of resubmitting a third time; the answer resolves the delta and it records ---

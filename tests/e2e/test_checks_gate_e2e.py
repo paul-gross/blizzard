@@ -24,8 +24,6 @@ pytestmark = [
     ),
 ]
 
-_LAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
-
 # Bumps a persistent `.build-count`, creates `.checks-ok` on the second+ visit (flipping
 # the check red->green), and always commits so "build ran twice" is provable on bare main.
 _BUILD_SCRIPT = scripted_build_prompt(
@@ -84,11 +82,14 @@ def _graph_yaml(*, build_judgement: str) -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": _LAND}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
+                        "landed": {"description": "Delivered.", "to": "done"},
+                        "conflict": {"description": "Conflicted.", "to": "build"},
                         "failure": {"description": "Failed to deliver.", "to": "build"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
                     }
                 },
             },

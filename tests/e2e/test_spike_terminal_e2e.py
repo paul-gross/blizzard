@@ -62,12 +62,14 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict.", "to": "spike"},
                         "failure": {"description": "Failed.", "to": "spike"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "spike"},
                     }
                 },
             },

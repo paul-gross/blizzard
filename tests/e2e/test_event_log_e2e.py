@@ -62,7 +62,8 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "test.answer",
+                "with": {"choice": "landed"},
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
