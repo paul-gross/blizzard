@@ -27,7 +27,12 @@ def _run(tmp_path: Path, tag: str, run_branches: list[str]) -> subprocess.Comple
         '#!/usr/bin/env bash\necho "$*" > "${GH_ARGV_FILE}"\n' + "".join(f"echo {branch}\n" for branch in run_branches)
     )
     gh.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GH_REPO": "o/r", "GH_ARGV_FILE": str(tmp_path / "argv")}
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "GH_REPO": "o/r",
+        "GH_ARGV_FILE": str(tmp_path / "argv"),
+    }
     return subprocess.run([str(_SCRIPT), tag, _SHA], capture_output=True, text=True, env=env)
 
 
