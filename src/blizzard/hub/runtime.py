@@ -15,6 +15,8 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
+
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
@@ -97,7 +99,8 @@ class Runtime:
         try:
             runner = Migrations(config, self.clock).runner
             self._move_store(config, runner, lambda: runner.upgrade("head"))
-        except MigrationConnectionError as exc:
+        except (MigrationConnectionError, OperationalError) as exc:
+            # The revision read that brackets the move opens the store too, so it can fail before the upgrade does.
             raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
         hub_key_provider(os.environ, data_dir=config.data_dir)
