@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # blizzard:image-smoke — builds the wheel + the hub container image, boots it on
 # an empty data volume, and asserts the acceptance criteria a unit test cannot
-# reach: non-root uid, git on PATH, the postgres driver importable, the store at
+# reach: non-root uid, the postgres driver importable, the store at
 # head *before* the daemon serves, and a live GET /api/health + GET /api/ready.
 #
 # Runs in CI on every pull request (upper-tiers.yml); the multi-arch GHCR publish leg is not
@@ -57,10 +57,6 @@ log "Asserting the container runs as a non-root uid"
 UID_IN_CONTAINER="$(docker exec "$CONTAINER" id -u)"
 [ "$UID_IN_CONTAINER" != "0" ] || fail "container is running as uid 0 (root)"
 echo "OK: uid=$UID_IN_CONTAINER"
-
-log "Asserting git resolves on PATH"
-docker exec "$CONTAINER" git --version >/dev/null || fail "git not resolvable on the image PATH"
-echo "OK: git present"
 
 log "Asserting the postgres driver is importable"
 docker exec "$CONTAINER" python3 -c "import psycopg" || fail "psycopg not importable in the image"

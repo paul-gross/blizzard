@@ -1,8 +1,7 @@
-"""The delivery domain — the generic hub command node executor (#65/#67).
+"""The delivery domain — the generic hub command node executor.
 
-Delivery is authored as graph CONTENT, not an engine special case: the hub executes a
-node's declared ``run:`` command list behind two owned mechanism seams,
-:mod:`.command_runner` and :mod:`.workdir` (``bzh:pluggable-seams``).
+Delivery is authored as graph CONTENT, not an engine special case: a hub node names one of the hub's
+actions, and the executor takes a pass of it in-process and routes the choice it answers.
 """
 
 from __future__ import annotations

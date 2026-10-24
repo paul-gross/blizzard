@@ -27,7 +27,6 @@ from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
-from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -447,7 +446,7 @@ def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:
 @router.post(
     "/chunks/{chunk_id}/hub-markers",
     response_model=HubMarkerResponse,
-    dependencies=[Depends(require_marker_authority)],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
     deprecated=True,
 )
 def record_hub_marker(
@@ -457,11 +456,8 @@ def record_hub_marker(
     request_body: HubMarkerRequest,
     services: Services,
 ) -> HubMarkerResponse:
-    """The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
-
-    Records a marker artifact mid-run, ahead of the producing command's own exit.
-    Idempotent per ``(chunk, node, name, epoch)``.
-    """
+    """Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:
+    a hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -485,7 +481,7 @@ def record_hub_marker(
 @router.post(
     "/chunks/{chunk_id}/garden-delivery",
     response_model=GardenDeliveryResponse,
-    dependencies=[Depends(require_marker_authority)],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
     deprecated=True,
 )
 def record_garden_delivery(
@@ -533,7 +529,7 @@ def record_garden_delivery(
 @router.post(
     "/chunks/{chunk_id}/review-findings-delivery",
     response_model=ReviewFindingsDeliveryResponse,
-    dependencies=[Depends(require_marker_authority)],
+    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
     deprecated=True,
 )
 def record_review_findings_delivery(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
 
@@ -27,7 +27,6 @@ from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.forge_handle import ForgeHandleFactory, IGitHubHandle
-from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     Effect,
@@ -48,7 +47,7 @@ from blizzard.hub.domain.actions.visit import (
     VisitNode,
 )
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources, board_chunk_url
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -125,35 +124,27 @@ _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
 )
 _MARKER_PREFIX = "merged/"
 #: The event each resolution outcome records — ``None`` where the resolution stands. Every refused
-#: outcome routes the ``hub-log.<outcome>`` step before any command runs.
+#: outcome records its ``hub-log.<outcome>`` artifact before any pass is taken.
 REFUSAL_EVENT: Mapping[RepositoryOutcome, EventLogKind | None] = {
     RepositoryOutcome.RESOLVED: None,
     RepositoryOutcome.NOTHING_TO_RESOLVE: None,
     RepositoryOutcome.UNRESOLVED: "repository-unresolved",
     RepositoryOutcome.NOT_LINKED: "repository-not-linked",
 }
-# Bound on the step output a bounce envelope carries; the full text is the `hub-log.<step>` asset.
-BOUNCE_OUTPUT_TAIL_CHARS = 2000
 
 
 @domain_model
 @dataclass(frozen=True)
-class FailedStep:
-    """The ``run:`` step a delivery bounce is attributed to — only ever one that exited non-zero:
-    what ran, how it exited, and where its full log lives."""
+class BouncedAction:
+    """The hub action whose pass answered the choice a delivery bounce routed, and the ``hub-log.<action>`` asset
+    holding its log — ``None`` when the pass logged nothing."""
 
     name: str
-    exit_code: int
-    output: str
-    log_key: str
+    choice: str
+    log_artifact: str | None
 
     def payload(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "exit_code": self.exit_code,
-            "output_tail": self.output[-BOUNCE_OUTPUT_TAIL_CHARS:],
-            "log_artifact": self.log_key,
-        }
+        return {"name": self.name, "choice": self.choice, "log_artifact": self.log_artifact}
 
 
 @domain_model
@@ -164,7 +155,7 @@ class BounceEnvelope:
     cause: str
     detail: str
     unlanded: list[dict[str, object]]
-    step: FailedStep | None
+    action: BouncedAction | None
 
     @classmethod
     def of(
@@ -174,7 +165,7 @@ class BounceEnvelope:
         summary: str,
         commits: list[dict[str, str]],
         sources: DeliverySources,
-        step: FailedStep | None,
+        action: BouncedAction | None,
     ) -> BounceEnvelope:
         landed = LandedRepos.of(sources.markers).names
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
@@ -197,11 +188,11 @@ class BounceEnvelope:
             f"PR #{pr['number']} in {u['repo']}" if isinstance(pr := u["pr"], dict) else str(u["repo"])
             for u in unlanded
         )
-        if step is None:
+        if action is None:
             detail = f"{summary} (not landed: {names})" if names else summary
         else:
-            detail = f"{names or summary} did not land: `{step.name}` exited {step.exit_code}"
-        return cls(cause=cause, detail=detail, unlanded=unlanded, step=step)
+            detail = f"{names or summary} did not land: `{action.name}` answered {action.choice}"
+        return cls(cause=cause, detail=detail, unlanded=unlanded, action=action)
 
     def serialize(self) -> str:
         return json.dumps(
@@ -209,7 +200,8 @@ class BounceEnvelope:
                 "cause": self.cause,
                 "detail": self.detail,
                 "unlanded": self.unlanded,
-                "step": self.step.payload() if self.step else None,
+                "step": None,
+                "action": self.action.payload() if self.action else None,
             },
             ensure_ascii=False,
         )
@@ -239,108 +231,6 @@ class HubRunResult:
     wrote_transition: bool
     detail: str = ""
     transition_id: str | None = None
-
-
-# The env-injection contract read by a graph's `run:` script.
-ENV_CHUNK_ID = "BZ_HUB_CHUNK_ID"
-ENV_WORKDIR = "BZ_HUB_WORKDIR"
-ENV_NODE_ID = "BZ_HUB_NODE_ID"
-ENV_NODE_NAME = "BZ_HUB_NODE_NAME"
-ENV_EPOCH = "BZ_HUB_EPOCH"
-ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
-ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit, forge_url, owner, base_branch, record}
-ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
-ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
-ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST
-# POST {delta, proposals} delivers a routine's run.
-ENV_GARDEN_DELIVERY_URL = "BZ_HUB_GARDEN_DELIVERY_URL"
-# POST with no body delivers the newest review-finding-delta artifact.
-ENV_REVIEW_FINDINGS_URL = "BZ_HUB_REVIEW_FINDINGS_URL"
-ENV_FORGE_URL = "BZ_FORGE_URL"
-ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
-ENV_FORGE_TOKENS = "BZ_FORGE_TOKENS"  # JSON object {repository record id: token}, one per record in the chunk
-ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_common.LandRun.repo
-# PR/merge title resolved from the primary work item, absent when unresolved.
-ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
-ENV_WORK_ITEMS = "BZ_HUB_WORK_ITEMS"
-ENV_CHUNK_URL = "BZ_HUB_CHUNK_URL"
-# "1" if the graph declares a `git_commit`-kind `produces:`, else "0".
-ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
-# The chunk's project: its id, and its slug as the visit starts.
-ENV_PROJECT_ID = "BZ_HUB_PROJECT_ID"
-ENV_PROJECT = "BZ_HUB_PROJECT"
-
-
-@domain_model
-@dataclass(frozen=True)
-class HubEnv:
-    """A hub command node's injected env, assembled from already-loaded domain inputs."""
-
-    chunk: Chunk
-    node: Node
-    workdir: str
-    epoch: int
-    artifacts: list  # list[StoredArtifact] — untyped here to avoid a domain->storage import cycle
-    marker_callback_url: str
-    garden_delivery_url: str = ""
-    review_findings_url: str = ""
-    #: Each commit pointer's resolved repository record, in row order; empty when there are no commits to land.
-    resolution: RepositoryResolution = field(
-        default_factory=lambda: RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
-    )
-    #: Each record's revealed secret by record name, placed in the step's env.
-    forge_tokens: Mapping[str, str] = field(default_factory=dict)
-    feature_title: str | None = None
-    expects_git_commits: bool = True
-    marker_token: str = ""
-    work_items: tuple[dict[str, str | None], ...] = ()
-    public_url: str | None = None
-    project: LandingProject = field(default_factory=LandingProject)
-
-    @property
-    def vars(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
-        """The env-var mapping itself — pure, no I/O.
-
-        **Never a model credential** (``bzh:deterministic-shell``): no key injected here
-        may grant access to an LLM or agent API. :data:`ENV_MARKER_TOKEN` is a delivery
-        credential scoped to this one node visit's marker writes."""
-        names = sorted({row.name for row in self.artifacts if row.node_id == self.node.node_id})
-        env = {
-            ENV_CHUNK_ID: self.chunk.chunk_id,
-            ENV_WORKDIR: self.workdir,
-            ENV_NODE_ID: self.node.node_id,
-            ENV_NODE_NAME: self.node.name,
-            ENV_EPOCH: str(self.epoch),
-            ENV_GIT_COMMITS: json.dumps(
-                GitCommits.of(self.artifacts).payload(self.resolution.qualified, self.resolution.targets)
-            ),
-            ENV_ARTIFACT_NAMES: json.dumps(names),
-            ENV_MARKER_CALLBACK_URL: self.marker_callback_url,
-            ENV_EXPECT_GIT_COMMITS: "1" if self.expects_git_commits else "0",
-            ENV_WORK_ITEMS: json.dumps(list(self.work_items)),
-        }
-        if chunk_url := board_chunk_url(self.public_url, self.chunk.chunk_id):
-            env[ENV_CHUNK_URL] = chunk_url
-        if self.garden_delivery_url:
-            env[ENV_GARDEN_DELIVERY_URL] = self.garden_delivery_url
-        if self.review_findings_url:
-            env[ENV_REVIEW_FINDINGS_URL] = self.review_findings_url
-        if (agreed := self.resolution.agreed()) is not None:
-            env[ENV_BASE_BRANCH] = agreed.base_branch
-            env[ENV_FORGE_URL] = agreed.forge_api_url
-            env[ENV_FORGE_OWNER] = agreed.owner
-            if token := self.forge_tokens.get(agreed.record):
-                env[ENV_FORGE_TOKEN] = token
-        if self.forge_tokens:
-            env[ENV_FORGE_TOKENS] = json.dumps(dict(self.forge_tokens))
-        if self.feature_title:
-            env[ENV_FEATURE_TITLE] = self.feature_title
-        if self.marker_token:
-            env[ENV_MARKER_TOKEN] = self.marker_token
-        if self.project.project_id:
-            env[ENV_PROJECT_ID] = self.project.project_id
-            env[ENV_PROJECT] = self.project.slug
-        return env
 
 
 @domain_model
@@ -389,7 +279,6 @@ class HubNodeExecutor:
         record: IReadChunkRecordRepository,
         graphs: IReadManyGraphs,
         clock: IClock,
-        marker_authority: MarkerAuthority,
         repositories: IReadRepositoryRecordRepository,
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
@@ -414,7 +303,6 @@ class HubNodeExecutor:
         self._record = record
         self._graphs = graphs
         self._clock = clock
-        self._marker_authority = marker_authority
         self._repositories = repositories
         self._links = links
         self._projects = projects
@@ -435,13 +323,8 @@ class HubNodeExecutor:
     ) -> bool:
         """Record a hub node visit's marker, idempotently per
         ``(chunk, node, name, epoch)``. A superseded epoch writes nothing, preventing
-        its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``).
-        :class:`AmbiguousMarkerRepository` — before anything is written — when a landed marker names
-        an ``owner/repo`` the visit holds for two repository records."""
-        if name.startswith(_MARKER_PREFIX) and is_landed_revision(content):
-            self._marker_authority.repository_id(
-                chunk_id, node_id=node_id, epoch=epoch, repo=name.removeprefix(_MARKER_PREFIX)
-            )
+        its marker from landing a repo or enqueuing a close (``bzh:epoch-fencing``). A landing it records names
+        no repository record: only a pass's ``LandingRecord`` knows which record landed."""
         wrote = self._artifacts.record_hub_artifact(
             chunk_id,
             node_id=node_id,
@@ -459,7 +342,7 @@ class HubNodeExecutor:
                 chunk_id,
                 repo=repo,
                 commit_hash=content,
-                repository_id=self._marker_authority.repository_id(chunk_id, node_id=node_id, epoch=epoch, repo=repo),
+                repository_id=None,
                 at=self._clock.now(),
             )
         return wrote
@@ -662,7 +545,7 @@ class HubNodeExecutor:
             )
             answer = self._answer(chunk, node, spec, run, epoch=epoch)
             annotate({ACTION_CHOICE: answer.choice or ""})
-        self._record_pass_log(chunk, node, action_name, answer, epoch=epoch)
+        log_artifact = self._record_pass_log(chunk, node, action_name, answer, epoch=epoch)
         if answer.escalation is not None:
             return self._escalate(chunk, answer.escalation, epoch=epoch)
         if answer.waits():
@@ -670,9 +553,9 @@ class HubNodeExecutor:
         commits = [
             {k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution.targets)
         ]
-        return self._route(
-            chunk, graph, node, epoch=epoch, choice=answer.choice or HUB_DEFAULT_FAILURE_CHOICE, commits=commits
-        )
+        choice = answer.choice or HUB_DEFAULT_FAILURE_CHOICE
+        bounced = BouncedAction(name=action_name, choice=choice, log_artifact=log_artifact)
+        return self._route(chunk, graph, node, epoch=epoch, choice=choice, commits=commits, action=bounced)
 
     def _answer(self, chunk: Chunk, node: Node, spec: ActionSpec, run: PassRun, *, epoch: int) -> Pass:
         """What a pass that ended as ``run`` answers: its own answer; an overrun waits where the action can
@@ -699,20 +582,23 @@ class HubNodeExecutor:
             at=self._clock.now(),
         )
 
-    def _record_pass_log(self, chunk: Chunk, node: Node, action_name: str, answer: Pass, *, epoch: int) -> None:
-        """The pass's log lines as its ``hub-log.<action>`` artifact, when it has any."""
+    def _record_pass_log(self, chunk: Chunk, node: Node, action_name: str, answer: Pass, *, epoch: int) -> str | None:
+        """The pass's log lines as its ``hub-log.<action>`` artifact, when it has any; the artifact's name, or
+        ``None`` when the pass logged nothing."""
         if not answer.log:
-            return
+            return None
+        name = f"{_HUB_LOG_PREFIX}{action_name}"
         self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
-            name=f"{_HUB_LOG_PREFIX}{action_name}",
+            name=name,
             content="\n".join(answer.log) + "\n",
             at=self._clock.now(),
         )
+        return name
 
     def _escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int) -> HubRunResult:
         """An escalation the hub authors, routing nothing."""
@@ -856,7 +742,7 @@ class HubNodeExecutor:
         )
 
     def _refuse(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, step: str, detail: str) -> HubRunResult:
-        """Record why the visit refused to run, and route its failure choice — before any command runs."""
+        """Record why the visit refused to run, and route its failure choice — before any pass is taken."""
         self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
@@ -914,7 +800,7 @@ class HubNodeExecutor:
             summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{_PENDING}`",
             commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified)],
             sources=self._delivery_sources(chunk),
-            step=None,
+            action=None,
         ).serialize()
         self._escalations.record_bounce(chunk.chunk_id, epoch=hub_epoch, cause=cause, envelope=envelope_payload, at=now)
 
@@ -966,6 +852,7 @@ class HubNodeExecutor:
         choice: str,
         extra_artifacts: list[StoredArtifact] | None = None,
         commits: list[dict[str, str]] | None = None,
+        action: BouncedAction | None = None,
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
@@ -1030,7 +917,7 @@ class HubNodeExecutor:
                     summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
                     commits=commits,
                     sources=self._delivery_sources(chunk),
-                    step=None,
+                    action=action,
                 ).serialize()
                 self._escalations.record_bounce(
                     chunk.chunk_id, epoch=hub_epoch, cause=choice, envelope=envelope_payload, at=now

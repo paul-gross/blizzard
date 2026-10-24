@@ -95,9 +95,6 @@ work is ingested from it, or when work lands in it.
 Unlinking retires the link: no new work is ingested through it, and the next `deliver` step no longer lands there. A
 step already running finishes. `link` relinks a link unlinked earlier.
 
-A hub step's `run:` commands see the chunk's project as `BZ_HUB_PROJECT_ID`, its id, and `BZ_HUB_PROJECT`, its slug when
-the step starts.
-
 ## A call that names no project
 
 A call that needs a project — creating a scope, routine, operator garden proposal, hub item or link, or looking up a

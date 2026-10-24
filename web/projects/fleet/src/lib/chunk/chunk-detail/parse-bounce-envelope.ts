@@ -1,4 +1,4 @@
-import type { BounceEnvelope, BounceFailedStep, BounceUnlandedRepo } from '../../api/hub';
+import type { BounceAction, BounceEnvelope, BounceFailedStep, BounceUnlandedRepo } from '../../api/hub';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -13,6 +13,15 @@ function parseStep(value: unknown): BounceFailedStep | null | undefined {
   return { name, exit_code, output_tail, log_artifact };
 }
 
+function parseAction(value: unknown): BounceAction | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  const { name, choice, log_artifact } = value;
+  if (typeof name !== 'string' || typeof choice !== 'string') return undefined;
+  if (log_artifact !== null && log_artifact !== undefined && typeof log_artifact !== 'string') return undefined;
+  return { name, choice, log_artifact: log_artifact ?? null };
+}
+
 function parseUnlandedRepo(value: unknown): BounceUnlandedRepo | null {
   if (!isRecord(value)) return null;
   const { repo, branch, commit, pr } = value;
@@ -25,8 +34,9 @@ function parseUnlandedRepo(value: unknown): BounceUnlandedRepo | null {
 /**
  * Runtime validation of the one-line JSON envelope the hub records on a refused delivery against the
  * generated `BounceEnvelope`. `null` when `raw` is not JSON, not an object, or any field fails its check — the
- * caller falls back to the artifact's own text. An unknown key is ignored. `unlanded` and `step` default to
- * `[]` and `null` when absent, so an envelope that names only a `cause` and a `detail` still reads structurally.
+ * caller falls back to the artifact's own text. An unknown key is ignored. `unlanded` defaults to `[]`, and `step`
+ * and `action` to `null`, when absent, so an envelope that names only a `cause` and a `detail` still reads
+ * structurally — as does one stored before the hub named the `action`, which carries a `step` instead.
  */
 export function parseBounceEnvelope(raw: string): BounceEnvelope | null {
   let parsed: unknown;
@@ -51,7 +61,9 @@ export function parseBounceEnvelope(raw: string): BounceEnvelope | null {
 
   const step = parseStep(parsed['step']);
   if (step === undefined) return null;
-  return { cause, detail, unlanded, step };
+  const action = parseAction(parsed['action']);
+  if (action === undefined) return null;
+  return { cause, detail, unlanded, step, action };
 }
 
 /** The envelope as one readable line: its `detail` with markdown code ticks dropped, else

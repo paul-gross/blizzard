@@ -6018,7 +6018,7 @@
       "short_help": "Operator verbs over the ready queue: show its order, replace it, move one chunk."
     },
     "record-marker": {
-      "help": "Deprecated: a hub node's ``run:`` script recorded a marker artifact mid-run; a hub node's action now does.\n\nThe injected ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk, node,\nand epoch. Idempotent per marker NAME; authorized by ``BZ_HUB_MARKER_TOKEN``,\nwhose absence is named rather than posted unauthenticated.",
+      "help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way. A hub\nnode's action records its own markers. Removed in 0.4.",
       "params": [
         {
           "hidden": false,
@@ -6044,7 +6044,7 @@
         }
       ],
       "path": "hub record-marker",
-      "short_help": "Deprecated: a hub node's ``run:`` script recorded a marker artifact mid-run; a hub node's action now does."
+      "short_help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way."
     },
     "repo": {
       "commands": {

@@ -776,12 +776,35 @@ export type BlockedView = {
 };
 
 /**
+ * BounceAction
+ *
+ * The hub action whose pass answered the ``choice`` the bounce routed; ``log_artifact`` names its
+ * ``hub-log.<action>`` asset, ``null`` when the pass logged nothing.
+ */
+export type BounceAction = {
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Log Artifact
+     */
+    log_artifact: string | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * BounceEnvelope
  *
  * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
- * failed ``step`` when a ``run:`` step caused the bounce.
+ * ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout. ``step`` is
+ * written ``null``; only an envelope stored before hub steps stopped running commands carries one.
  */
 export type BounceEnvelope = {
+    action: BounceAction | null;
     /**
      * Cause
      */
@@ -790,6 +813,9 @@ export type BounceEnvelope = {
      * Detail
      */
     detail: string;
+    /**
+     * @deprecated
+     */
     step: BounceFailedStep | null;
     /**
      * Unlanded
@@ -800,8 +826,8 @@ export type BounceEnvelope = {
 /**
  * BounceFailedStep
  *
- * The ``run:`` step the bounce is attributed to — one that exited non-zero. ``output_tail`` is bounded;
- * ``log_artifact`` names the asset holding the full log.
+ * The ``run:`` step an envelope recorded before hub steps stopped running commands — one that exited non-zero.
+ * ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log.
  */
 export type BounceFailedStep = {
     /**
@@ -9720,7 +9746,7 @@ export type SecretCreateRequestWritable = {
 };
 
 /**
- * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.
+ * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or host token acts in its own tenant, and a header naming another is refused 400.
  */
 export type TenantHeader = string;
 

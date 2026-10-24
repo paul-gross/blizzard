@@ -2,7 +2,7 @@
   "components": {
     "parameters": {
       "TenantHeader": {
-        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.",
+        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or host token acts in its own tenant, and a header naming another is refused 400.",
         "in": "header",
         "name": "X-Blizzard-Tenant",
         "required": false,
@@ -1309,9 +1309,51 @@
         "title": "BlockedView",
         "type": "object"
       },
-      "BounceEnvelope": {
-        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\nfailed ``step`` when a ``run:`` step caused the bounce.",
+      "BounceAction": {
+        "description": "The hub action whose pass answered the ``choice`` the bounce routed; ``log_artifact`` names its\n``hub-log.<action>`` asset, ``null`` when the pass logged nothing.",
         "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "log_artifact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Artifact"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "choice",
+          "log_artifact"
+        ],
+        "title": "BounceAction",
+        "type": "object"
+      },
+      "BounceEnvelope": {
+        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout. ``step`` is\nwritten ``null``; only an envelope stored before hub steps stopped running commands carries one.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BounceAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "cause": {
             "title": "Cause",
             "type": "string"
@@ -1328,7 +1370,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "deprecated": true
           },
           "unlanded": {
             "items": {
@@ -1342,13 +1385,14 @@
           "cause",
           "detail",
           "unlanded",
-          "step"
+          "step",
+          "action"
         ],
         "title": "BounceEnvelope",
         "type": "object"
       },
       "BounceFailedStep": {
-        "description": "The ``run:`` step the bounce is attributed to \u2014 one that exited non-zero. ``output_tail`` is bounded;\n``log_artifact`` names the asset holding the full log.",
+        "description": "The ``run:`` step an envelope recorded before hub steps stopped running commands \u2014 one that exited non-zero.\n``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log.",
         "properties": {
           "exit_code": {
             "title": "Exit Code",
@@ -21546,7 +21590,7 @@
     "/api/chunks/{chunk_id}/hub-markers": {
       "post": {
         "deprecated": true,
-        "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nRecords a marker artifact mid-run, ahead of the producing command's own exit.\nIdempotent per ``(chunk, node, name, epoch)``.",
+        "description": "Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:\na hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``.",
         "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
         "parameters": [
           {

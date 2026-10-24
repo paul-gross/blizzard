@@ -40,7 +40,7 @@ Everything durable lives under a single documented path: **`/var/lib/blizzard/hu
 | `data/hub.db`             | The sqlite store (when `db_url` is left at its default — see below).                                                                                                    |
 | `data/auth/signing-keys/` | OAuth login signing keys, only written when `auth.mode = "oauth"`.                                                                                                      |
 | `data/auth/secret-keys/`  | The key sealing the hub's stored secrets — back it up with the store (`docs/backup.md`).                                                                                |
-| `data/hub_workdirs/`      | Hub-command-node scratch clones — reclaimable, not backup-worthy (`docs/backup.md`).                                                                                    |
+| `data/hub_workdirs/`      | Deprecated: scratch clones a hub `run:` step used — nothing writes it any more, so an existing one is reclaimable, not backup-worthy (`docs/backup.md`).                |
 
 ## Environment variables
 

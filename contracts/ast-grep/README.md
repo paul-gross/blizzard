@@ -60,9 +60,8 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
   `blizzard-context:/architecture/system-shape/worker-boundary.md`; this file states none of that prose, only what the
   rule mechanically checks.
   - Scoped to `src/blizzard/runner/**`, `src/blizzard/foundation/**` and `src/blizzard/hub/**`, except
-    `src/blizzard/runner/process/**` (the seam and its driver),
-    `src/blizzard/hub/delivery/internal/hub_command_runner.py` (the hub's one launch site) and the colocated
-    `store/migrations/tests/**` trees, which are test code.
+    `src/blizzard/runner/process/**` (the seam and its driver) and the colocated `store/migrations/tests/**` trees,
+    which are test code. The hub launches no child at all.
   - Matches `import subprocess`, `import pty` (bare or aliased), and `from subprocess import …` / `from pty import …`.
     `asyncio.create_subprocess_*`, `os.spawn*`, `os.system` and `os.fork` are not matched — a floor, not a proof.
   - No exemption stands.

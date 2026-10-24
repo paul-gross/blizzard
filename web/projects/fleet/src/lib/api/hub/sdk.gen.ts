@@ -559,10 +559,8 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
 /**
  * Record Hub Marker
  *
- * The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
- *
- * Records a marker artifact mid-run, ahead of the producing command's own exit.
- * Idempotent per ``(chunk, node, name, epoch)``.
+ * Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:
+ * a hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``.
  *
  * @deprecated
  */

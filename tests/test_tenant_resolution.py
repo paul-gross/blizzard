@@ -135,24 +135,6 @@ def test_a_runner_token_decides_its_tenant_and_a_disagreeing_header_answers_400(
     assert disagreeing.status_code == 400
 
 
-def test_a_marker_token_decides_its_tenant_and_grants_only_its_own_write(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, auth_mode="oauth")
-    second = _second_tenant(hub)
-    token = hub.hub_services.marker_authority.issue("ch_x", node_id="nd_x", epoch=1, tenant=second)
-    marker = {"X-Blizzard-Marker-Token": token}
-    query = "node_id=nd_x&epoch=1"
-
-    disagreeing = hub.client.post(
-        f"/api/chunks/ch_x/hub-markers?{query}",
-        json={"name": "m", "content": ""},
-        headers={**marker, TENANT_HEADER: default_tenant(hub.engine)},
-    )
-    elsewhere = hub.client.post(f"/api/chunks/ch_x/promote?{query}", headers=marker)
-
-    assert disagreeing.status_code == 400
-    assert elsewhere.status_code == 403
-
-
 def test_under_auth_none_the_operator_acts_in_whichever_tenant_is_named(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     second = _second_tenant(hub)

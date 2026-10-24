@@ -12,11 +12,10 @@
 # entrypoint steps (migrate before host — `bzh:manual-migrations`).
 FROM python:3.12-slim
 
-# git: delivery `run:` scripts clone into hub workdirs (bzh:deterministic-shell).
 # ca-certificates: TLS to a real forge/work-source origin and (when configured)
 # a postgres server requiring a verified certificate.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root: the daemon runs as `blizzard`, owning the one durable-state mount.
@@ -42,7 +41,7 @@ USER blizzard
 WORKDIR /var/lib/blizzard/hub
 
 # The single documented mount for everything durable — store (sqlite default),
-# signing keys, hub workdirs, and the config file (packaging/docker/README.md).
+# signing keys, and the config file (packaging/docker/README.md).
 VOLUME ["/var/lib/blizzard/hub"]
 
 ENV BZ_HUB_DIR=/var/lib/blizzard/hub \

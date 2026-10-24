@@ -199,6 +199,23 @@ describe('ChunkArtifactBody', () => {
     expect(el.querySelector('[data-testid="artifact-bounce-raw"]')?.textContent).toBe(raw);
   });
 
+  it('renders the action a pass answered, and no step row, on an action envelope', async () => {
+    const raw = JSON.stringify({
+      cause: 'failure',
+      detail: 'acme/one did not land: `land` answered failure',
+      unlanded: [{ repo: 'acme/one', branch: 'feat/x', commit: 'a1', pr: null }],
+      step: null,
+      action: { name: 'land', choice: 'failure', log_artifact: 'hub-log.land' },
+    });
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', { ...ASSET, key: 'bounce-envelope', name: 'bounce-envelope', content: raw });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifact-bounce-action"]')?.textContent).toContain('land answered failure');
+    expect(el.querySelector('[data-testid="artifact-bounce-step"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifact-bounce-unlanded-0"]')?.textContent).toContain('acme/one');
+  });
+
   it('renders a bounce-envelope that does not validate verbatim', async () => {
     const raw = '{"cause":"poll-timeout","detail":"no verdict","step":{"name":"tests"}}';
     const fixture = TestBed.createComponent(ChunkArtifactBody);

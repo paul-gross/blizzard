@@ -12,8 +12,8 @@ Conventions for the `prompts/` tree are owned by the
 - **The `survey` session pool is named `sweep`.** Mint validation refuses a pool sharing a node's name — `resume:survey`
   would resolve to the session and never the node — and the plan named both the pool and the entry node `survey`. The
   policy is unchanged: `survey` on `fresh:sweep`, `reconcile` on `fresh:match`, `propose` on `resume:match`.
-- **`deliver` names its artifacts.** The plan invoked `garden_deliver` bare; the shipped `garden-deliver` action takes
-  the delivering artifact names, so the packaged node passes them `with: {delta: delta, proposals: docket}`.
+- **`deliver` names its artifacts.** The plan named the `garden-deliver` action bare; the shipped action takes the
+  delivering artifact names, so the packaged node passes them `with: {delta: delta, proposals: docket}`.
 - **`survey` also produces `delta`.** The `clean` choice routes `survey → deliver` with no `reconcile` in between, and
   delivery validates an artifact named `delta` — but a completion publishes only the names its node declares, so
   `survey` declares `delta` and every sweep publishes the empty skeleton carrying the run's scope, revisions, and

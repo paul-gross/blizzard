@@ -7,130 +7,21 @@ decision is reverted. Grouped by the module whose decision they pin.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
-from blizzard.hub.graphs.scripts import land_common, land_pr_ci
-from blizzard.hub.tenancy import TenantId
 from tests.github_double import GitHubDouble
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
-
-_TENANT = TenantId("ten_marker")
-
-# -- marker_auth: the authority is instance-scoped, never persisted -------------------
-
-
-@pytest.mark.unit
-def test_a_restarted_processs_fresh_authority_refuses_a_prior_instances_token() -> None:
-    """An orphaned land script — its owning hub process killed mid-land — presents a token
-    minted by a process that no longer exists. The restarted process's authority is empty,
-    so that write is refused rather than granted."""
-    killed = MarkerAuthority()
-    orphaned_token = killed.issue("ch_1", node_id="nd_1", epoch=1, tenant=_TENANT)
-
-    restarted = MarkerAuthority()
-
-    assert restarted.verify(orphaned_token, chunk_id="ch_1", node_id="nd_1", epoch=1) is None
-
-
-# -- land_pr_ci: the terminal-failure findings write is unguarded ---------------------
-
-_REPO = "acme/widget"
-_BRANCH = "feat/x"
-_COMMIT = "c" * 40
-_CALLBACK_URL = "http://callback/hub-markers"
-
-
-def _blocked_forge_with_a_terminal_check(calls: list[tuple[str, str, dict[str, Any] | None]], *, marker_status: int):
-    """A double whose one open PR reads ``blocked`` with a completed-failing check run, and
-    whose marker callback always answers ``marker_status``."""
-    base = f"http://forge/repos/{_REPO}"
-    check_run = {
-        "id": 1,
-        "name": "build",
-        "status": "completed",
-        "conclusion": "failure",
-        "details_url": "https://forge/build/1",
-        "head_sha": "headsha",
-    }
-    responses = {
-        ("GET", f"{base}/pulls?state=closed&base=main&page=1&per_page=100"): (200, []),
-        ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
-        ("GET", f"{base}/pulls/1"): (
-            200,
-            {
-                "number": 1,
-                "merged": False,
-                "mergeable_state": "blocked",
-                "head": {"ref": _BRANCH, "sha": "headsha"},
-                "html_url": f"http://forge/{_REPO}/pull/1",
-            },
-        ),
-        ("GET", f"{base}/commits/headsha/check-runs"): (200, {"total_count": 1, "check_runs": [check_run]}),
-        ("GET", f"{base}/commits/main/check-runs"): (200, {"total_count": 0, "check_runs": []}),
-    }
-
-    def fake(
-        method: str,
-        url: str,
-        *,
-        token: str | None,
-        body: dict[str, Any] | None,
-        headers: dict[str, str] | None = None,
-    ) -> tuple[int, Any]:
-        calls.append((method, url, body))
-        if url == _CALLBACK_URL:
-            return marker_status, {"message": "marker write failed"}
-        return responses[(method, url)]
-
-    return fake
-
-
-@pytest.mark.unit
-def test_a_terminal_failure_findings_write_failure_exits_non_zero_instead_of_routing_failure(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """The terminal-CI-failure findings write is deliberately unguarded: an unwritten
-    set of findings is the only signal a resolve worker has nothing to read, so it exits
-    non-zero rather than printing the `failure` edge over it."""
-    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
-    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
-    entry = {
-        "repo": _REPO,
-        "branch": _BRANCH,
-        "commit": _COMMIT,
-        "forge_url": "http://forge",
-        "owner": "acme",
-        "base_branch": "main",
-        "record": "widget",
-    }
-    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([entry]))
-    monkeypatch.setenv("BZ_FORGE_TOKENS", json.dumps({"widget": "tok"}))
-    monkeypatch.setenv("BZ_HUB_MARKER_CALLBACK_URL", _CALLBACK_URL)
-    monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", "test-marker-token")
-    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
-    monkeypatch.delenv("BZ_FORGE_OWNER", raising=False)
-    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
-    calls: list[tuple[str, str, dict[str, Any] | None]] = []
-    monkeypatch.setattr(land_common, "forge_request", _blocked_forge_with_a_terminal_check(calls, marker_status=500))
-
-    exit_code = land_pr_ci.main()
-
-    assert exit_code == 1
-    assert land_pr_ci._CI_FAILURE not in capsys.readouterr().out
-
 
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 

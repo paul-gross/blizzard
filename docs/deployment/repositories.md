@@ -85,12 +85,10 @@ saves. On a phone the page is read-only and names the `blizzard hub repo` comman
 
 ## How delivery uses a record
 
-A `deliver` step resolves each of its chunk's commit pointers to its own repository record before any command runs. Each
-commit's `repo` is qualified to the record's `owner/repo`, and its entry carries that record's target: `forge_url` from
-`forge_api_url`, `owner`, `base_branch`, and the `record` id. `BZ_FORGE_TOKENS` maps each record id to its secret,
-revealed once per distinct secret for that step. When every pointer's record agrees on forge, owner, base branch and
-secret, the step also gets the single-valued `BZ_FORGE_URL`, `BZ_FORGE_OWNER`, `BZ_HUB_BASE_BRANCH` and
-`BZ_FORGE_TOKEN`; when they differ, those four are unset and whether the mix is acceptable is the land script's call.
+A `deliver` step resolves each of its chunk's commit pointers to its own repository record before its action takes a
+pass. Each commit's `repo` is qualified to the record's `owner/repo`, and lands against that record's target: its
+`forge_api_url`, `owner` and `base_branch`. The `land` action reaches each repository through a forge handle built from
+its record and the record's secret, revealed once per distinct secret for that pass, so the secret never leaves the hub.
 
 A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
 `file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
@@ -109,9 +107,9 @@ Three outcomes refuse the step before it runs and route its failure choice; the 
 - `repository-secret-unavailable` — a record's secret is missing or retired; the log names the repository by slug.
   Replace or enable the secret.
 
-Records that differ on forge, owner, base branch or secret do not refuse the step. The shipped land scripts land each
-repository against its own record, and refuse two commit entries that share one `owner/repo`, such as the same name on
-two forge hosts, because they would share one `merged/<repo>` marker.
+Records that differ on forge, owner, base branch or secret do not refuse the step. The `land` action lands each
+repository against its own record and records each repository's landing, and the step refuses two commit entries that
+share one `owner/repo`, such as the same name on two forge hosts, because they would share one `merged/<repo>` marker.
 
 The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. A hub whose
 environment still sets `BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` refuses to start;

@@ -26,8 +26,8 @@ ciphertext is useless without it, and a lost key means every secret must be set 
 `BZ_HUB_SECRET_KEY` supplies the key, which then belongs in your own secret management.
 
 **Hub workdirs.** `data/hub_workdirs/` (`config.data_dir / "hub_workdirs"`) is deprecated: it held the scratch git
-clones a hub `run:` step used, and no hub step writes it any more. It carries no state the store lacks, so skip it, and
-delete it once the hub has moved.
+clones a hub `run:` step used, and nothing writes it any more. An existing directory carries no state the store lacks,
+so it is reclaimable: skip it, and delete it once the hub has moved.
 
 [`contracts/config/hub.json`](../contracts/config/README.md) lists these paths beside the config keys the hub reads; the
 merge gate fails when one moves without the document.

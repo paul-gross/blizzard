@@ -13,7 +13,6 @@ files:
   - src/blizzard/hub/**
 ignores:
   - src/blizzard/runner/process/**
-  - src/blizzard/hub/delivery/internal/hub_command_runner.py
   - src/blizzard/**/store/migrations/tests/**
 rule:
   any:
