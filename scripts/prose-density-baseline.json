@@ -3065,10 +3065,10 @@
    "total": 27
   },
   "blizzard/hub/delivery/actions/land.py": {
-   "comments": 29,
+   "comments": 30,
    "docstrings": 58,
    "over_cap": 0,
-   "total": 649
+   "total": 650
   },
   "blizzard/hub/delivery/actions/land_checks.py": {
    "comments": 15,
@@ -3107,10 +3107,10 @@
    "total": 71
   },
   "blizzard/hub/delivery/hub_node.py": {
-   "comments": 42,
-   "docstrings": 75,
+   "comments": 41,
+   "docstrings": 76,
    "over_cap": 2,
-   "total": 1123
+   "total": 1120
   },
   "blizzard/hub/delivery/internal/__init__.py": {
    "comments": 0,
@@ -10103,10 +10103,10 @@
    "total": 17
   },
   "blizzard/wire/bounce.py": {
-   "comments": 0,
-   "docstrings": 10,
+   "comments": 1,
+   "docstrings": 13,
    "over_cap": 0,
-   "total": 44
+   "total": 56
   },
   "blizzard/wire/chunk.py": {
    "comments": 70,
@@ -10130,7 +10130,7 @@
    "comments": 0,
    "docstrings": 7,
    "over_cap": 0,
-   "total": 132
+   "total": 133
   },
   "blizzard/wire/config.py": {
    "comments": 5,
@@ -11617,10 +11617,10 @@
    "total": 332
   },
   "test_bounce_envelope_wire.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 45
+   "total": 71
   },
   "test_change_notes.py": {
    "comments": 0,
@@ -12346,7 +12346,7 @@
    "comments": 7,
    "docstrings": 16,
    "over_cap": 0,
-   "total": 258
+   "total": 262
   },
   "test_delivery_incomplete_routing.py": {
    "comments": 4,
@@ -13558,7 +13558,7 @@
    "comments": 51,
    "docstrings": 95,
    "over_cap": 0,
-   "total": 1675
+   "total": 1676
   },
   "test_hub_command_runner.py": {
    "comments": 0,
@@ -13906,7 +13906,7 @@
    "comments": 10,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 806
+   "total": 832
   },
   "test_land_common.py": {
    "comments": 18,
@@ -14548,7 +14548,7 @@
    "comments": 2,
    "docstrings": 20,
    "over_cap": 0,
-   "total": 449
+   "total": 459
   },
   "test_repo_files.py": {
    "comments": 1,
@@ -16876,7 +16876,7 @@
    "comments": 2,
    "docstrings": 7,
    "over_cap": 1,
-   "total": 110
+   "total": 112
   },
   "test_wire_sent_is_required.py": {
    "comments": 1,

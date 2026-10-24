@@ -132,28 +132,20 @@ REFUSAL_EVENT: Mapping[RepositoryOutcome, EventLogKind | None] = {
     RepositoryOutcome.UNRESOLVED: "repository-unresolved",
     RepositoryOutcome.NOT_LINKED: "repository-not-linked",
 }
-# Bound on the step output a bounce envelope carries; the full text is the `hub-log.<step>` asset.
-BOUNCE_OUTPUT_TAIL_CHARS = 2000
 
 
 @domain_model
 @dataclass(frozen=True)
-class FailedStep:
-    """The ``run:`` step a delivery bounce is attributed to — only ever one that exited non-zero:
-    what ran, how it exited, and where its full log lives."""
+class BouncedAction:
+    """The hub action whose pass answered the choice a delivery bounce routed, and the ``hub-log.<action>`` asset
+    holding its log — ``None`` when the pass logged nothing."""
 
     name: str
-    exit_code: int
-    output: str
-    log_key: str
+    choice: str
+    log_artifact: str | None
 
     def payload(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "exit_code": self.exit_code,
-            "output_tail": self.output[-BOUNCE_OUTPUT_TAIL_CHARS:],
-            "log_artifact": self.log_key,
-        }
+        return {"name": self.name, "choice": self.choice, "log_artifact": self.log_artifact}
 
 
 @domain_model
@@ -164,7 +156,7 @@ class BounceEnvelope:
     cause: str
     detail: str
     unlanded: list[dict[str, object]]
-    step: FailedStep | None
+    action: BouncedAction | None
 
     @classmethod
     def of(
@@ -174,7 +166,7 @@ class BounceEnvelope:
         summary: str,
         commits: list[dict[str, str]],
         sources: DeliverySources,
-        step: FailedStep | None,
+        action: BouncedAction | None,
     ) -> BounceEnvelope:
         landed = LandedRepos.of(sources.markers).names
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
@@ -197,11 +189,11 @@ class BounceEnvelope:
             f"PR #{pr['number']} in {u['repo']}" if isinstance(pr := u["pr"], dict) else str(u["repo"])
             for u in unlanded
         )
-        if step is None:
+        if action is None:
             detail = f"{summary} (not landed: {names})" if names else summary
         else:
-            detail = f"{names or summary} did not land: `{step.name}` exited {step.exit_code}"
-        return cls(cause=cause, detail=detail, unlanded=unlanded, step=step)
+            detail = f"{names or summary} did not land: `{action.name}` answered {action.choice}"
+        return cls(cause=cause, detail=detail, unlanded=unlanded, action=action)
 
     def serialize(self) -> str:
         return json.dumps(
@@ -209,7 +201,8 @@ class BounceEnvelope:
                 "cause": self.cause,
                 "detail": self.detail,
                 "unlanded": self.unlanded,
-                "step": self.step.payload() if self.step else None,
+                "step": None,
+                "action": self.action.payload() if self.action else None,
             },
             ensure_ascii=False,
         )
@@ -662,7 +655,7 @@ class HubNodeExecutor:
             )
             answer = self._answer(chunk, node, spec, run, epoch=epoch)
             annotate({ACTION_CHOICE: answer.choice or ""})
-        self._record_pass_log(chunk, node, action_name, answer, epoch=epoch)
+        log_artifact = self._record_pass_log(chunk, node, action_name, answer, epoch=epoch)
         if answer.escalation is not None:
             return self._escalate(chunk, answer.escalation, epoch=epoch)
         if answer.waits():
@@ -670,9 +663,9 @@ class HubNodeExecutor:
         commits = [
             {k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution.targets)
         ]
-        return self._route(
-            chunk, graph, node, epoch=epoch, choice=answer.choice or HUB_DEFAULT_FAILURE_CHOICE, commits=commits
-        )
+        choice = answer.choice or HUB_DEFAULT_FAILURE_CHOICE
+        bounced = BouncedAction(name=action_name, choice=choice, log_artifact=log_artifact)
+        return self._route(chunk, graph, node, epoch=epoch, choice=choice, commits=commits, action=bounced)
 
     def _answer(self, chunk: Chunk, node: Node, spec: ActionSpec, run: PassRun, *, epoch: int) -> Pass:
         """What a pass that ended as ``run`` answers: its own answer; an overrun waits where the action can
@@ -699,20 +692,23 @@ class HubNodeExecutor:
             at=self._clock.now(),
         )
 
-    def _record_pass_log(self, chunk: Chunk, node: Node, action_name: str, answer: Pass, *, epoch: int) -> None:
-        """The pass's log lines as its ``hub-log.<action>`` artifact, when it has any."""
+    def _record_pass_log(self, chunk: Chunk, node: Node, action_name: str, answer: Pass, *, epoch: int) -> str | None:
+        """The pass's log lines as its ``hub-log.<action>`` artifact, when it has any; the artifact's name, or
+        ``None`` when the pass logged nothing."""
         if not answer.log:
-            return
+            return None
+        name = f"{_HUB_LOG_PREFIX}{action_name}"
         self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
-            name=f"{_HUB_LOG_PREFIX}{action_name}",
+            name=name,
             content="\n".join(answer.log) + "\n",
             at=self._clock.now(),
         )
+        return name
 
     def _escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int) -> HubRunResult:
         """An escalation the hub authors, routing nothing."""
@@ -914,7 +910,7 @@ class HubNodeExecutor:
             summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{_PENDING}`",
             commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified)],
             sources=self._delivery_sources(chunk),
-            step=None,
+            action=None,
         ).serialize()
         self._escalations.record_bounce(chunk.chunk_id, epoch=hub_epoch, cause=cause, envelope=envelope_payload, at=now)
 
@@ -966,6 +962,7 @@ class HubNodeExecutor:
         choice: str,
         extra_artifacts: list[StoredArtifact] | None = None,
         commits: list[dict[str, str]] | None = None,
+        action: BouncedAction | None = None,
     ) -> HubRunResult:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
@@ -1030,7 +1027,7 @@ class HubNodeExecutor:
                     summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
                     commits=commits,
                     sources=self._delivery_sources(chunk),
-                    step=None,
+                    action=action,
                 ).serialize()
                 self._escalations.record_bounce(
                     chunk.chunk_id, epoch=hub_epoch, cause=choice, envelope=envelope_payload, at=now

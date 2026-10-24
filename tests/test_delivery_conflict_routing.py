@@ -181,7 +181,7 @@ def _envelope(hub: HubHarness, chunk_id: str) -> dict:
     return json.loads(bounce["envelope"])
 
 
-def test_a_red_check_envelope_names_the_unlanded_repo_and_its_pr_and_no_step(tmp_path: Path) -> None:
+def test_a_red_check_envelope_names_the_unlanded_repo_its_pr_and_the_land_action(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, forge_handles=_forge(checks={_COMMIT: RED}).handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
@@ -195,7 +195,10 @@ def test_a_red_check_envelope_names_the_unlanded_repo_and_its_pr_and_no_step(tmp
     assert envelope["unlanded"][0]["commit"] == _COMMIT
     assert envelope["unlanded"][0]["pr"] == {"number": 1, "url": "https://github.example/acme/widget/pull/1"}
     assert envelope["step"] is None
-    assert envelope["detail"].endswith("(not landed: PR #1 in acme/widget)")
+    assert envelope["action"] == {"name": "land", "choice": "failure", "log_artifact": "hub-log.land"}
+    assert envelope["detail"] == "PR #1 in acme/widget did not land: `land` answered failure"
+    artifact_names = {a["name"] for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]}
+    assert "hub-log.land" in artifact_names
 
 
 def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) -> None:
@@ -215,7 +218,7 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) ->
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
     assert envelope["unlanded"][0]["pr"] == {"number": 945, "url": "https://x/acme/widget/pull/945"}
-    assert envelope["detail"].endswith("(not landed: PR #945 in acme/widget)")
+    assert envelope["detail"].startswith("PR #945 in acme/widget did not land: `land` answered ")
     assert [repo for repo, _ in double.named("open_pull")] == []
 
 
@@ -228,6 +231,7 @@ def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_pat
 
     envelope = _envelope(hub, chunk_id)
     assert envelope["step"] is None
+    assert envelope["action"]["choice"] == "conflict"
     assert "conflict" in envelope["detail"] and "acme/widget" in envelope["detail"]
     assert "exited" not in envelope["detail"]
 

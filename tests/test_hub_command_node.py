@@ -1433,6 +1433,7 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert "poll_timeout" in envelope["detail"]
     assert envelope["unlanded"] == []
     assert envelope["step"] is None
+    assert envelope["action"] is None
 
 
 @pytest.mark.component

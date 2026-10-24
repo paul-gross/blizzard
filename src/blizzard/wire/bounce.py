@@ -5,7 +5,9 @@ artifact off the generated client rather than restating the keys."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from blizzard.wire.base import WireModel
 
 
 class BouncePullRequest(BaseModel):
@@ -25,8 +27,8 @@ class BounceUnlandedRepo(BaseModel):
 
 
 class BounceFailedStep(BaseModel):
-    """The ``run:`` step the bounce is attributed to — one that exited non-zero. ``output_tail`` is bounded;
-    ``log_artifact`` names the asset holding the full log."""
+    """The ``run:`` step an envelope recorded before hub steps stopped running commands — one that exited non-zero.
+    ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log."""
 
     name: str
     exit_code: int
@@ -34,11 +36,23 @@ class BounceFailedStep(BaseModel):
     log_artifact: str
 
 
-class BounceEnvelope(BaseModel):
+class BounceAction(BaseModel):
+    """The hub action whose pass answered the ``choice`` the bounce routed; ``log_artifact`` names its
+    ``hub-log.<action>`` asset, ``null`` when the pass logged nothing."""
+
+    name: str
+    choice: str
+    log_artifact: str | None
+
+
+class BounceEnvelope(WireModel):
     """Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
-    failed ``step`` when a ``run:`` step caused the bounce."""
+    ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout. ``step`` is
+    written ``null``; only an envelope stored before hub steps stopped running commands carries one."""
 
     cause: str
     detail: str
     unlanded: list[BounceUnlandedRepo]
-    step: BounceFailedStep | None
+    step: BounceFailedStep | None = Field(deprecated=True)
+    # Defaulted: an envelope stored before the hub named the action carries none, and parses as ``null``.
+    action: BounceAction | None = None
