@@ -1,7 +1,8 @@
 """The upgrade an operator performs, rehearsed: a supported release's hub and runner host, seeded, upgraded hub first.
 
 Each leg is one baseline on one hub backend. The baseline hub is upgraded and its old runner keeps landing work,
-then the runner is upgraded; both stores then walk down to the baseline and forward again. Reproduce with
+then the runner is upgraded; both stores then walk down to the baseline, where the baseline hub runs a chunk on the
+version the candidate carried onto an action, and forward again. Reproduce with
 ``mise run rehearsal``; the inputs are this module's ``BLIZZARD_REHEARSAL_*`` variables."""
 
 from __future__ import annotations
@@ -306,6 +307,12 @@ class _Rehearsal:
                 raise self._fail(
                     step, f"chunk {chunk_id} landed before the walk reads back as {detail.get('status')!r}"
                 )
+        # The version the candidate carried onto `land` walks back to its `run:`, which the baseline runs again.
+        carried = self._ingest(client, "the baseline hub on the walked-back version")
+        pinned = client.get(f"/api/chunks/{carried}").json().get("graph_id")
+        if pinned != self.graph_id:
+            raise self._fail(step, f"chunk {carried} pinned {pinned!r}, not the carried version {self.graph_id!r}")
+        self._await_landed(client, carried, step)
 
         step = "walk forward"
         self.hub.stop()
@@ -331,6 +338,7 @@ class _Rehearsal:
             assert client.put(f"/api/projects/{_PROJECT}/repository-links/{repository['slug']}").status_code == 200
         minted = client.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
         assert minted.status_code == 201, minted.text
+        self.graph_id = minted.json()["graph_id"]
 
     def _ingest(self, client: httpx2.Client, title: str) -> str:
         issue = self.forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": title})

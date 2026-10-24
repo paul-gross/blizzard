@@ -20,6 +20,7 @@ pytestmark = pytest.mark.unit
 #: ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(
     {
+        "e2e/test_run_carry_over_e2e.py",
         "rehearsal/test_upgrade_rehearsal.py",
         "test_legacy_run.py",
     }
