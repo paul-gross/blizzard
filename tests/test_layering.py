@@ -2497,10 +2497,42 @@ def _os_misuses(path: Path, src_root: Path) -> list[str]:
     return found
 
 
-def _hub_action_purity_violations(actions_dir: Path, src_root: Path) -> list[str]:
+def _reached_violations(
+    reached: list[str], module_root: Path, refused: tuple[str, ...], *, os_misuse: bool, process_calls: bool = False
+) -> list[str]:
+    """Walk every blizzard module ``reached`` names — and each it imports in turn, through its parent packages — under
+    ``module_root``, naming each import of a ``refused`` module, and, with ``os_misuse``, any use of ``os`` but
+    ``os.urandom``, and with ``process_calls``, any ``asyncio`` process call."""
+    violations: list[str] = []
+    seen: set[Path] = set()
+    while reached:
+        module = reached.pop()
+        # A package's own `__init__` loads before any of its modules does.
+        parts = module.split(".")
+        for depth in range(1, len(parts) + 1):
+            path = _module_path(".".join(parts[:depth]), module_root)
+            if path is None or path in seen:
+                continue
+            seen.add(path)
+            for line, imported, name in _action_imports(path, module_root):
+                if _within(imported, refused) or (name is not None and _within(f"{imported}.{name}", refused)):
+                    violations.append(
+                        f"{path.relative_to(module_root)}:{line} imports {imported}, reached by an action"
+                    )
+                elif imported.startswith("blizzard."):
+                    reached += [imported, f"{imported}.{name}"] if name is not None else [imported]
+            if os_misuse:
+                violations += _os_misuses(path, module_root)
+            if process_calls:
+                violations += _asyncio_process_calls(path, module_root)
+    return violations
+
+
+def _hub_action_purity_violations(actions_dir: Path, src_root: Path, module_root: Path | None = None) -> list[str]:
     """``bzh:hub-action-purity``'s import gate over ``actions_dir``: every import on the allowlist, no refused
     ``asyncio`` attribute, and no blizzard module the actions reach — directly or through another — importing a
-    module that reaches a process or the network, or using any of ``os`` but ``os.urandom``."""
+    module that reaches a process or the network, or using any of ``os`` but ``os.urandom``. The blizzard modules
+    resolve under ``module_root``, ``src_root`` unless the actions live outside it."""
     violations: list[str] = []
     reached: list[str] = []
     for path in _production_files(actions_dir):
@@ -2518,24 +2550,50 @@ def _hub_action_purity_violations(actions_dir: Path, src_root: Path) -> list[str
             and node.value.id == "asyncio"
             and node.attr in _ACTION_REFUSED_ASYNCIO
         ]
-    seen: set[Path] = set()
-    while reached:
-        module = reached.pop()
-        # A package's own `__init__` loads before any of its modules does.
-        parts = module.split(".")
-        for depth in range(1, len(parts) + 1):
-            path = _module_path(".".join(parts[:depth]), src_root)
-            if path is None or path in seen:
-                continue
-            seen.add(path)
-            for line, imported, name in _action_imports(path, src_root):
-                if _within(imported, _ACTION_TRANSITIVE_REFUSED) or (
-                    name is not None and _within(f"{imported}.{name}", _ACTION_TRANSITIVE_REFUSED)
-                ):
-                    violations.append(f"{path.relative_to(src_root)}:{line} imports {imported}, reached by an action")
-                elif imported.startswith("blizzard."):
-                    reached += [imported, f"{imported}.{name}"] if name is not None else [imported]
-            violations += _os_misuses(path, src_root)
+    violations += _reached_violations(reached, module_root or src_root, _ACTION_TRANSITIVE_REFUSED, os_misuse=True)
+    return sorted(set(violations))
+
+
+#: What no module under ``hub/delivery/`` reaches, directly or through another blizzard module: a child process.
+_DELIVERY_REFUSED = ("subprocess",)
+_DELIVERY_REFUSED_ASYNCIO = frozenset({"subprocess", "create_subprocess_exec", "create_subprocess_shell"})
+
+
+def _asyncio_process_calls(path: Path, src_root: Path) -> list[str]:
+    """Each ``asyncio`` process call ``path`` takes by name or reaches as an attribute."""
+    rel = path.relative_to(src_root)
+    found = [
+        f"{rel}:{line} takes asyncio.{name}"
+        for line, module, name in _action_imports(path, src_root)
+        if module == "asyncio" and name in _DELIVERY_REFUSED_ASYNCIO
+    ]
+    found += [
+        f"{rel}:{node.lineno} reaches asyncio.{node.attr}"
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path)))
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "asyncio"
+        and node.attr in _DELIVERY_REFUSED_ASYNCIO
+    ]
+    return found
+
+
+def _hub_delivery_process_violations(delivery_dir: Path, src_root: Path) -> list[str]:
+    """``bzh:runner-child-launch``'s transitive half over ``delivery_dir``: no module there, nor any blizzard module
+    it reaches, imports ``subprocess`` or takes an ``asyncio`` process call."""
+    violations: list[str] = []
+    reached: list[str] = []
+    for path in _production_files(delivery_dir):
+        rel = path.relative_to(src_root)
+        for line, module, name in _action_imports(path, src_root):
+            if _within(module, _DELIVERY_REFUSED) or (
+                name is not None and _within(f"{module}.{name}", _DELIVERY_REFUSED)
+            ):
+                violations.append(f"{rel}:{line} imports {module}")
+            elif module.startswith("blizzard."):
+                reached += [module, f"{module}.{name}"] if name is not None else [module]
+        violations += _asyncio_process_calls(path, src_root)
+    violations += _reached_violations(reached, src_root, _DELIVERY_REFUSED, os_misuse=False, process_calls=True)
     return sorted(set(violations))
 
 
@@ -2605,6 +2663,67 @@ def test_the_hub_action_purity_gate_follows_an_allowlisted_module_through_anothe
         },
     )
     assert violations == ["blizzard/hub/domain/helper.py:1 imports socket, reached by an action"]
+
+
+#: The exemplar action package, held to the same purity gate as ``src/``'s (``bzh:exemplar-conformance``).
+_EXEMPLAR_ACTIONS_DIR = _REPO_ROOT / "exemplars" / "python" / "exemplar" / "hub" / "delivery" / "actions"
+
+
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="walks into the actions package, whose modules mutmut rewrites to import its generated trampoline names",
+)
+def test_the_exemplar_actions_import_only_their_allowlist() -> None:
+    assert _production_files(_EXEMPLAR_ACTIONS_DIR), "the exemplar action package holds no module"
+    violations = _hub_action_purity_violations(_EXEMPLAR_ACTIONS_DIR, _EXEMPLAR_ACTIONS_DIR.parents[3], _SRC_DIR.parent)
+    assert not violations, f"an exemplar hub action may import only its allowlist (bzh:hub-action-purity): {violations}"
+
+
+@pytest.mark.skipif(
+    "MUTANT_UNDER_TEST" in os.environ,
+    reason="walks the delivery package, whose modules mutmut rewrites to import its generated trampoline names",
+)
+def test_nothing_under_hub_delivery_reaches_a_child_process() -> None:
+    violations = _hub_delivery_process_violations(_HUB_DIR / "delivery", _SRC_DIR.parent)
+    assert not violations, f"the hub launches no child process (bzh:runner-child-launch): {violations}"
+
+
+def _plant_delivery(tmp_path: Path, files: Mapping[str, str]) -> list[str]:
+    """A blizzard tree holding one clean delivery module that reaches a domain module, with ``files`` laid over it."""
+    root = tmp_path / "src"
+    for rel, text in {
+        "blizzard/__init__.py": "",
+        "blizzard/hub/__init__.py": "",
+        "blizzard/hub/domain/__init__.py": "",
+        "blizzard/hub/domain/model.py": "import json\n\nX = json\n",
+        "blizzard/hub/delivery/__init__.py": "",
+        "blizzard/hub/delivery/executor.py": "from blizzard.hub.domain.model import X\n",
+        **files,
+    }.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    return _hub_delivery_process_violations(root / "blizzard" / "hub" / "delivery", root)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text", "caught"),
+    [
+        ("blizzard/hub/delivery/runner.py", "import subprocess", True),
+        ("blizzard/hub/delivery/internal/runner.py", "from subprocess import run", True),
+        ("blizzard/hub/delivery/runner.py", "import asyncio\n\nasyncio.create_subprocess_exec('true')", True),
+        ("blizzard/hub/delivery/runner.py", "from asyncio import create_subprocess_shell", True),
+        ("blizzard/hub/domain/model.py", "import subprocess", True),
+        ("blizzard/hub/domain/model.py", "import asyncio\n\nasyncio.create_subprocess_shell('true')", True),
+        ("blizzard/hub/domain/__init__.py", "from subprocess import PIPE", True),
+        ("blizzard/hub/delivery/runner.py", "import asyncio\n\nasyncio.sleep(0)", False),
+        ("blizzard/hub/elsewhere.py", "import subprocess", False),
+    ],
+)
+def test_the_delivery_process_gate_judges_each_planted_module(
+    tmp_path: Path, rel: str, text: str, caught: bool
+) -> None:
+    violations = _plant_delivery(tmp_path, {rel: f"{text}\n"})
+    assert bool(violations) is caught, violations
 
 
 @pytest.mark.parametrize(

@@ -25,17 +25,12 @@ from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
-    ENV_CHUNK_URL,
-    ENV_MARKER_TOKEN,
-    ENV_WORK_ITEMS,
-    HubEnv,
     PollPolicy,
 )
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
-from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError, Visit
+from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError, Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
-    Chunk,
     ChunkFacts,
     HubNodePollFact,
     TransitionFact,
@@ -44,7 +39,6 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
@@ -406,62 +400,6 @@ def _yaml_nodes() -> dict:
     return yaml.safe_load(_HUB_CMD_GRAPH_YAML)["nodes"]
 
 
-def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> None:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    artifact = StoredArtifact(
-        kind=ArtifactKind.GIT_COMMIT,
-        name="work",
-        data="blizzard/ch-x:abc123",
-        repo="acme/widget",
-        forge="https://github.com/acme/widget",
-        artifact_id="art_1",
-        chunk_id="ch_x",
-        node_id="nd_build",
-        node_name="build",
-        epoch=1,
-    )
-    env = HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=1,
-        artifacts=[artifact],
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        resolution=RepositoryResolution(
-            RepositoryOutcome.RESOLVED,
-            targets=(
-                ResolvedRepository(
-                    forge_api_url="http://forge",
-                    owner="acme",
-                    base_branch="main",
-                    secret_name="forge-token",
-                    record="repo_widget",
-                    slug="widget",
-                ),
-            ),
-            qualified=("acme/widget",),
-            records=("repo_widget",),
-        ),
-        forge_tokens={"repo_widget": "tok"},
-    ).vars
-    assert env["BZ_HUB_CHUNK_ID"] == "ch_x"
-    assert env["BZ_HUB_WORKDIR"] == "/tmp/ch_x"
-    assert env["BZ_HUB_NODE_NAME"] == "merge"
-    assert env["BZ_HUB_EPOCH"] == "1"
-    assert env["BZ_HUB_BASE_BRANCH"] == "main"
-    assert "acme/widget" in env["BZ_HUB_GIT_COMMITS"]
-    assert env["BZ_HUB_MARKER_CALLBACK_URL"] == "http://hub/api/chunks/ch_x/hub-markers"
-    assert env["BZ_FORGE_URL"] == "http://forge"
-    assert env["BZ_FORGE_TOKEN"] == "tok"
-    assert json.loads(env["BZ_FORGE_TOKENS"]) == {"repo_widget": "tok"}
-    assert "BZ_HUB_FEATURE_TITLE" not in env  # no feature_title given
-    # Structurally agentless (`bzh:deterministic-shell`) — no key here ever names a
-    # model/agent credential.
-    forbidden = {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "BZ_MODEL", "BZ_MODEL_API_KEY"}
-    assert not forbidden & env.keys()
-
-
 def _commit_row(
     *,
     node_name: str,
@@ -489,34 +427,22 @@ def _commit_row(
     )
 
 
-def _commits_in(env: dict[str, str]) -> list[dict[str, str]]:
-    return cast(list[dict[str, str]], json.loads(env["BZ_HUB_GIT_COMMITS"]))
-
-
-def _env_with(artifacts: list[StoredArtifact]) -> dict[str, str]:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    return HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=9,
-        artifacts=artifacts,
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-    ).vars
+def _delivered(artifacts: list[StoredArtifact]) -> list[dict[str, str | None]]:
+    """The commits a visit over ``artifacts`` delivers, one per repository."""
+    return GitCommits.of(artifacts).payload()
 
 
 def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> None:
     """The pre-push wedge (#130): a rebase REWRITES the branch, so `build`'s orphaned
     commit can never fast-forward. Delivery must see ONLY the rebased tip — keyed per
     ``(node_name, name)``, the later declaration wins."""
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40),
             _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
         ]
     )
-    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
+    assert commits == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
 
 
 def test_declaration_order_never_decides_which_commit_delivers() -> None:
@@ -525,97 +451,20 @@ def test_declaration_order_never_decides_which_commit_delivers() -> None:
         _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
         _commit_row(node_name="build", epoch=2, commit="a" * 40),
     ]
-    assert _commits_in(_env_with(rows)) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
+    assert _delivered(rows) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
 
 
 def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
     """Collapsing is per repo, so a chunk spanning repos still delivers all of them."""
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40, repo="acme/widget"),
             _commit_row(node_name="build", epoch=2, commit="c" * 40, repo="acme/gadget"),
             _commit_row(node_name="pre-push", epoch=7, commit="b" * 40, repo="acme/widget"),
         ]
     )
-    by_repo = {c["repo"]: c["commit"] for c in _commits_in(env)}
+    by_repo = {c["repo"]: c["commit"] for c in commits}
     assert by_repo == {"acme/widget": "b" * 40, "acme/gadget": "c" * 40}
-
-
-def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
-    """When `marker_token` is empty, the built env omits `BZ_HUB_MARKER_TOKEN`,
-    mirroring every other optional env var's only-when-non-empty
-    convention."""
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    env = HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=1,
-        artifacts=[],
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        marker_token="",
-    ).vars
-    assert ENV_MARKER_TOKEN not in env
-
-
-def test_build_hub_env_carries_the_feature_title_when_given() -> None:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    env = HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=1,
-        artifacts=[],
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        feature_title="Add rate limiting to the widget API",
-    ).vars
-    assert env["BZ_HUB_FEATURE_TITLE"] == "Add rate limiting to the widget API"
-
-
-def test_build_hub_env_links_the_board_only_from_a_declared_public_url() -> None:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-
-    def env_for(public_url: str | None) -> dict[str, str]:
-        return HubEnv(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=[],
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-            public_url=public_url,
-        ).vars
-
-    assert env_for("https://blizzard.example.com")[ENV_CHUNK_URL] == "https://blizzard.example.com/board/chunk/ch_x"
-    assert ENV_CHUNK_URL not in env_for(None)
-    assert json.loads(env_for(None)[ENV_WORK_ITEMS]) == []
-
-
-def test_build_hub_env_takes_the_board_url_from_the_shared_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "blizzard.hub.delivery.hub_node.board_chunk_url",
-        lambda public_url, chunk_id: f"via-helper:{public_url}:{chunk_id}",
-    )
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-
-    env = HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=1,
-        artifacts=[],
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        public_url="https://blizzard.example.com",
-    ).vars
-
-    assert env[ENV_CHUNK_URL] == "via-helper:https://blizzard.example.com:ch_x"
-
-
-# Component — the executor taking passes over a real hub store
 
 
 def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML, tokens=None):  # type: ignore[no-untyped-def]
@@ -1500,25 +1349,25 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
 def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:
     """The rebase case the per-repo key exists for: pre-push rewrites build's branch, so
     the later declaration replaces it rather than delivery being handed both."""
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(node_name="build", epoch=1, commit="a" * 40),
             _commit_row(node_name="pre-push", epoch=3, commit="b" * 40),
         ]
     )
 
-    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
+    assert commits == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
 
 
 def test_an_identical_re_declaration_at_one_epoch_is_a_correction_not_a_conflict() -> None:
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(node_name="build", epoch=2, commit="a" * 40),
             _commit_row(node_name="build", epoch=2, commit="a" * 40),
         ]
     )
 
-    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]
+    assert commits == [{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]
 
 
 def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
@@ -1526,7 +1375,7 @@ def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
     whichever came last would deliver a fraction of the work and call it a landing, so
     it is refused, not tie-broken. Convergence belongs to pre-push."""
     with pytest.raises(UnconvergedDeliveryError) as exc:
-        _env_with(
+        _delivered(
             [
                 _commit_row(node_name="build", epoch=2, commit="a" * 40, branch="feat/from-e1"),
                 _commit_row(node_name="build", epoch=2, commit="b" * 40, branch="feat/from-e2"),
@@ -1541,21 +1390,21 @@ def test_delivery_addresses_a_repo_by_the_owner_its_own_origin_names() -> None:
     """Two repos under two owners in one chunk: each is addressed by the coordinate its
     own origin encodes, rather than both being re-qualified with one workspace-wide
     owner — which could only ever be right for one of them."""
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(node_name="build", epoch=1, commit="a" * 40, repo="acme/widget"),
             _commit_row(node_name="build", epoch=1, commit="b" * 40, repo="other-org/gadget"),
         ]
     )
 
-    assert {c["repo"] for c in _commits_in(env)} == {"acme/widget", "other-org/gadget"}
+    assert {c["repo"] for c in commits} == {"acme/widget", "other-org/gadget"}
 
 
 def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner() -> None:
     """The verification forge fronts flat bare origins that resolve under any owner, so
     an unqualifiable origin must leave the bare name rather than inventing a
     coordinate."""
-    env = _env_with(
+    commits = _delivered(
         [
             _commit_row(
                 node_name="build",
@@ -1567,14 +1416,14 @@ def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner(
         ]
     )
 
-    assert _commits_in(env) == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]
+    assert commits == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]
 
 
 def test_the_same_name_under_two_owners_stays_two_repositories() -> None:
     """Production rows carry the bare manifest name in ``repo`` and the origin in ``forge``;
     identity is read from the origin, so neither owner's pointer merges into or supersedes
     the other's — at one epoch or across epochs."""
-    at_one_epoch = _env_with(
+    at_one_epoch = _delivered(
         [
             _commit_row(
                 node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="https://github.com/owner-a/widget"
@@ -1584,7 +1433,7 @@ def test_the_same_name_under_two_owners_stays_two_repositories() -> None:
             ),
         ]
     )
-    across_epochs = _env_with(
+    across_epochs = _delivered(
         [
             _commit_row(
                 node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="https://github.com/owner-a/widget"
@@ -1595,13 +1444,13 @@ def test_the_same_name_under_two_owners_stays_two_repositories() -> None:
         ]
     )
 
-    assert {c["repo"] for c in _commits_in(at_one_epoch)} == {"owner-a/widget", "owner-b/widget"}
-    assert {c["repo"] for c in _commits_in(across_epochs)} == {"owner-a/widget", "owner-b/widget"}
+    assert {c["repo"] for c in at_one_epoch} == {"owner-a/widget", "owner-b/widget"}
+    assert {c["repo"] for c in across_epochs} == {"owner-a/widget", "owner-b/widget"}
 
 
 def test_one_identity_declared_twice_with_different_commits_refuses_to_deliver() -> None:
     with pytest.raises(UnconvergedDeliveryError) as exc:
-        _env_with(
+        _delivered(
             [
                 _commit_row(
                     node_name="build", epoch=1, commit="a" * 40, repo="widget", forge="git@github.com:acme/widget.git"
@@ -1624,25 +1473,6 @@ def test_declares_git_commit_reads_the_graphs_own_intent() -> None:
     declares = graph.declares_git_commit
 
     assert declares is any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
-
-
-def test_the_env_carries_the_graphs_git_commit_expectation() -> None:
-    assert _env_for_expectation(expects=True)["BZ_HUB_EXPECT_GIT_COMMITS"] == "1"
-    assert _env_for_expectation(expects=False)["BZ_HUB_EXPECT_GIT_COMMITS"] == "0"
-
-
-def _env_for_expectation(*, expects: bool) -> dict[str, str]:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    return HubEnv(
-        chunk=chunk,
-        node=merge_node,
-        workdir="/tmp/ch_x",
-        epoch=1,
-        artifacts=[],
-        marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        expects_git_commits=expects,
-    ).vars
 
 
 @pytest.mark.component

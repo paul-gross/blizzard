@@ -2,8 +2,7 @@
 
 Builds the store-backed ``host`` composition with the work-item read seam replaced by
 :class:`FakeWorkSource` (``bzh:pluggable-seams``) and a clock the test can advance
-(``bzh:injected-clock``). A deliver hub node's script talks HTTP directly, so arm
-:class:`FakeHubCommandRunner`."""
+(``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
@@ -69,10 +68,8 @@ from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, Hub
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
-from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.forge_handle import ForgeHandleFactory
 from blizzard.hub.delivery.internal.github_handle import GitHubHandle
-from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -475,31 +472,6 @@ def make_graph(
     )
 
 
-class FakeHubCommandRunner:
-    """An in-process :class:`IHubCommandRunner` — scripted results by command, in order.
-
-    ``script`` queues :class:`CommandResult`\\ s per command (popped in order, repeating
-    the last once exhausted); ``calls`` records every invocation for assertion."""
-
-    def __init__(self, *, default: CommandResult | None = None) -> None:
-        self.script: dict[str, list[CommandResult]] = {}
-        self.calls: list[tuple[str, str, dict[str, str]]] = []
-        self.default = default or CommandResult(exit_code=0, stdout="", stderr="")
-        self.before_run: Callable[[str], None] | None = None
-
-    def arm(self, command: str, *results: CommandResult) -> None:
-        self.script.setdefault(command, []).extend(results)
-
-    def run(self, *, command: str, cwd: str, env: dict[str, str]) -> CommandResult:
-        self.calls.append((command, cwd, env))
-        if self.before_run is not None:
-            self.before_run(command)
-        queue = self.script.get(command)
-        if queue:
-            return queue.pop(0) if len(queue) > 1 else queue[0]
-        return self.default
-
-
 class InMemoryTraceExporter:
     """An in-process :class:`ITraceExporter` — records each batch it accepts.
 
@@ -524,34 +496,6 @@ class InMemoryTraceExporter:
     @property
     def spans(self) -> list[FinishedSpan]:
         return [span for batch in self.batches for span in batch]
-
-
-class FakeHubWorkdir:
-    """An in-process :class:`IHubWorkdir` — a plain in-memory chunk-id -> path map."""
-
-    def __init__(self) -> None:
-        self.ensured: list[str] = []
-        self.expired: list[str] = []
-        self._paths: dict[str, str] = {}
-
-    def ensure(self, chunk_id: str) -> str:
-        self.ensured.append(chunk_id)
-        return self._paths.setdefault(chunk_id, f"/tmp/fake-hub-workdir/{chunk_id}")
-
-    def expire(self, chunk_id: str) -> None:
-        self.expired.append(chunk_id)
-        self._paths.pop(chunk_id, None)
-
-    def list_orphans(self) -> list[str]:
-        return list(self._paths)
-
-
-def _conforms_fake_hub_command_runner(x: FakeHubCommandRunner) -> IHubCommandRunner:
-    return x
-
-
-def _conforms_fake_hub_workdir(x: FakeHubWorkdir) -> IHubWorkdir:
-    return x
 
 
 class FakeWorkSource:
@@ -1297,8 +1241,6 @@ def build_hub(
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
     link: bool = True,
-    hub_command_runner: IHubCommandRunner | None = None,
-    hub_workdir: IHubWorkdir | None = None,
     repositories: Sequence[RepositoryFields] | None = None,
     public_url: str | None = None,
     route_token_mode: str = ROUTE_TOKEN_WARN,
@@ -1330,8 +1272,7 @@ def build_hub(
     ``work_sources=None`` defaults to one fake source, while ``{}`` is a deliberately **empty** registry;
     each fake source is stored as a configured record linked to the tenant's only project, and each seeded
     repository is linked to it too, while ``link=False`` leaves the sources unstored, serving no project, as a
-    file-configured source is, and the repositories stored but unlinked; ``hub_command_runner``/``hub_workdir``
-    left ``None`` wire real adapters; ``hub_version`` and ``version_window`` default to the installed and packaged."""
+    file-configured source is, and the repositories stored but unlinked; ``hub_version`` and ``version_window`` default to the installed and packaged."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -1394,10 +1335,6 @@ def build_hub(
     hub_services = build_services(
         core,
         work_sources=tenant_work_sources,
-        hub_command_runner=hub_command_runner,
-        hub_workdir=hub_workdir,
-        hub_workdir_root=tmp_path / "hub_workdirs",
-        hub_marker_callback_base_url="http://testserver",
         public_url=public_url,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring

@@ -1,5 +1,5 @@
-"""Whether a merge commit adds exactly the base branch's change — the proof behind ``land``'s head gate
-and the ``land_pr_ci`` script's, worked from forge compare payloads alone. A file both sides changed
+"""Whether a merge commit adds exactly the base branch's change — the proof behind ``land``'s head gate,
+worked from forge compare payloads alone. A file both sides changed
 is admitted only when the merge's change blocks equal the base's blocks translated into the
 feature side's line coordinates; unprovable is refused
 (``blizzard-context:/domain/artifacts/model.md``)."""

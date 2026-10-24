@@ -9746,7 +9746,7 @@ export type SecretCreateRequestWritable = {
 };
 
 /**
- * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.
+ * The id of the tenant the request acts in. A caller with one membership may omit it; a runner or host token acts in its own tenant, and a header naming another is refused 400.
  */
 export type TenantHeader = string;
 

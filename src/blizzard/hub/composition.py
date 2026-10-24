@@ -8,7 +8,6 @@ every domain service's own narrow parameter alike — is the same instance built
 from __future__ import annotations
 
 import random
-import tempfile
 
 # Wires the residual cycle-check lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md —
 # and the tenant cache's lock, which guards this process's memory, not a store decision
@@ -69,14 +68,9 @@ from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
-from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.forge_handle import ForgeHandleFactory
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.github_handle import GitHubHandle
-from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
-from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
-from blizzard.hub.delivery.marker_auth import MarkerAuthority
-from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
@@ -434,9 +428,6 @@ class HubServices:
     tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
     #: The read host registry of the tenant a host credential resolved to; raises as ``tenant_registry`` does.
     tenant_hosts: Callable[[TenantId], IReadHostRegistry]
-    #: The mid-run marker-write capability authority — one shared instance,
-    #: so every reader agrees on the one live token per (chunk, node, epoch).
-    marker_authority: MarkerAuthority
     #: The one thread every tenant's hub action passes run on — started and stopped by the hub's lifespan.
     action_loop: ActionLoop
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
@@ -887,12 +878,8 @@ class TenantServiceParts:
     secret_cipher: ISecretCipher
     graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
-    marker_authority: MarkerAuthority
     system_artifacts: PackagedSystemArtifacts
     commit_forge: ICommitForge
-    hub_command_runner: IHubCommandRunner
-    hub_workdir: IHubWorkdir
-    hub_marker_callback_base_url: str
     public_url: str | None
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
@@ -1017,7 +1004,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         record=chunk_record,
         graphs=graph_store,
         clock=clock,
-        marker_authority=parts.marker_authority,
         repositories=stores.repository_records,
         links=stores.project_links,
         projects=stores.projects,
@@ -1280,10 +1266,6 @@ def build_services(
     work_sources: WorkSourceRegistryFactory,
     secret_keys: IHubKeyProvider,
     brokers: TenantBrokers | None = None,
-    hub_command_runner: IHubCommandRunner | None = None,
-    hub_workdir: IHubWorkdir | None = None,
-    hub_workdir_root: Path | None = None,
-    hub_marker_callback_base_url: str = "",
     public_url: str | None = None,
     forge_http_client: httpx2.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
@@ -1311,8 +1293,7 @@ def build_services(
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
     are one pass per hub, each acting on a row through the services of the row's tenant, opened from
     the cache. ``work_sources`` builds a tenant's
-    work-source registry; ``hub_command_runner``/``hub_workdir`` are the hub command node's
-    mechanism seams, left ``None`` for real adapters; an explicit ``oauth_registry`` wins over
+    work-source registry; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
     may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
     later; ``forge_handles`` builds a landing action's handle on each repository's forge."""
@@ -1321,7 +1302,6 @@ def build_services(
     action_loop = ActionLoop()
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
-    marker_authority = MarkerAuthority()
     system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
     # One process-scoped draw for every project color a create leaves to the hub.
     color_pick = random.Random().choice
@@ -1332,15 +1312,10 @@ def build_services(
         secret_cipher=secret_cipher(secret_keys),
         graph_yaml=YAML_CODEC,
         work_sources=work_sources,
-        marker_authority=marker_authority,
         system_artifacts=system_artifacts,
         # Bound as `.for_project` per tenant (a project to a plain `delivery.validation.CommitResolver`
         # callable), so `TenantServices.commit_resolver_for` carries no dependency on the concrete class.
         commit_forge=GitHubCommitResolver(forge_http_client or httpx2.Client(timeout=10.0)),
-        hub_command_runner=hub_command_runner or SubprocessHubCommandRunner(),
-        hub_workdir=hub_workdir
-        or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
-        hub_marker_callback_base_url=hub_marker_callback_base_url,
         public_url=public_url,
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
@@ -1533,7 +1508,6 @@ def build_services(
         hub_scoped_reads=core.hub_scoped_reads,
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
         tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
-        marker_authority=marker_authority,
         action_loop=action_loop,
         hub_event_log=hub_event_log,
         hub_events=hub_events,

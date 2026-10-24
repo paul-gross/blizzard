@@ -6,7 +6,7 @@ write is delegated to the domain (``bzh:controller-read-only``). ``auth.mode = "
 default) short-circuits a person to the implicit operator identity.
 
 :func:`resolve_tenant` is the one place a request's tenant is resolved, by the first rule that
-applies: a machine credential (a runner or host bearer token, a marker token) decides; else the
+applies: a machine credential (a runner or host bearer token) decides; else the
 ``X-Blizzard-Tenant`` header names it, checked against the caller's memberships; else the caller's
 one membership settles it; else the request answers ``409 tenant_required``. Every people and fleet
 router depends on it through :func:`tenant_bound`; :func:`require` checks a permission in the
@@ -45,7 +45,6 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, permissions_for
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
-from blizzard.hub.delivery.marker_auth import MarkerPrincipal
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 
 _SESSION_COOKIE_NAME = "bz_session"
@@ -62,12 +61,9 @@ TENANT_HEADER_PARAMETER: dict[str, object] = {
     "schema": {"type": "string"},
     "description": (
         "The id of the tenant the request acts in. A caller with one membership may omit it; a runner "
-        "or marker token acts in its own tenant, and a header naming another is refused 400."
+        "or host token acts in its own tenant, and a header naming another is refused 400."
     ),
 }
-
-#: The header a hub command node's land script presents its marker token in.
-MARKER_TOKEN_HEADER = "X-Blizzard-Marker-Token"
 
 #: ASGI-scope key holding the identity the trace gate already resolved, so the route's own
 #: dependency reuses it — one session lookup and one sliding-expiry touch per request.
@@ -80,8 +76,8 @@ OPERATOR = "operator"
 #: indistinguishable.
 _NO_SUCH_TENANT = "no such tenant"
 
-#: Whoever a request's tenant was resolved for: a person, a runner, or a hub node's marker write.
-Principal = ResolvedIdentity | RunnerPrincipal | HostPrincipal | MarkerPrincipal
+#: Whoever a request's tenant was resolved for: a person, a runner, or a runner host.
+Principal = ResolvedIdentity | RunnerPrincipal | HostPrincipal
 
 
 def implicit_operator(tenant: TenantId | None) -> ResolvedIdentity:
@@ -273,28 +269,12 @@ def _named_tenant(request: Request) -> TenantId | None:
     return TenantId(named) if named else None
 
 
-def _machine_credential(request: Request, hub: HubServices) -> RunnerPrincipal | HostPrincipal | MarkerPrincipal | None:
-    """The runner or host bearer or marker token ``request`` carries, verified — in every auth mode."""
+def _machine_credential(request: Request, hub: HubServices) -> RunnerPrincipal | HostPrincipal | None:
+    """The runner or host bearer token ``request`` carries, verified — in every auth mode."""
     runner = RunnerAuth.of(request, hub).principal
     if runner is not None:
         return runner
-    host = HostAuth.of(request, hub).principal
-    if host is not None:
-        return host
-    token = request.headers.get(MARKER_TOKEN_HEADER)
-    if not token:
-        return None
-    # Path and query params are read off the request because FastAPI resolves a route's
-    # dependencies alongside its own param validation: a bad ``epoch`` verifies nothing.
-    chunk_id = request.path_params.get("chunk_id")
-    node_id = request.query_params.get("node_id")
-    try:
-        epoch = int(request.query_params.get("epoch", ""))
-    except ValueError:
-        return None
-    if not isinstance(chunk_id, str) or node_id is None:
-        return None
-    return hub.marker_authority.verify(token, chunk_id=chunk_id, node_id=node_id, epoch=epoch)
+    return HostAuth.of(request, hub).principal
 
 
 def _served(hub: HubServices, tenant: TenantId, identity: Principal) -> TenantRequest:

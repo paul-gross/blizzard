@@ -12,5 +12,5 @@ STORE_FILENAME = "hub.db"
 SIGNING_KEYS_PARTS = ("auth", "signing-keys")
 #: Under the data directory: the keys that seal every stored secret.
 SECRET_KEYS_PARTS = ("auth", "secret-keys")
-#: Under the data directory: scratch clones a hub command node uses mid-delivery; reclaimable.
+#: Under the data directory: scratch clones a hub `run:` step once used; nothing writes it now, so it is reclaimable.
 WORKDIRS_DIRNAME = "hub_workdirs"

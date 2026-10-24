@@ -2,7 +2,7 @@
   "components": {
     "parameters": {
       "TenantHeader": {
-        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or marker token acts in its own tenant, and a header naming another is refused 400.",
+        "description": "The id of the tenant the request acts in. A caller with one membership may omit it; a runner or host token acts in its own tenant, and a header naming another is refused 400.",
         "in": "header",
         "name": "X-Blizzard-Tenant",
         "required": false,
@@ -21590,7 +21590,7 @@
     "/api/chunks/{chunk_id}/hub-markers": {
       "post": {
         "deprecated": true,
-        "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nRecords a marker artifact mid-run, ahead of the producing command's own exit.\nIdempotent per ``(chunk, node, name, epoch)``.",
+        "description": "Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:\na hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``.",
         "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
         "parameters": [
           {
