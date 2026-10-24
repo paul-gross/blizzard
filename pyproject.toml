@@ -231,6 +231,7 @@ also_copy = [
     "scripts/check-line-provenance.sh",
     "scripts/release-cut-in-range.sh",
     "scripts/trailers.sh",
+    "scripts/borrowed-proof.sh",
     "scripts/check-version-tag.sh",
     "scripts/export-requirements.sh",
     "scripts/image-tags.sh",

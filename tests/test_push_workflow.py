@@ -88,8 +88,32 @@ def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
 
 @pytest.mark.parametrize("cut_version, expected", [("0.1.0", "0.2.0"), ("0.2.0", "0.3.0")])
 def test_dev_version_targets_the_next_minor_train(tmp_path, cut_version: str, expected: str) -> None:
+    assert _dev_version(tmp_path, cut_version, 'floor = "0.2"\n') == f"{expected}.dev42+abcdef123"
+
+
+def test_an_open_major_builds_toward_its_first_release(tmp_path) -> None:
+    assert _dev_version(tmp_path, "0.2.0", 'floor = "0.2"\nopening = "1"\n') == "1.0.0.dev42+abcdef123"
+
+
+def test_a_missing_window_file_fails_the_version_step(tmp_path) -> None:
+    compute = next(s for s in _jobs()["dev-build"]["steps"] if s.get("id") == "ver")
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.0"\n')
+    script = compute["run"].replace("${{ github.run_number }}", "42")
+    result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_SHA": "abcdef123456789", "GITHUB_OUTPUT": str(tmp_path / "output")},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+
+
+def _dev_version(tmp_path, cut_version: str, window: str) -> str:
     compute = next(s for s in _jobs()["dev-build"]["steps"] if s.get("id") == "ver")
     (tmp_path / "pyproject.toml").write_text(f'[project]\nversion = "{cut_version}"\n')
+    (tmp_path / "src" / "blizzard" / "wire").mkdir(parents=True)
+    (tmp_path / "src" / "blizzard" / "wire" / "window.toml").write_text(window)
     output = tmp_path / "output"
     script = compute["run"].replace("${{ github.run_number }}", "42")
     result = subprocess.run(
@@ -100,7 +124,7 @@ def test_dev_version_targets_the_next_minor_train(tmp_path, cut_version: str, ex
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert output.read_text().strip() == f"version={expected}.dev42+abcdef123"
+    return output.read_text().strip().removeprefix("version=")
 
 
 def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:

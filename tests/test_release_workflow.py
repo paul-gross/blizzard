@@ -86,6 +86,7 @@ def test_each_job_holds_exactly_its_own_scopes() -> None:
     assert _publish_job()["permissions"] == {"contents": "write"}
     assert _verify_job()["permissions"] == {"contents": "read"}
     assert _wheel_job()["permissions"] == {"contents": "read"}
+    assert _job("proof")["permissions"] == {"contents": "read", "actions": "read"}
     assert _job("rehearsal")["permissions"] == {"contents": "read"}
 
 
@@ -172,6 +173,7 @@ def test_the_store_baseline_runs_on_candidates_and_patches_and_not_on_a_stable_p
 def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> None:
     build = _build_job()
     assert build["needs"] == [
+        "proof",
         "gate",
         "compat",
         "upper-tiers",
@@ -210,7 +212,7 @@ def test_build_job_waits_for_each_full_suite_tier() -> None:
         assert job in needs
     tiers = _job("upper-tiers")
     assert tiers["uses"] == "./.github/workflows/upper-tiers.yml"
-    assert tiers["needs"] == ["gate"]
+    assert tiers["needs"] == ["proof", "gate"]
     assert tiers["with"] == {"full_suite": True, "crash_sweep_ci": ""}
     assert not {"service-tier", "crash-sweep", "e2e"} & set(_workflow()["jobs"])
 
@@ -457,3 +459,44 @@ def test_the_isolation_cross_check_gates_the_build_and_never_runs_on_a_pull_requ
     assert set(workflow[True]) == {"schedule", "workflow_dispatch", "workflow_call"}
     assert workflow["jobs"]["compare"]["if"] == "${{ !cancelled() }}"
     assert set(workflow["jobs"]["compare"]["needs"]) == {"declared", "raised"}
+
+
+def test_proof_runs_first_and_alone_holds_the_actions_scope() -> None:
+    jobs = _workflow()["jobs"]
+    assert next(iter(jobs)) == "proof"
+    assert "needs" not in jobs["proof"]
+    assert jobs["proof"]["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert [name for name, job in jobs.items() if "actions" in (job.get("permissions") or {})] == ["proof"]
+    steps = jobs["proof"]["steps"]
+    assert steps[0]["with"]["sparse-checkout"] == "scripts/borrowed-proof.sh"
+    assert "borrowed-proof.sh" in steps[1]["run"] and '>> "$GITHUB_OUTPUT"' in steps[1]["run"]
+    assert jobs["proof"]["outputs"] == {"borrowed": "${{ steps.proof.outputs.borrowed }}"}
+
+
+@pytest.mark.parametrize("name", ["gate", "upper-tiers", "isolation-cross-check"])
+def test_the_full_suite_tiers_are_skipped_when_the_proof_is_borrowed(name: str) -> None:
+    job = _job(name)
+    assert "proof" in job["needs"]
+    assert job["if"] == "${{ needs.proof.outputs.borrowed != 'true' }}"
+
+
+def test_wheel_and_build_wait_for_the_proof_and_compat_stays_unconditional() -> None:
+    assert "proof" in _wheel_job()["needs"]
+    assert "proof" in _build_job()["needs"]
+    assert "needs" not in _job("compat") and "if" not in _job("compat")
+
+
+def test_wheel_checks_out_full_history_for_the_line_check() -> None:
+    checkout = next(s for s in _wheel_job()["steps"] if _uses(s, "actions/checkout"))
+    assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_build_passes_the_repo_tags_to_the_fan_out_and_publish_withholds_latest_unless_it_moved() -> None:
+    steps = _build_job()["steps"]
+    derive = steps[_step_index(steps, lambda s: s.get("id") == "image_meta")]
+    assert "git tag --list 'v*'" in derive["run"]
+    assert _build_job()["outputs"]["latest"] == "${{ steps.image_meta.outputs.latest }}"
+    publish = _publish_job()
+    step = publish["steps"][_step_index(publish["steps"], lambda s: "gh release create" in str(s.get("run", "")))]
+    assert step["env"]["LATEST"] == "${{ needs.build.outputs.latest }}"
+    assert "--latest=false" in step["run"]

@@ -17,8 +17,8 @@ pytestmark = pytest.mark.unit
 _SCRIPT = repo_root() / "scripts" / "image-tags.sh"
 
 
-def _run(tag: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([str(_SCRIPT), tag], capture_output=True, text=True)
+def _run(tag: str, *repo_tags: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([str(_SCRIPT), tag, *repo_tags], capture_output=True, text=True)
 
 
 @pytest.mark.parametrize(
@@ -33,6 +33,27 @@ def test_stable_tag_fans_out_to_exact_minor_and_latest(tag: str, expected: list[
     result = _run(tag)
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == expected
+
+
+_REPO_TAGS = ["v0.1.0", "v0.2.0-rc.1", "v0.2.0", "v0.2.1", "v0.10.0", "v0.10.0-rc.2", "not-a-tag"]
+
+
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [
+        ("v0.2.0", ["0.2.0", "0.2"]),
+        ("v0.2.1", ["0.2.1", "0.2"]),
+        ("v0.10.0", ["0.10.0", "0.10", "latest"]),
+    ],
+)
+def test_latest_goes_only_to_the_highest_stable_version_compared_numerically(tag: str, expected: list[str]) -> None:
+    result = _run(tag, *_REPO_TAGS)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == expected
+
+
+def test_a_candidate_higher_than_the_tag_does_not_hold_latest_back() -> None:
+    assert _run("v0.2.0", "v0.3.0-rc.1").stdout.splitlines() == ["0.2.0", "0.2", "latest"]
 
 
 @pytest.mark.parametrize("tag", ["v1.2.3-rc.1", "v1.2.3-rc.10", "v0.1.0-rc.1"])
