@@ -9,10 +9,17 @@ badge. The log has no rotation policy.
 The runner emits failure events on the same durable store-and-forward path completions ride — non-clean worker exits,
 failed captured spawn, push, or environment-prep commands, reaped, abandoned, or escalated attempts — and the hub folds
 each into the log. The hub emits its own events for failures only it sees, chief among them
-`hub-node-unroutable-outcome` (critical): a hub command node produced an outcome with no authored edge, so nothing
-routes and the chunk re-polls it forever; announced once per node visit, not per poll — the remedy is authoring the
-missing edge then requeuing, not retrying. The work-item closure events are also the hub's —
-[work-sources.md](./work-sources.md) owns them.
+`hub-node-unroutable-outcome` (critical): a hub node's pass answered a choice no authored edge routes, so nothing routes
+the chunk on. The hub records it once per node visit and escalates the chunk at once, cause `unroutable-outcome`, naming
+the node and the choice; it never takes the pass again. Only a stored version minted before mint required every edge can
+answer one. The remedy is moving the chunk onto a graph that routes the choice. The work-item closure events are also
+the hub's — [work-sources.md](./work-sources.md) owns them.
+
+`hub-action-missing` (critical): a chunk stands at a hub node that names no action, one whose stored `run:` command the
+upgrade could not carry onto an action. The hub escalates the chunk once, cause `hub-action-missing`, naming the node
+and the stored command, whether the chunk reaches the node, a hub-advance poll finds it there, or it stood there when
+the hub booted. The hub never runs the command. The remedy is moving the chunk onto a graph whose node names an action,
+with `chunk restart --to-graph` ([control-verbs.md](./control-verbs.md#restart)), or stopping it.
 
 `hub-action-overran` (warning): a hub node's action pass ran past `action_pass_seconds`
 ([install.md](./install.md#configuration-and-credentials)) and was cancelled. It answered `pending` where its action can

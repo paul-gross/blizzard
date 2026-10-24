@@ -43,6 +43,37 @@ raise any cap that recent figure would cross.
 them. If `blizzard-hub.toml`'s `[tracing]` table carries any of them, delete them, or move them to `blizzard-host.toml`
 where the runner reads them. The hub now refuses to start with one present, and its error names `blizzard-host.toml`.
 
+### Hub nodes run no commands
+
+A hub node now takes an action and runs no `run:` command. The hub store's migration carries every stored hub node onto
+the action its `run:` named: `land_pr_ci`, `land_default` and `land_ff` onto `land`, `review_deliver` onto
+`record-findings`, `garden_deliver` onto `garden-deliver`, and an empty `run:` onto `pass`. A chunk pinned to a carried
+version keeps its version and lands through `land`, which waits on the pull request's checks. A hub node with no
+`poll_timeout` waits three hours. Minting a graph whose hub node names `run:` is refused with a 422 naming `action:`;
+rewrite such a graph onto an action before minting it again.
+
+A `run:` the migration cannot carry, such as a command of your own or two steps on one node, is kept on the node as its
+`legacy_run` and never runs. Each live chunk standing at such a node, or reaching one, is escalated `needs_human` with
+cause `hub-action-missing`, naming the node and the command. A carried version that answers a choice its graph never
+routed escalates the chunk with cause `unroutable-outcome`, naming the choice. After recreating the hub:
+
+1. Read the migration's warnings. The entrypoint's migrate logs one `store migration warning` line for each node it
+   could not carry, naming the graph's id, name and mint time, the node and the tenant:
+
+   ```bash
+   docker compose logs hub | grep 'store migration warning'
+   ```
+
+   No line means every stored node was carried.
+2. List the escalated chunks with `blizzard hub events --severity critical`, and look for the cause
+   `hub-action-missing`.
+3. Move each one onto a graph whose node names an action with `blizzard hub chunk restart <chunk> --to-graph <graph>`
+   ([`docs/deployment/control-verbs.md`](./deployment/control-verbs.md#restart)), or stop it. A plain restart onto the
+   same version escalates again.
+
+To go back to an older release, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)). The
+older hub then runs each node's untouched `run:` again. A chunk escalated meanwhile stays escalated.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.
