@@ -515,6 +515,32 @@ def test_a_foreign_non_merge_commit_refuses_and_fires_nothing_in_a_behind_siblin
     assert double.named("update_branch") == [] and double.named("merge") == []
 
 
+def test_a_merged_pr_whose_head_carries_a_foreign_commit_is_not_a_landing() -> None:
+    double = _forge()
+    double.repos[_WIDGET].heads = {"feat/x": "foreign"}
+    double.repos[_WIDGET].pulls[4] = pull_body(
+        _WIDGET, 4, branch="feat/x", sha="foreign", base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    )
+    double.repos[_WIDGET].compares = {
+        (_SUBMITTED, "foreign"): {"status": "ahead", "total_commits": 1, "commits": [_commit("foreign", _SUBMITTED)]}
+    }
+    answer, sink = _land(double)
+    assert answer.choice == "failure"
+    assert "foreign (not a merge of the base branch)" in sink.markers()["delivery-findings/foreign-head"]
+    assert sink.landings() == []
+
+
+def test_a_merged_pr_whose_head_only_merged_the_base_still_lands() -> None:
+    double = _forge()
+    _advanced(double, _WIDGET, merged_files=[_file("a.txt", "blob1")])
+    double.repos[_WIDGET].pulls[4] = pull_body(
+        _WIDGET, 4, branch="feat/x", sha="merge1", base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    )
+    answer, sink = _land(double)
+    assert answer.choice == "landed"
+    assert sink.landings()[0].revision == f"merge-{_WIDGET}-4"
+
+
 def test_a_head_that_no_longer_descends_from_the_submitted_commit_refuses() -> None:
     double = _forge(heads={"feat/x": "reset"}, compares={(_SUBMITTED, "reset"): {"status": "diverged"}})
     answer, sink = _land(double)
