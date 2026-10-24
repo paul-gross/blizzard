@@ -1,23 +1,29 @@
+import { type CallRecorder, timed } from './latency';
 import type { ApplyResponse, TenantView } from './wire/hub/types.gen';
 
 /**
  * The internal client: hub-level calls the harness's own fixtures make (tenant creation, furnishing), which no spec can
  * reach. The shared hubs run with authentication off, so the harness acts as the implicit operator and names its tenant
- * in `X-Blizzard-Tenant`.
+ * in `X-Blizzard-Tenant`. Given a recorder, it leaves a latency record for each call, tenant creation among them.
  */
 export class HubInternal {
-  constructor(readonly baseUrl: string) {}
+  constructor(
+    readonly baseUrl: string,
+    private readonly record?: CallRecorder,
+  ) {}
 
   async call<T>(method: string, route: string, options: { tenant?: string; body?: unknown } = {}): Promise<T> {
     const headers: Record<string, string> = {};
     if (options.tenant !== undefined) headers['X-Blizzard-Tenant'] = options.tenant;
     if (options.body !== undefined) headers['content-type'] = 'application/json';
-    const response = await fetch(`${this.baseUrl}${route}`, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: AbortSignal.timeout(30_000),
-    });
+    const send = (): Promise<Response> =>
+      fetch(`${this.baseUrl}${route}`, {
+        method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: AbortSignal.timeout(30_000),
+      });
+    const response = this.record === undefined ? await send() : await timed(this.record, method, route.split('?')[0] as string, send, (answer) => answer.status);
     const text = await response.text();
     if (!response.ok) throw new Error(`${method} ${route} answered ${response.status}: ${text}`);
     return (text === '' ? undefined : JSON.parse(text)) as T;

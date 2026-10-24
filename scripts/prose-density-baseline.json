@@ -10758,24 +10758,6 @@
    "over_cap": 3,
    "total": 518
   },
-  "service/test_analytics_events_service.py": {
-   "comments": 3,
-   "docstrings": 4,
-   "over_cap": 0,
-   "total": 123
-  },
-  "service/test_analytics_operational_service.py": {
-   "comments": 8,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 127
-  },
-  "service/test_analytics_service.py": {
-   "comments": 2,
-   "docstrings": 4,
-   "over_cap": 0,
-   "total": 91
-  },
   "service/test_auth_login_service.py": {
    "comments": 2,
    "docstrings": 23,

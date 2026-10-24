@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { type APIRequestContext, test as base, type TestInfo } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../playwright.config';
 import { HubInternal } from './client/internal';
+import { type CallRecorder, LATENCY_ATTACHMENT, recorderFor, recordsOf } from './client/latency';
 import { Ledger } from './client/ledger';
 import { stopDaemon } from './daemons/process';
 import { runDir } from './env';
@@ -87,7 +88,7 @@ export interface Touched {
 
 export interface WorkerFixtures {
   hub: SharedHub;
-  adminClient: () => HubInternal;
+  adminClient: (record?: CallRecorder) => HubInternal;
 }
 
 export interface TestFixtures {
@@ -98,6 +99,7 @@ export interface TestFixtures {
   ledger: Ledger;
   touched: Touched;
   attachLogs: void;
+  attachLatency: void;
 }
 
 /** A name from the test's title and a random suffix, so two runs of one test never collide. */
@@ -136,7 +138,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   adminClient: [
     async ({ hub }, use) => {
-      await use(() => new HubInternal(hub.coordinates().url));
+      await use((record) => new HubInternal(hub.coordinates().url, record));
     },
     { scope: 'worker' },
   ],
@@ -186,7 +188,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       if (id === undefined) throw new Error('the shared hub has no common tenant');
       tenant = { id, name: 'common' };
     } else if (level.served === 'fresh-tenant') {
-      const created = await adminClient().createTenant(uniqueName(testInfo));
+      const created = await adminClient(recorderFor(testInfo)).createTenant(uniqueName(testInfo));
       tenant = { id: created.tenant_id, name: created.name };
     } else {
       // The fresh hub's seeded tenant, the only one open.
@@ -206,6 +208,16 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
   touched: async ({}, use) => {
     await use({});
   },
+
+  // Runs for every test: the calls its clients made, each with its duration, attached for the reporter's summary.
+  attachLatency: [
+    async ({}, use, testInfo) => {
+      await use();
+      const calls = recordsOf(testInfo);
+      if (calls.length > 0) await testInfo.attach(LATENCY_ATTACHMENT, { body: JSON.stringify(calls), contentType: 'application/json' });
+    },
+    { auto: true },
+  ],
 
   // Runs for every test: a test that never set `isolation` fails here, naming the option, and a failing test has the
   // tail of the hub log it touched attached to its report.
