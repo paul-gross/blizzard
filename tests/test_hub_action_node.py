@@ -55,12 +55,7 @@ def test_a_hub_node_naming_a_routed_action_mints() -> None:
     assert _errors(_deliver(poll_interval=30, poll_timeout=10800)) == []
 
 
-def test_a_hub_node_naming_both_action_and_run_is_refused() -> None:
-    errors = _errors(_deliver(run=[{"command": "true"}]))
-    assert any("exactly one of `action:` and `run:`" in e for e in errors)
-
-
-def test_a_hub_node_naming_neither_action_nor_run_is_refused() -> None:
+def test_a_hub_node_naming_no_action_is_refused() -> None:
     errors = _errors({"executor": "hub", "judgement": _choices("success", "failure")})
     assert any("must name an `action:`" in e for e in errors)
 
@@ -99,8 +94,8 @@ def test_a_with_value_that_is_not_a_string_or_list_of_strings_is_refused() -> No
     assert any("`with.proposals` must be a string or a list of strings" in e for e in errors)
 
 
-def test_with_on_a_node_naming_run_is_refused() -> None:
-    node = {"executor": "hub", "run": [{"command": "true"}], "with": {"x": "y"}, "judgement": _choices("failure")}
+def test_with_on_a_hub_node_naming_no_action_is_refused() -> None:
+    node = {"executor": "hub", "with": {"x": "y"}, "judgement": _choices("failure")}
     assert any("`with:` is only legal on a node that names an `action:`" in e for e in _errors(node))
 
 
@@ -137,18 +132,6 @@ def test_poll_keys_on_a_test_action_that_can_answer_a_wait_mint() -> None:
         "judgement": _choices("failure"),
     }
     assert _errors(node) == []
-
-
-def test_a_node_naming_run_takes_poll_keys_only_with_a_non_empty_list() -> None:
-    with_steps = {
-        "executor": "hub",
-        "run": [{"command": "true"}],
-        "poll_interval": 30,
-        "judgement": _choices("failure"),
-    }
-    assert _errors(with_steps) == []
-    empty = {"executor": "hub", "run": [], "poll_interval": 30, "judgement": _choices("failure")}
-    assert any("`poll_interval`/`poll_timeout` are only legal" in e for e in _errors(empty))
 
 
 # Unit — due-ness

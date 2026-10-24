@@ -422,14 +422,16 @@ def _pre_action_body(body: dict[str, object]) -> dict[str, object]:
     return body
 
 
-def test_a_store_holding_the_pre_action_packaged_set_mints_one_new_version_of_each_graph_with_a_hub_node(
+def test_a_store_holding_the_pre_action_packaged_set_mints_one_new_version_of_each_graph_changed_beyond_its_run(
     tmp_path: Path,
 ) -> None:
     hub = build_hub(tmp_path)
     pre_action: dict[str, str] = {}
     for graph in PACKAGED.files:
+        # Minted from the packaged doc, since mint now refuses `run:`, but stored as the pre-action text: the
+        # stored definition is all reconciliation reads.
         body = _pre_action_body(graph.body)
-        minted, _ = hub.services.graph_mint.mint(GraphDoc.of(body), definition_yaml=YAML_CODEC.encode(body).decode())
+        minted, _ = hub.services.graph_mint.mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())
         pre_action[graph.doc.name] = minted.graph_id
     chunk_id = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}).json()["chunk_id"]
     assert hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": pre_action["bas-dwf"]}).status_code == 202
@@ -443,9 +445,26 @@ def test_a_store_holding_the_pre_action_packaged_set_mints_one_new_version_of_ea
         ("bas-dwf", "minted"),
         ("bas-hwf", "minted"),
         ("default-delivery", "up-to-date"),
-        ("garden-routine", "minted"),
-        ("ideation", "minted"),
+        # Their hub nodes changed only from `run:` to the action each step named.
+        ("garden-routine", "up-to-date"),
+        ("ideation", "up-to-date"),
     ]
     assert all(o.graph_id != pre_action[o.name] for o in first if o.status is GraphSyncStatus.MINTED)
     assert {o.status for o in second} == {GraphSyncStatus.UP_TO_DATE}
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == pre_action["bas-dwf"]
+
+
+def test_a_store_holding_the_packaged_set_with_its_actions_as_run_reconciles_up_to_date(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    for graph in PACKAGED.files:
+        body = graph.body
+        nodes = body["nodes"]
+        assert isinstance(nodes, dict)
+        for node in nodes.values():
+            action = node.pop("action", None)
+            if action is not None:
+                node.pop("with", None)
+                node["run"] = _PRE_ACTION_RUN[action]
+        hub.services.graph_mint.mint(graph.doc, definition_yaml=YAML_CODEC.encode(body).decode())
+
+    assert {o.status for o in _sync(hub, PACKAGED.paths)} == {GraphSyncStatus.UP_TO_DATE}

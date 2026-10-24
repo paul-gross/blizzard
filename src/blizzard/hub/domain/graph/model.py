@@ -322,6 +322,8 @@ class NodeDoc(NodeShape[RunStepDoc]):
     bounce_cap: int | None = None
     # The hub command node's declared commands (#65, #67); empty on a worker node.
     run: list[RunStepDoc] = field(default_factory=list)
+    # Whether the node declares ``run:`` at all, an empty list included — what mint refuses.
+    names_run: bool = False
     # The hub action this node names, in place of ``run:``, and its ``with:`` arguments,
     # each one value or a list read as a tuple.
     action: str | None = None
@@ -371,6 +373,7 @@ class NodeDoc(NodeShape[RunStepDoc]):
             bounce_cap=bounce_cap,
             judgement=JudgementDoc.of(body.get("judgement")),
             run=run,
+            names_run="run" in body.body,
             action=body.text("action"),
             action_args=action_args,
             malformed_action_args=malformed_action_args,

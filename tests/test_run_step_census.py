@@ -1,4 +1,7 @@
-"""No test authors a hub node naming ``run:`` — as a mapping literal or as YAML in a string — off the allowlist."""
+"""No test authors a hub node naming ``run:`` — as a mapping literal or as YAML in a string — off the allowlist.
+
+Mint refuses ``run:``, so a test authoring it is about a stored version minted before hub nodes named
+actions, or about a hub that cannot read ``action:``; every other test names an action."""
 
 from __future__ import annotations
 
@@ -13,15 +16,13 @@ from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
 
-#: The files, relative to ``tests/``, whose subject is the ``run:`` step loop or a hub that cannot read ``action:``.
+#: The files, relative to ``tests/``, whose subject is a stored pre-action document or a hub that cannot read
+#: ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(
     {
-        "crash/test_kill9_sweep.py",
         "rehearsal/test_upgrade_rehearsal.py",
-        "test_hub_action_node.py",
-        "test_hub_command_node.py",
-        "test_hub_marker_auth.py",
-        "test_hub_platform_tracing.py",
+        "test_graph_sync.py",
+        "test_legacy_run.py",
     }
 )
 
@@ -105,8 +106,8 @@ def test_only_the_allowlist_authors_a_run_step() -> None:
 )
 def test_a_planted_run_step_outside_the_allowlist_is_found(tmp_path: Path, source: str) -> None:
     (tmp_path / "test_planted.py").write_text(source)
-    (tmp_path / "crash").mkdir()
-    (tmp_path / "crash" / "test_kill9_sweep.py").write_text(source)
+    (tmp_path / "rehearsal").mkdir()
+    (tmp_path / "rehearsal" / "test_upgrade_rehearsal.py").write_text(source)
 
     assert run_step_authors(tmp_path) - RUN_STEP_ALLOWLIST == {"test_planted.py"}
 

@@ -20,6 +20,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS
 from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
 from blizzard.hub.domain.graph.authoring import GraphMintService
+from blizzard.hub.domain.graph.legacy_run import translated
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
 from blizzard.hub.domain.graph.validation import GraphValidationError
 from blizzard.hub.graphs import PACKAGED, GraphFile
@@ -100,11 +101,13 @@ class GraphReconciliation:
 
         ``None`` means "nothing to compare against", which mints. It covers both the
         never-minted name and the stored definition that no longer parses — that one stays in
-        the store, superseded rather than lost."""
+        the store, superseded rather than lost. A stored ``run:`` is read as the action it named
+        (:func:`~blizzard.hub.domain.graph.legacy_run.translated`), so a version minted before
+        hub nodes named actions compares as what it already was."""
         if stored is None:
             return None
         try:
-            return GraphDoc.of(self.yaml.decode(stored.encode("utf-8")))
+            return translated(GraphDoc.of(self.yaml.decode(stored.encode("utf-8"))))
         except (ConfigDecodeError, GraphParseError):
             _log.warning("stored graph definition no longer parses; treating it as changed", graph=name)
             return None
