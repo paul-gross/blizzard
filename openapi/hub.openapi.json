@@ -24358,7 +24358,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: a different chunk holds the slot, the node reported ``pending`` before ``poll_interval``\nelapsed, the chunk is escalated to a person, or it is not parked at a hub command node it may\ndrive \u2014 ``detail`` names which.\nThe request declares no ``runner_id`` to confine against.",
+        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: another chunk holds the slot, the node is ``pending`` inside ``poll_interval``, the\nchunk is escalated, or it is not parked at a drivable hub node \u2014 ``detail`` names which.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {
