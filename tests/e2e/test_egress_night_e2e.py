@@ -92,12 +92,14 @@ def _deliver(entry: str = "build") -> dict[str, Any]:
     """The hub's landing node; a conflict routes back to the graph's entry."""
     return {
         "executor": "hub",
-        "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+        "action": "land",
+        "poll_interval": 1,
         "judgement": {
             "choices": {
                 "landed": {"description": "Landed.", "to": "done"},
                 "conflict": {"description": "Conflict; back to the entry.", "to": entry},
                 "failure": {"description": "Failed; back to the entry.", "to": entry},
+                "inherited-failure": {"description": "The base check stays red.", "to": entry},
             }
         },
     }

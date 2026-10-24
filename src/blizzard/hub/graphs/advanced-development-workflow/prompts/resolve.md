@@ -6,9 +6,9 @@ that*. The change has already passed verify, review, and pre-push — preserve t
 ## Diagnose before you touch anything
 
 Start with `blizzard runner artifact get delivery-findings --node deliver --content`; when it is absent, fall back to
-the `hub-log.land-every-repo` log, the bounce envelope, and the PRs and their check results on the forge. Check the
-state as it is *now*, not as the bounce described it — a transient state may have cleared, and an earlier attempt may
-already have repaired a repo. Then establish which case you are in:
+the `hub-log.land` log, the bounce envelope, and the PRs and their check results on the forge. Check the state as it is
+*now*, not as the bounce described it — a transient state may have cleared, and an earlier attempt may already have
+repaired a repo. Then establish which case you are in:
 
 ### 1. Merge conflict
 
@@ -33,7 +33,7 @@ it does not belong, select `broken`.
 
 ### 4. Transient or infra failure
 
-The land script crashed, or the forge state was momentary and the PRs now read clean. Confirm each repo's PR is
+The land pass itself raised, or the forge state was momentary and the PRs now read clean. Confirm each repo's PR is
 mergeable, change nothing, and say so.
 
 ## Declare every tip before you leave

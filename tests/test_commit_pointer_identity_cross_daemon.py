@@ -1,14 +1,13 @@
 """A commit pointer's repository identity, from the runner's submission through hub delivery — component tier.
 
 Runs the runner's real :class:`DeclaredCommits` over two held environments, records what it submits
-as the chunk's ``git_commit`` artifacts in a real hub, and runs the ``deliver`` node, capturing the
-``BZ_HUB_GIT_COMMITS`` it hands the land script. Doubles sit only at the provider, git, and
-command-runner seams."""
+as the chunk's ``git_commit`` artifacts in a real hub, and runs the ``deliver`` node's ``land`` against
+the in-memory GitHub double, reading what it merged. Doubles sit only at the provider, git, and forge
+seams."""
 
 from __future__ import annotations
 
 import itertools
-import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,14 +16,16 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.delivery.hub_node import HubRunResult
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.node_steps.submissions import CompletionArtifact
+from tests.github_double import GitHubDouble
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
-from tests.support import DEFAULT_FIXTURE_REPOSITORIES, FakeHubCommandRunner, FakeHubWorkdir, build_hub, report_lease
+from tests.support import DEFAULT_FIXTURE_REPOSITORIES, build_hub, report_lease
 from tests.test_pin_hub_delivery import _mint_and_claim, _writable
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -78,20 +79,23 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
     return DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")).verify()
 
 
-def _deliver_payload(
+def _deliver(
     tmp_path: Path,
     submitted: list[CompletionArtifact],
     *owners: str,
     forges: tuple[str, ...] = (),
-) -> list[list[dict[str, str]]]:
-    """Record ``submitted`` as the chunk's build artifacts, run ``deliver``, and return the
-    ``BZ_HUB_GIT_COMMITS`` list each land-script run received."""
-    runner = FakeHubCommandRunner()
+) -> tuple[HubRunResult, GitHubDouble, str]:
+    """Record ``submitted`` as the chunk's build artifacts, push each one's branch to the double, and run
+    ``deliver``: its result, the double, and the chunk."""
+    double = GitHubDouble()
+    for a in submitted:
+        assert a.forge is not None and a.branch_name is not None and a.commit_hash is not None
+        owner = a.forge.removesuffix(".git").replace(":", "/").split("/")[-2]
+        double.repo(f"{owner}/{a.repo}").heads[a.branch_name] = a.commit_hash
     (tmp_path / "hub").mkdir()
     hub = build_hub(
         tmp_path / "hub",
-        hub_command_runner=runner,
-        hub_workdir=FakeHubWorkdir(),
+        forge_handles=double.handle,
         repositories=[
             replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url=forge)
             for owner, forge in itertools.product(owners, forges or ("https://api.github.com",))
@@ -132,8 +136,17 @@ def _deliver_payload(
     assert graph is not None
     node = graph.node_by_id(nodes["deliver"])
     assert node is not None
-    hub.services.hub_node.run(chunk, graph, node, epoch=1)
-    return [json.loads(call[2]["BZ_HUB_GIT_COMMITS"]) for call in runner.calls]
+    result = hub.services.hub_node.run(chunk, graph, node, epoch=1)
+    assert result is not None
+    log = next(
+        (
+            a.data
+            for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)
+            if a.name.startswith("hub-log.repository")
+        ),
+        "",
+    )
+    return result, double, log
 
 
 def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
@@ -143,30 +156,30 @@ def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
         commits={"e1": "a" * 40, "e2": "a" * 40},
     )
 
-    runs = _deliver_payload(tmp_path, submitted, "acme")
+    result, double, _ = _deliver(tmp_path, submitted, "acme")
 
-    assert len(runs) == 1 and len(runs[0]) == 1
-    assert {k: runs[0][0][k] for k in ("repo", "branch", "commit")} == {
-        "repo": "acme/widget",
-        "branch": "feat/x",
-        "commit": "a" * 40,
-    }
+    assert result.outcome_choice == "landed"
+    assert [(repo, args["head"]) for repo, args in double.named("open_pull")] == [("acme/widget", "feat/x")]
+    assert [(repo, args["sha"]) for repo, args in double.named("merge")] == [("acme/widget", "a" * 40)]
 
 
-def test_one_name_at_two_owners_runs_with_each_entry_on_its_own_record(tmp_path: Path) -> None:
+def test_one_name_at_two_owners_lands_each_entry_on_its_own_record(tmp_path: Path) -> None:
     submitted = _submit(
         tmp_path,
         origins={"e1": "https://github.com/owner-a/widget", "e2": "https://github.com/owner-b/widget"},
         commits={"e1": "a" * 40, "e2": "b" * 40},
     )
 
-    runs = _deliver_payload(tmp_path, submitted, "owner-a", "owner-b")
+    result, double, _ = _deliver(tmp_path, submitted, "owner-a", "owner-b")
 
-    assert len(runs) == 1
-    assert [(c["repo"], c["owner"]) for c in runs[0]] == [("owner-a/widget", "owner-a"), ("owner-b/widget", "owner-b")]
+    assert result.outcome_choice == "landed"
+    assert sorted((repo, args["sha"]) for repo, args in double.named("merge")) == [
+        ("owner-a/widget", "a" * 40),
+        ("owner-b/widget", "b" * 40),
+    ]
 
 
-def test_one_owner_and_name_on_two_forge_hosts_runs_with_each_entry_on_its_own_record(tmp_path: Path) -> None:
+def test_one_owner_and_name_on_two_forge_hosts_reaches_the_hub_as_two_records_land_refuses(tmp_path: Path) -> None:
     submitted = _submit(
         tmp_path,
         origins={"e1": "https://github.com/acme/widget", "e2": "https://git.example.test/acme/widget"},
@@ -174,10 +187,13 @@ def test_one_owner_and_name_on_two_forge_hosts_runs_with_each_entry_on_its_own_r
     )
 
     assert len(submitted) == 2, "the runner keeps one name on two hosts as two pointers"
-    runs = _deliver_payload(tmp_path, submitted, "acme", forges=("https://api.github.com", "https://git.example.test"))
+    result, double, log = _deliver(
+        tmp_path, submitted, "acme", forges=("https://api.github.com", "https://git.example.test")
+    )
 
-    assert len(runs) == 1
-    assert [(c["repo"], c["forge_url"], c["commit"]) for c in runs[0]] == [
-        ("acme/widget", "https://api.github.com", "a" * 40),
-        ("acme/widget", "https://git.example.test", "b" * 40),
-    ]
+    # Both pointers resolved, each to its own host's record — so one marker name stands for two records,
+    # which `land` refuses before its pass rather than land either.
+    assert result.outcome_choice == "failure"
+    assert "resolves to two repository records" in log
+    assert "(https://api.github.com)" in log and "(https://git.example.test)" in log
+    assert double.calls == []

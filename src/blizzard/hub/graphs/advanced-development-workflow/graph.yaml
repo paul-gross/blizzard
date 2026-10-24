@@ -12,8 +12,8 @@
 # improvement-tier findings into the reviewed-plan it publishes — the asset build
 # implements — and bounces to plan only on must-fix. Every backward edge carries its
 # findings asset into the node it re-enters — a bounce is contention, not failure.
-# Delivery is authored as graph content: `deliver` runs the packaged `land_pr_ci`
-# script. The PR + CI-watch delivery policy is in
+# Delivery is authored as graph content: `deliver` takes the packaged `land`
+# action. The PR + CI-watch delivery policy is in
 # blizzard-context:/workflows/feature-delivery.md.
 
 name: adv-dwf
@@ -329,13 +329,11 @@ nodes:
 
   deliver:
     executor: hub
-    run:
-      - name: land-every-repo
-        command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
-    # Outcome classification: src/blizzard/hub/graphs/scripts/land_pr_ci.py;
+    action: land
+    # Outcome classification: src/blizzard/hub/delivery/actions/land.py;
     # this graph owns the outcome routes below.
     poll_interval: 30
-    poll_timeout: 1800
+    poll_timeout: 10800
     judgement:
       choices:
         landed:
@@ -345,7 +343,7 @@ nodes:
           description: A repo's PR read dirty — a real merge conflict — routed immediately, without waiting out poll_timeout; sent to resolve to base-merge without discarding the validated verify/review/pre-push spine.
           to: resolve
         failure:
-          description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, a PR head carrying a commit beyond the submitted one and its own base merges (a foreign advance), or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share on that check, poll_timeout exceeded with a repo never going cleanly mergeable, a PR head carrying a commit beyond the submitted one and its own base merges (a foreign advance), or the land pass itself raised; routed to resolve to diagnose and repair without discarding the validated spine.
           to: resolve
         inherited-failure:
           description: Every remaining check failure is inherited from the base branch and survived a one-time re-run; not this chunk's defect, so it routes straight to build to repair the base as its own commit, bypassing resolve entirely.
@@ -356,7 +354,7 @@ nodes:
     executor: runner
     prompt: ./prompts/resolve.md
     session: resume:integration  # mechanical (base-merge, transient CI/forge blip),
-      # not a judgement call — deliver is a script node with no session, so the
+      # not a judgement call — deliver is a hub node with no session, so the
       # `integration` lineage, pre-push's, is the closest context holding the
       # branch/rebase history
     produces:
@@ -385,10 +383,8 @@ nodes:
 
   record-findings:
     executor: hub
-    run:
-      - name: materialize-review-findings
-        command: python3 -m blizzard.hub.graphs.scripts.review_deliver
-    # The review-findings-delivery route in src/blizzard/hub/api/chunks.py owns materialization;
+    action: record-findings
+    # The record-findings action (src/blizzard/hub/delivery/actions/) owns materialization;
     # all outcomes below leave the delivery lane for retrospective.
     judgement:
       choices:
@@ -400,7 +396,7 @@ nodes:
           to: retrospective
           prompt_addendum: ./prompts/retrospective.from-record-findings.md
         failure:
-          description: review_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. Routed to retrospective to record that this round's deferred findings were lost.
+          description: The record-findings action answered failure rather than a clean outcome — the record was refused because the chunk had moved past this visit, or the pass itself raised. Routed to retrospective to record that this round's deferred findings were lost.
           to: retrospective
           prompt_addendum: ./prompts/retrospective.from-record-findings.md
 

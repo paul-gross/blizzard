@@ -24,7 +24,8 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.graphs.scripts import land_common, land_pr_ci
 from blizzard.hub.tenancy import TenantId
-from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
+from tests.github_double import GitHubDouble
+from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 _TENANT = TenantId("ten_marker")
 
@@ -196,8 +197,8 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     """A defect in what reached the node, not a fault in running it: the executor routes
     `deliver`'s authored `failure` edge and records the reason as an artifact, rather than
     letting the error escape and re-crash the tick on every poll."""
-    runner = FakeHubCommandRunner()
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    double = GitHubDouble()
+    hub = build_hub(tmp_path, forge_handles=double.handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_two_branches_for_one_repo(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -216,6 +217,6 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     assert result is not None
     assert result.outcome_choice == "failure"
     assert result.to_node_name == "resolve"
-    assert runner.calls == [], "the land script must never run against an unconverged set"
+    assert double.calls == [], "land must never reach the forge for an unconverged set"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert any("unconverged-delivery" in a["name"] for a in detail["artifacts"]), detail["artifacts"]

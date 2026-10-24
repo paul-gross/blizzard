@@ -30,7 +30,6 @@ import sqlalchemy
 
 from blizzard.foundation import cli_spans
 from blizzard.foundation import trace_attributes as shared
-from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_ids import (
     ChunkRole,
     SpanRole,
@@ -50,6 +49,7 @@ from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import route_tokens
 from blizzard.runner.tracing import attributes as runner_attr
+from blizzard.runner.tracing.config import RunnerTracingConfig
 from tests.repo_files import repo_root
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 from tests.trace_contract_support import dictionary, otlp_type, required_by_role, role_of_name, scope_of_role
@@ -923,7 +923,7 @@ def runner_sweep(
     environ["OTEL_BSP_SCHEDULE_DELAY"] = "200"  # inline platform spans reach the file before the sweep's roots do
     traced = dataclasses.replace(
         config,
-        tracing=TracingConfig(
+        tracing=RunnerTracingConfig(
             sweep_seconds=sweep_seconds, settle_seconds=settle_seconds, platform=True, platform_sample_ratio=0.0
         ),
     )

@@ -1,5 +1,5 @@
-"""#241 AC2/AC3: the SHIPPED ``advanced-development-workflow`` graph's ``deliver`` node
-actually routes a printed ``conflict`` outcome — component tier.
+"""The SHIPPED ``advanced-development-workflow`` graph's ``deliver`` node routes each answer
+its ``land`` action gives against the in-memory GitHub double — component tier.
 
 Mints the real, packaged graph, seeding the chunk directly at ``deliver``'s minted node
 id via a direct transition-fact insert.
@@ -16,7 +16,6 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
@@ -25,11 +24,9 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
 from blizzard.hub.graphs import PACKAGED
-from blizzard.hub.graphs.scripts import land_pr_ci
+from tests.github_double import RED, GitHubDouble, forge_holding, pull_body
 from tests.support import (
     DEFAULT_FIXTURE_REPOSITORIES,
-    FakeHubCommandRunner,
-    FakeHubWorkdir,
     HubHarness,
     build_hub,
     chunk_facts_of,
@@ -40,7 +37,11 @@ from tests.support import (
 
 pytestmark = pytest.mark.component
 
-_LAND_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"
+_COMMIT = "c" * 40
+
+
+def _forge(*repos: str, **state: object) -> GitHubDouble:
+    return forge_holding(*(repos or ("acme/widget",)), branch="feat/thing", commit=_COMMIT, **state)
 
 
 def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
@@ -87,7 +88,7 @@ def _seed_at_deliver_with_an_unlanded_commit(
         StoredArtifact(
             kind=ArtifactKind.GIT_COMMIT,
             name=repo.split("/")[1],
-            data=f"feat/thing:{'c' * 40}",
+            data=f"feat/thing:{_COMMIT}",
             repo=repo,
             forge=None,
             artifact_id=Id.mint(IdPrefix.ARTIFACT, hub.clock).value,
@@ -113,9 +114,7 @@ def _seed_at_deliver_with_an_unlanded_commit(
 
 
 def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"doing stuff\n{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -150,9 +149,7 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
 
 
 def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
 
@@ -184,67 +181,46 @@ def _envelope(hub: HubHarness, chunk_id: str) -> dict:
     return json.loads(bounce["envelope"])
 
 
-def test_a_failed_deliver_step_envelope_names_the_unlanded_repo_and_the_step_output(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=1, stdout="", stderr="boom — merge refused\n" + "x" * 5000))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+def test_a_red_check_envelope_names_the_unlanded_repo_and_its_pr_and_no_step(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, forge_handles=_forge(checks={_COMMIT: RED}).handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+    body = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
+    assert (body["outcome_choice"], body["to_node_name"]) == ("failure", "resolve")
 
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
     assert envelope["unlanded"][0]["branch"] == "feat/thing"
-    assert envelope["unlanded"][0]["commit"] == "c" * 40
-    assert envelope["unlanded"][0]["pr"] is None  # a repo with no PR
-    assert envelope["step"]["exit_code"] == 1
-    assert len(envelope["step"]["output_tail"]) == 2000
-    assert envelope["step"]["log_artifact"] == f"hub-log.{envelope['step']['name']}"
-    assert "acme/widget" in envelope["detail"] and envelope["step"]["name"] in envelope["detail"]
+    assert envelope["unlanded"][0]["commit"] == _COMMIT
+    assert envelope["unlanded"][0]["pr"] == {"number": 1, "url": "https://github.example/acme/widget/pull/1"}
+    assert envelope["step"] is None
+    assert envelope["detail"].endswith("(not landed: PR #1 in acme/widget)")
 
 
-def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr_and_keeps_non_ascii_unescaped(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=1, stdout="", stderr="émoji ✗"))
+def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) -> None:
+    pr = pull_body(
+        "acme/widget", 945, branch="feat/thing", sha=_COMMIT, base="main", html_url="https://x/acme/widget/pull/945"
+    )
+    double = _forge("acme/done", "acme/widget", mergeable_state="dirty")
+    double.repos["acme/widget"].pulls[945] = pr
     repositories = [replace(DEFAULT_FIXTURE_REPOSITORIES[0], repo=name) for name in ("widget", "done")]
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir(), repositories=repositories)
+    hub = build_hub(tmp_path, forge_handles=double.handle, repositories=repositories)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/done", "acme/widget"))
-    artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
-    for name, data in (
-        ("merged/acme/done", "d" * 40),
-        (
-            "delivery-pr/acme/widget",
-            json.dumps({"repo": "acme/widget", "number": 945, "url": "https://x/acme/widget/pull/945"}),
-        ),
-    ):
-        artifacts.record_hub_artifact(
-            chunk_id,
-            node_id=nodes["deliver"],
-            node_name="deliver",
-            epoch=1,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            name=name,
-            content=data,
-            at=hub.clock.now(),
-        )
+    _record(hub, chunk_id, nodes, "merged/acme/done", "d" * 40)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
 
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
     assert envelope["unlanded"][0]["pr"] == {"number": 945, "url": "https://x/acme/widget/pull/945"}
-    assert envelope["detail"].startswith("PR #945 in acme/widget did not land: `")
-    assert "émoji ✗" in envelope["step"]["output_tail"]
-    (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
-    assert "\\u" not in bounce["envelope"]
+    assert envelope["detail"].endswith("(not landed: PR #945 in acme/widget)")
+    assert [repo for repo, _ in double.named("open_pull")] == []
 
 
-def test_a_conflict_printed_by_a_step_that_exited_0_names_no_step_in_its_envelope(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -257,22 +233,26 @@ def test_a_conflict_printed_by_a_step_that_exited_0_names_no_step_in_its_envelop
 
 
 def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_path: Path) -> None:
-    runner = FakeHubCommandRunner()
-    runner.arm(_LAND_COMMAND, CommandResult(exit_code=0, stdout=f"{land_pr_ci._CONFLICT}\n", stderr=""))
-    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    repositories = [replace(DEFAULT_FIXTURE_REPOSITORIES[0], repo=name) for name in ("widget", "gadget")]
+    double = _forge("acme/widget", "acme/gadget", mergeable_state="dirty")
+    hub = build_hub(tmp_path, forge_handles=double.handle, repositories=repositories)
     chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
+    _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/widget", "acme/gadget"))
+    _record(hub, chunk_id, nodes, "merged/acme/widget", "  ")
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+
+    assert sorted(u["repo"] for u in _envelope(hub, chunk_id)["unlanded"]) == ["acme/gadget", "acme/widget"]
+
+
+def _record(hub: HubHarness, chunk_id: str, nodes: dict[str, str], name: str, content: str) -> None:
     cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id=nodes["deliver"],
         node_name="deliver",
         epoch=1,
         admission=EpochAdmission.AT_OR_ABOVE,
-        name="merged/acme/widget",
-        content="  ",
+        name=name,
+        content=content,
         at=hub.clock.now(),
     )
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-
-    assert [u["repo"] for u in _envelope(hub, chunk_id)["unlanded"]] == ["acme/widget"]

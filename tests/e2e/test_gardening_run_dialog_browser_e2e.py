@@ -33,7 +33,8 @@ def _graph_yaml(name: str) -> str:
         "nodes": {
             "work": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "test.answer",
+                "with": {"choice": "landed"},
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Done.", "to": "done"},

@@ -18,14 +18,14 @@
 # still rides back into `review` for cold eyes, and `clean` proceeds straight to
 # delivery.
 #
-# Delivery runs the packaged `land_pr_ci` script — the PR + CI-watch delivery policy
+# Delivery takes the packaged `land` action — the PR + CI-watch delivery policy
 # (blizzard-context:/workflows/feature-delivery.md).
 # A dirty PR (a real merge conflict) reports `conflict`, routed back to `pre-push` — NOT to
 # `build`. That edge is the point of having a pre-push node at all: a real conflict means
 # the base moved under the chunk, not that the work is wrong. Recovery rebases instead of
 # rebuilding a change that already passed review. A repo's own CI check failing on the PR
 # reports `failure` the same way, also routed to `pre-push`. It reads `delivery-findings`
-# to tell a mechanical land-script hiccup from a real defect and triages accordingly. `pre-push`
+# to tell a mechanical landing hiccup from a real defect and triages accordingly. `pre-push`
 # re-triages and returns to delivery; the hub node's bounce_cap bounds the loop if the
 # base keeps moving under it.
 #
@@ -167,15 +167,13 @@ nodes:
 
   deliver:
     executor: hub
-    run:
-      - name: land-every-repo
-        command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
-    # land_pr_ci reports the reserved `pending` outcome while any PR isn't yet eligible to
+    action: land
+    # land answers the reserved `pending` outcome while any PR isn't yet eligible to
     # merge — `unstable`/`unknown`/not-yet-clean, but ALSO a `clean` head whose checks
     # haven't all finished green — so a transient forge state or in-flight CI polls in
     # place instead of bouncing validated work to pre-push.
     poll_interval: 30
-    poll_timeout: 1800
+    poll_timeout: 10800
     judgement:
       choices:
         landed:
@@ -186,7 +184,7 @@ nodes:
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         failure:
-          description: A repo's check run completed with a terminal conclusion the base branch does not share, poll_timeout was exceeded, a PR head carries a commit beyond the submitted one and its own base merges (a foreign advance), or the land script itself crashed; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose (via delivery-findings) and retry without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion the base branch does not share, poll_timeout was exceeded, a PR head carries a commit beyond the submitted one and its own base merges (a foreign advance), or the land pass itself raised; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose (via delivery-findings) and retry without discarding the validated spine.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
         inherited-failure:
@@ -196,10 +194,8 @@ nodes:
 
   record-findings:
     executor: hub
-    run:
-      - name: materialize-review-findings
-        command: python3 -m blizzard.hub.graphs.scripts.review_deliver
-    # The review-findings-delivery route in src/blizzard/hub/api/chunks.py owns materialization;
+    action: record-findings
+    # The record-findings action (src/blizzard/hub/delivery/actions/) owns materialization;
     # all outcomes below leave the delivery lane for retrospective.
     judgement:
       choices:
@@ -211,7 +207,7 @@ nodes:
           to: retrospective
           prompt_addendum: ./prompts/retrospective.from-record-findings.md
         failure:
-          description: review_deliver itself failed or crashed rather than reporting a clean outcome — a missing env var, a non-2xx delivery POST, an unrecognized response outcome, or an unauthorized/failed marker write. Routed to retrospective to record that this round's deferred findings were lost.
+          description: The record-findings action answered failure rather than a clean outcome — the record was refused because the chunk had moved past this visit, or the pass itself raised. Routed to retrospective to record that this round's deferred findings were lost.
           to: retrospective
           prompt_addendum: ./prompts/retrospective.from-record-findings.md
 

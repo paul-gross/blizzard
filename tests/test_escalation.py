@@ -48,8 +48,7 @@ nodes:
       exhausted: escalate
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:

@@ -38,8 +38,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -72,8 +71,7 @@ nodes:
           to: deliver
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -196,7 +194,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
     # Fleet truth: the empty deliver still finalizes the chunk terminal.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
     # Hub-durable artifacts: no git-commit pointer ever lands — only the spike's own
-    # asset and the deliver hub node's own run: step log (#65's captured stdout/stderr).
+    # asset.
     artifacts = hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
     assert {a["kind"] for a in artifacts} == {"asset"}, f"expected only asset artifacts, got: {artifacts}"
     spike_notes = next(a for a in artifacts if a["name"] == "spike-notes")
@@ -236,8 +234,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:

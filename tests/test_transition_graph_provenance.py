@@ -34,7 +34,8 @@ def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
     other_body: dict[str, object] = (
         {
             "executor": "hub",
-            "run": [{"command": "c", "produces": "m"}],
+            "action": "test.answer",
+            "with": {"choice": "ok"},
             "judgement": {"choices": {"ok": {"description": "d", "to": "done"}}},
         }
         if other_executor == "hub"

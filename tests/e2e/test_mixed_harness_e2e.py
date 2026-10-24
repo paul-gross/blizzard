@@ -42,7 +42,6 @@ from blizzard.runner.store import schema as runner_schema
 from tests.config_inputs import load_hub_config
 from tests.crash.support import (
     ENV_HARNESS_FENCE,
-    LAND_STEP,
     REPO,
     REPO_NAME,
     await_http,
@@ -221,11 +220,14 @@ def _mixed_graph_yaml(build_landed_file: str, review_landed_file: str) -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": LAND_STEP}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
+                        "landed": {"description": "Delivered.", "to": "done"},
+                        "conflict": {"description": "Conflicted.", "to": "build"},
                         "failure": {"description": "Failed to deliver.", "to": "build"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
                     }
                 },
             },

@@ -242,14 +242,13 @@ def test_garden_routine_deliver_records_or_bounces_to_reconcile_with_the_addendu
     assert failure.prompt_addendum is not None
 
 
-def test_garden_routine_deliver_runs_the_packaged_script_naming_its_artifacts() -> None:
+def test_garden_routine_deliver_takes_the_garden_deliver_action_naming_its_artifacts() -> None:
     doc = _doc()
     deliver = doc.node("deliver")
     assert deliver is not None and deliver.is_hub_command_node
-    (step,) = deliver.run
-    assert "blizzard.hub.graphs.scripts.garden_deliver" in step.command
-    assert "--delta delta" in step.command
-    assert "--proposals docket" in step.command
+    assert deliver.action == "garden-deliver"
+    assert dict(deliver.action_args) == {"delta": ("delta",), "proposals": ("docket",)}
+    assert not deliver.run
 
 
 def test_garden_routine_produces_lists_and_never_a_commit() -> None:

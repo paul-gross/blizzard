@@ -59,7 +59,7 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},
@@ -568,7 +568,7 @@ def _produces_graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},
@@ -718,7 +718,7 @@ def _git_commit_kind_graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},
@@ -825,7 +825,7 @@ def _checks_gated_graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},

@@ -51,8 +51,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -63,7 +62,7 @@ nodes:
           to: build
 """
 
-_PENDING_YAML = _MERGE_YAML.replace('command: "true"', 'command: "echo pending"')
+_PENDING_YAML = _MERGE_YAML.replace("action: pass", "action: test.answer\n    with: {choice: pending}")
 
 
 def _claim(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]

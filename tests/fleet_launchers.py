@@ -46,7 +46,7 @@ from tests.support import (
 )
 
 # The fixture project repo the loop drives and the owner the forge/hub address it under
-# (the repository record's owner; see `src/blizzard/hub/graphs/scripts/land_default.py`).
+# (the repository record's owner, which `land` qualifies each repo with).
 OWNER = "blizzard"
 REPO = f"{OWNER}/{REPO_NAME}"
 

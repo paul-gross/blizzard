@@ -1,5 +1,5 @@
 """The `record-findings` node end to end: the real packaged
-`basic-development-workflow` graph, its `deliver`/`record-findings` scripts unscripted, runs
+`basic-development-workflow` graph, its `deliver`/`record-findings` actions untouched, runs
 against the real hub route. A scripted review publishes a `review-finding-delta` with one
 `deferred`, one `fixed`, and one `refuted` entry; after landing, only the deferred entry is a
 durable review-sourced finding, readable through `GET /api/findings`."""
@@ -81,8 +81,8 @@ _RETROSPECTIVE_JUDGEMENT = "verdict('recorded', 'landed clean; the review round 
 def _scripted_graph_yaml() -> str:
     """The real packaged `basic-development-workflow` body with only its runner-node
     prompts swapped for scripts — `deliver` and `record-findings` (both hub-executor
-    script nodes) travel verbatim, so this exercises the real `land_pr_ci`/`review_deliver`
-    scripts and the real hub route/domain code, not a mock of either."""
+    action nodes) travel verbatim, so this exercises the real `land`/`record-findings`
+    actions against the mock forge and the real hub route/domain code, not a mock of either."""
     body: Any = PACKAGED.named("basic-development-workflow").body
     # The built-in triage router's own migration-target name, so a freshly ingested
     # chunk mints straight onto it with no unscripted triage node in the loop.
@@ -149,6 +149,6 @@ def test_review_finding_delta_mints_exactly_its_deferred_entry_at_landing(tmp_pa
         assert finding["class"] == "simplification"
         assert finding["locus"] == f"{REPO_NAME}/BUILD.md:1"
 
-    # land_pr_ci merges the PR into the base branch — the build commit is on bare main.
+    # `land` merges the PR into the base branch — the build commit is on bare main.
     build_md = git_bare(origin_bare, "show", "main:BUILD.md")
     assert "build pass" in build_md, f"the build commit did not land on main:\n{build_md}"

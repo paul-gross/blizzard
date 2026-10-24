@@ -119,7 +119,7 @@ DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
 
 # Pending-poll cadence defaults (#66), overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
-DEFAULT_POLL_TIMEOUT = timedelta(minutes=30)
+DEFAULT_POLL_TIMEOUT = timedelta(hours=3)
 
 # Crash points for the per-step re-run windows (`bzh:crash-point-registry`).
 _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER = crashpoint(

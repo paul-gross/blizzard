@@ -64,12 +64,14 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Landed; run the post-merge acceptance check.", "to": "verify"},
                         "conflict": {"description": "Conflict; back to build.", "to": "build"},
                         "failure": {"description": "Failed.", "to": "build"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
                     },
                 },
             },

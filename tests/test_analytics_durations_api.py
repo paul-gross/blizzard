@@ -18,8 +18,6 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from tests.support import (
-    FakeHubCommandRunner,
-    FakeHubWorkdir,
     FakeWorkSource,
     HubHarness,
     build_hub,
@@ -85,10 +83,7 @@ nodes:
           to: build
   merge:
     executor: hub
-    run:
-      - name: land
-        command: land-the-repo
-        produces: merged
+    action: pass
     judgement:
       choices:
         success:
@@ -158,15 +153,11 @@ def _seeded_hub(  # type: ignore[no-untyped-def]
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
     graph_yaml: str = _GRAPH_YAML,
-    hub_command_runner: FakeHubCommandRunner | None = None,
-    hub_workdir: FakeHubWorkdir | None = None,
 ):
     hub = build_hub(
         tmp_path,
         auth_mode="oauth",
         work_sources=work_sources,
-        hub_command_runner=hub_command_runner,
-        hub_workdir=hub_workdir,
     )
     admin = seed_user(hub, username="admin", role=Role.ADMIN)
     admin_token = seed_session(hub, admin)
@@ -315,11 +306,7 @@ def test_a_hub_executed_steps_own_exit_transition_carries_no_duration(tmp_path: 
     """A hub-executed node's own exit shares one instant with its own synthetic lease
     mint by construction — the real predecessor step shows up, the
     hub's own instantaneous one does not."""
-    runner = FakeHubCommandRunner()
-    workdir = FakeHubWorkdir()
-    hub, token, _graph_id, nodes = _seeded_hub(
-        tmp_path, graph_yaml=_HUB_STEP_GRAPH_YAML, hub_command_runner=runner, hub_workdir=workdir
-    )
+    hub, token, _graph_id, nodes = _seeded_hub(tmp_path, graph_yaml=_HUB_STEP_GRAPH_YAML)
     chunk_id = _mint_chunk(hub, token)
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.clock.advance(timedelta(seconds=30))

@@ -36,7 +36,8 @@ def _min_build_deliver() -> dict[str, Any]:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
+                "action": "test.answer",
+                "with": {"choice": "failure"},
                 "judgement": {
                     "choices": {
                         "landed": {"description": "landed", "to": "done"},

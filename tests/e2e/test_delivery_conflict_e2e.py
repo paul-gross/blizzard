@@ -77,12 +77,14 @@ def _graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict; back to build.", "to": "build"},
                         "failure": {"description": "Failed.", "to": "build"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
                     }
                 },
             },
@@ -214,7 +216,7 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
         # Fleet truth, as the trace backend sees it: the bounced deliver step is routing, not error — it carries a
         # `bounce` event with cause `conflict` and closes back to build, and the re-entered build links to it by
         # `bounce`. The chunk keeps looping against the armed lever, so only the first three steps are read.
-        # The hub runs platform spans at a zero root sample ratio: its `hub run step` spans still export, parented
+        # The hub runs platform spans at a zero root sample ratio: its `hub action pass` spans still export, parented
         # on the very `hub exec` span the sweep tells, which proves the inline derivation and the sweep agree.
         with subtests.test(msg="fleet traces"):
             fleet_traces.require()
@@ -240,19 +242,19 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
             )
             deliver = traces[1]
             (hub_exec,) = [c for c in deliver.children if c.name == "hub exec"]
-            # A `hub run step` exports live, its `hub exec` only when its step closes: read the runs of told steps.
+            # A `hub action pass` exports live, its `hub exec` only when its step closes: read the passes of told steps.
             told = told_until([t.root for t in traces])[deliver.root.trace_id]
-            run_steps = [
+            passes = [
                 s
                 for s in fleet_traces.platform_spans()
-                if s.name == "hub run step" and s.trace_id == deliver.root.trace_id and s.start_ns < told
+                if s.name == "hub action pass" and s.trace_id == deliver.root.trace_id and s.start_ns < told
             ]
-            assert run_steps, "the chunk's trace carries no told `hub run step` span"
-            # The work trace holds every told deliver step's runs; each hangs on its own step's `hub exec`.
+            assert passes, "the chunk's trace carries no told `hub action pass` span"
+            # The work trace holds every told deliver step's passes; each hangs on its own step's `hub exec`.
             hub_execs = {c.span_id for trace in traces for c in trace.children if c.name == "hub exec"}
-            assert {s.parent_span_id for s in run_steps} <= hub_execs
-            assert hub_exec.span_id in {s.parent_span_id for s in run_steps}
-            assert all("blizzard.hub.run_step.exit_code" in s.attributes for s in run_steps)
+            assert {s.parent_span_id for s in passes} <= hub_execs
+            assert hub_exec.span_id in {s.parent_span_id for s in passes}
+            assert all(s.attributes["blizzard.hub.action.name"] == "land" for s in passes)
 
         with subtests.test(msg="platform spans"):
             fleet_traces.require()

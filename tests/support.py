@@ -68,7 +68,7 @@ from blizzard.hub.composition import (
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
-from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
+from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.forge_handle import ForgeHandleFactory
 from blizzard.hub.delivery.internal.github_handle import GitHubHandle
@@ -151,6 +151,8 @@ _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 # The shipped catalogue with the two test actions added — what a test hands graph validation.
 TEST_CATALOGUE = SHIPPED_CATALOGUE.including(TEST_ACTION_SPECS)
+# The shipped actions with the two test actions added — what an in-process hub serves.
+TEST_HUB_ACTIONS = HubActions.of([*SHIPPED_ACTIONS.implementations.values(), *TEST_ACTIONS])
 
 
 def first_color(colors: Sequence[ProjectColor]) -> ProjectColor:
@@ -1317,7 +1319,7 @@ def build_hub(
     flags: Flags | None = None,
     hub_version: str | None = None,
     version_window: VersionWindow = VERSION_WINDOW,
-    actions: HubActions = HUB_ACTIONS,
+    actions: HubActions = TEST_HUB_ACTIONS,
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     forge_handles: ForgeHandleFactory = GitHubHandle.of,

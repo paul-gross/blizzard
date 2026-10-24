@@ -210,7 +210,6 @@ def _opencode_transcript_chunk_spec(work_ref_url: str) -> dict:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},
@@ -416,7 +415,6 @@ def _opencode_crash_chunk_spec(work_ref_url: str) -> dict:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "true"}],
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly.", "to": "done"},

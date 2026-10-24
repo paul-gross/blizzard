@@ -49,7 +49,6 @@ from tests.config_inputs import init_host, load_host_config, load_hub_config
 from tests.crash.support import (
     ENV_CRASH_FENCE,
     ENV_CRASH_POINT,
-    LAND_STEP,
     OPENCODE_SESSION_NAME,
     OWNER,
     REPO,
@@ -62,6 +61,7 @@ from tests.crash.support import (
     git_bare,
     graph_yaml,
     intended_migrate_source_yaml,
+    land_node,
     migrate_hub_source_yaml,
     migrate_hub_target_yaml,
     migrate_source_yaml,
@@ -1159,16 +1159,7 @@ def _pre_declare_graph_yaml(landed_file: str, pushed_marker: Path, go_marker: Pa
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -1306,8 +1297,8 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         if status == "done":
-            # The land step's refusal worked through a retried build, not a silent empty delivery — against
-            # the unmodified LAND_STEP this assertion fails: `done` with `commits == []`.
+            # `land`'s refusal worked through a retried build, not a silent empty delivery — without the
+            # refusal this assertion fails: `done` with `commits == []`.
             assert len(commits) == 1, f"landed `done` with an empty delivery: {landed_file} is on main {len(commits)}x"
         else:
             # The refusal escalated instead of silently converging — never a landed file.
@@ -1347,16 +1338,7 @@ def _hanging_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -1403,16 +1385,7 @@ def _sigint_drain_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -1866,16 +1839,7 @@ def _opencode_hanging_graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -2025,16 +1989,7 @@ def _abandon_graph_yaml(landed_file: str, marker: Path) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -2469,16 +2424,7 @@ def _release_graph_yaml(build_prompt: str, *, review: bool) -> str:
             },
             "retries": {"max": 1, "exhausted": "escalate"},
         }
-    nodes["deliver"] = {
-        "executor": "hub",
-        "run": [{"command": LAND_STEP}],
-        "judgement": {
-            "choices": {
-                "success": {"description": "Delivered.", "to": "done"},
-                "failure": {"description": "Failed to deliver.", "to": "build"},
-            }
-        },
-    }
+    nodes["deliver"] = land_node()
     return yaml.safe_dump({"name": "default-delivery", "entry": "build", "nodes": nodes}, sort_keys=False)
 
 
@@ -2619,9 +2565,52 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 # --- Generic hub command node (#65) — the hubnode.* per-step crash windows ---
 
 
-# The land step's command, shared with the generic sweep graph's own ``deliver`` step — see
-# :data:`support.LAND_STEP` for what it runs and why re-running it lands nothing twice.
-_LAND_STEP = LAND_STEP
+# The ``merge`` node's ``land`` step: merges each submitted branch to base by pinned SHA against the
+# mock forge; idempotent by construction, and refuses an empty delivery as ``land`` does.
+_LAND_STEP = """python3 - <<'PYEOF'
+import json, os, sys, urllib.error, urllib.request
+
+forge = os.environ.get("BZ_FORGE_URL", "")
+base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
+commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
+
+if not commits and os.environ.get("BZ_HUB_EXPECT_GIT_COMMITS", "1") != "0":
+    print(
+        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
+        "is nothing to open a PR for.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def call(method, path, payload):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        forge + path, data=data, headers={"Content-Type": "application/json"}, method=method
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, json.loads(resp.read().decode() or "null")
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+
+
+for c in commits:
+    repo = c["repo"] if "/" in c["repo"] else "blizzard/" + c["repo"]
+    status, body = call(
+        "POST",
+        "/repos/%s/pulls" % repo,
+        {"title": "land", "head": c["branch"], "base": base, "body": "", "user": "blizzard-hub"},
+    )
+    if status == 201 and body:
+        call(
+            "PUT",
+            "/repos/%s/pulls/%s/merge" % (repo, body["number"]),
+            {"commit_message": "blizzard: land", "sha": c["commit"], "merge_method": "merge", "user": "blizzard-hub"},
+        )
+print("landed the submitted branches")
+PYEOF
+"""
 
 # A no-op second step, unmarked, so ``hubnode.after-marker.before-next`` has a "next"
 # step to skip the marked land step in favour of.
@@ -3522,16 +3511,7 @@ def _preempt_graph_yaml(landed_file: str, marker: Path) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {
-                "executor": "hub",
-                "run": [{"command": LAND_STEP}],
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
+            "deliver": land_node(),
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -3618,15 +3598,37 @@ def test_kill9_at_preempt_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-# --- The close-intent outbox — no forge: driven entirely through the ---
-# --- built-in `hub` work source, whose landing marker and whose closer are both local ---
+# --- The close-intent outbox — driven through the built-in `hub` work source, whose closer is ---
+# --- local; `land` against the mock forge writes the landing marker that owes the close intent ---
 
 
-def _close_intent_graph_yaml() -> str:
-    """Named ``default-delivery`` so ``ensure_default`` resolves to it. A no-op ``build``
-    hands off to ``land``, a hub node whose ``run:`` step marks ``merged/<repo>`` with no
-    git or forge involved and routes straight to ``done`` — the runner must claim ``build``
-    once before it holds a hub node (#65), so both ``close.*`` windows open only after that."""
+def _close_intent_graph_yaml(landed_file: str) -> str:
+    """``default-delivery``: ``build`` commits ``landed_file``, then ``land``, whose ``merged/<repo>`` marker owes
+    the item's close intent — so both ``close.*`` windows open only after the runner claims ``build``."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file),
+                "produces": [{"name": "commit", "kind": "git_commit"}],
+                "judgement": {
+                    "prompt": "verdict('pass', 'the mock harness committed the change; checks are green')\n",
+                    "choices": {"pass": {"description": "Committed; hand off to land.", "to": "land"}},
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "land": land_node(),
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _no_op_graph_yaml() -> str:
+    """``default-delivery``: a no-op ``build``, then a hub node taking ``pass`` — a chunk that converges, no forge."""
     import yaml
 
     graph = {
@@ -3644,7 +3646,7 @@ def _close_intent_graph_yaml() -> str:
             },
             "land": {
                 "executor": "hub",
-                "run": [{"command": "true", "produces": f"merged/{REPO_NAME}"}],
+                "action": "pass",
                 "judgement": {
                     "choices": {
                         "success": {"description": "Delivered.", "to": "done"},
@@ -3657,13 +3659,12 @@ def _close_intent_graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _ingest_close_intent_chunk(hub: httpx2.Client) -> tuple[str, str]:
-    """Mint the close-intent graph as the packaged default's own name, then create a
-    hub-owned work item — no forge issue, no configured work source at
-    all. Returns ``(chunk_id, ref)``."""
-    minted = hub.post("/api/graphs", json={"definition_yaml": _close_intent_graph_yaml()})
+def _ingest_hub_item_chunk(hub: httpx2.Client, definition_yaml: str) -> tuple[str, str]:
+    """Mint ``definition_yaml`` as the packaged default's own name, then create a hub-owned work item — no
+    forge issue. Returns ``(chunk_id, ref)``."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert minted.status_code == 201, minted.text
-    created = hub.post("/api/work-sources/hub/items", json={"title": "close-intent crash chunk", "body": "b"})
+    created = hub.post("/api/work-sources/hub/items", json={"title": "hub-item crash chunk", "body": "b"})
     assert created.status_code == 201, created.text
     body = created.json()
     chunk_id, ref = body["chunk_id"], body["ref"]
@@ -3692,18 +3693,18 @@ def _wait_item_delivered(hub: httpx2.Client, ref: str, *, timeout: float) -> dic
 def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` inside the close-intent outbox's own windows still
     converges: the pending intent survives the crash and the item closes exactly once,
-    driven entirely through the built-in ``hub`` work source — no forge involved."""
+    driven through the built-in ``hub`` work source, landed through ``land`` against the mock forge."""
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
 
-    # Both close.* windows fire inside the HUB; no configured work source at all — the
-    # always-seated built-in `hub` source is the only one.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point, work_sources=())
+    # Both close.* windows fire inside the HUB. The item comes from the always-seated built-in `hub`
+    # source; the seeded forge repository is what `land` merges through.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
     runner_proc = None
     hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        chunk_id, ref = _ingest_close_intent_chunk(hub)
+        chunk_id, ref = _ingest_hub_item_chunk(hub, _close_intent_graph_yaml(f"close-{point}.txt"))
 
         write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
@@ -3723,7 +3724,7 @@ def test_kill9_at_close_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
 
         # Restart the hub UNARMED; the runner's replayed hub-advance poll resumes the
         # interrupted run, and the always-on drain sweep retires the surviving intent.
-        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, work_sources=())
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
@@ -3819,7 +3820,7 @@ def test_kill9_at_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
-            chunk_id, _ = _ingest_close_intent_chunk(hub)
+            chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
             write_runner_config(
                 runner_dir,
                 workspace=crash_env.workspace,
@@ -3952,7 +3953,7 @@ def test_kill9_at_egress_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
-        chunk_id, _ = _ingest_close_intent_chunk(hub)
+        chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
         write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
         )
@@ -4059,7 +4060,7 @@ def test_kill9_at_lease_trace_crash_point(crash_env: CrashEnv, tmp_path: Path, p
         hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
         try:
             await_http(hub, "/api/health", proc=hub_proc)
-            chunk_id, _ = _ingest_close_intent_chunk(hub)
+            chunk_id, _ = _ingest_hub_item_chunk(hub, _no_op_graph_yaml())
             write_runner_config(
                 runner_dir,
                 workspace=crash_env.workspace,

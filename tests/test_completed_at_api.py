@@ -21,7 +21,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
 
-# Mirrors tests/test_chunks_api.py's own merge graph: the deliver hub node's `run: true`
+# Mirrors tests/test_chunks_api.py's own merge graph: the deliver hub node's `pass` action
 # completes synchronously, so one build completion carries the chunk straight to `done`.
 _MERGE_YAML = """
 name: default-delivery
@@ -43,8 +43,7 @@ nodes:
           to: build
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:

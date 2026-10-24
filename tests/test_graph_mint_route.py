@@ -158,8 +158,7 @@ nodes:
       exhausted: escalate
   deliver:
     executor: hub
-    run:
-      - command: "true"
+    action: pass
     judgement:
       choices:
         success:
@@ -206,8 +205,8 @@ nodes:
       exhausted: escalate
   merge:
     executor: hub
-    run:
-      - command: check-ci
+    action: test.sequence
+    with: {choices: [pending, success]}
     poll_interval: 15
     poll_timeout: 600
     judgement:

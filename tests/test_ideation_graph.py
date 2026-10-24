@@ -221,17 +221,6 @@ def test_ideation_deliver_loop_bound_is_a_count_the_worker_can_evaluate(prompt: 
     assert "has already left" not in text
 
 
-def test_ideation_deliver_runs_the_packaged_script_naming_its_artifacts() -> None:
-    doc = _doc()
-    deliver = doc.node("deliver")
-    assert deliver is not None and deliver.is_hub_command_node
-    (step,) = deliver.run
-    assert step.name == "materialize-garden-artifacts"
-    assert "blizzard.hub.graphs.scripts.garden_deliver" in step.command
-    assert "--delta delta" in step.command
-    assert "--proposals docket" in step.command
-
-
 def test_ideation_produces_lists_and_never_a_commit() -> None:
     """`survey` declares both its own assets; `propose` republishes `delta` alongside
     `docket` so delivery always has a `delta` to read regardless of which path reached

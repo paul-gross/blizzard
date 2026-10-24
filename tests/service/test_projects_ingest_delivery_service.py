@@ -2,8 +2,8 @@
 
 A tenant holding two projects, each drawing from its own work source: an ingest that names no project mints into
 the one its sources link, and one its sources leave open is refused whole, naming the projects to choose from. A
-chunk whose commit names a repository its project does not link reaches its land script's ``deliver`` step, which
-is refused before the script runs — nothing reaches the forge — with a critical ``repository-not-linked`` event read
+chunk whose commit names a repository its project does not link reaches its ``deliver`` step's ``land`` action, which
+is refused before the action runs — nothing reaches the forge — with a critical ``repository-not-linked`` event read
 back over the events API, and the step's failure route taken. sqlite only. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def test_an_ingest_whose_sources_disagree_is_refused_whole_naming_the_projects(t
 
 
 def _not_linked_graph_yaml() -> str:
-    """``build`` hands a commit to a ``deliver`` hub step running the default land script, whose ``failure`` routes
+    """``build`` hands a commit to a ``deliver`` hub step taking the ``land`` action, whose ``failure`` routes
     to ``triage`` — a node nothing else reaches."""
     graph = {
         "name": "not-linked-delivery",
@@ -112,12 +112,14 @@ def _not_linked_graph_yaml() -> str:
             },
             "deliver": {
                 "executor": "hub",
-                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Landed.", "to": "done"},
                         "conflict": {"description": "Conflict.", "to": "build"},
                         "failure": {"description": "Failed to deliver.", "to": "triage"},
+                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
                     }
                 },
             },
@@ -143,7 +145,7 @@ _COMMIT_ON_TOY_API = [
 ]
 
 
-def test_a_commit_its_project_does_not_link_is_refused_at_deliver_before_the_land_script(tmp_path: Path) -> None:
+def test_a_commit_its_project_does_not_link_is_refused_at_deliver_before_the_land_action(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     with _two_projects(tmp_path) as (forge, hub, hub_port):
         minted = hub.post("/api/graphs", json={"definition_yaml": _not_linked_graph_yaml()})

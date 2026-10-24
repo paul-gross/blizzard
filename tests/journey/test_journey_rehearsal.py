@@ -251,11 +251,11 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            # Delivery is graph content (#67): a generic hub command node running the
-            # packaged default graph's own `land_default` script; mirrors `hub/graphs/default/graph.yaml`.
+            # Delivery is graph content: a hub node taking the shipped `land` action against the mock forge.
             "deliver": {
                 "executor": "hub",
-                "run": [{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "action": "land",
+                "poll_interval": 1,
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo merged cleanly into its base branch.", "to": "done"},
@@ -264,6 +264,7 @@ def _graph_yaml() -> str:
                             "to": "build",
                         },
                         "failure": {"description": "A repo failed to land; kicked back to build.", "to": "build"},
+                        "inherited-failure": {"description": "The base check stays red; back to build.", "to": "build"},
                     }
                 },
             },

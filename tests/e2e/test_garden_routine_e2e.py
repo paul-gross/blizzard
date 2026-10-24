@@ -2,7 +2,7 @@
 of the standing e2e smoke.
 
 The real packaged YAML is minted with only its prompts swapped for scripts the mock can
-execute — nodes, edges, session pools, and the ``garden_deliver`` command all travel to
+execute — nodes, edges, session pools, and the ``garden-deliver`` action all travel to
 the mint verbatim — then one routine runs it through every authored path."""
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ _PROPOSE_JUDGEMENT = (
 
 def _scripted_garden_graph_yaml() -> str:
     """The real packaged ``garden-routine`` body with only its prompts swapped for
-    scripts — nodes, edges, session pools, and the deliver command stay verbatim."""
+    scripts — nodes, edges, session pools, and the deliver action stay verbatim."""
     body = PACKAGED.named("garden-routine").body
     common = _common()
     nodes: Any = body["nodes"]
