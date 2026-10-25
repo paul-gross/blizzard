@@ -12,6 +12,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.composition import _credential_renewal_pass, _pool_held_ids
 from blizzard.runner.config import SubscriptionDeclaration
+from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.support_child_launch import CHILDREN, tool_env
@@ -38,16 +39,17 @@ def test_the_renewal_pass_pairs_each_renewable_subscription_with_its_slug_cadenc
     built = _credential_renewal_pass(declarations, stores, clock, children=CHILDREN, env=tool_env())  # type: ignore[arg-type]
 
     assert built is not None
-    [renewable] = built._subscriptions
-    assert (renewable.slug, renewable.sample_interval_seconds) == ("gpt", 77)
-    assert isinstance(renewable.renewer, OpenAICredentialRenewer)
+    claude, gpt = built._subscriptions
+    assert isinstance(claude.renewer, AnthropicCredentialRenewer)
+    assert (gpt.slug, gpt.sample_interval_seconds) == ("gpt", 77)
+    assert isinstance(gpt.renewer, OpenAICredentialRenewer)
     assert built._renewals is stores.external_usage
     assert built._clock is clock
 
 
 def test_a_host_whose_providers_bind_no_renewer_builds_no_renewal_pass() -> None:
     stores: Any = SimpleNamespace(external_usage=object())
-    declarations = (SubscriptionDeclaration(slug="claude", name="Claude", provider=PROVIDER_ANTHROPIC),)
+    declarations = (SubscriptionDeclaration(slug="mystery", name="Mystery", provider="some-unshipped-provider"),)
 
     built = _credential_renewal_pass(
         declarations,

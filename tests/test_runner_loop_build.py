@@ -289,7 +289,7 @@ def test_no_renewal_pass_is_composed_when_no_provider_binds_a_renewer(tmp_path: 
         runner_id=FIXTURE_RUNNER_ID,
         root=tmp_path,
         db_url=HostLayout(tmp_path).default_db_url,
-        subscriptions=(SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),),
+        subscriptions=(SubscriptionDeclaration(slug="mystery", name="Mystery", provider="some-unshipped-provider"),),
     )
 
     with loop_graph(config) as graph:

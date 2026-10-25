@@ -293,8 +293,11 @@ taken just before a renewal lands can still miss as `credential_lapsed`, and the
 `blizzard runner tick` never renews. The runner records each renewal attempt before asking `codex`, so a renewal whose
 outcome is lost, to a crash or a failed write, is never repeated within that interval. It needs the `codex` binary
 reachable from the runner's environment; a renewal that times out or is refused is recorded as a failed outcome with its
-reason, never a raise. `anthropic` carries none: a fleet's own Claude Code workers renew that token continuously, and an
-idle Anthropic runner whose token lapses shows the lapsed condition below until its next worker refreshes the file.
+reason, never a raise. `anthropic` binds a renewer too: within 4 minutes of expiry it runs a minimal headless `claude`
+one-shot (haiku, one turn, no tools, MCP servers, settings or session) and counts the renewal done once `expiresAt` in
+`~/.claude/.credentials.json` has moved forward — even if the call itself was throttled, since Claude Code refreshes
+before it sends. It needs the `claude` binary reachable from the runner's environment. An expired refresh token still
+needs an operator login and shows the lapsed condition below.
 
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a

@@ -1,6 +1,6 @@
 """``select_renewer`` — the provider -> renewer-binding selection.
 
-Anthropic and any unknown provider select ``None`` — declared, but with no renewal
+An unknown provider selects ``None`` — declared, but with no renewal
 binding, which keeps today's read-only behaviour exactly."""
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.internal.credential_renewer_factory import select_renewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
@@ -31,12 +32,11 @@ class _UnreachableSubprocess:
         raise AssertionError("no subprocess should have been run")
 
 
-def test_anthropic_selects_no_renewer() -> None:
+def test_anthropic_selects_an_anthropic_renewer() -> None:
     declaration = SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC)
 
-    assert (
-        select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env()) is None
-    )
+    renewer = select_renewer(declaration, clock=FixedClock(_NOW), subprocess=_UnreachableSubprocess(), env=tool_env())
+    assert isinstance(renewer, AnthropicCredentialRenewer)
 
 
 def test_an_unknown_provider_selects_no_renewer() -> None:
