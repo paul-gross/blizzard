@@ -10,3 +10,9 @@ registration's answer carries the hub's version and window. `GET /api/runners` r
 standing against the window. A hub whose own version is below its window's floor refuses to start. A refused runner
 halts alone, leaving the host's other runners working, and registers again each tick until it is admitted; its status
 reports `version_refused` with the hub's sentence, and the hub's version and window once admitted.
+
+## Upgrade
+
+Move the hub first. A runner whose version sits outside the hub's window is refused `409` and claims nothing until it is
+upgraded or downgraded into the window, so the runner host follows the hub in the same pass. To go back, reinstall the
+previous wheel and run `blizzard hub migrate --down` to the previous revision.

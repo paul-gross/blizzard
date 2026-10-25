@@ -9,3 +9,9 @@ gate declines, `ready` at that step for whichever runner's throttles admit it, a
 of a lease a usage limit parks mid-step while its floor still holds, keeping the half-done step's spend. Neither spends
 a retry. A runner whose hub refuses the release, or predates it, keeps the chunk as with `"hold"`. Any other value halts
 the runner and names the key. `blizzard runner status` and the runner panel show both choices.
+
+## Upgrade
+
+Move the hub before the runner host. Both keys default to `"hold"`, so nothing changes until you set one. To go back to
+an older wheel, set both back to `"hold"` and remove them from the runner's configuration first, then downgrade each
+store before its older install.

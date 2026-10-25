@@ -149,10 +149,6 @@ def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, mon
 <details>
 <summary>Commits</summary>
 
-## Upgrade notes
-
-_Fill in when this release asks something of the operator — see docs/versioning.md._
-
 ## Fixes
 
 - second (SHA)
