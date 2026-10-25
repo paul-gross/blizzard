@@ -273,6 +273,34 @@ def test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg() -> No
         provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
 
 
+def test_oidc_exchange_refuses_a_jwks_entry_that_parses_to_a_private_key() -> None:
+    private_key, _ = _rsa_keypair()
+    private_jwk = json.loads(RSAAlgorithm.to_jwk(private_key))  # type: ignore[arg-type]
+    private_jwk.update(kid=_KID, alg="RS256", use="sig")
+    token = _id_token(private_key, claims={"sub": "u1"})
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        path = request.url.path
+        if path.endswith("/.well-known/openid-configuration"):
+            return httpx2.Response(
+                200,
+                json={
+                    "authorization_endpoint": f"{_ISSUER}/authorize",
+                    "token_endpoint": f"{_ISSUER}/token",
+                    "jwks_uri": f"{_ISSUER}/jwks",
+                },
+            )
+        if path == "/token":
+            return httpx2.Response(200, json={"id_token": token})
+        if path == "/jwks":
+            return httpx2.Response(200, json={"keys": [private_jwk]})
+        return httpx2.Response(404)
+
+    provider = _oidc_provider(httpx2.Client(transport=httpx2.MockTransport(handler)))
+    with pytest.raises(OAuthExchangeError):
+        provider.exchange(code="abc", redirect_uri="https://hub.test/callback")
+
+
 def test_oidc_exchange_raises_when_id_token_carries_no_sub() -> None:
     provider = _oidc_provider(_oidc_transport({}))
     with pytest.raises(OAuthExchangeError):
