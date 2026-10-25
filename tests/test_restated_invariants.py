@@ -100,9 +100,10 @@ def test_case1_marker_matches_across_line_break_in_ts_block(tmp_path: Path) -> N
 # the marker.
 
 
-def test_case2_excluded_root_not_reported(tmp_path: Path) -> None:
-    excluded = tmp_path / "openapi"
-    excluded.mkdir()
+@pytest.mark.parametrize("root", ["openapi", "tests/harness/client/wire/hub"])
+def test_case2_excluded_root_not_reported(tmp_path: Path, root: str) -> None:
+    excluded = tmp_path / root
+    excluded.mkdir(parents=True)
     (excluded / "widget.ts").write_text(
         "/**\n * The verb is wrapped\n * implies raw, never the reverse.\n */\nexport class Widget {}\n"
     )

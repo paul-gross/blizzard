@@ -43,6 +43,7 @@ _EXTS = (".py", ".ts", ".md")
 _EXCLUDED_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("openapi",),
     ("web", "projects", "fleet", "src", "lib", "api"),
+    ("tests", "harness", "client", "wire"),
     ("src", "blizzard", "static"),
 )
 
