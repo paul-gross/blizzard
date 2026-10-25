@@ -225,6 +225,36 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
 
 
 @pytest.mark.unit
+def test_resolved_gate_after_a_later_claim_submits_at_the_current_epoch(tmp_path):  # type: ignore[no-untyped-def]
+    """A decision opened at a landing epoch, with a claim since reserved a later one: the resolving
+    transition is fenced at the current epoch yet still names the landing decision."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        latest_epoch=2,
+        route_runner_id="r1",
+        decision=ChunkGate(
+            decision_id="dec_1", node_id="nd_gate", epoch=1, resolved_choice="approve", transitioned=False
+        ),
+    )
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200), verdict="pass"
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    Advance(ctx).run()
+
+    _, submission = hub.completions[0]
+    assert submission.epoch == 2
+    assert submission.decision_id == "dec_1"
+
+
+@pytest.mark.unit
 def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def]
     """A parked chunk whose decision is not yet resolved advances nothing."""
     store = _store(tmp_path)

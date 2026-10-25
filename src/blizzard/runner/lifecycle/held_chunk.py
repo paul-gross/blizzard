@@ -17,6 +17,7 @@ from blizzard.runner.lifecycle.model import (
     HeldChunkMove,
     TakeoverHolds,
     apply_move,
+    gate_resolution_epoch,
     gate_resolution_lease_id,
     held_chunk_move,
     held_chunk_reads_local_epoch,
@@ -155,7 +156,7 @@ class HeldChunk:
             _log.info("gate-parked chunk no longer routed here — releasing envs", chunk_id=self.chunk_id)
             self.ctx.env_release.release_chunk(self.chunk_id)
         elif move is HeldChunkMove.RESOLVE_GATE and view.decision is not None:
-            self._resolve_gate(view.decision)
+            self._resolve_gate(view.decision, view.latest_epoch)
         elif move is HeldChunkMove.SPAWN_ADVANCED and view.latest_epoch is not None:
             self._spawn_advanced_node(view.latest_epoch)
         elif move is HeldChunkMove.POLL_HUB_NODE:
@@ -204,24 +205,26 @@ class HeldChunk:
         _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=self.chunk_id)
         Spawner(self.ctx).enter_node(self.chunk_id, envelope, Environments(bindings).acquired, via="advance")
 
-    def _resolve_gate(self, decision: ChunkGate) -> None:
+    def _resolve_gate(self, decision: ChunkGate, hub_epoch: int | None) -> None:
         """Record the resolving transition for a decided gate and continue in place.
 
-        Reuses the parked step's epoch — no new lease was minted while parked — and references
-        the decision id, which is what makes a transition out of a human-judged node legal."""
+        Submits at the chunk's current epoch — the parked step's, or a later one when a claim was
+        reserved after a route-releasing landing — and references the decision id, which is what
+        makes a transition out of a human-judged node legal."""
         parked = self.ctx.stores.lease_record.latest_lease_for_chunk(self.chunk_id)
+        epoch = gate_resolution_epoch(hub_epoch, decision)
         submission = Completion(
             choice=decision.resolved_choice or "",
-            epoch=decision.epoch,
+            epoch=epoch,
             from_node_id=decision.node_id,
             artifacts=[],  # the decision's artifacts already landed
             decision_id=decision.decision_id,
             # Not buffered, so stamped directly at submit.
             route_token=self.ctx.stores.tokens.route_token(self.chunk_id),
-            lease_id=gate_resolution_lease_id(parked, decision),
+            lease_id=gate_resolution_lease_id(parked, epoch),
         )
         try:
-            gate = StepKey.gate(self.chunk_id, decision.epoch, decision.decision_id)
+            gate = StepKey.gate(self.chunk_id, epoch, decision.decision_id)
             with self.ctx.tracer.under(step_root(gate)):
                 response = self.ctx.hub.submit_completion(self.chunk_id, submission)
         except HubClientError:
