@@ -245,8 +245,10 @@ class GitHubLanding:
         return tuple(found)
 
     async def rerun_check(self, id: str) -> bool:
-        response = await self._send("POST", f"{self._repo}/check-runs/{id}/rerequest", write=True)
-        if response.status_code in (401, 403):
+        # A GitHub Actions check run's id is its job id, and a token can re-run a job; the check-run rerequest
+        # route answers only the GitHub App that owns the run. A run that is no Actions job answers 404 or 422.
+        response = await self._send("POST", f"{self._repo}/actions/jobs/{id}/rerun", write=True)
+        if response.status_code in (401, 403, 404, 422):
             return False
         await self._answered(response, ForgeObject.CHECK)
         return True

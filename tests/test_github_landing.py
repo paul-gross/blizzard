@@ -449,11 +449,14 @@ def test_a_merge_answer_without_its_revision_reads_the_change_for_it() -> None:
     assert harness.run(lambda forge: forge.merge(7, "h1", MergeMethod.MERGE, "msg")) == "m1"
 
 
-@pytest.mark.parametrize(("status", "accepted"), [(201, True), (401, False), (403, False)])
-def test_rerun_check_answers_whether_the_forge_took_it(status: int, accepted: bool) -> None:
-    harness = _Harness({("POST", f"{_REPO}/check-runs/11/rerequest"): [_reply(status, {})]})
+@pytest.mark.parametrize(("status", "accepted"), [(201, True), (401, False), (403, False), (404, False), (422, False)])
+def test_rerun_check_reruns_the_actions_job_and_answers_whether_the_forge_took_it(status: int, accepted: bool) -> None:
+    harness = _Harness({("POST", f"{_REPO}/actions/jobs/11/rerun"): [_reply(status, {"message": "nope"})]})
 
     assert harness.run(lambda forge: forge.rerun_check("11")) is accepted
+    assert [(request.method, request.url.path) for request in harness.recorded.requests] == [
+        ("POST", f"{_REPO}/actions/jobs/11/rerun")
+    ]
 
 
 # Failures
@@ -488,11 +491,10 @@ def test_any_other_4xx_is_rejected_with_the_forges_message() -> None:
             ForgeObject.CHANGE,
         ),
         (("PUT", f"{_REPO}/pulls/7/update-branch"), lambda forge: forge.update_from_base(7, "h"), ForgeObject.CHANGE),
-        (("POST", f"{_REPO}/check-runs/11/rerequest"), lambda forge: forge.rerun_check("11"), ForgeObject.CHECK),
         (("GET", f"{_REPO}/compare/a...b"), lambda forge: forge.compare("a", "b"), ForgeObject.REVISION),
         (("GET", f"{_REPO}/commits/h/check-runs"), lambda forge: forge.checks("h"), ForgeObject.REVISION),
     ],
-    ids=["change", "merge", "update-branch", "rerun", "compare", "checks"],
+    ids=["change", "merge", "update-branch", "compare", "checks"],
 )
 def test_a_404_with_the_repository_present_names_what_the_call_asked_for(
     route: tuple[str, str], call: Callable[[GitHubLanding], Awaitable[object]], what: ForgeObject
@@ -589,9 +591,7 @@ def test_a_rate_limit_says_when_to_resume_and_is_never_retried(
 
 
 def test_a_rate_limited_rerun_is_rate_limited_not_refused() -> None:
-    harness = _Harness(
-        {("POST", f"{_REPO}/check-runs/11/rerequest"): [_reply(403, {}, {"x-ratelimit-remaining": "0"})]}
-    )
+    harness = _Harness({("POST", f"{_REPO}/actions/jobs/11/rerun"): [_reply(403, {}, {"x-ratelimit-remaining": "0"})]})
 
     with pytest.raises(ForgeRateLimited):
         harness.run(lambda forge: forge.rerun_check("11"))

@@ -381,6 +381,16 @@ def test_a_re_run_check_still_red_answers_inherited_failure() -> None:
     assert double.named("rerun_check") == []
 
 
+def test_an_accepted_re_run_still_red_on_the_next_pass_answers_inherited_failure() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
+    first, sink = _land(double)
+    assert first.choice == "pending"
+
+    answer, _ = _land(double, _visit(markers=tuple(name for name in sink.markers() if name.startswith("ci-rerun/"))))
+    assert answer.choice == "inherited-failure"
+    assert double.named("rerun_check") == [(_WIDGET, {"id": "1"})]
+
+
 def test_two_repos_one_failing_names_only_the_failing_one_and_merges_neither() -> None:
     double = _forge(_WIDGET, _GADGET)
     double.repos[_GADGET].checks = {_SUBMITTED: (_failing(),), "main": GREEN}

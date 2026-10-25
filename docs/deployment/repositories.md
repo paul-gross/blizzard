@@ -53,6 +53,19 @@ Name such a repository by its new slug.
 
 Every field is required, and none can be cleared. Each `(forge_api_url, owner, repo)` belongs to one record.
 
+### The forge token
+
+On GitHub, delivery needs a fine-grained token on the repository with these permissions:
+
+| Permission    | Access       | Why                                                                         |
+| ------------- | ------------ | --------------------------------------------------------------------------- |
+| Contents      | Read & write | Read and move branches, compare revisions                                   |
+| Pull requests | Read & write | Open, update and merge pull requests                                        |
+| Checks        | Read         | Read each check on a revision                                               |
+| Actions       | Read & write | Re-run, once, a GitHub Actions check that is failing on the base branch too |
+
+Without Actions write, an inherited failure is never re-run and routes as the change's own failure.
+
 ## Verbs
 
 `create <slug>` stores the repository at revision 1, named `--name` (default: the slug). It is refused when another
