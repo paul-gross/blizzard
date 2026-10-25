@@ -7,7 +7,7 @@ note stays put outside the cut that wrote it."""
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -181,9 +181,3 @@ def judge(facts: Facts) -> Verdict:
     failures += _breaking_pair(facts)
     failures += _released_stay_put(facts)
     return Verdict(tuple(failures), tuple(honoured))
-
-
-def released_paths(changes: Collection[Change]) -> list[str]:
-    """The released-note paths the range touches, so the reader knows which to load at ``base`` and ``HEAD``."""
-    paths = {p for c in changes for p in (c.path, c.old_path) if p and _released_version(p)}
-    return sorted(paths)
