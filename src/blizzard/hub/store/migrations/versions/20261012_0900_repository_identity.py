@@ -333,7 +333,7 @@ def _carry_change_keys(bind: sa.Connection) -> None:
     _rewrite_keys(bind, [c.c.record_kind.in_(_KEYED_KINDS), ~held, sa.exists(named)], named)
 
 
-def _rewrite_keys(bind: sa.Connection, conditions: list[sa.ColumnElement[bool]], value: sa.Select) -> None:  # type: ignore[type-arg]
+def _rewrite_keys(bind: sa.Connection, conditions: list[sa.ColumnElement[bool]], value: sa.Select) -> None:
     """Set the key of the change rows ``conditions`` select to ``value``, a page of row ids at a time."""
     c = _changes
     page = sa.select(c.c.id).where(*conditions).order_by(c.c.id).limit(_BATCH_ROWS)

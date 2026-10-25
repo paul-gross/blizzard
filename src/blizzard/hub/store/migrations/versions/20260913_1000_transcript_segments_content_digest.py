@@ -125,7 +125,7 @@ def upgrade() -> None:
             )
             pending_row_updates.clear()
 
-    def process_segment(segment_id: str, rows: list) -> None:  # type: ignore[type-arg]
+    def process_segment(segment_id: str, rows: list) -> None:
         rows_sorted = sorted(rows, key=lambda r: r.turn_range_start)
         digests = [
             _row_digest(turn_range_start=r.turn_range_start, rejected=r.rejected, content=r.content)
@@ -151,7 +151,7 @@ def upgrade() -> None:
                 )
 
     current_segment_id: str | None = None
-    current_rows: list = []  # type: ignore[type-arg]
+    current_rows: list = []
     # Streamed, like the write side's own `_FLUSH_EVERY` batching below — `content` at
     # production scale (~178 MB compressed) must never sit in memory as one result set.
     rows_iter = bind.execute(

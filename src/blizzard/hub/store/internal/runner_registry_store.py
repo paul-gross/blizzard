@@ -69,7 +69,7 @@ class RunnerRegistryStore:
         with self._store.read("is_retired") as conn:
             return self._lifecycle(conn, runner_id)[0]
 
-    def get_runner_conn(self, conn, runner_id: str) -> RunnerRegistration | None:  # type: ignore[no-untyped-def]
+    def get_runner_conn(self, conn, runner_id: str) -> RunnerRegistration | None:
         """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection
         rather than a fresh one."""
@@ -468,12 +468,12 @@ class RunnerRegistryStore:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
+    def _paused(conn, runner_id: str) -> bool:
         """Derive the fleet's brake from the newest pause/resume fact, default False."""
         return RunnerRegistryStore._paused_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _paused_many(conn, runner_ids: Sequence[str]) -> dict[str, bool]:  # type: ignore[no-untyped-def]
+    def _paused_many(conn, runner_ids: Sequence[str]) -> dict[str, bool]:
         """``_paused``'s grouped sibling and its one home — every listed runner's fleet
         brake off its own newest pause/resume fact, one query for every id in
         ``runner_ids`` rather than one query per runner (`list_runners`)."""
@@ -498,14 +498,12 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _lifecycle(conn, runner_id: str) -> tuple[bool, datetime | None, str | None]:  # type: ignore[no-untyped-def]
+    def _lifecycle(conn, runner_id: str) -> tuple[bool, datetime | None, str | None]:
         """The runner's retirement, off its newest lifecycle fact."""
         return RunnerRegistryStore._lifecycle_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _lifecycle_many(  # type: ignore[no-untyped-def]
-        conn, runner_ids: Sequence[str]
-    ) -> dict[str, tuple[bool, datetime | None, str | None]]:
+    def _lifecycle_many(conn, runner_ids: Sequence[str]) -> dict[str, tuple[bool, datetime | None, str | None]]:
         """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
         its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None)``,
         and a reinstated runner's newest fact nulls ``at``/``by``."""
@@ -530,14 +528,12 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
+    def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:
         """The runner's own brake plus its cause, off the newest fact."""
         return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _local_pause_detail_many(  # type: ignore[no-untyped-def]
-        conn, runner_ids: Sequence[str]
-    ) -> dict[str, tuple[bool, str | None, str | None]]:
+    def _local_pause_detail_many(conn, runner_ids: Sequence[str]) -> dict[str, tuple[bool, str | None, str | None]]:
         """``_local_pause_detail``'s grouped sibling and its one home — every listed
         runner's own brake plus its cause, off its own newest fact, one query for every id
         in ``runner_ids`` rather than one query per runner (`list_runners`).
@@ -568,15 +564,13 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
+    def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:
         """Every reported subscription's newest sample for this runner, raw,
         one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _external_usage_many(  # type: ignore[no-untyped-def]
-        conn, runner_ids: Sequence[str]
-    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
+    def _external_usage_many(conn, runner_ids: Sequence[str]) -> dict[str, list[tuple[str, str, datetime, str]]]:
         """``_external_usage``'s grouped sibling and its one home — every listed runner's
         reported subscriptions, raw, one row per slug — ``(slug, name, sampled_at,
         windows_json)`` tuples — one query for every id in ``runner_ids`` rather than one
@@ -603,15 +597,13 @@ class RunnerRegistryStore:
         return grouped
 
     @staticmethod
-    def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:  # type: ignore[no-untyped-def]
+    def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:
         """Every reported subscription's newest miss for this runner, raw,
         one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_misses_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _external_usage_misses_many(  # type: ignore[no-untyped-def]
-        conn, runner_ids: Sequence[str]
-    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
+    def _external_usage_misses_many(conn, runner_ids: Sequence[str]) -> dict[str, list[tuple[str, str, datetime, str]]]:
         """``_external_usage_misses``'s grouped sibling and its one home — every listed
         runner's reported subscription misses, raw, one row per slug — ``(slug, name,
         missed_at, reason)`` tuples — one query for every id in ``runner_ids`` rather than
@@ -639,7 +631,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _registration(
-        row,  # type: ignore[no-untyped-def]
+        row,
         hub_paused: bool,
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],

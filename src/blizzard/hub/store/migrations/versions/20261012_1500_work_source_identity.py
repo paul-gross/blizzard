@@ -276,7 +276,7 @@ def _rewrite(
     table: sa.TableClause,
     column: str,
     conditions: list[sa.ColumnElement[bool]],
-    value: sa.Select,  # type: ignore[type-arg]
+    value: sa.Select,
 ) -> None:
     """Set ``column`` of the rows ``conditions`` select to ``value``, a page of row ids at a time."""
     page = sa.select(table.c.id).where(*conditions).order_by(table.c.id).limit(_BATCH_ROWS)

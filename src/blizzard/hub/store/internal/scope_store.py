@@ -81,7 +81,7 @@ def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
     return True
 
 
-def _named(stmts: ScopedStatements, project_id: str, slug: str, *columns: Any) -> Select:  # type: ignore[type-arg]
+def _named(stmts: ScopedStatements, project_id: str, slug: str, *columns: Any) -> Select:
     """``columns`` of the scope ``project_id`` names ``slug`` (every column when none is given)."""
     return stmts.select(scopes, *columns).where(scopes.c.project_id == project_id, scopes.c.slug == slug)
 
@@ -217,7 +217,7 @@ class ScopeStore:
             return _retired_slugs(conn, project_id)
 
     @staticmethod
-    def _of(row, *, retired: bool) -> Scope:  # type: ignore[no-untyped-def]
+    def _of(row, *, retired: bool) -> Scope:
         return Scope(
             scope_id=row.scope_id,
             slug=row.slug,

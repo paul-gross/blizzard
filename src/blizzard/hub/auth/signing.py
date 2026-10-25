@@ -106,7 +106,7 @@ class SigningKeyService:
     def _public_jwk(self, kid: str) -> dict[str, object]:
         private_pem = self._read_private_pem(kid)
         private_key = serialization.load_pem_private_key(private_pem, password=None)
-        public_key = private_key.public_key()  # type: ignore[union-attr]
+        public_key = private_key.public_key()
         jwk = json.loads(RSAAlgorithm.to_jwk(public_key))  # type: ignore[arg-type]
         jwk["kid"] = kid
         jwk["use"] = "sig"

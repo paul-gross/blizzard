@@ -112,4 +112,4 @@ def install_schema_components(app: FastAPI, models: Sequence[type[BaseModel]], e
         app.openapi_schema = spec
         return spec
 
-    app.openapi = openapi  # type: ignore[method-assign]
+    app.openapi = openapi

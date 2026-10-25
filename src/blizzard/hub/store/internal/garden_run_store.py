@@ -144,7 +144,7 @@ class GardenRunStore:
                 for row in rows
             ]
 
-    def _delivered_sets_by_chunk(self, conn, chunk_ids: list[str]) -> dict[str, list[DeliveredSet]]:  # type: ignore[no-untyped-def]
+    def _delivered_sets_by_chunk(self, conn, chunk_ids: list[str]) -> dict[str, list[DeliveredSet]]:
         if not chunk_ids:
             return {}
         rows = []
@@ -180,7 +180,7 @@ class GardenRunStore:
         return dict(grouped)
 
     @staticmethod
-    def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:  # type: ignore[no-untyped-def]
+    def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:
         """How many `add`/`observed`/`gone` facts each delivered set's own delivery
         recorded — one `GROUP BY` query for every id in `finding_set_ids`
         (index-backed on `ix_finding_facts_tenant_finding_set_id`), the `fact_summaries`
@@ -205,7 +205,7 @@ class GardenRunStore:
         return counts
 
     @staticmethod
-    def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+    def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:
         """Every listed set's own `add` facts' finding ids, in insertion order, read in one
         query (index-backed on `ix_finding_facts_tenant_finding_set_id`). A set with no linked `add`
         fact maps to an empty list."""

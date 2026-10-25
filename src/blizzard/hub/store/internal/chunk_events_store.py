@@ -724,7 +724,7 @@ class ChunkEventsStore:
             return rows
 
     @staticmethod
-    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, chunks, builder):  # type: ignore[no-untyped-def]
+    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, chunks, builder):
         """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
         read and reshape each row via ``builder`` — the one piece every
         :meth:`activity_facts_since` source shares (never a full-table scan). ``chunks``, when given, narrows

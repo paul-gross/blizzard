@@ -180,7 +180,7 @@ def decode_work_refs(raw: str | None) -> tuple[WorkRefStamp, ...] | None:
     return tuple(WorkRefStamp(source=e["source"], ref=e["ref"], label=e.get("label")) for e in json.loads(raw))
 
 
-def row_to_lease(r) -> Lease:  # type: ignore[no-untyped-def]
+def row_to_lease(r) -> Lease:
     return Lease(
         lease_id=str(r.lease_id),
         chunk_id=str(r.chunk_id),

@@ -304,7 +304,7 @@ class HostRegistryStore:
         return result
 
     @staticmethod
-    def _host(row, lifecycle: _Lifecycle) -> Host:  # type: ignore[no-untyped-def]
+    def _host(row, lifecycle: _Lifecycle) -> Host:
         retired, retired_at, retired_by = lifecycle
         return Host(
             host_id=row.host_id,
@@ -330,7 +330,7 @@ class HostRegistryStore:
         )
 
 
-def _inserted_id(result) -> int:  # type: ignore[no-untyped-def]
+def _inserted_id(result) -> int:
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
 

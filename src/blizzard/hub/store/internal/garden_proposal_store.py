@@ -217,7 +217,7 @@ class GardenProposalStore:
                 )
             return self._reread(conn, proposal_id)
 
-    def _reread(self, conn, proposal_id: str) -> GardenProposal:  # type: ignore[no-untyped-def]
+    def _reread(self, conn, proposal_id: str) -> GardenProposal:
         """The proposal as it now stands — the tail `edit` and `detach` share."""
         row = conn.execute(
             self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
@@ -368,7 +368,7 @@ class GardenProposalStore:
             )
         ]
 
-    def _findings(self, conn, proposal_id: str) -> list[str]:  # type: ignore[no-untyped-def]
+    def _findings(self, conn, proposal_id: str) -> list[str]:
         rows = conn.execute(
             self._store.select(garden_proposal_findings, garden_proposal_findings.c.finding_id)
             .where(garden_proposal_findings.c.proposal_id == proposal_id)
@@ -377,7 +377,7 @@ class GardenProposalStore:
         return [r.finding_id for r in rows]
 
     @staticmethod
-    def _findings_for(conn, proposal_ids: Sequence[str]) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+    def _findings_for(conn, proposal_ids: Sequence[str]) -> dict[str, list[str]]:
         """`list_all`/`list_for_routine`'s bulk sibling to `_findings` — every listed
         proposal's findings in one batched read apiece, instead of one query per
         proposal. A proposal with no findings maps to an empty list, not an absent key."""
@@ -398,7 +398,7 @@ class GardenProposalStore:
         return result
 
     @staticmethod
-    def _of(row, findings: list[str]) -> GardenProposal:  # type: ignore[no-untyped-def]
+    def _of(row, findings: list[str]) -> GardenProposal:
         return GardenProposal(
             proposal_id=row.proposal_id,
             origin=GardenProposalOrigin(row.origin),

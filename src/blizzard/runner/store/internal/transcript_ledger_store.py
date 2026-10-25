@@ -412,7 +412,7 @@ class TranscriptLedgerStore:
     # --- shared helpers -------------------------------------------------------
 
     @staticmethod
-    def _row_to_transcript_segment(r) -> TranscriptSegmentState:  # type: ignore[no-untyped-def]
+    def _row_to_transcript_segment(r) -> TranscriptSegmentState:
         return TranscriptSegmentState(
             segment_id=str(r.segment_id),
             chunk_id=str(r.chunk_id),

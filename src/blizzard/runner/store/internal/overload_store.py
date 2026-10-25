@@ -135,7 +135,7 @@ class OverloadStore:
         _log.info("provider overload streak reset", lease_id=lease_id, epoch=epoch)
 
     @staticmethod
-    def _row_to_record(r) -> OverloadExit:  # type: ignore[no-untyped-def]
+    def _row_to_record(r) -> OverloadExit:
         return OverloadExit(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),

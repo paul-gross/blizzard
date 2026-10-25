@@ -100,7 +100,7 @@ class TraceStore:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor("newest_export_cursor", s.trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, operation: str, *where) -> TraceCheckpoint | None:  # type: ignore[no-untyped-def]
+    def _newest_cursor(self, operation: str, *where) -> TraceCheckpoint | None:
         c = s.trace_cursor.c
         with self._store.read(operation) as conn:
             row = conn.execute(

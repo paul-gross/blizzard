@@ -92,6 +92,10 @@ run = "uv run ruff format ."
 description = "Type-check with pyright"
 run = "uv run pyright"
 
+[tasks.typecheck-strict]
+description = "Pyright in strict mode with type-ignore comments disabled — a report over the include paths, or over the paths passed"
+run = "scripts/typecheck-strict.sh"
+
 [tasks.export-openapi]
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"

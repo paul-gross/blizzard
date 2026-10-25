@@ -48,7 +48,7 @@ class GardenDeliveryStore:
             return self._marker(conn, chunk_id=chunk_id, node_id=node_id, epoch=epoch) is not None
 
     @staticmethod
-    def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):  # type: ignore[no-untyped-def]
+    def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):
         return conn.execute(
             statements_of(conn)
             .select(artifacts, artifacts.c.artifact_id)

@@ -365,7 +365,7 @@ class GraphStore:
         with self._store.read("graph_id_of_enabled_name") as conn:
             return conn.execute(self._enabled_by_name_select(name, graphs.c.graph_id)).scalar_one_or_none()
 
-    def _enabled_by_name_select(self, name: str, *columns: Any) -> Select:  # type: ignore[type-arg]
+    def _enabled_by_name_select(self, name: str, *columns: Any) -> Select:
         """The one statement behind both enabled-by-name reads: ``name``'s newest mint that is not
         retired — ``(created_at, graph_id)`` descending, ULIDs sorting lexically by creation — as
         ``LIMIT 1``, so only the winning row is read. Retired is :func:`newest_retired_select`'s
@@ -395,7 +395,7 @@ class GraphStore:
                 result.update(self._reify_many(conn, batch))
         return result
 
-    def _reify_many(self, conn, graph_ids: Sequence[str]) -> dict[str, Graph]:  # type: ignore[no-untyped-def]
+    def _reify_many(self, conn, graph_ids: Sequence[str]) -> dict[str, Graph]:
         graph_rows = conn.execute(self._store.select(graphs).where(graphs.c.graph_id.in_(graph_ids))).all()
         if not graph_rows:
             return {}
@@ -545,7 +545,7 @@ class GraphStore:
         with self._store.read("is_retired") as conn:
             return self._is_retired(conn, graph_id)
 
-    def _is_retired(self, conn, graph_id: str) -> bool:  # type: ignore[no-untyped-def]
+    def _is_retired(self, conn, graph_id: str) -> bool:
         """Newest ``graph_lifecycle_facts`` row for ``graph_id`` wins; no row reads
         not-retired (a freshly minted graph starts enabled)."""
         row = conn.execute(
@@ -600,7 +600,7 @@ class GraphStore:
                 )
             )
 
-    def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
+    def _reify(self, conn, graph_row) -> Graph:
         node_rows = conn.execute(
             self._store.select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)
         ).all()

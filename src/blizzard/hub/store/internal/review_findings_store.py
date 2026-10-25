@@ -41,7 +41,7 @@ class ReviewFindingsStore:
             return self._marker(conn, chunk_id=chunk_id) is not None
 
     @staticmethod
-    def _marker(conn, *, chunk_id: str):  # type: ignore[no-untyped-def]
+    def _marker(conn, *, chunk_id: str):
         return conn.execute(
             statements_of(conn)
             .select(artifacts, artifacts.c.artifact_id)
@@ -49,7 +49,7 @@ class ReviewFindingsStore:
         ).first()
 
     @staticmethod
-    def _mint_scope_if_unseen(conn, mint: ScopeMint) -> None:  # type: ignore[no-untyped-def]
+    def _mint_scope_if_unseen(conn, mint: ScopeMint) -> None:
         """Mint the scope — a fresh `scp_` id stamped at the plan's instant — with its `create` change if
         its project holds no scope of its slug. The write runs in its own savepoint, not the outer `deliver`
         transaction, so a concurrent mint of the same slug loses the race on `uq_scopes_project_slug` with an
@@ -63,7 +63,7 @@ class ReviewFindingsStore:
             pass
 
     @staticmethod
-    def _project_of(conn, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
+    def _project_of(conn, chunk_id: str) -> str:
         """The project of the reviewed chunk, read in the delivery's own transaction."""
         return conn.execute(
             statements_of(conn).select(chunks, chunks.c.project_id).where(chunks.c.chunk_id == chunk_id)

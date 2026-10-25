@@ -83,7 +83,7 @@ class ChunkRouteStore:
             routes = self._routes(conn, chunk_ids)
         return sorted((r for r in routes.values() if r.runner_id == runner_id), key=lambda r: r.chunk_id)
 
-    def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+    def _routes(self, conn, chunk_ids: list[str] | None) -> dict[str, Route]:
         """:meth:`load_all_routes`/:meth:`routes_for`'s shared entry — ``chunk_ids=None``
         reads fleet-wide in one pass; otherwise batches through :func:`id_batches`
         (`bzh:bulk-reconstitution`)."""
@@ -94,7 +94,7 @@ class ChunkRouteStore:
             result.update(self._routes_batch(conn, batch))
         return result
 
-    def _routes_batch(self, conn, chunk_ids: Sequence[str] | None) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+    def _routes_batch(self, conn, chunk_ids: Sequence[str] | None) -> dict[str, Route]:
         """One batch (or the whole fleet, when ``chunk_ids`` is ``None``) — :func:`routes_of_conn`,
         shared by both of :meth:`_routes`'s branches and by :func:`route_of_conn`."""
         return routes_of_conn(conn, chunk_ids)
@@ -116,7 +116,7 @@ class ChunkRouteStore:
         are refused from this commit on."""
         return self._record_route_conn(conn_of(handle), route, token_hash=token_hash, at=at)
 
-    def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:  # type: ignore[no-untyped-def]
+    def _record_route_conn(self, conn, route: Route, *, token_hash: str, at: datetime) -> str:
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         conn.execute(
             self._store.insert(s.route_created).values(

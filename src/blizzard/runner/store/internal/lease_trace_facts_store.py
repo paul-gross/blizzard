@@ -85,7 +85,7 @@ class _FactRead:
     build: Callable[[Row[Any]], Any]
     via: tuple[Any, Any] | None = None
 
-    def statement(self, store: RunnerStoreConnections, ids: Sequence[str]):  # type: ignore[no-untyped-def]
+    def statement(self, store: RunnerStoreConnections, ids: Sequence[str]):
         from_ = self.columns[0].table
         if self.via is not None:
             from_ = sa.join(from_, *self.via)
@@ -396,7 +396,7 @@ class LeaseTraceFactsStore:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor(trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, *where) -> LeaseTraceCheckpoint | None:  # type: ignore[no-untyped-def]
+    def _newest_cursor(self, *where) -> LeaseTraceCheckpoint | None:
         c = trace_cursor.c
         with self._store.connect() as conn:
             row = conn.execute(

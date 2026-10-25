@@ -187,7 +187,7 @@ class EnvironmentStore:
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)
 
     @staticmethod
-    def _row_to_binding(r) -> EnvBinding:  # type: ignore[no-untyped-def]
+    def _row_to_binding(r) -> EnvBinding:
         return EnvBinding(
             chunk_id=str(r.chunk_id),
             environment_id=str(r.environment_id),

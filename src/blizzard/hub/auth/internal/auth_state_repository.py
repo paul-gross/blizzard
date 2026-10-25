@@ -65,7 +65,7 @@ class AuthStateRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _entry(row) -> AuthStateEntry:  # type: ignore[no-untyped-def]
+    def _entry(row) -> AuthStateEntry:
         return AuthStateEntry(
             state=row.state,
             kind=row.kind,

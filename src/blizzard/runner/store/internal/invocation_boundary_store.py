@@ -184,7 +184,7 @@ class InvocationBoundaryStore:
         _log.info("invocation boundaries closed", lease_id=lease_id, reason=reason)
 
     @staticmethod
-    def _row_to_boundary(r) -> InvocationBoundary:  # type: ignore[no-untyped-def]
+    def _row_to_boundary(r) -> InvocationBoundary:
         return InvocationBoundary(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),

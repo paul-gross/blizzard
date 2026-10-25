@@ -21,9 +21,9 @@ def newest_fact_select(
     stmts: ScopedStatements,
     table: Table,
     key: Column[Any],
-    keys: Sequence[str] | Select | None,  # type: ignore[type-arg]
-    *columns: Column[Any],  # type: ignore[type-arg]
-) -> Select:  # type: ignore[type-arg]
+    keys: Sequence[str] | Select | None,
+    *columns: Column[Any],
+) -> Select:
     """``columns`` of the single newest (highest ``id``) row of ``table`` per ``key`` value
     in ``keys``, within ``stmts``' scope — callers batch ``keys`` through ``id_batches``, or
     pass a scalar select of key values. ``keys=None`` reads every key."""
@@ -37,10 +37,10 @@ def newest_fact_select(
 def newest_retired_select(
     stmts: ScopedStatements,
     facts: Table,
-    key: Column[Any],  # type: ignore[type-arg]
-    keys: Sequence[str] | Select | None = None,  # type: ignore[type-arg]
-    *columns: Column[Any],  # type: ignore[type-arg]
-) -> Select:  # type: ignore[type-arg]
+    key: Column[Any],
+    keys: Sequence[str] | Select | None = None,
+    *columns: Column[Any],
+) -> Select:
     """``key`` (then ``columns``) of every key whose newest lifecycle fact in ``facts`` reads
     retired, within ``stmts``' scope — the one retirement read. ``keys=None`` reads every key;
     a supplied set restricts the group-by itself, and the result composes as a subquery."""

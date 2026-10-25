@@ -129,7 +129,7 @@ class AskStore:
         _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
 
     @staticmethod
-    def _row_to_ask(r) -> OpenAsk:  # type: ignore[no-untyped-def]
+    def _row_to_ask(r) -> OpenAsk:
         return OpenAsk(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
