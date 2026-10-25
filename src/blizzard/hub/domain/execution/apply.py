@@ -14,7 +14,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.node_steps import ApplyOutcome
+from blizzard.foundation.node_steps import ApplyOutcome, JudgedBy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel
@@ -274,7 +274,16 @@ class ApplyService:
             if submission.decision_id is not None:
                 # A gate-resolving transition — a graph gate (human node) or a runner-config gate.
                 decision = self._decisions.get_decision(submission.decision_id)
-                plan = CompletionPlan.resolving(graph, from_node, submission, decision, chunk=chunk)
+                plan = CompletionPlan.resolving(
+                    graph,
+                    from_node,
+                    submission,
+                    decision,
+                    chunk=chunk,
+                    visit_epoch=facts.arrival_epoch_at(from_node.node_id)
+                    if from_node.judged_by is JudgedBy.HUMAN
+                    else None,
+                )
             else:
                 open_gate = self._decisions.find_decision(
                     chunk.chunk_id, node_id=from_node.node_id, epoch=submission.epoch

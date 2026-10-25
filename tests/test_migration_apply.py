@@ -243,6 +243,56 @@ def test_a_cross_graph_gate_landing_opens_one_decision_even_on_replay(tmp_path: 
     assert [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]] == [decision["decision_id"]]
 
 
+def test_resolved_migration_gate_can_exit_after_a_new_claim(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, source_node = _setup(hub, target_name="triage", mint_target=True, target_yaml=_GATE_TARGET_YAML)
+    assert _migrate(hub, chunk_id, source_node).json()["outcome"] == "migrated"
+    landed = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    decision = landed["decision"]
+    gate_node = landed["current_node_id"]
+    assert (
+        hub.client.post(f"/api/decisions/{decision['decision_id']}/resolutions", json={"choice": "pass"}).status_code
+        == 200
+    )
+
+    claimed = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claimed.status_code == 201, claimed.text
+    assert claimed.json()["envelope"]["node"]["node_id"] == gate_node
+    report_lease(hub, chunk_id, epoch=2, seq=2)
+    stale = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": gate_node,
+            "decision_id": decision["decision_id"],
+            "artifacts": [],
+        },
+    )
+    assert stale.json()["outcome"] == "failure"
+    assert "stale epoch 1" in stale.json()["detail"]
+    completed = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 2,
+            "runner_id": "r1",
+            "from_node_id": gate_node,
+            "decision_id": decision["decision_id"],
+            "artifacts": [],
+        },
+    )
+    assert completed.json()["outcome"] == "done", completed.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "done"
+    assert detail["history"][-1]["epoch"] == 2
+    assert detail["decision"] is None
+
+
 @pytest.mark.parametrize("mode,expected", [("enforce", "failure"), ("warn", "migrated")])
 def test_cross_graph_completion_enforces_source_outputs_before_repin(tmp_path: Path, mode: str, expected: str) -> None:
     source = _SRC_YAML.format(target="triage").replace(

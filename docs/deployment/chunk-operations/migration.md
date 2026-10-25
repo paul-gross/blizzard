@@ -30,7 +30,8 @@ A fired intent is recorded as a migration, like an authored cross-graph judgemen
 the resolved node, and clears the intent, atomically. The landed node's executor governs — landing on a hub-executed
 node derives `delivering`, as any transition into one does. Landing on a graph-declared human gate instead opens its
 decision atomically with the migration and derives `waiting_on_human`; after resolution the runner carries that visit's
-decision into the next movement.
+decision into the next movement. A newly claiming runner reserves a later attempt epoch without creating another gate
+visit; it may carry the landing decision when its completion clears the current lease fence.
 
 ## Following the latest mint
 

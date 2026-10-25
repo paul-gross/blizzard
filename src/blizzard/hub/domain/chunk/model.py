@@ -1189,6 +1189,27 @@ class ChunkFacts:
             return None
         return ranked[max(ranked)]
 
+    def arrival_epoch_at(self, node_id: str) -> int | None:
+        """The current visit's landing epoch, independent of a later claim's reservation.
+
+        A transition, migration, or restart can land on the same node more than once;
+        only the newest movement's epoch identifies this visit.
+        """
+        arrivals = [
+            (MovementKind.TRANSITION.order_key(t.recorded_at, t.epoch), t.to_node_id, t.epoch) for t in self.transitions
+        ]
+        arrivals += [
+            (MovementKind.MIGRATION.order_key(m.recorded_at, m.epoch), m.landed_node_id, m.epoch)
+            for m in self.migrations
+        ]
+        arrivals += [
+            (MovementKind.RESTART.order_key(r.recorded_at, r.epoch), r.to_node_id, r.epoch) for r in self.restarts
+        ]
+        if not arrivals:
+            return None
+        _, landed_node_id, epoch = max(arrivals)
+        return epoch if landed_node_id == node_id else None
+
     def current_node_id(self) -> str | None:
         """The chunk's current node id — the newest movement fact's target, else ``None``.
 

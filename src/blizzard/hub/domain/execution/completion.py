@@ -201,9 +201,10 @@ class CompletionPlan:
         decision: GateDecision | None,
         *,
         chunk: Chunk,
+        visit_epoch: int | None = None,
     ) -> CompletionPlan:
         """The resolving transition out of a gate: the named decision must be this gate's,
-        resolved, to the submitted choice; then the edge and destination refusals."""
+        resolved, and from this visit; then the edge and destination refusals."""
         detail = (
             f"decision {submission.decision_id} does not match node `{gate_node.name}`"
             if decision is None
@@ -211,7 +212,7 @@ class CompletionPlan:
                 chunk_id=chunk.chunk_id,
                 node_id=gate_node.node_id,
                 node_name=gate_node.name,
-                epoch=submission.epoch,
+                epoch=visit_epoch if visit_epoch is not None else submission.epoch,
                 choice=submission.choice,
             )
         )
