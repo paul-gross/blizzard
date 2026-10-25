@@ -1,9 +1,10 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { FLEET_CLOCK, hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { RUNNER_HOST_NAMES } from 'fleet/shell';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { vi } from 'vitest';
 
@@ -13,9 +14,9 @@ const NOW = Date.now();
 const completedAt = (ageMs: number) => new Date(NOW - ageMs).toISOString();
 
 /**
- * `chunk-lanes.ts`'s `STATUS_TONE` decides which section a chunk lands in — this
- * fixture picks chunks for every glance section plus terminal rows outside the
- * rolling window and a `not_ready` chunk that must land in neither.
+ * `chunk-lanes.ts`'s lanes decide where in the list a chunk lands — this fixture
+ * picks a chunk for every lane, plus terminal chunks outside the rolling window
+ * that the list leaves out.
  */
 const CHUNKS = [
   {
@@ -44,6 +45,8 @@ const CHUNKS = [
     current_node_name: 'build',
     model: 'claude-opus-4-8',
     runner_id: 'r3',
+    runner_name: 'r-claude',
+    project_id: 'pj_alpha',
     cost: { cost_usd: 2.03, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 },
   },
   {
@@ -113,7 +116,35 @@ const CHUNKS = [
     model: 'claude-opus-4-8',
     runner_id: null,
   },
+  {
+    chunk_id: 'ch_01notreadylater000000000000',
+    graph_id: 'gr_1',
+    status: 'not_ready',
+    current_node_id: null,
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
 ];
+
+// The backlog's hub order deliberately differs from the chunks list's order.
+const BACKLOG = [
+  { chunk_id: 'ch_01notreadylater000000000000', graph_id: 'gr_1', position: 0, work_refs: [] },
+  { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', position: 1, work_refs: [] },
+];
+
+const DECISIONS = [
+  {
+    decision_id: 'dc_1',
+    chunk_id: 'ch_01needshuman0000000000000000',
+    node_id: 'nd_gate',
+    node_name: 'approve-gate',
+    epoch: 1,
+    submitted_at: '2026-07-16T00:00:01Z',
+    choices: [{ name: 'approve', description: '' }],
+  },
+];
+
+const PROJECTS = { projects: [{ project_id: 'pj_alpha', slug: 'alpha', name: 'Alpha', color: 'teal' }] };
 
 // The API's dispatch order deliberately differs from the chunks list's order.
 const QUEUE = [
@@ -121,8 +152,7 @@ const QUEUE = [
   { chunk_id: 'ch_01readyfirst0000000000000000', graph_id: 'gr_1', position: 1 },
 ];
 
-// The open ask names the SAME chunk as the waiting_on_human fixture above — the
-// "Needs you" bucket must dedupe to one row (the ask's own text), not two.
+// The open ask names the waiting_on_human fixture above, whose card carries its question.
 const QUESTIONS = [
   {
     question_id: 'qn_01ask00000000000000000000000',
@@ -149,170 +179,139 @@ const SPEND = {
   since: '2026-07-20T00:00:00Z',
 };
 
-const COUNTS = {
-  total: 9,
-  not_ready: 1,
-  ready: 2,
-  running: 1,
-  delivering: 0,
-  waiting_on_human: 1,
-  needs_human: 1,
-  paused: 0,
-  stopped: 1,
-  done: 3,
-  terminal: 4,
-};
+const ids = (el: HTMLElement): (string | null)[] =>
+  [...el.querySelectorAll('[data-testid="glance-list"] > li')].map((li) => li.getAttribute('data-chunk') ?? li.getAttribute('data-testid'));
 
-describe('GlanceBoard — attention bucketing and vitals', () => {
+const card = (el: HTMLElement, chunkId: string): HTMLElement | null => el.querySelector(`[data-testid="glance-card"][data-chunk="${chunkId}"]`);
+
+describe('GlanceBoard — one list and the vitals', () => {
   let stub: RequestClientStub;
 
-  beforeEach(async () => {
+  /** Answer the board's reads, `overrides` first. */
+  function stubHub(overrides: (method: string, path: string) => unknown = () => undefined): void {
     stub = stubRequestClient(hubClient, (method, path) => {
+      const override = overrides(method, path);
+      if (override !== undefined) return override;
       if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/chunk-counts') return COUNTS;
       if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
+      if (method === 'GET' && path === '/api/backlog') return { entries: BACKLOG };
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/questions') return QUESTIONS;
+      if (method === 'GET' && path === '/api/decisions') return { decisions: DECISIONS };
+      if (method === 'GET' && path === '/api/projects') return PROJECTS;
       if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
       if (method === 'GET' && path === '/api/spend') return SPEND;
       return {};
     });
+  }
+
+  beforeEach(async () => {
+    stubHub();
     await TestBed.configureTestingModule({
       imports: [GlanceBoard],
       providers: [
         provideZonelessChangeDetection(),
-        // GlanceView's rows are `routerLink`s into the mobile chunk page.
+        // GlanceView's cards are `routerLink`s into the mobile chunk page.
         provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: RUNNER_HOST_NAMES, useValue: signal(new Map([['r3', 'atlas']])) },
       ],
     }).compileComponents();
   });
 
   afterEach(() => stub.restore());
 
-  it('folds an open ask and a needs_human chunk into "Needs you", deduping the chunk an ask already names', async () => {
+  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, then done today', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="needs-you-row"]');
-    // Two rows: the ask (waiting_on_human, folded with its question) and the
-    // needs_human chunk — not three, even though one chunk backs an open ask.
-    expect(rows).toHaveLength(2);
-    expect(el.querySelector('[data-chunk="ch_01waitinghuman00000000000000"]')?.textContent).toContain(
-      '401 vs 403 for expired tokens?',
-    );
-    expect(el.querySelector('[data-chunk="ch_01needshuman0000000000000000"]')).toBeTruthy();
-    // Neither the running, done, nor not_ready fixture chunk shows here.
-    expect(el.querySelector('[data-testid="needs-you-row"][data-chunk="ch_01running000000000000000000"]')).toBeNull();
-  });
-
-  it('lands a running chunk in "In motion" with its node and spend', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const rows = el.querySelectorAll('[data-testid="in-motion-row"]');
-    expect(rows).toHaveLength(1);
-    const row = el.querySelector('[data-testid="in-motion-row"][data-chunk="ch_01running000000000000000000"]');
-    expect(row).toBeTruthy();
-    expect(row?.textContent).toContain('build');
-    expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
-  });
-
-  it('lists every currently READY chunk in exact queue dispatch order', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="up-next-row"]')];
-
-    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([
+    expect(ids(fixture.nativeElement as HTMLElement)).toEqual([
+      'ch_01needshuman0000000000000000',
+      'ch_01waitinghuman00000000000000',
+      'ch_01running000000000000000000',
       'ch_01readysecond000000000000000',
       'ch_01readyfirst0000000000000000',
-    ]);
-  });
-
-  it('lists only rolling-24-hour terminal chunks in newest-first order and shows visible/total', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const rows = [...el.querySelectorAll('[data-testid="done-today-row"]')];
-    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([
+      'glance-ready-divider',
+      'ch_01notreadylater000000000000',
+      'ch_01notready00000000000000000',
       'ch_01donerecent0000000000000000',
       'ch_01stoppedrecent00000000000000',
     ]);
-    expect(el.querySelector('[data-chunk="ch_01donerecent0000000000000000"]')?.textContent).toContain('blizzard#79');
-    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/4');
   });
 
-  it('withholds Done today\'s count when the chunks query fails', async () => {
+  it('keeps the backlog in the chunk read\'s order, unread, without queue:reorder', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') return stubError(503, { detail: 'unavailable' });
-      if (method === 'GET' && path === '/api/chunk-counts') return stubError(503, { detail: 'unavailable' });
-      if (method === 'GET' && path === '/api/queue') return { entries: [] };
-      if (method === 'GET' && path === '/api/questions') return [];
-      if (method === 'GET' && path === '/api/runners') return { runners: [] };
-      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
-      if (method === 'GET' && path === '/api/spend') return SPEND;
-      return {};
-    });
+    stubHub((method, path) => (method === 'GET' && path === '/api/me' ? { ...OPERATOR_ME_RESPONSE, permissions: [] } : undefined));
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+
+    const list = ids(fixture.nativeElement as HTMLElement);
+    expect(list.slice(list.indexOf('glance-ready-divider') + 1, -2)).toEqual(['ch_01notready00000000000000000', 'ch_01notreadylater000000000000']);
+    expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(0);
+  });
+
+  it('carries an open ask on its chunk\'s card and pills an open gate', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="done-today-error"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-count"]')).toBeNull();
+    expect(card(el, 'ch_01waitinghuman00000000000000')?.querySelector('[data-testid="glance-ask"]')?.textContent).toContain('401 vs 403 for expired tokens?');
+    expect(card(el, 'ch_01needshuman0000000000000000')?.querySelector('.gate')).not.toBeNull();
+    expect(card(el, 'ch_01waitinghuman00000000000000')?.querySelector('.gate')).toBeNull();
   });
 
-  it('takes the Done today denominator from the all-time counts, not the windowed list', async () => {
+  it('meta-lines a running card with its node, its runner by host and name, and its spend, tinted by its project', async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const running = card(fixture.nativeElement as HTMLElement, 'ch_01running000000000000000000');
+
+    expect(running?.querySelector('.step')?.textContent?.trim()).toBe('build');
+    expect(running?.querySelector('[data-testid="glance-runner"]')?.textContent?.replace(/\s+/g, '')).toBe('atlas/r-claude');
+    expect(running?.querySelector('[data-testid="glance-cost"]')?.textContent).toContain('$2.03');
+    expect(running?.classList).toContain('tinted');
+  });
+
+  it('words a stopped card\'s status, which its lane icon does not, and no other', async () => {
+    const fixture = TestBed.createComponent(GlanceBoard);
+    await settle(fixture);
+    const words = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-row-status"]')].map((el) =>
+      el.closest('[data-chunk]')?.getAttribute('data-chunk'),
+    );
+
+    expect(words).toEqual(['ch_01stoppedrecent00000000000000']);
+  });
+
+  it('shows the list\'s error state when the chunks read fails', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/chunk-counts') return { ...COUNTS, done: 200, stopped: 7, terminal: 207 };
-      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
-      if (method === 'GET' && path === '/api/questions') return QUESTIONS;
-      if (method === 'GET' && path === '/api/spend') return SPEND;
-      return {};
-    });
+    stubHub((method, path) => (method === 'GET' && path === '/api/chunks' ? stubError(503, { detail: 'unavailable' }) : undefined));
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/207');
+    expect(el.querySelector('[data-testid="glance-list-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="glance-card"]')).toBeNull();
   });
 
-  it('never buckets a not_ready chunk into any glance section', async () => {
+  it('derives the vitals strip from the same list plus the runner registry', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
+    const vital = (id: string) => el.querySelector(`[data-testid="${id}"] .v-n`)?.textContent?.trim();
 
-    expect(el.querySelector('[data-chunk="ch_01notready00000000000000000"]')).toBeNull();
-  });
-
-  it('derives the vitals strip from the same buckets plus the runner registry', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="vital-needs-you"]')?.textContent).toContain('2');
-    expect(el.querySelector('[data-testid="vital-running"]')?.textContent).toContain('1');
+    expect(vital('vital-needs-you')).toBe('2');
+    expect(vital('vital-running')).toBe('1');
+    expect(vital('vital-ready')).toBe('2');
+    expect(vital('vital-done-today')).toBe('2');
     // r1 and r2 online, r3 offline — "2/3 runners up".
-    expect(el.querySelector('[data-testid="vital-runners-up"]')?.textContent).toContain('2/3');
+    expect(vital('vital-runners-up')).toBe('2/3');
   });
 
   it('leaves a retired runner out of the runners-up denominator', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runners') {
-        return { runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] };
-      }
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/chunk-counts') return COUNTS;
-      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
-      if (method === 'GET' && path === '/api/questions') return QUESTIONS;
-      return {};
-    });
+    stubHub((method, path) =>
+      method === 'GET' && path === '/api/runners' ? { runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] } : undefined,
+    );
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -349,34 +348,6 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it('carries no status pill on any row — each panel\'s heading already names its rows\' state', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    for (const testid of ['needs-you-row', 'in-motion-row', 'up-next-row', 'done-today-row']) {
-      expect(el.querySelector(`[data-testid="${testid}"]`)).not.toBeNull();
-      expect(el.querySelector(`[data-testid="${testid}"] .badge`)).toBeNull();
-    }
-  });
-
-  it('colors each section header and retains Done today\'s useful visible/total count', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const label = (panel: string) => el.querySelector(`[data-testid="${panel}"] .lbl`) as HTMLElement;
-    expect(label('needs-you-panel').style.color).toBe('var(--red)');
-    expect(label('in-motion-panel').style.color).toBe('var(--cyan)');
-    expect(label('up-next-panel').style.color).toBe('var(--amber-hi)');
-    expect(label('done-today-panel').style.color).toBe('var(--green)');
-
-    expect(el.querySelector('[data-testid="needs-you-count"]')?.textContent).toContain('2');
-    expect(el.querySelector('[data-testid="in-motion-count"]')?.textContent).toContain('1');
-    expect(el.querySelector('[data-testid="up-next-count"]')?.textContent).toContain('2');
-    expect(el.querySelector('[data-testid="done-today-count"]')?.textContent).toContain('2/4');
   });
 });
 
@@ -422,6 +393,7 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks') return { chunks: ESTIMATE_CHUNKS, next_cursor: null };
       if (method === 'GET' && path === '/api/queue') return { entries: [] };
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/questions') return [];
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/health') return { status: 'ok' };
@@ -440,13 +412,12 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
 
   afterEach(() => stub.restore());
 
-  it("shows the in-motion row's own entirely-estimated figure as the estimate alone, marked ~", async () => {
+  it("shows a card's own entirely-estimated figure as the estimate alone, marked ~", async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    const row = el.querySelector('[data-testid="in-motion-row"]');
-    expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(card(el, 'ch_01estimaterun0000000000000')?.querySelector('[data-testid="glance-cost"]')?.textContent?.trim()).toBe('~$0.07');
   });
 
   it("shows the spend panel's own entirely-estimated figure as the estimate alone, marked ~", async () => {
@@ -455,75 +426,6 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
-  });
-});
-
-describe('GlanceBoard — open gates in "Needs you"', () => {
-  const ASK = 'ch_01gateask00000000000000000000';
-  const GATE = 'ch_01gateopen0000000000000000000';
-  const WAITING = 'ch_01gatewaiting000000000000000';
-  const chunk = (chunkId: string, runnerId: string) => ({
-    chunk_id: chunkId,
-    graph_id: 'gr_1',
-    status: 'waiting_on_human',
-    current_node_id: 'nd_build',
-    current_node_name: 'build',
-    model: 'claude-opus-4-8',
-    runner_id: runnerId,
-  });
-  const decision = (decisionId: string, chunkId: string) => ({
-    decision_id: decisionId,
-    chunk_id: chunkId,
-    node_id: 'nd_gate',
-    node_name: 'approve-gate',
-    epoch: 1,
-    submitted_at: '2026-07-16T00:00:01Z',
-    choices: [{ name: 'approve', description: '' }],
-  });
-  let stub: RequestClientStub;
-
-  beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      // The list order is deliberately the reverse of the attention order.
-      if (method === 'GET' && path === '/api/chunks') {
-        return { chunks: [chunk(WAITING, 'r3'), chunk(GATE, 'r2'), chunk(ASK, 'r1')], next_cursor: null };
-      }
-      if (method === 'GET' && path === '/api/queue') return { entries: [] };
-      if (method === 'GET' && path === '/api/questions') {
-        return [{ question_id: 'qn_1', chunk_id: ASK, runner_id: 'r1', question: 'Which branch?', options: [] }];
-      }
-      // The ask's chunk also carries a gate — it must still show once, as the ask.
-      if (method === 'GET' && path === '/api/decisions') return { decisions: [decision('dc_1', GATE), decision('dc_2', ASK)] };
-      if (method === 'GET' && path === '/api/runners') return { runners: [] };
-      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
-      if (method === 'GET' && path === '/api/spend') return SPEND;
-      return {};
-    });
-    await TestBed.configureTestingModule({
-      imports: [GlanceBoard],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideRouter([]),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-      ],
-    }).compileComponents();
-  });
-
-  afterEach(() => stub.restore());
-
-  it('orders an ask, then a gate, then a plain waiting chunk, deduped by chunk', async () => {
-    const fixture = TestBed.createComponent(GlanceBoard);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const rows = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="needs-you-row"]'));
-    expect(rows.map((row) => row.getAttribute('data-chunk'))).toEqual([ASK, GATE, WAITING]);
-    const status = (row: HTMLElement) => row.querySelector('[data-testid="glance-row-status"]')?.textContent?.trim() ?? null;
-    expect(rows[0].textContent).toContain('Which branch?');
-    expect(status(rows[0])).toBeNull();
-    expect(status(rows[1])).toBe('gate');
-    expect(rows[1].textContent).toContain('approve-gate');
-    expect(status(rows[2])).toBeNull();
   });
 });
 
@@ -552,6 +454,7 @@ describe('GlanceBoard — work items', () => {
       if (method === 'GET' && path === `/api/chunks/${CHUNK_ID}/work-items`) {
         return { items: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments' }] };
       }
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return { runners: [] };
       if (method === 'GET' && path === '/api/questions') return [];
       return {};
@@ -568,10 +471,10 @@ describe('GlanceBoard — work items', () => {
 
   afterEach(() => stub.restore());
 
-  it("heads a row with its work item's label and short id, its title read in under them", async () => {
+  it("heads a card with its work item's label and short id, its title read in under them", async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
-    const row = (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="in-motion-row"][data-chunk="${CHUNK_ID}"]`);
+    const row = card(fixture.nativeElement as HTMLElement, CHUNK_ID);
 
     expect(row?.querySelector('.head [data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-api#4');
     expect(row?.querySelector('.head .cid')?.textContent?.trim()).toMatch(/^C-/);
