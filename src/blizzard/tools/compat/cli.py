@@ -22,10 +22,11 @@ import click
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError
-from blizzard.tools.change_notes.contract import Note
+from blizzard.tools.change_notes.breaks import declared_pairs
 from blizzard.tools.change_notes.tree import CHANGES_DIR, README, read_tree
 from blizzard.tools.compat import allowances, gate
 from blizzard.tools.compat.git import GitError, Repository
+from blizzard.tools.compat.reader import BREAKS_FILE
 from blizzard.tools.compat.registry import DOCUMENTS
 from blizzard.tools.compat.releases import (
     Release,
@@ -41,7 +42,6 @@ from blizzard.tools.compat.releases import (
 from blizzard.tools.compat.violation import Violation
 
 _WINDOW_PATH = "src/blizzard/wire/window.toml"
-BREAKS_FILE = "compat-breaks.json"
 
 
 @domain_model
@@ -202,21 +202,13 @@ def _note_ids(paths: Sequence[str]) -> set[str]:
     return {Path(p).stem for p in paths if p.endswith(".md") and Path(p).name != README}
 
 
-def _declared_pairs(note: Note) -> set[tuple[str, str]]:
-    """The ``(surface, where)`` a breaking note declares: each of its surfaces against each name in ``breaks``."""
-    if note.fields.get("breaking") is not True:
-        return set()
-    surfaces, names = note.fields.get("surfaces") or [], note.fields.get("breaks") or []
-    return {(str(surface), str(name).strip()) for surface in surfaces for name in names}
-
-
 def _declared(repo: Repository, root: Path, base: str) -> frozenset[tuple[str, str]]:
     """The breaks declared by the notes HEAD adds over ``base``, by note id (a note the cut moved still counts)."""
     added = _note_ids(repo.paths("HEAD", CHANGES_DIR)) - _note_ids(repo.paths(base, CHANGES_DIR))
     if not added or not (root / CHANGES_DIR).is_dir():
         return frozenset()
     notes, _failures = read_tree(root)
-    return frozenset(pair for note in notes if note.id in added for pair in _declared_pairs(note))
+    return frozenset(pair for note in notes if note.id in added for pair in declared_pairs(note))
 
 
 def _inherited(

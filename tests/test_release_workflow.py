@@ -195,13 +195,23 @@ def test_release_notes_are_generated_not_auto_generated() -> None:
     """The published notes come from the tag-tree renderer, including its flag summaries."""
     steps = _build_job()["steps"]
     notes_gen = steps[_step_index(steps, lambda s: "blizzard-change-notes render" in str(s.get("run", "")))]
-    assert 'render "${GITHUB_REF_NAME}" > release-notes.md' in notes_gen["run"]
+    assert 'render "${GITHUB_REF_NAME}" --breaks compat-breaks.json > release-notes.md' in notes_gen["run"]
     publish_steps = _publish_job()["steps"]
     publish_run = str(
         publish_steps[_step_index(publish_steps, lambda s: "gh release create" in str(s.get("run", "")))]["run"]
     )
     assert "--notes-file release-notes.md" in publish_run
     assert "--generate-notes" not in publish_run
+
+
+def test_the_notes_are_rendered_after_the_breaks_are_fetched_and_before_publish() -> None:
+    """An unnamed compat break fails `build`, which `publish` (holding `gh release create`) needs."""
+    steps = _build_job()["steps"]
+    fetch = _step_index(steps, lambda s: s.get("with", {}).get("name") == "compat-breaks")
+    render_step = _step_index(steps, lambda s: "blizzard-change-notes render" in str(s.get("run", "")))
+    assert fetch < render_step
+    assert "compat" in _build_job()["needs"]
+    assert _publish_job()["needs"] == ["build"] or "build" in _publish_job()["needs"]
 
 
 def test_the_release_is_published_once_and_never_edited() -> None:

@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.tools.change_notes.anchors import anchor_titles
+from blizzard.tools.change_notes.breaks import BreakEntry, cross_check
 from blizzard.tools.change_notes.flags import working_registry
 from blizzard.tools.change_notes.schedule import cut_refusals
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries, staged_anchors
 from blizzard.tools.change_notes.validate import UPGRADE_DOC, validate
+from blizzard.tools.compat.reader import CompatError
 
 
 class CutRefused(RuntimeError):
@@ -28,10 +31,13 @@ class CutReport:
     boundaries: tuple[str, ...]
     left: tuple[str, ...]
     held: tuple[str, ...]
+    unrecorded: tuple[tuple[str, str], ...] = ()
 
 
-def cut(root: Path, version: str) -> CutReport:
-    """Move ``changes/unreleased/`` into ``changes/<version>/``; refuse before writing anything."""
+def cut(root: Path, version: str, breaks: Callable[[], Sequence[BreakEntry]] | None = None) -> CutReport:
+    """Move ``changes/unreleased/`` into ``changes/<version>/``; refuse before writing anything.
+
+    ``breaks`` yields the breaks compat lets through; each must be named by a note the version will hold."""
     if not VERSION_DIR.match(version):
         raise CutRefused(f"{version!r} is not a release version; expected X.Y.Z")
     failures = validate(root)
@@ -45,6 +51,27 @@ def cut(root: Path, version: str) -> CutReport:
     refusals = cut_refusals(notes, version, moving)
     if refusals:
         raise CutRefused("\n".join(refusals))
+    unrecorded: tuple[tuple[str, str], ...] = ()
+    if breaks is not None:
+        try:
+            recorded = breaks()
+        except CompatError as exc:
+            raise CutRefused(str(exc)) from exc
+        prospective = [n for n in notes if n.directory == version] + moving
+        check = cross_check(recorded, prospective)
+        if check.unnamed:
+            raise CutRefused(
+                "\n".join(
+                    [
+                        *(
+                            f"no breaking note names {entry}: list its surface in surfaces and its where in breaks"
+                            for entry in check.unnamed
+                        ),
+                        f"{len(check.unnamed)} compat break(s) unnamed",
+                    ]
+                )
+            )
+        unrecorded = check.unrecorded
     guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
     doc = root / UPGRADE_DOC
     original = doc.read_text(encoding="utf-8") if guides else ""
@@ -71,4 +98,4 @@ def cut(root: Path, version: str) -> CutReport:
         target.mkdir(exist_ok=True)
         (root / note.path).rename(target / f"{note.id}.md")
     left = tuple(g for g in guides if g not in moved.anchors)
-    return CutReport(version, tuple(n.id for n in moving), moved.anchors, left, held)
+    return CutReport(version, tuple(n.id for n in moving), moved.anchors, left, held, unrecorded)

@@ -254,7 +254,7 @@ jobs:
           path: .
       - name: generate release notes from the tag tree
         run: |
-          uv run blizzard-change-notes render "${GITHUB_REF_NAME}" > release-notes.md
+          uv run blizzard-change-notes render "${GITHUB_REF_NAME}" --breaks compat-breaks.json > release-notes.md
           cat release-notes.md
       - name: derive the GHCR tag fan-out (scripts/image-tags.sh) and OCI annotations
         id: image_meta

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,9 +10,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from blizzard.tools.change_notes.breaks import BreakEntry, NamedBreak
 from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.render import render
+from tests.compat_stub import entry, stub_compat
 from tests.repo_files import repo_root
 
 pytestmark = pytest.mark.unit
@@ -87,6 +90,26 @@ Move.
     assert render("v0.3.0", notes, {"z-fix": ["0.2.1"]}, _COMMITS) == expected
 
 
+def test_render_lists_each_recorded_break_beside_its_note_at_the_end_of_upgrade_notes() -> None:
+    notes = [
+        _note("brk", "Drops it. Really.\n\n## Upgrade\n\nSwitch.\n", kind="changed", breaking=True),
+        _note("route", "Drops the route. Yes.\n", kind="changed", breaking=True, **{"upgrade-guide": "route"}),
+    ]
+    named = (NamedBreak(BreakEntry("v0.2.0", "http-api", "GET /old"), notes[1]),)
+    text = render("v0.3.0", notes, {}, _COMMITS, breaks=named)
+    assert text.startswith(
+        "## Upgrade notes\n\n### Drops it.\n\nSwitch.\n\n"
+        "### [Drops the route.](https://github.com/paul-gross/blizzard/blob/v0.3.0/docs/upgrade.md#route)\n\n"
+        "Breaks GET /old (http-api) in v0.2.0.\n\n## Breaking changes"
+    )
+
+
+def test_render_of_only_a_recorded_break_still_has_an_upgrade_notes_section() -> None:
+    note = _note("brk", "Drops it.\n", kind="changed", breaking=True)
+    named = (NamedBreak(BreakEntry("v0.2.0", "http-api", "GET /old"), note),)
+    assert render("v0.3.0", [note], {}, _COMMITS, breaks=named).startswith("## Upgrade notes\n\n### Drops it.")
+
+
 def test_render_of_no_notes_is_the_commit_block_alone() -> None:
     assert render("v0.3.0", [], {}, _COMMITS).startswith("## Commits\n")
 
@@ -130,9 +153,14 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
-def _render(repo: Path, tag: str, monkeypatch: pytest.MonkeyPatch):
+def _render(
+    repo: Path, tag: str, monkeypatch: pytest.MonkeyPatch, *args: str, supported: tuple[str, ...] = ("v0.1.0", "v0.1.1")
+):
+    log = stub_compat(repo, monkeypatch, supported=supported)
     monkeypatch.chdir(repo)
-    return CliRunner().invoke(main, ["render", tag])
+    result = CliRunner().invoke(main, ["render", tag, *args])
+    result.compat_calls = log.read_text() if log.exists() else ""  # type: ignore[attr-defined]
+    return result
 
 
 def test_render_of_a_two_tag_repository_is_golden_and_repeatable(repo: Path, monkeypatch) -> None:
@@ -231,3 +259,56 @@ def test_stable_tag_on_candidates_commit_does_not_repeat_its_flag(repo: Path, mo
     assert candidate.exit_code == stable.exit_code == 0
     assert "## Turned on\n\n- Alpha capability" in candidate.output
     assert "## Turned on" not in stable.output
+
+
+_BREAKING = "---\nkind: changed\nbreaking: true\nsurfaces: [http-api]\nbreaks: ['GET /old', 'GET /ghost']\n---\n\nDrops it.\n\n## Upgrade\n\nMove.\n"
+
+
+def _breaks_file(repo: Path, tag: str, *entries: dict) -> str:
+    path = repo / "breaks.json"
+    path.write_text(json.dumps({"tag": tag, "breaks": list(entries)}))
+    return str(path)
+
+
+@pytest.fixture
+def breaking(repo: Path) -> Path:
+    _commit(repo, "feat: drop", {"changes/0.3.0/drop.md": _BREAKING})
+    _git(repo, "tag", "v0.3.0")
+    return repo
+
+
+def test_render_with_breaks_lists_the_break_and_reports_an_unrecorded_one(breaking: Path, monkeypatch) -> None:
+    path = _breaks_file(breaking, "v0.3.0", entry("v0.2.0", "http-api", "GET /old"))
+    result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", path)
+    assert result.exit_code == 0, result.output
+    assert "### Drops it.\n\nBreaks GET /old (http-api) in v0.2.0.\n" in result.stdout
+    assert "GET /ghost is recorded by no compat break" in result.stderr
+
+
+def test_render_with_breaks_fails_on_an_unnamed_break_with_empty_stdout(breaking: Path, monkeypatch) -> None:
+    path = _breaks_file(breaking, "v0.3.0", entry("v0.2.0", "http-api", "GET /other"))
+    result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", path)
+    assert result.exit_code == 1 and result.stdout == ""
+    assert "http-api GET /other (breaks v0.2.0)" in result.stderr
+
+
+def test_render_refuses_a_breaks_file_judging_another_tag(breaking: Path, monkeypatch) -> None:
+    result = _render(breaking, "v0.3.0", monkeypatch, "--breaks", _breaks_file(breaking, "v0.2.0"))
+    assert result.exit_code == 1 and result.stdout == "" and "judged v0.2.0, not v0.3.0" in result.stderr
+
+
+def test_render_without_breaks_is_unchanged_by_the_option(breaking: Path, monkeypatch) -> None:
+    plain = _render(breaking, "v0.3.0", monkeypatch)
+    assert plain.exit_code == 0 and "Breaks GET" not in plain.stdout
+
+
+def test_also_in_marks_only_supported_releases(repo: Path, monkeypatch) -> None:
+    result = _render(repo, "v0.2.0", monkeypatch, supported=("v0.1.0",))
+    assert "- Shared.\n" in result.output and "also in" not in result.output
+    assert "releases --json --tag 0.2.0" in result.compat_calls  # type: ignore[attr-defined]
+
+
+def test_a_tag_with_no_notes_consults_no_compat(repo: Path, monkeypatch) -> None:
+    _commit(repo, "chore: later", {"x": "y"})
+    _git(repo, "tag", "v0.3.0")
+    assert _render(repo, "v0.3.0", monkeypatch).compat_calls == ""  # type: ignore[attr-defined]

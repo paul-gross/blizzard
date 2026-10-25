@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
 from pathlib import Path
 
 import click
@@ -12,32 +10,12 @@ from blizzard.foundation.flags.registry import FlagRegistry, FlagRegistryError
 from blizzard.tools.change_notes.contract import Failure
 from blizzard.tools.change_notes.tree import parse_note
 from blizzard.tools.compat.git import GitError, Repository
+from blizzard.tools.compat.reader import SupportedReleasesError, supported_tags
 from blizzard.tools.compat.releases import parse_releases
 from blizzard.tools.flag_lifecycle_domain import Mode, Snapshot, derive
 
 _REGISTRY = "src/blizzard/foundation/flags/registry.toml"
 _UNRELEASED = "changes/unreleased"
-
-
-class SupportedReleasesError(RuntimeError):
-    """``blizzard-compat releases --json`` did not yield the supported releases."""
-
-
-def supported_tags() -> frozenset[str]:
-    """The supported release tags, read through ``blizzard-compat`` rather than recomputed here."""
-    command = ["blizzard-compat", "releases", "--json"]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.SubprocessError) as error:
-        raise SupportedReleasesError(f"blizzard-compat releases --json could not run: {error}") from error
-    if result.returncode != 0:
-        raise SupportedReleasesError(
-            f"blizzard-compat releases --json failed: {result.stderr.strip() or result.stdout.strip()}"
-        )
-    try:
-        return frozenset(release["tag"] for release in json.loads(result.stdout)["releases"])
-    except (ValueError, KeyError, TypeError) as error:
-        raise SupportedReleasesError(f"blizzard-compat releases --json gave an unreadable document: {error}") from error
 
 
 def base_registry(repo: Repository, base: str | None) -> FlagRegistry | None:
