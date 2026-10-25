@@ -141,18 +141,28 @@ class _Chunk:
 
 def _held_by_a_writer(chunk: _Chunk, submit: Callable[[], object], write: Callable[[object], None]) -> object:
     answered: dict[str, object] = {}
+    started = threading.Event()
 
     def _submit() -> None:
-        answered["result"] = submit()
+        started.set()
+        try:
+            answered["result"] = submit()
+        except BaseException as error:
+            answered["error"] = error
 
     thread = threading.Thread(target=_submit)
     with chunk.stores.exclusive.locked([chunk.chunk_id]) as handle:
         thread.start()
+        assert started.wait(timeout=60), "the submission thread never started"
         thread.join(timeout=0.3)
         assert thread.is_alive(), "the submission completed while a writer held the chunk row lock — not fenced"
+        assert not answered, "the submission produced an outcome while a writer held the chunk row lock — not fenced"
         write(handle)
-    thread.join(timeout=5)
-    assert not thread.is_alive()
+    # A generous hang guard: the blocked submission polls for the lock, then runs the whole request.
+    thread.join(timeout=60)
+    assert not thread.is_alive(), "the submission never finished after the writer released the chunk row lock"
+    if "error" in answered:
+        raise AssertionError("the submission raised") from answered["error"]  # type: ignore[arg-type]
     return answered["result"]
 
 
