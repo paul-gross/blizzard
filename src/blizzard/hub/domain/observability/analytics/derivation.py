@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
 
+from structlog.contextvars import bound_contextvars
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
@@ -362,20 +364,21 @@ class EventDerivationReconciler:
         converged: list[TenantId] = []
         unconverged: list[TenantId] = []
         for tenant in due:
-            if tenant not in reads and tenant not in stale:
-                converged.append(tenant)
-                continue
-            candidates = reads.get(tenant, _NOTHING_VISIBLE).candidate_segment_ids
-            try:
-                ok = self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
-            except (TenantClosed, UnknownTenant):
-                _log.info("transcript event derivation skipped a closed tenant", tenant=tenant)
-                self._unconverged.discard(tenant)
-                continue
-            except Exception as exc:
-                ok = False
-                _log.warning("transcript event derivation failed for a tenant", tenant=tenant, fault=repr(exc))
-            (converged if ok else unconverged).append(tenant)
+            with bound_contextvars(tenant_id=tenant):
+                if tenant not in reads and tenant not in stale:
+                    converged.append(tenant)
+                    continue
+                candidates = reads.get(tenant, _NOTHING_VISIBLE).candidate_segment_ids
+                try:
+                    ok = self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
+                except (TenantClosed, UnknownTenant):
+                    _log.info("transcript event derivation skipped a closed tenant")
+                    self._unconverged.discard(tenant)
+                    continue
+                except Exception as exc:
+                    ok = False
+                    _log.warning("transcript event derivation failed for a tenant", fault=repr(exc))
+                (converged if ok else unconverged).append(tenant)
 
         self._unconverged = (self._unconverged - set(due)) | set(unconverged)
         for tenant in converged:

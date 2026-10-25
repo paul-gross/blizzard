@@ -8,11 +8,15 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 import sqlalchemy as sa
+from structlog.contextvars import merge_contextvars
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -20,6 +24,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import TenantWorkRef, WorkRefsSig
 from blizzard.hub.domain.observability.analytics.derivation import (
     DerivationTally,
     EventDerivationReconciler,
+    EventDerivationService,
     TenantEventDerivation,
 )
 from blizzard.hub.domain.observability.analytics.events import CandidacyRead, DerivationSignature
@@ -53,6 +58,7 @@ from tests.support import (
 _NOW = datetime(2026, 7, 13, tzinfo=UTC)
 _A = TenantId("ten_a")
 _B = TenantId("ten_b")
+_log = get_logger("test.sweep_tenants")
 
 
 def _refused(tenant: TenantId) -> object:
@@ -346,6 +352,7 @@ def _annotation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Cal
             self.tenant = tenant
 
         def annotating(self) -> list[str]:
+            _log.info("tenant annotation opening")
             recorder.log(self.tenant, "annotating")
             return super().annotating()
 
@@ -356,6 +363,7 @@ def _annotation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Cal
             rows: Callable[[], Sequence[TenantWorkRef]],
             tally: AnnotationTally,
         ) -> bool:
+            _log.info("tenant annotation work")
             recorder.log(tenant, "reconcile", list(annotating), [row.chunk_id for row in rows()])
             poison = _poison_for(tenant, scene)
             if poison is Poison.RAISES:
@@ -380,6 +388,7 @@ def _derivation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Cal
             self.tenant = tenant
 
         def converge(self, candidates: Sequence[str], stale: frozenset[str], tally: DerivationTally) -> bool:
+            _log.info("tenant derivation work")
             recorder.log(self.tenant, "converge", list(candidates), sorted(stale))
             poison = _poison_for(self.tenant, scene)
             if poison is Poison.RAISES:
@@ -410,6 +419,7 @@ def _drain_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Callable
             self.tenant = tenant
 
         def drain(self, due: Sequence[PendingCloseIntent], tally: CloseDrainTally) -> None:
+            _log.info("tenant drain work")
             recorder.log(self.tenant, "drain", [intent.chunk_id for intent in due])
             if _poison_for(self.tenant, scene) is Poison.RAISES:
                 raise RuntimeError("the forge refused the close")
@@ -424,6 +434,7 @@ def _drain_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Callable
 def _teardown_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Callable[[], None]:
     class Teardown:
         def advance(self, tenant: TenantId, *, budget: int) -> None:
+            _log.info("tenant teardown work")
             recorder.log(tenant, "advance", budget)
             if _poison_for(tenant, scene) is Poison.RAISES:
                 raise RuntimeError("the drain failed")
@@ -435,6 +446,85 @@ def _teardown_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Calla
     return TenantTeardownSweep(
         teardown=cast(TenantTeardown, Teardown()), teardowns=cast(IReadTenantTeardowns, Underway()), budget=50
     ).sweep
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("make_pass", "events", "summary"),
+    [
+        (_annotation_pass, ("tenant annotation opening", "tenant annotation work"), "forge-status sweep completed"),
+        (_derivation_pass, ("tenant derivation work",), "transcript event derivation sweep completed"),
+        (_drain_pass, ("tenant drain work",), "close intent drain sweep completed"),
+        (_teardown_pass, ("tenant teardown work",), None),
+    ],
+)
+def test_each_sweep_binds_only_its_tenants_work_even_when_last_tenant_raises(
+    make_pass: Callable[[Scene, Recorder, FixedClock], Callable[[], None]],
+    events: tuple[str, ...],
+    summary: str | None,
+) -> None:
+    last = TenantId("ten_z")
+    scene = Scene(poisoned=last, poison=Poison.RAISES)
+    sweep = make_pass(scene, Recorder(), FixedClock(_NOW))
+
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep()
+        _log.info("after tenant loop")
+
+    for event in events:
+        assert {entry["tenant_id"] for entry in logs if entry["event"] == event} == set(scene.tenants)
+    failures = [entry for entry in logs if entry["log_level"] == "warning"]
+    assert all(entry["tenant_id"] == last for entry in failures)
+    assert all("tenant" not in entry for entry in logs)
+    assert "tenant_id" not in logs[-1]
+    if summary is not None:
+        [entry] = [entry for entry in logs if entry["event"] == summary]
+        assert "tenant_id" not in entry
+
+
+@pytest.mark.unit
+def test_annotation_source_left_warning_inherits_tenant_from_its_sweep() -> None:
+    def unit(tenant: TenantId) -> TenantAnnotation:
+        memory = Mock()
+        memory.annotated_sources.return_value = frozenset({"departed"})
+        sources = Mock()
+        sources.annotating_ids.return_value = []
+        sources.label_clearer.return_value = None
+        return TenantAnnotation(facts=Mock(), work_sources=sources, memory=memory, clock=FixedClock(_NOW))
+
+    sweep = AnnotationReconciler(
+        corpus=_WorkRefs([]),
+        tenants=lambda: [_A, _B],
+        tenant=unit,
+        clock=FixedClock(_NOW),
+        full_pass_floor=timedelta(minutes=10),
+    )
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep.sweep()
+
+    assert [
+        entry["tenant_id"]
+        for entry in logs
+        if entry["event"] == "forge-status source left config; its labels are not cleared"
+    ] == [_A, _B]
+    assert "tenant_id" not in logs[-1]
+
+
+@pytest.mark.unit
+def test_segment_derivation_warning_inherits_tenant_from_its_sweep() -> None:
+    def unit(tenant: TenantId) -> TenantEventDerivation:
+        service = Mock(spec=EventDerivationService)
+        service.graph_pins_for.return_value = Mock()
+        service.derive_segment.side_effect = RuntimeError("bad segment")
+        return TenantEventDerivation(service=service, events=Mock(), clock=FixedClock(_NOW))
+
+    read = CandidacyRead(visible_segment_ids=frozenset({"sg_1"}), candidate_segment_ids=["sg_1"])
+    sweep = EventDerivationReconciler(corpus=_Segments({_A: read, _B: read}, {}), tenant=unit, clock=FixedClock(_NOW))
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep.sweep()
+
+    assert [entry["tenant_id"] for entry in logs if entry["event"] == "segment derivation skipped"] == [_A, _B]
+    assert "tenant_id" not in logs[-1]
 
 
 _FAILING = (Poison.RAISES, Poison.UNCONVERGED)
