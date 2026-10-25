@@ -1,11 +1,9 @@
 """The forge registry — each repository's forge roles, built from its records on use.
 
-The store is the only answer to what is configured (``bzh:config-read-on-use``): every hand-out reads the repository's
-revisions and hands out the adapter built under them from the tenant's
-:class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit to the record or its secret reaches the next use with
-no restart. Building reads the store and reveals a secret, so only whoever builds a visit calls the registry, never an
-action. It hands out roles, never an adapter, and each role checks every call against what the forge offers before the
-call reaches the adapter."""
+Every hand-out reads the repository's revisions and takes the adapter built under them from the tenant's
+:class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit reaches the next use with no restart
+(``bzh:config-read-on-use``). Only whoever builds a visit calls it, never an action; each role it hands out checks
+every call against what the forge offers."""
 
 from __future__ import annotations
 

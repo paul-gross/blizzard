@@ -431,8 +431,7 @@ class HubServices:
     tenant_hosts: Callable[[TenantId], IReadHostRegistry]
     #: The one thread every tenant's hub action passes run on — started and stopped by the hub's lifespan.
     action_loop: ActionLoop
-    #: Closes the objects every served tenant's configured records built — run at shutdown, before the action loop
-    #: stops, so each forge client closes on a live loop.
+    #: Closes every served tenant's configured objects at shutdown, while the action loop still runs.
     close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
