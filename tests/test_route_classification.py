@@ -64,6 +64,7 @@ _HUB_LEVEL: set[tuple[str, str]] = {
     ("DELETE", "/api/admin/tenants/{tenant_id}"),
     ("POST", "/api/admin/graphs/sync"),
     ("GET", "/api/admin/events"),
+    ("POST", "/api/admin/sweeps/{name}/passes"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``, or
@@ -223,6 +224,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     # Forced transcript-event re-derivation — a mutation, above the
     # read-only Permission.TRANSCRIPT_READ.
     ("POST", "/api/analytics/re-derive"): Permission.ANALYTICS_ADMIN,
+    ("POST", "/api/sweeps/{name}/passes"): Permission.ANALYTICS_ADMIN,
     # The export surfaces — their cursors and directories are shared by every tenant, so each
     # takes the hub's export permission.
     ("GET", "/api/traces/status"): Permission.EXPORT_ADMIN,
@@ -237,6 +239,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("DELETE", "/api/admin/tenants/{tenant_id}"): Permission.TENANT_ADMIN,
     ("POST", "/api/admin/graphs/sync"): Permission.TENANT_ADMIN,
     ("GET", "/api/admin/events"): Permission.TENANT_ADMIN,
+    ("POST", "/api/admin/sweeps/{name}/passes"): Permission.TENANT_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): Permission.TRANSCRIPT_READ,
     ("GET", "/api/analytics/events/ndjson"): Permission.TRANSCRIPT_READ,

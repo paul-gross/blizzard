@@ -8891,6 +8891,42 @@ export type SubscriptionUsageView = {
 };
 
 /**
+ * SweepPassOutcome
+ *
+ * How one sweep pass ended.
+ */
+export const SweepPassOutcome = { COMPLETED: 'completed', FAILED: 'failed' } as const;
+
+/**
+ * SweepPassOutcome
+ *
+ * How one sweep pass ended.
+ */
+export type SweepPassOutcome = typeof SweepPassOutcome[keyof typeof SweepPassOutcome];
+
+/**
+ * SweepPassResponse
+ *
+ * A finished sweep pass: when it started and finished on the hub's clock, its outcome, and the fault's message
+ * when it failed — ``null`` when it completed.
+ */
+export type SweepPassResponse = {
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Finished At
+     */
+    finished_at: string;
+    outcome: SweepPassOutcome;
+    /**
+     * Started At
+     */
+    started_at: string;
+};
+
+/**
  * SystemArtifactView
  *
  * A system artifact's global name and raw text.
@@ -10489,6 +10525,44 @@ export type GrantHubAdminApiAdminHubAdminsUserIdPutResponses = {
 };
 
 export type GrantHubAdminApiAdminHubAdminsUserIdPutResponse = GrantHubAdminApiAdminHubAdminsUserIdPutResponses[keyof GrantHubAdminApiAdminHubAdminsUserIdPutResponses];
+
+export type RunEveryTenantPassApiAdminSweepsNamePassesPostData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/admin/sweeps/{name}/passes';
+};
+
+export type RunEveryTenantPassApiAdminSweepsNamePassesPostErrors = {
+    /**
+     * No sweep this hub builds goes by the name.
+     */
+    404: unknown;
+    /**
+     * A pass of the sweep holds the lock this one needs: `{"code": "sweep_in_progress"}`.
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunEveryTenantPassApiAdminSweepsNamePassesPostError = RunEveryTenantPassApiAdminSweepsNamePassesPostErrors[keyof RunEveryTenantPassApiAdminSweepsNamePassesPostErrors];
+
+export type RunEveryTenantPassApiAdminSweepsNamePassesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SweepPassResponse;
+};
+
+export type RunEveryTenantPassApiAdminSweepsNamePassesPostResponse = RunEveryTenantPassApiAdminSweepsNamePassesPostResponses[keyof RunEveryTenantPassApiAdminSweepsNamePassesPostResponses];
 
 export type ListTenantsApiAdminTenantsGetData = {
     body?: never;
@@ -18234,6 +18308,42 @@ export type FleetSpendApiSpendGetResponses = {
 };
 
 export type FleetSpendApiSpendGetResponse = FleetSpendApiSpendGetResponses[keyof FleetSpendApiSpendGetResponses];
+
+export type RunTenantPassApiSweepsNamePassesPostData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/sweeps/{name}/passes';
+};
+
+export type RunTenantPassApiSweepsNamePassesPostErrors = {
+    /**
+     * No sweep this hub builds goes by the name.
+     */
+    404: unknown;
+    /**
+     * A pass of the sweep holds the lock this one needs: `{"code": "sweep_in_progress"}`.
+     */
+    409: unknown;
+    /**
+     * The sweep runs over every tenant only.
+     */
+    422: unknown;
+};
+
+export type RunTenantPassApiSweepsNamePassesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SweepPassResponse;
+};
+
+export type RunTenantPassApiSweepsNamePassesPostResponse = RunTenantPassApiSweepsNamePassesPostResponses[keyof RunTenantPassApiSweepsNamePassesPostResponses];
 
 export type TraceReplayApiTracesReplayPostData = {
     body: TraceReplayRequest;

@@ -201,6 +201,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/analytics/spend/models"): _LIST,
     ("GET", "/api/analytics/spend/nodes"): _LIST,
     ("POST", "/api/analytics/re-derive"): _own({}),
+    ("POST", "/api/sweeps/{name}/passes"): _own(ids={"name": "sweep"}),
     ("GET", "/api/spend"): _list(**_SINCE),
     # -- backlog and queue -----------------------------------------------------------------------------------
     ("GET", "/api/backlog"): _LIST,
@@ -538,6 +539,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.ids["spare_token"] = f"hub:{spare['ref']}"
     t.keep("spare_chunk_id", spare["chunk_id"])
     t.ids["hub_source"] = "hub"
+    t.ids["sweep"] = "close_drain"
     chunk = t.keep("chunk_id", item["chunk_id"])
     node = _ok(c.get(f"/api/chunks/{chunk}"), 200)["current_node_id"]
     _ok(c.post(f"/api/chunks/{chunk}/promote"), 202)
@@ -742,7 +744,7 @@ def _ghost_of(tenant: _Tenant) -> _Tenant:
 def _url(path: str, tenant: _Tenant, ids: dict[str, str]) -> str:
     def value(match: re.Match[str]) -> str:
         name = match.group(1)
-        if name == "name":
+        if name == "name" and name not in ids:
             return tenant.ids["secret"]
         if name == "runner_id" and path.startswith("/api/fleet/"):
             return tenant.ids["runner"]

@@ -77,9 +77,10 @@ Finally it removes the tenant itself. The hub's event log records `tenant-closed
 | `409`  | `last_tenant`: the tenant is the hub's only open tenant, which cannot be deleted                                  |
 | `410`  | The tenant was deleted already; the CLI says so and exits zero                                                    |
 
-The `tenant_teardown` sweep runs every 30 seconds and drains up to 50,000 rows of each deletion underway per pass. A hub
-stopped or killed mid-drain resumes the drain from wherever the tables stand once it is back. Deleting a tenant whose
-deletion is underway answers `202` again and changes nothing. `tenant list` shows the tenant until it is gone.
+The `tenant_teardown` sweep ([The hub's sweeps](./observability.md#the-hubs-sweeps)) runs every 30 seconds and drains up
+to 50,000 rows of each deletion underway per pass. A hub stopped or killed mid-drain resumes the drain from wherever the
+tables stand once it is back. Deleting a tenant whose deletion is underway answers `202` again and changes nothing.
+`tenant list` shows the tenant until it is gone.
 
 Deletion removes the tenant's rows from the hub's store, never from an export already written
 ([egress.md](./egress.md#upgrading-to-tenants)).

@@ -14582,6 +14582,51 @@
         "title": "SubscriptionUsageView",
         "type": "object"
       },
+      "SweepPassOutcome": {
+        "description": "How one sweep pass ended.",
+        "enum": [
+          "completed",
+          "failed"
+        ],
+        "title": "SweepPassOutcome",
+        "type": "string"
+      },
+      "SweepPassResponse": {
+        "description": "A finished sweep pass: when it started and finished on the hub's clock, its outcome, and the fault's message\nwhen it failed \u2014 ``null`` when it completed.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SweepPassOutcome",
+            "x-blizzard-open": true
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "outcome",
+          "error"
+        ],
+        "title": "SweepPassResponse",
+        "type": "object"
+      },
       "SystemArtifactView": {
         "description": "A system artifact's global name and raw text.",
         "properties": {
@@ -17218,6 +17263,55 @@
           }
         },
         "summary": "Grant Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/sweeps/{name}/passes": {
+      "post": {
+        "description": "One pass of any sweep this hub builds over every tenant, under its ``sweep <name>`` root: ``failed`` only\nwhen the pass itself raised.",
+        "operationId": "run_every_tenant_pass_api_admin_sweeps__name__passes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No sweep this hub builds goes by the name."
+          },
+          "409": {
+            "description": "A pass of the sweep holds the lock this one needs: `{\"code\": \"sweep_in_progress\"}`."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Every Tenant Pass",
         "tags": [
           "admin"
         ]
@@ -31872,6 +31966,48 @@
         "summary": "Fleet Spend",
         "tags": [
           "spend"
+        ]
+      }
+    },
+    "/api/sweeps/{name}/passes": {
+      "post": {
+        "description": "One pass of ``forge_status``, ``event_derivation`` or ``close_drain`` over the request's tenant alone:\n``failed`` with the fault its tenant met.",
+        "operationId": "run_tenant_pass_api_sweeps__name__passes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No sweep this hub builds goes by the name."
+          },
+          "409": {
+            "description": "A pass of the sweep holds the lock this one needs: `{\"code\": \"sweep_in_progress\"}`."
+          },
+          "422": {
+            "description": "The sweep runs over every tenant only."
+          }
+        },
+        "summary": "Run Tenant Pass",
+        "tags": [
+          "sweeps"
         ]
       }
     },

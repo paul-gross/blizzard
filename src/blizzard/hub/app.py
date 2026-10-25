@@ -88,6 +88,8 @@ from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.secrets import router as secrets_router
 from blizzard.hub.api.secrets import sanitized_validation_response
 from blizzard.hub.api.spend import router as spend_router
+from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
+from blizzard.hub.api.sweeps import router as sweeps_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
@@ -456,6 +458,8 @@ def create_app(
     app.include_router(egress_router)
     app.include_router(admin_tenants_router)
     app.include_router(admin_events_router)
+    app.include_router(sweeps_router)
+    app.include_router(admin_sweeps_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(projects_router)

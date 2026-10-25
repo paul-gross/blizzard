@@ -346,9 +346,10 @@ step's root, as described under **Nesting under a step** below. The [Spans](#spa
   arrives sampled is always kept. `OTEL_TRACES_SAMPLER` replaces the ratio when it is set.
 - **What each daemon traces.** The hub traces each request under its route template, such as
   `GET /api/chunks/{chunk_id}`, each store query, each call to the OAuth provider, the forge and the work sources, and
-  each sweep pass as a root named `sweep <name>`. The runner traces the same for its own app, whether served over TCP or
-  the unix socket, its calls to the hub, and each tick as a root named `tick` with a child per step. A runner's calls to
-  its hub carry `traceparent`.
+  each pass of a sweep over every tenant, timed or requested, as a root named `sweep <name>`; a pass for one tenant
+  opens no root and runs inside its request's span. The runner traces the same for its own app, whether served over TCP
+  or the unix socket, its calls to the hub, and each tick as a root named `tick` with a child per step. A runner's calls
+  to its hub carry `traceparent`.
 - **Nesting under a step.** A platform span made on one step's behalf parents on that step's derived root or `hub exec`
   span, using the ids in [Trace and span ids](#trace-and-span-ids). Such a span is always kept, whatever the sample
   ratio, because its parent counts as sampled.
