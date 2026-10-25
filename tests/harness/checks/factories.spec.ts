@@ -44,11 +44,14 @@ test.describe('at fresh-tenant, the factories make what the tenant is to own', (
     );
   });
 
-  test('fleet mints a runner and speaks the fleet plane under its token', async ({ fleet }) => {
-    const runner = await fleet('r-fleet');
+  test('fleet mints a project-serving runner and speaks the fleet plane under its token', async ({ fleet, api, project }) => {
+    const runner = await fleet('r-fleet', { projects: [project.slug] });
     const answered = await runner.get('/api/fleet/identity');
     expect(answered.status).toBe(200);
     expect(JSON.stringify(answered.body)).toContain(runner.runnerId);
+    const listed = await api.get('/api/runners');
+    expect(listed.body.runners.find((item: { runner_id: string }) => item.runner_id === runner.runnerId).projects)
+      .toEqual([expect.objectContaining({ entry: project.slug })]);
   });
 
   test('a client call and the tenant’s creation each leave a latency record on the test', async ({ api }, testInfo) => {
@@ -65,6 +68,30 @@ test.describe('at fresh-tenant, the factories make what the tenant is to own', (
     expect(runner.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     const runners = await api.get('/api/runners');
     expect(runners.body.runners.map((listed: { runner_id: string }) => listed.runner_id)).toContain(runner.runnerId);
+  });
+
+  test('mockRunner drives registration and peek and exposes its own levers', async ({ mockRunner, api, project }, testInfo) => {
+    const runner = await mockRunner('r-drive', { projects: [project.slug] });
+    const registered = await runner.drive('register');
+    expect(registered.status).toBe(200);
+    expect(registered.body.status).toBe(201);
+    expect(registered.body.response.runner_id).toBe(runner.runnerId);
+    const peeked = await runner.drive('peek');
+    expect(peeked.status).toBe(200);
+    expect(peeked.body.status).toBe(200);
+    const listed = await api.get('/api/runners');
+    expect(listed.body.runners.find((item: { runner_id: string }) => item.runner_id === runner.runnerId).projects)
+      .toEqual([expect.objectContaining({ entry: project.slug })]);
+
+    const armed = await runner.lever('drop_ack', { chunk_id: 'only-this-chunk' });
+    expect(armed.status).toBe(200);
+    expect(armed.body.armed.kind).toBe('drop_ack');
+    const levers = await runner.levers();
+    expect(levers.status).toBe(200);
+    expect(levers.body.active).toContainEqual(expect.objectContaining({ kind: 'drop_ack', chunk_id: 'only-this-chunk' }));
+    const records = recordsOf(testInfo);
+    expect(records).toContainEqual(expect.objectContaining({ method: 'POST', route: '/_drive/register', status: 200 }));
+    expect(records).toContainEqual(expect.objectContaining({ method: 'GET', route: '/_levers', status: 200 }));
   });
 });
 

@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
-import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, type Verbs } from './client/clients';
+import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
+import type { RunnerAddRequest } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
 import {
   type FactoryContext,
@@ -10,6 +11,7 @@ import {
   type Repository,
   repositoryFactory,
   requireOwnTenant,
+  type RunnerOptions,
 } from './factories';
 import { type HubLog, hubLog as readHubLog } from './logs';
 import { type Project, sharesTenant, tenancy, uniqueName } from './tenancy';
@@ -23,13 +25,13 @@ export interface FleetClient extends Verbs {
 interface Fixtures {
   api: HubApi;
   project: Project;
-  fleet: (name: string) => Promise<FleetClient>;
+  fleet: (name: string, options?: RunnerOptions) => Promise<FleetClient>;
   forge: ForgeApi;
   events: Events;
   hubLog: HubLog;
   issue: (title: string, options?: { repository?: Repository }) => Promise<FiledIssue>;
   repository: (name?: string) => Promise<Repository>;
-  mockRunner: (name: string) => Promise<MockRunner>;
+  mockRunner: (name: string, options?: RunnerOptions) => Promise<MockRunner>;
   /** Internal: what the factories share. */
   factoryContext: FactoryContext;
   /** Internal: the event subscriptions a test opened, closed when it ends. */
@@ -67,9 +69,9 @@ export const test = tenancy.extend<Fixtures>({
   },
 
   fleet: async ({ api, testHub, tenant, level, ledger }, use, testInfo) => {
-    await use(async (name) => {
+    await use(async (name, options) => {
       requireOwnTenant(level.served, 'fleet()');
-      const minted = await api.post('/api/runners', { data: { name } });
+      const minted = await api.post('/api/runners', { data: { name, ...options } satisfies RunnerAddRequest });
       if (!minted.ok) throw new Error(`minting runner ${name} answered ${minted.status}: ${JSON.stringify(minted.body)}`);
       ledger.add('runner', minted.body.runner_id as string);
       const client = fleetApi({
@@ -110,7 +112,8 @@ export const test = tenancy.extend<Fixtures>({
   },
 
   factoryContext: async ({ api, forge, project, level, testHub, ledger }, use, testInfo) => {
-    await use({ api, forge, project, level: level.served, testHub, ledger, unique: (prefix) => uniqueName(testInfo, prefix) });
+    await use({ api, forge, project, level: level.served, testHub, ledger, unique: (prefix) => uniqueName(testInfo, prefix),
+      mockClient: (url) => mockRunnerApi({ context: testHub.context, testInfo, url, ledger }) });
   },
 
   repository: async ({ factoryContext }, use) => {

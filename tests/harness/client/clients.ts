@@ -1,7 +1,7 @@
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { recorderFor, timed } from './latency';
 import type { Ledger } from './ledger';
-import type { MockIssue, MockRepositoryCreated } from './mock';
+import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing } from './mock';
 import { RESOURCES } from './resources';
 
 // A hub answer is whatever the route returns; a test names the fields it reads.
@@ -140,6 +140,26 @@ export function fleetApi(options: { context: APIRequestContext; testInfo: TestIn
     },
     false,
   );
+}
+
+/** The mock runner's control plane, sent through the same timed and diagnosed request path as the hub. */
+export function mockRunnerApi(options: { context: APIRequestContext; testInfo: TestInfo; url: string; ledger: Ledger }): {
+  drive: <V extends string>(verb: V, body?: unknown) => Promise<ApiResponse<MockDriveAnswer<V>>>;
+  lever: (kind: string, body?: unknown) => Promise<ApiResponse>;
+  levers: () => Promise<ApiResponse<MockRunnerLeverListing>>;
+} {
+  const engine: Engine = {
+    context: options.context,
+    testInfo: options.testInfo,
+    headers: {},
+    ledger: options.ledger,
+    logContext: () => '',
+  };
+  return {
+    drive: (verb, body) => send(engine, 'POST', `${options.url}/_drive/${verb}`, { data: body }, false),
+    lever: (kind, body) => send(engine, 'POST', `${options.url}/_levers/${kind}`, { data: body ?? {} }, false),
+    levers: () => send(engine, 'GET', `${options.url}/_levers`, {}, false),
+  };
 }
 
 export interface ForgeApi {

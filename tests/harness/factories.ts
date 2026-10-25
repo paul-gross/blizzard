@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ChunkIngestResponse } from './client/wire/hub/types.gen';
-import type { ForgeApi, HubApi } from './client/clients';
+import type { ChunkIngestResponse, RunnerAddRequest } from './client/wire/hub/types.gen';
+import { type ApiResponse, type ForgeApi, type HubApi } from './client/clients';
 import type { Ledger } from './client/ledger';
-import type { MockIssue } from './client/mock';
+import type { MockDriveAnswer, MockIssue, MockRunnerLeverListing } from './client/mock';
 import { startMockRunner } from './daemons/mock-runner';
 import { type DaemonRecord, stopDaemon } from './daemons/process';
 import { runDir } from './env';
@@ -23,7 +23,12 @@ export interface MockRunner {
   runnerId: string;
   token: string;
   url: string;
+  drive<V extends string>(verb: V, body?: unknown): Promise<ApiResponse<MockDriveAnswer<V>>>;
+  lever(kind: string, body?: unknown): Promise<ApiResponse>;
+  levers(): Promise<ApiResponse<MockRunnerLeverListing>>;
 }
+
+export type RunnerOptions = Pick<RunnerAddRequest, 'projects'>;
 
 export interface FiledIssue {
   issue: MockIssue;
@@ -37,6 +42,7 @@ export interface FactoryContext {
   level: Level;
   testHub: TestHub;
   ledger: Ledger;
+  mockClient: (url: string) => Pick<MockRunner, 'drive' | 'lever' | 'levers'>;
   /** A name unique to this test and run. */
   unique: (prefix: string) => string;
 }
@@ -138,19 +144,19 @@ export function issueFactory(
  * At `fresh-tenant` and up, a mock runner against the test's hub with a token minted in the tenant, stopped when the
  * test ends. A mock runner left to add itself would name no tenant and be refused, so none starts without `--token`.
  */
-export function mockRunnerFactory(context: FactoryContext): { factory: (name: string) => Promise<MockRunner>; stopAll: () => Promise<void> } {
+export function mockRunnerFactory(context: FactoryContext): { factory: (name: string, options?: RunnerOptions) => Promise<MockRunner>; stopAll: () => Promise<void> } {
   const started: DaemonRecord[] = [];
   return {
-    factory: async (name) => {
+    factory: async (name, options) => {
       requireOwnTenant(context.level, 'mockRunner()');
-      const minted = await context.api.post('/api/runners', { data: { name } });
+      const minted = await context.api.post('/api/runners', { data: { name, ...options } satisfies RunnerAddRequest });
       if (!minted.ok) throw new Error(`minting runner ${name} answered ${minted.status}: ${JSON.stringify(minted.body)}`);
       context.ledger.add('runner', minted.body.runner_id as string);
       const dir = path.join(runDir(), 'runners', context.unique(`${name}-`));
       fs.mkdirSync(dir, { recursive: true });
       const daemon = await startMockRunner(dir, { hubUrl: context.testHub.coordinates.url, name, token: minted.body.token as string });
       started.push(daemon);
-      return { name, runnerId: minted.body.runner_id as string, token: minted.body.token as string, url: daemon.url };
+      return { name, runnerId: minted.body.runner_id as string, token: minted.body.token as string, url: daemon.url, ...context.mockClient(daemon.url) };
     },
     // A runner's log is read for the guard's refusal when it stops.
     stopAll: async () => {
