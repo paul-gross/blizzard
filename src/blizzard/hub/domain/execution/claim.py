@@ -159,6 +159,19 @@ class RekeyDeniedTerminal(Exception):
         self.status = status
 
 
+class RekeyDeniedNotHolder(Exception):
+    """The caller no longer holds the chunk's route — it was released, or another runner claimed it,
+    after the caller was admitted — so no token is minted. ``holder`` is the route's current runner,
+    ``None`` when the chunk has no live route."""
+
+    def __init__(self, *, chunk_id: str, holder: str | None) -> None:
+        super().__init__(
+            f"chunk {chunk_id} has no live route" if holder is None else f"chunk {chunk_id} is held by another runner"
+        )
+        self.chunk_id = chunk_id
+        self.holder = holder
+
+
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
     """Refuse, in order, an unregistered, retired, version-refused, or paused runner; return its registration."""
     bar = ClaimBar.UNREGISTERED if registration is None else registration.claim_bar()
@@ -387,13 +400,22 @@ class ClaimService:
         )
         return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
-    def rekey(self, route: Route, facts: ChunkFacts) -> str:
+    def rekey(self, route: Route) -> str:
         """Rotate a live route's capability token — the lost-plaintext recovery: a claim whose route-token
         response was never read back has no other way to learn it. Appends a new ``route_token_minted`` fact
-        (``bzh:facts-not-status``), newest-fact-wins, re-run idempotent; :func:`refuse_rekey` refuses a
-        route left on an ended chunk."""
+        (``bzh:facts-not-status``), newest-fact-wins, re-run idempotent. The holder and the ended-chunk guards
+        are re-read under the chunk-row lock (``bzh:store-exclusive-write``): :class:`RekeyDeniedNotHolder` when
+        the route moved off ``route``'s runner since the caller read it, :func:`refuse_rekey` for an ended chunk."""
         self._retired.refuse_if_retired(route.runner_id, action="route-token rekey")
-        refuse_rekey(route, facts)
-        route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        self._route.record_route_token(route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now())
+        with self._exclusive.locked([route.chunk_id]) as handle:
+            current = handle.route_of(route.chunk_id)
+            if current is None or current.runner_id != route.runner_id:
+                raise RekeyDeniedNotHolder(
+                    chunk_id=route.chunk_id, holder=None if current is None else current.runner_id
+                )
+            refuse_rekey(current, ChunkFacts.or_default(handle.facts(route.chunk_id)))
+            route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
+            self._route.record_route_token_locked(
+                handle, route.chunk_id, token_hash=TokenHash(route_token).hex, at=self._clock.now()
+            )
         return route_token

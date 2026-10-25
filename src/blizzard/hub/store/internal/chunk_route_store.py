@@ -168,20 +168,21 @@ class ChunkRouteStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
-        """Append a fresh ``route_token_minted`` fact — the re-key path.
-        Same allocator as :meth:`record_route_locked`'s own token fact, its own call rather
-        than a fixed +1, so it stays correctly ordered against a concurrent
+    def record_route_token_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, token_hash: str, at: datetime
+    ) -> None:
+        """Append a fresh ``route_token_minted`` fact — the re-key path — on ``handle``'s already-locked
+        connection (``bzh:store-exclusive-write``). Same allocator as :meth:`record_route_locked`'s own token
+        fact, its own call rather than a fixed +1, so it stays correctly ordered against a concurrent
         create/release/re-key on this chunk."""
-        with self._store.write("record_route_token") as conn:
-            conn.execute(
-                self._store.insert(s.route_token_minted).values(
-                    chunk_id=chunk_id,
-                    token_hash=token_hash,
-                    seq=next_route_seq(conn, chunk_id),
-                    minted_at=at,
-                )
+        conn_of(handle).execute(
+            self._store.insert(s.route_token_minted).values(
+                chunk_id=chunk_id,
+                token_hash=token_hash,
+                seq=next_route_seq(conn_of(handle), chunk_id),
+                minted_at=at,
             )
+        )
 
     def record_lease_minted(
         self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime

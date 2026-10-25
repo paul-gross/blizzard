@@ -61,6 +61,7 @@ from blizzard.hub.domain.execution.claim import (
     ClaimDeniedTerminal,
     ClaimDeniedUnregistered,
     ClaimDeniedVersionRefused,
+    RekeyDeniedNotHolder,
     RekeyDeniedTerminal,
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
@@ -766,9 +767,14 @@ def rekey_route_token(
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
     fleet.assert_owns(route.runner_id)
-    facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
     try:
-        route_token = services.claim.rekey(route, facts)
+        route_token = services.claim.rekey(route)
+    except RekeyDeniedNotHolder as exc:
+        # The route moved after the pre-check: answer as the pre-check would have.
+        if exc.holder is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        fleet.assert_owns(exc.holder)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except RekeyDeniedTerminal as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=route_token)

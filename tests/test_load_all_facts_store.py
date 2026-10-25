@@ -255,7 +255,8 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
             token_hash="th_ks_1",
             at=_T0,
         )
-    store.route.record_route_token("ch_kitchen_sink", token_hash="th_ks_2", at=_at(1))
+    with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
+        store.route.record_route_token_locked(handle, "ch_kitchen_sink", token_hash="th_ks_2", at=_at(1))
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
         store.route.record_route_released_locked(handle, "ch_kitchen_sink", at=_at(2))
         store.movement.record_requeue_locked(handle, "ch_kitchen_sink", at=_at(2))

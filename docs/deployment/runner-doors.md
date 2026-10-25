@@ -93,7 +93,8 @@ verbs use — the same write path, not a second one.
 
 The local brake means start no processes on this machine — no new claims, no restart-resume, no requeue respawn, no
 judging an exited worker (judging resumes a session); the hub brake (`blizzard hub runner pause`) only stops new claims,
-in-flight chunks running on. Neither brake is a drain: a running worker is left alone, and every lease, route, and retry
+in-flight chunks running on. Neither brake is a drain: a running worker is left alone (bar a restart's fenced-out worker, which the local brake still kills —
+[control-verbs.md](./control-verbs.md#restart)), and every lease, route, and retry
 budget the local brake defers picks up exactly where it left off once cleared, unless an operator moved the chunk —
 `blizzard-runner pause --help` carries the full contract.
 

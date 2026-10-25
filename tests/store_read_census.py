@@ -1945,7 +1945,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     write.route.record_lease_minted(chunk_route_a, epoch=1, claimant=Claimant(HUB_RUNNER_ID), at=_ht(89))
     write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, at=_ht(90))
-    write.route.record_route_token(chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
+    with write.exclusive.locked([chunk_route_a]) as handle:
+        write.route.record_route_token_locked(handle, chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
     with write.exclusive.locked([chunk_route_b]) as handle:
         write.route.record_route_locked(
             handle,

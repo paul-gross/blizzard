@@ -70,9 +70,12 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         activity-feed's key)."""
         ...
 
-    def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
+    def record_route_token_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, token_hash: str, at: datetime
+    ) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
-        path. Never mutates the prior token fact (``bzh:facts-not-status``):
+        path — on ``handle``'s already-locked connection (``bzh:store-exclusive-write``). Never mutates the prior
+        token fact (``bzh:facts-not-status``):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 
