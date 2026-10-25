@@ -109,8 +109,8 @@ description = "blizzard:compat — hold HEAD's committed surface documents to th
 run = "uv run blizzard-compat --commits origin/master..HEAD"
 
 [tasks.change-notes]
-description = "Validate the change notes under changes/ with blizzard-change-notes check — the format changes/README.md documents"
-run = "uv run blizzard-change-notes check"
+description = "Validate the change notes under changes/ with blizzard-change-notes check, then fail on a note the branch owes with blizzard-change-notes owed --against origin/master — the format and the rules changes/README.md documents"
+run = "uv run blizzard-change-notes check && uv run blizzard-change-notes owed --against origin/master"
 
 [tasks.flag-lifecycle]
 description = "Check release-derived flag lifetimes against HEAD (pr mode by default; cut and tag also available)"

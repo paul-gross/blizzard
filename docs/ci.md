@@ -12,11 +12,12 @@ every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gat
 (`contracts/ast-grep/`), the `dprint check` Markdown format (`gate / dprint`, `blizzard:markdown-format`), pytest
 (unit + component), OpenAPI spec drift, contract document drift (`gate / contract drift`), compatibility against the
 supported releases (`gate / compatibility against supported releases`, every trigger but a tag — see below), the change
-notes under `changes/` (`gate / change notes`, every trigger — see below), flag lifecycle (`gate / flag lifecycle`,
-PR-only), the Playwright package's static checks (`gate / playwright static`, `mise run playwright-check`: `tsc`, eslint
-with the bans a service spec keeps, and a regenerate-and-diff of the committed wire types; no daemon starts), the `web/`
-frontend checks (eslint, vitest, structural gate, bundle composition, story render, generated-client drift), and the
-Vale prose lint (`gate / process-reference and change-history lint`, `styles/Blizzard/ProcessReference.yml`,
+notes under `changes/` (`gate / change notes`, `check` on every trigger and `owed` on pull requests — see below), flag
+lifecycle (`gate / flag lifecycle`, PR-only), the Playwright package's static checks (`gate / playwright static`,
+`mise run playwright-check`: `tsc`, eslint with the bans a service spec keeps, and a regenerate-and-diff of the
+committed wire types; no daemon starts), the `web/` frontend checks (eslint, vitest, structural gate, bundle
+composition, story render, generated-client drift), and the Vale prose lint
+(`gate / process-reference and change-history lint`, `styles/Blizzard/ProcessReference.yml`,
 `styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and `styles/Blizzard/ShortFormPointer.yml`
 against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and
 web TypeScript/CSS; generated API clients are excluded and `.html` templates are outside Vale's configured extensions.
@@ -47,6 +48,7 @@ uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- open
 uv run blizzard-export-contracts --out-dir contracts && git diff --exit-code -- contracts/ && test -z "$(git ls-files --others --exclude-standard -- contracts/)"
 uv run blizzard-compat --commits origin/master..HEAD
 uv run blizzard-change-notes check
+uv run blizzard-change-notes owed --against origin/master
 uv run blizzard-flag-lifecycle pr
 cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run bundle-check && npm run story-render && npm run generate:client && cd .. && git diff --exit-code -- web/
 ```
@@ -62,7 +64,12 @@ or unless an entry in `contracts/compat/allowances.toml` admits it — that file
 
 `blizzard-change-notes check` (`src/blizzard/tools/change_notes/`) fails on a file under `changes/` that breaks the
 format [`changes/README.md`](../changes/README.md) documents, naming the file and the rule for every failure. The
-`gate.yml` job runs on every trigger, and `mise run change-notes` reproduces it locally.
+`gate.yml` job runs it on every trigger. On a pull request the job then runs
+`blizzard-change-notes owed --against
+origin/<base branch>`, which fails when the commits since the merge-base owe a
+change note they do not add — a changed contract document, a `!` commit and a breaking note owing each other, a released
+note touched; changes/README.md §When a note is owed has the rules. A push has already been judged and runs only
+`check`. `mise run change-notes` reproduces both locally, `owed` against `origin/master`.
 
 `gate / flag lifecycle` runs only on pull requests with a full tag history. It parses HEAD and the registries at valid
 release tags, reports each flag's release-derived lifetime and rule-labelled findings, and fails on lifecycle

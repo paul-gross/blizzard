@@ -2,7 +2,8 @@
 
 A change note is a small Markdown file committed beside the change it describes. `blizzard-change-notes check` (run by
 `mise run change-notes`, `mise run gate` and the `gate / change notes` check) refuses a malformed one and names the file
-and the rule it broke.
+and the rule it broke; `blizzard-change-notes owed --against <ref>` (run by `mise run change-notes` and, on pull
+requests, `gate / change notes`) fails a change that owes a note it does not add.
 
 ## Where notes live
 
@@ -41,6 +42,22 @@ the previous release under **Turned on** by registry summary, then breaking chan
 changed, fixed and security notes, then the commits since the previous tag in a collapsed block. The **Deprecated**
 section shows each promise's current line after released postponements. A note that an earlier release on another line
 also carries is marked `(also in X.Y.Z)`. Rendering a tag twice gives the same text.
+
+## When a note is owed
+
+`blizzard-change-notes owed --against <ref>` judges the commits in `merge-base(HEAD, <ref>)..HEAD` and prints every
+waiver it honours, then each failure with its rule and remedy.
+
+- **A contract document changed.** A range that changes an OpenAPI document, a configuration, trace, egress or CLI
+  contract document adds or edits a note under `changes/unreleased/`. The store schema documents are left out. A change
+  an operator would not notice, such as a reordered enum or a corrected description, waives this with a trailer on any
+  commit of the range: `Change-Note: none — <reason>`. The reason is required, after the em dash. A release cut, the
+  range with a `Release-Cut:` trailer, is exempt.
+- **`!` and `breaking: true` travel together.** A commit with the `!` marker needs an added note with `breaking: true`
+  and an `## Upgrade` section, and an added note with `breaking: true` needs a `!` commit. Editing an existing note to
+  `breaking: true` counts as adding one. No trailer waives this.
+- **Released notes stay put.** A range does not add, delete or rename a note under `changes/<X.Y.Z>/` or change its
+  frontmatter; a body edit is fine. A `Release-Cut: <X.Y.Z>` commit may write `changes/<X.Y.Z>/`.
 
 ## The id
 

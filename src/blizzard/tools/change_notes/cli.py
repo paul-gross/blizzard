@@ -6,13 +6,15 @@ from pathlib import Path
 
 import click
 
+from blizzard.tools.change_notes import owed as owed_rules
+from blizzard.tools.change_notes.contract import Failure, Note
 from blizzard.tools.change_notes.cut import CutRefused, cut
 from blizzard.tools.change_notes.flags import turned_on, working_registry
 from blizzard.tools.change_notes.guide import guide
 from blizzard.tools.change_notes.released import ReleasedNoteInvalid, also_in, commit_block, notes_at
 from blizzard.tools.change_notes.render import render
 from blizzard.tools.change_notes.schedule import due_without_removal, latest_released_schedule, release_line
-from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
+from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, parse_note, read_tree
 from blizzard.tools.change_notes.validate import validate
 from blizzard.tools.compat.git import GitError, Repository
 from blizzard.tools.compat.releases import parse_release, parse_releases
@@ -21,6 +23,41 @@ from blizzard.tools.compat.releases import parse_release, parse_releases
 def _tag_notes(repo: Repository, tag: str) -> list:
     directories = (d for d in repo.names(tag, CHANGES_DIR) if VERSION_DIR.fullmatch(d))
     return [note for directory in directories for note in notes_at(repo, tag, directory)]
+
+
+def _notes_at(repo: Repository, rev: str, paths: list[str]) -> dict[str, Note]:
+    """The parseable notes among ``paths`` as ``rev`` holds them; the working tree is never read."""
+    notes: dict[str, Note] = {}
+    for path in paths:
+        text = repo.show(rev, path)
+        if text is None:
+            continue
+        directory, name = path.rsplit("/", 2)[-2:]
+        parsed = parse_note(text, path=path, directory=directory, note_id=name.removesuffix(".md"))
+        if not isinstance(parsed, Failure):
+            notes[path] = parsed
+    return notes
+
+
+def _range_facts(repo: Repository, against: str) -> owed_rules.Facts:
+    base = repo.merge_base(against, "HEAD")
+    span = f"{base}..HEAD"
+    waivers = dict(repo.trailers(span, "Change-Note"))
+    cuts = dict(repo.trailers(span, "Release-Cut"))
+    commits = tuple(
+        owed_rules.Commit(sha, subject, tuple(waivers.get(sha, ())), tuple(cuts.get(sha, ())))
+        for sha, subject in repo.commits(span)
+    )
+    changes = tuple(owed_rules.Change(status, path, old) for status, path, old in repo.changed(base, "HEAD"))
+    paths = sorted(
+        {
+            p
+            for c in changes
+            for p in (c.path, c.old_path)
+            if p and p.startswith(f"{CHANGES_DIR}/") and p.endswith(".md")
+        }
+    )
+    return owed_rules.Facts(changes, commits, _notes_at(repo, base, paths), _notes_at(repo, "HEAD", paths))
 
 
 @click.group()
@@ -41,6 +78,27 @@ def check() -> None:
         click.echo(f"{len(failures)} change-note failure(s)", err=True)
         raise SystemExit(1)
     click.echo("change notes ok")
+
+
+@main.command()
+@click.option(
+    "--against", required=True, help="The ref the change is judged against: the range is merge-base(HEAD, ref)..HEAD."
+)
+def owed(against: str) -> None:
+    """Fail when the commits of the range owe a change note they do not add."""
+    try:
+        repo = Repository(Path.cwd())
+        verdict = owed_rules.judge(_range_facts(Repository(repo.toplevel()), against))
+    except GitError as exc:
+        raise click.UsageError(str(exc)) from exc
+    for line in verdict.honoured:
+        click.echo(line)
+    for line in verdict.failures:
+        click.echo(line)
+    if verdict.failures:
+        click.echo(f"{len(verdict.failures)} change-note obligation(s) unmet", err=True)
+        raise SystemExit(1)
+    click.echo("no change note owed beyond what the range adds")
 
 
 @main.command(name="cut")
