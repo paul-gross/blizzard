@@ -1,15 +1,8 @@
 <app-unserved-banner />
 <app-glance-view
   [vitals]="vitals()"
-  [needsYou]="needsYou()"
-  [needsYouState]="needsYouState()"
-  [inMotion]="inMotion()"
-  [inMotionState]="inMotionState()"
-  [upNext]="upNext()"
-  [upNextState]="upNextState()"
-  [doneToday]="doneToday()"
-  [doneTodayState]="doneTodayState()"
-  [doneTodayTotal]="doneTodayTotal()"
+  [list]="list()"
+  [listState]="listState()"
   [spend]="spendToday.data() ?? null"
   [spendState]="spendState()"
 />

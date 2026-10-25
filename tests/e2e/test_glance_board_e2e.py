@@ -2,7 +2,7 @@
 
 At a real ~390px phone width (`bzh:narrow-viewport-tier-rule`), `/board` routes to the
 glance shell. Asserts the loading-vs-empty distinction (AC 4): while the chunks read is
-in flight "Needs you" shows loading, never empty. Skipped unless `BLIZZARD_E2E=1`.
+in flight the list shows loading, never empty. Skipped unless `BLIZZARD_E2E=1`.
 """
 
 from __future__ import annotations
@@ -72,8 +72,8 @@ def _graph_yaml() -> str:
 def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populated_fleet(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """A held-open `GET /api/chunks` keeps "Needs you" in loading state; asserted to
-    show loading, never empty, then land the row once released.
+    """A held-open `GET /api/chunks` keeps the list in loading state; asserted to
+    show loading, never empty, then land the card once released.
     """
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -122,16 +122,16 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
 
                 # The mobile shell, not the desktop board — the guard matched.
                 expect(page.get_by_test_id("glance-board")).to_be_visible()
-                expect(page.get_by_test_id("needs-you-loading")).to_be_visible()
-                expect(page.get_by_test_id("needs-you-empty")).to_have_count(0)
+                expect(page.get_by_test_id("glance-list-loading")).to_be_visible()
+                expect(page.get_by_test_id("glance-list-empty")).to_have_count(0)
 
-                # Release the held read: the row lands, and the empty copy is never what
+                # Release the held read: the card lands, and the empty copy is never what
                 # took its place in between.
                 for route in held:
                     route.continue_()
-                expect(page.get_by_test_id("needs-you-row")).to_have_count(1)
-                expect(page.get_by_test_id("needs-you-loading")).to_have_count(0)
-                expect(page.get_by_test_id("needs-you-empty")).to_have_count(0)
+                expect(page.locator(f'[data-testid="glance-card"][data-chunk="{chunk_id}"]')).to_have_count(1)
+                expect(page.get_by_test_id("glance-list-loading")).to_have_count(0)
+                expect(page.get_by_test_id("glance-list-empty")).to_have_count(0)
             finally:
                 browser.close()
 
@@ -139,7 +139,7 @@ def test_the_glance_board_shows_loading_before_rows_and_never_empty_on_a_populat
 def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
     tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
-    """The glance spend panel and in-motion row render the combined figure, marked `~`,
+    """The glance spend panel and the running chunk's card render the combined figure, marked `~`,
     never a plain billed `$0.00`, for a chunk with no billed cost."""
     if not chromium_available:
         pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
@@ -182,9 +182,9 @@ def test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero(
                 # `~` — never a plain billed $0.00 in its place.
                 expect(page.get_by_test_id("glance-spend-value")).to_have_text("~$0.07")
 
-                # The in-motion row: same rule, same figure, on the one running chunk.
-                motion_row = page.locator('[data-testid="in-motion-row"][data-chunk="' + chunk_id + '"]')
-                expect(motion_row).to_have_count(1)
-                expect(motion_row.get_by_test_id("in-motion-cost")).to_have_text("~$0.07")
+                # The running chunk's card: same rule, same figure.
+                card = page.locator(f'[data-testid="glance-card"][data-chunk="{chunk_id}"]')
+                expect(card).to_have_count(1)
+                expect(card.get_by_test_id("glance-cost")).to_have_text("~$0.07")
             finally:
                 browser.close()

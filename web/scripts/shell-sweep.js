@@ -37,9 +37,9 @@
  *     scrolls inside a bounded box rather than clipping with no scroll
  *     container — the flex chain jsdom cannot resolve.
  *   - projects/hub/src/app/board/glance/glance-view.shell-sweep.spec.ts — the
- *     mobile glance board's spend-then-attention-to-completion section ordering, each
- *     row's work-ref/short-id head line and two-line title clamp, and no-overflow
- *     layout at 390px and 320px.
+ *     mobile glance board's spend-then-list ordering, each card's work-ref/short-id
+ *     head line, two-line title clamp and one-line meta, and no-overflow layout at
+ *     390px and 320px.
  *   - projects/runner/src/app/shell/nav/app-header.shell-sweep.spec.ts — the
  *     runner app root's own desktop header (`AppHeader`, moved out of
  *     `LocalPanelLayout` by issue #325), swept over width × signed-in

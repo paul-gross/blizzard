@@ -3,15 +3,40 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { KitAsyncStateValue } from 'fleet';
 
+import type { GlanceListGroups, GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
 
 const VITALS: Vitals = {
   needsYou: 0,
   running: 0,
+  ready: 0,
+  doneToday: 0,
   runnersUpLabel: '0/0',
-  live: false,
-  liveLabel: 'connecting',
 };
+
+const EMPTY: GlanceListGroups = { live: [], ready: [], backlog: [], done: [] };
+
+/** A running card with nothing spent, no runner, and no work items, unless a case says otherwise. */
+const row = (fields: Partial<GlanceRow> = {}): GlanceRow => ({
+  chunkId: 'ch_01row0000000000000000000000',
+  shortId: 'C-0001',
+  lane: 'running',
+  status: 'running',
+  statusWord: null,
+  node: 'build',
+  runner: null,
+  gated: false,
+  ask: null,
+  lines: [],
+  itemsRead: true,
+  costUsd: 0,
+  costPartial: false,
+  estimatedCostUsd: null,
+  projectColor: null,
+  ...fields,
+});
+
+const text = (el: Element | null | undefined): string | undefined => el?.textContent?.replace(/\s+/g, ' ').trim();
 
 describe('GlanceView', () => {
   beforeEach(async () => {
@@ -21,72 +46,55 @@ describe('GlanceView', () => {
     }).compileComponents();
   });
 
-  /** Render with every state defaulting to `'ready'` (empty rows) unless overridden —
- * each panel's own state is what this spec exercises independently. */
-  function render(
-    overrides: Partial<Record<'needsYouState' | 'inMotionState' | 'upNextState' | 'doneTodayState' | 'spendState', KitAsyncStateValue>> = {},
-  ) {
+  function render(list: Partial<GlanceListGroups> = {}, listState: KitAsyncStateValue = 'ready', spendState: KitAsyncStateValue = 'ready') {
     const fixture = TestBed.createComponent(GlanceView);
     fixture.componentRef.setInput('vitals', VITALS);
-    fixture.componentRef.setInput('needsYouState', overrides.needsYouState ?? 'empty');
-    fixture.componentRef.setInput('inMotionState', overrides.inMotionState ?? 'empty');
-    fixture.componentRef.setInput('upNextState', overrides.upNextState ?? 'empty');
-    fixture.componentRef.setInput('doneTodayState', overrides.doneTodayState ?? 'empty');
-    fixture.componentRef.setInput('spendState', overrides.spendState ?? 'ready');
+    fixture.componentRef.setInput('list', { ...EMPTY, ...list });
+    fixture.componentRef.setInput('listState', listState);
+    fixture.componentRef.setInput('spendState', spendState);
     return fixture;
   }
 
-  it('withholds "Needs you"\'s empty copy while its own state is loading, independently of the other four (AC 4)', async () => {
-    const fixture = render({ needsYouState: 'loading' });
+  async function cards(list: Partial<GlanceListGroups>): Promise<HTMLElement[]> {
+    const fixture = render(list);
+    await fixture.whenStable();
+    return [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-testid="glance-card"]')];
+  }
+
+  it('renders the five vitals', async () => {
+    const fixture = render();
+    fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, doneToday: 5, runnersUpLabel: '1/2' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="needs-you-loading"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="needs-you-empty"]')).toBeNull();
-    // The other three are unaffected — still resolved to their own empty states.
-    expect(el.querySelector('[data-testid="in-motion-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="up-next-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-empty"]')).not.toBeNull();
+    const vital = (id: string) => text(el.querySelector(`[data-testid="${id}"] .v-n`));
+    expect([vital('vital-needs-you'), vital('vital-running'), vital('vital-ready'), vital('vital-done-today'), vital('vital-runners-up')]).toEqual([
+      '2',
+      '3',
+      '4',
+      '5',
+      '1/2',
+    ]);
   });
 
-  it('withholds "In motion"\'s empty copy while its own state is loading, independently of the other three', async () => {
-    const fixture = render({ inMotionState: 'loading' });
+  it('shows the list\'s loading, error, and empty states in place of the list', async () => {
+    const fixture = render({}, 'loading');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="glance-list-loading"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="glance-list"]')).toBeNull();
 
-    expect(el.querySelector('[data-testid="in-motion-loading"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-empty"]')).toBeNull();
-    expect(el.querySelector('[data-testid="needs-you-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="up-next-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-empty"]')).not.toBeNull();
-  });
-
-  it('withholds "Up next"\'s empty copy while its own state is loading, independently of the other panels', async () => {
-    const fixture = render({ upNextState: 'loading' });
+    fixture.componentRef.setInput('listState', 'error');
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="glance-list-error"]')).not.toBeNull();
 
-    expect(el.querySelector('[data-testid="up-next-loading"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="up-next-empty"]')).toBeNull();
-    expect(el.querySelector('[data-testid="needs-you-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-empty"]')).not.toBeNull();
-  });
-
-  it('withholds "Done today"\'s empty copy while its own state is loading, independently of the other three', async () => {
-    const fixture = render({ doneTodayState: 'loading' });
+    fixture.componentRef.setInput('listState', 'empty');
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="done-today-loading"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-empty"]')).toBeNull();
-    expect(el.querySelector('[data-testid="needs-you-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-empty"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="up-next-empty"]')).not.toBeNull();
+    expect(text(el.querySelector('[data-testid="glance-list-empty"]'))).toContain('NOTHING ON THE BOARD');
   });
 
   it('shows the spend panel\'s own loading placeholder distinctly from its error state', async () => {
-    const fixture = render({ spendState: 'loading' });
+    const fixture = render({}, 'ready', 'loading');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -98,66 +106,86 @@ describe('GlanceView', () => {
     expect(el.querySelector('[data-testid="glance-spend-error"]')).not.toBeNull();
   });
 
-  it('shows each panel\'s error state distinctly from empty', async () => {
-    const fixture = render({ needsYouState: 'error', inMotionState: 'error', upNextState: 'error', doneTodayState: 'error' });
+  it('renders live, then READY, the divider, BACKLOG, then done, as one list', async () => {
+    const fixture = render({
+      live: [row({ chunkId: 'ch_live' })],
+      ready: [row({ chunkId: 'ch_ready', lane: 'ready', status: 'ready' })],
+      backlog: [row({ chunkId: 'ch_backlog', lane: 'notready', status: 'not_ready' })],
+      done: [row({ chunkId: 'ch_done', lane: 'done', status: 'done' })],
+    });
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const items = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-list"] > li')];
 
-    expect(el.querySelector('[data-testid="needs-you-error"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-error"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="up-next-error"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="done-today-error"]')).not.toBeNull();
-  });
-
-  it('renders every panel\'s empty copy once all four states have settled with nothing to show', async () => {
-    const fixture = render();
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="needs-you-empty"]')?.textContent).toContain('NOTHING NEEDS YOU');
-    expect(el.querySelector('[data-testid="in-motion-empty"]')?.textContent).toContain('NOTHING IN MOTION');
-    expect(el.querySelector('[data-testid="up-next-empty"]')?.textContent).toContain('NOTHING UP NEXT');
-    expect(el.querySelector('[data-testid="done-today-empty"]')?.textContent).toContain('NOTHING DONE YET');
-  });
-
-  it('renders Done today\'s visible/total terminal count even at zero', async () => {
-    const fixture = render();
-    await fixture.whenStable();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="done-today-count"]')?.textContent).toContain('0/0');
-  });
-
-  it('hides Done today\'s count while the chunks-derived panel is loading', async () => {
-    const fixture = render({ doneTodayState: 'loading' });
-    fixture.componentRef.setInput('doneTodayTotal', null);
-    await fixture.whenStable();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="done-today-count"]')).toBeNull();
-  });
-
-  it('hides Done today\'s count when the chunks-derived panel errors', async () => {
-    const fixture = render({ doneTodayState: 'error' });
-    fixture.componentRef.setInput('doneTodayTotal', null);
-    await fixture.whenStable();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="done-today-count"]')).toBeNull();
-  });
-
-  it("renders the in-motion row's and the spend panel's own entirely-estimated figure as the estimate alone, marked ~", async () => {
-    const fixture = render({ inMotionState: 'ready' });
-    fixture.componentRef.setInput('inMotion', [
-      {
-        chunkId: 'ch_01estimate0000000000000000',
-        shortId: 'C-0001',
-        node: 'build',
-        status: null,
-        lines: [],
-        itemsRead: true,
-        costUsd: 0,
-        costPartial: false,
-        estimatedCostUsd: 0.07,
-      },
+    expect(items.map((li) => li.getAttribute('data-chunk') ?? li.getAttribute('data-testid'))).toEqual([
+      'ch_live',
+      'ch_ready',
+      'glance-ready-divider',
+      'ch_backlog',
+      'ch_done',
     ]);
+  });
+
+  it('keeps the divider with nothing either side of it', async () => {
+    const fixture = render({ live: [row()] });
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="glance-ready-divider"]')).not.toBeNull();
+  });
+
+  it('meta-lines a card with its node and holding runner, host and name each their own span', async () => {
+    const [card] = await cards({ live: [row({ node: 'review', runner: { host: 'atlas', name: 'r-claude' } })] });
+
+    expect(text(card.querySelector('.step'))).toBe('review');
+    expect(text(card.querySelector('[data-testid="glance-runner"] .r-host'))).toBe('atlas');
+    expect(text(card.querySelector('[data-testid="glance-runner"] .r-name'))).toBe('r-claude');
+    expect(text(card.querySelector('[data-testid="glance-runner"]'))).toBe('atlas/r-claude');
+  });
+
+  it('names a runner with no known host by its name alone, and no runner at all where none holds it', async () => {
+    const [hostless, idle] = await cards({
+      live: [row({ chunkId: 'ch_a', runner: { host: null, name: 'r-claude' } }), row({ chunkId: 'ch_b' })],
+    });
+
+    expect(hostless.querySelector('.r-host')).toBeNull();
+    expect(text(hostless.querySelector('[data-testid="glance-runner"]'))).toBe('r-claude');
+    expect(idle.querySelector('[data-testid="glance-runner"]')).toBeNull();
+  });
+
+  it('pills an open gate, words a paused status, and carries an open ask under the card', async () => {
+    const [card] = await cards({ live: [row({ gated: true, statusWord: 'paused', ask: 'Which branch?' })] });
+
+    expect(text(card.querySelector('.gate'))).toBe('gate');
+    expect(text(card.querySelector('[data-testid="glance-row-status"]'))).toBe('paused');
+    expect(text(card.querySelector('[data-testid="glance-ask"]'))).toBe('Which branch?');
+  });
+
+  it('carries no gate, status word, or ask where the row has none', async () => {
+    const [card] = await cards({ live: [row()] });
+
+    expect(card.querySelector('.gate')).toBeNull();
+    expect(card.querySelector('[data-testid="glance-row-status"]')).toBeNull();
+    expect(card.querySelector('[data-testid="glance-ask"]')).toBeNull();
+  });
+
+  it('tints a card with its project color and edges it with its status color', async () => {
+    const [tinted, plain] = await cards({ live: [row({ chunkId: 'ch_a', projectColor: 'teal' }), row({ chunkId: 'ch_b' })] });
+
+    expect(tinted.classList).toContain('tinted');
+    expect(tinted.style.getPropertyValue('--project-tint')).not.toBe('');
+    expect(tinted.style.getPropertyValue('--status-color')).not.toBe('');
+    expect(plain.classList).not.toContain('tinted');
+  });
+
+  it('links each card to its chunk\'s detail page', async () => {
+    const [card] = await cards({ live: [row({ chunkId: 'ch_01link', shortId: 'C-LINK' })] });
+
+    const hit = card.querySelector('a.hit');
+    expect(hit?.getAttribute('href')).toContain('/board/chunk/ch_01link');
+    expect(hit?.getAttribute('aria-label')).toBe('Open chunk C-LINK');
+  });
+
+  it("renders a card's and the spend panel's own entirely-estimated figure as the estimate alone, marked ~", async () => {
+    const fixture = render({ live: [row({ estimatedCostUsd: 0.07 })] });
     fixture.componentRef.setInput('spend', {
       since: '2026-07-20T00:00:00Z',
       input_tokens: 900,
@@ -171,46 +199,18 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$0.07');
-    expect(el.querySelector('[data-testid="glance-spend-value"]')?.textContent?.trim()).toBe('~$0.07');
+    expect(text(el.querySelector('[data-testid="glance-cost"]'))).toBe('~$0.07');
+    expect(text(el.querySelector('[data-testid="glance-spend-value"]'))).toBe('~$0.07');
   });
 
-  it('folds a billed cost and its own estimate into one in-motion figure, marked ~', async () => {
-    const fixture = render({ inMotionState: 'ready' });
-    fixture.componentRef.setInput('inMotion', [
-      {
-        chunkId: 'ch_01billedandestimate00000000',
-        shortId: 'C-0003',
-        node: 'build',
-        status: null,
-        lines: [],
-        itemsRead: true,
-        costUsd: 0.05,
-        costPartial: false,
-        estimatedCostUsd: 2,
-      },
-    ]);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('folds a billed cost and its own estimate into one card figure, marked ~', async () => {
+    const [card] = await cards({ live: [row({ costUsd: 0.05, estimatedCostUsd: 2 })] });
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('~$2.05');
+    expect(text(card.querySelector('[data-testid="glance-cost"]'))).toBe('~$2.05');
   });
 
-  it('renders no ~ marker for a chunk/spend read with no estimate — exactly as before this field existed', async () => {
-    const fixture = render({ inMotionState: 'ready' });
-    fixture.componentRef.setInput('inMotion', [
-      {
-        chunkId: 'ch_01billedonly000000000000000',
-        shortId: 'C-0002',
-        node: 'build',
-        status: null,
-        lines: [],
-        itemsRead: true,
-        costUsd: 2.03,
-        costPartial: false,
-        estimatedCostUsd: null,
-      },
-    ]);
+  it('renders no ~ marker for a chunk/spend read with no estimate', async () => {
+    const fixture = render({ live: [row({ costUsd: 2.03 })] });
     fixture.componentRef.setInput('spend', {
       since: '2026-07-20T00:00:00Z',
       input_tokens: 900,
@@ -223,97 +223,51 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="in-motion-cost"]')?.textContent?.trim()).toBe('$2.03');
-    expect(el.querySelector('[data-testid="glance-spend-row"]')?.textContent).toContain('$18.40');
+    expect(text(el.querySelector('[data-testid="glance-cost"]'))).toBe('$2.03');
+    expect(text(el.querySelector('[data-testid="glance-spend-row"]'))).toContain('$18.40');
   });
 
-  it('renders no cost figure at all on an in-motion row that has spent nothing and carries no estimate', async () => {
-    const fixture = render({ inMotionState: 'ready' });
-    fixture.componentRef.setInput('inMotion', [
-      {
-        chunkId: 'ch_01nothingspent0000000000000',
-        shortId: 'C-0004',
-        node: 'build',
-        status: null,
-        lines: [],
-        itemsRead: true,
-        costUsd: 0,
-        costPartial: false,
-        estimatedCostUsd: null,
-      },
-    ]);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+  it('renders no cost figure on a card that has spent nothing and carries no estimate', async () => {
+    const [card] = await cards({ live: [row()] });
 
-    expect(el.querySelector('[data-testid="in-motion-row"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="in-motion-cost"]')).toBeNull();
+    expect(card.querySelector('[data-testid="glance-cost"]')).toBeNull();
   });
 
-  it("leads a row with its work item's label and title, and names only the status its panel does not", async () => {
-    const fixture = render({ inMotionState: 'ready' });
-    fixture.componentRef.setInput('inMotion', [
-      {
-        chunkId: 'ch_01delivering0000000000000',
-        shortId: 'C-0005',
-        node: 'deliver',
-        status: 'delivering',
-        lines: [{ label: 'toy-web#6', title: 'Announce form errors' }],
-        itemsRead: true,
-        costUsd: 0,
-        costPartial: false,
-        estimatedCostUsd: null,
-      },
-    ]);
-    await fixture.whenStable();
-    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="in-motion-row"]');
+  it("leads a card with its work item's label and title", async () => {
+    const [card] = await cards({ live: [row({ lines: [{ label: 'toy-web#6', title: 'Announce form errors', url: null }] })] });
 
-    expect(row?.querySelector('[data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-web#6');
-    expect(row?.querySelector('[data-testid="glance-title"]')?.textContent?.trim()).toBe('Announce form errors');
-    expect(row?.querySelector('[data-testid="glance-row-status"]')?.textContent?.trim()).toBe('delivering');
+    expect(text(card.querySelector('[data-testid="glance-work-ref"]'))).toBe('toy-web#6');
+    expect(text(card.querySelector('[data-testid="glance-title"]'))).toBe('Announce form errors');
   });
 
-  it("holds a row's title in a skeleton until its work items are read", async () => {
-    const fixture = render({ upNextState: 'ready' });
-    fixture.componentRef.setInput('upNext', [
-      { chunkId: 'ch_01unread000000000000000000', shortId: 'C-0006', node: 'build', lines: [{ label: 'toy-api#1', title: null }], itemsRead: false },
-    ]);
-    await fixture.whenStable();
-    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+  it("holds a card's title in a skeleton until its work items are read", async () => {
+    const [card] = await cards({ ready: [row({ lines: [{ label: 'toy-api#1', title: null, url: null }], itemsRead: false })] });
 
-    expect(row?.querySelector('[data-testid="glance-work-ref"]')?.textContent?.trim()).toBe('toy-api#1');
-    expect(row?.querySelector('[data-testid="glance-title-skeleton"]')).not.toBeNull();
-    expect(row?.querySelector('[data-testid="glance-title"]')).toBeNull();
-    expect(row?.querySelector('[data-testid="glance-row-status"]')).toBeNull();
+    expect(text(card.querySelector('[data-testid="glance-work-ref"]'))).toBe('toy-api#1');
+    expect(card.querySelector('[data-testid="glance-title-skeleton"]')).not.toBeNull();
+    expect(card.querySelector('[data-testid="glance-title"]')).toBeNull();
   });
 
-  it('heads a row with no work item with its short id alone, and no empty work-ref', async () => {
-    const fixture = render({ upNextState: 'ready' });
-    fixture.componentRef.setInput('upNext', [{ chunkId: 'ch_01bare00000000000000000000', shortId: 'C-0007', node: 'build', lines: [], itemsRead: true }]);
-    await fixture.whenStable();
-    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+  it('heads a card with no work item with its short id alone, and no empty work-ref', async () => {
+    const [card] = await cards({ ready: [row({ shortId: 'C-0007' })] });
 
-    expect(row?.querySelector('.head')?.textContent?.trim()).toBe('C-0007');
-    expect(row?.querySelector('[data-testid="glance-work-ref"]')).toBeNull();
+    expect(text(card.querySelector('.head'))).toBe('C-0007');
+    expect(card.querySelector('[data-testid="glance-work-ref"]')).toBeNull();
   });
 
   it("names a grouped chunk's later work items each under its own label", async () => {
-    const fixture = render({ upNextState: 'ready' });
-    fixture.componentRef.setInput('upNext', [
-      {
-        chunkId: 'ch_01group000000000000000000',
-        shortId: 'C-0008',
-        node: 'build',
-        lines: [
-          { label: 'toy-api#1', title: 'Rate-limit login' },
-          { label: 'toy-web#3', title: 'Drop moment.js' },
-        ],
-        itemsRead: true,
-      },
-    ]);
-    await fixture.whenStable();
-    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="up-next-row"]');
+    const [card] = await cards({
+      ready: [
+        row({
+          lines: [
+            { label: 'toy-api#1', title: 'Rate-limit login', url: null },
+            { label: 'toy-web#3', title: 'Drop moment.js', url: null },
+          ],
+        }),
+      ],
+    });
 
-    expect([...(row?.querySelectorAll('[data-testid="glance-work-ref"]') ?? [])].map((el) => el.textContent?.trim())).toEqual(['toy-api#1', 'toy-web#3']);
-    expect([...(row?.querySelectorAll('[data-testid="glance-title"]') ?? [])].map((el) => el.textContent?.trim())).toEqual(['Rate-limit login', 'Drop moment.js']);
+    expect([...card.querySelectorAll('[data-testid="glance-work-ref"]')].map(text)).toEqual(['toy-api#1', 'toy-web#3']);
+    expect([...card.querySelectorAll('[data-testid="glance-title"]')].map(text)).toEqual(['Rate-limit login', 'Drop moment.js']);
   });
 });

@@ -18,7 +18,7 @@
    needed?" before the rest of the column ever has to scroll into view. */
 .vitals {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border: 1px solid var(--bezel);
   background: var(--panel-deep);
 }
@@ -27,7 +27,7 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 10px 6px;
+  padding: 10px 2px;
   border-right: 1px solid var(--line);
 }
 .vital:last-child {
@@ -49,25 +49,8 @@
   text-transform: uppercase;
   color: var(--label);
 }
-.live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--label-dim);
-}
-.live-dot.active {
-  background: var(--cyan);
-  box-shadow: 0 0 8px var(--cyan);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .live-dot.active {
-    animation: glance-live-pulse 2.2s ease-in-out infinite;
-  }
-}
-@keyframes glance-live-pulse {
-  50% {
-    opacity: 0.35;
-  }
+.v-n.done {
+  color: var(--green);
 }
 .empty {
   color: var(--label-dim);
@@ -76,41 +59,72 @@
   font-size: var(--fs-sm);
   letter-spacing: 0.08em;
 }
-.rows {
+.spend {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px;
+}
+/* One long list of small cards, standing apart by the desktop list's own gap. */
+.cards {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-.row {
-  position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+}
+/* A card: the lane icon in its own track beside the work, a 2px status edge on the left, and the
+   project's tint behind it, as a desktop list row has. */
+.card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
-  padding: 8px;
-  border-bottom: 1px solid var(--line);
+  padding: 7px 8px;
+  border-left: 2px solid var(--status-color);
+  --bg-resting: var(--surface-resting);
+  --bg-pressed: var(--surface-hover);
+  background: var(--bg-resting);
 }
-.row:last-child {
-  border-bottom: 0;
+.card.tinted {
+  --bg-resting: color-mix(in srgb-linear, var(--project-tint) 2%, black);
+  --bg-pressed: color-mix(in srgb-linear, var(--project-tint) 3.5%, black);
 }
-/* A whole-row hit target for the chunk drill-down, laid over the row rather
-   than wrapped around it — the row's cells stay a flex layout of spans and
-   badges. pointer-events:none inherits, so any control added inside a cell
-   later needs pointer-events:auto of its own to stay clickable; none of
-   these rows carries one today. Scoped to :has(.hit) so the spend row —
-   same .row class, no drill-down — keeps normal behavior and never flashes
-   a pressed state for a tap that goes nowhere. */
+.lane {
+  margin-top: 1px;
+}
+/* A whole-card hit target for the chunk drill-down, laid over the card rather than wrapped
+   around it; the card's cells let a tap fall through to it. */
 .hit {
   position: absolute;
   inset: 0;
   z-index: 0;
 }
-.row:has(.hit) > *:not(.hit) {
+.card > *:not(.hit) {
   position: relative;
   z-index: 1;
   pointer-events: none;
 }
-.row:has(.hit):active {
-  background: var(--bezel-hi);
+.card:active {
+  background: var(--bg-pressed);
+}
+/* The line between the dispatch queue and the backlog, as the desktop list draws it. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  color: var(--cyan);
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.divider-rule {
+  flex: 1;
+  height: 0;
+  border-top: 1px dashed var(--cyan-dim);
 }
 .grow {
   flex: 1;
@@ -152,14 +166,83 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* What else the row says — its node, any status the panel does not name, its cost, an ask's
-   question — in one wrapping line. */
+/* What else the card says — its node, its runner, an open gate, a paused or stopped status, and its
+   cost on the right — on one line. */
 .meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 6px;
+  gap: 8px;
   min-width: 0;
+}
+.where {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--label);
+  font-size: var(--fs-xs);
+}
+/* The node takes only the line's leftover room, so a long name clips before the runner, gate, or
+   status beside it; the runner clips next. */
+.step {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex: 1 1 0;
+  max-width: max-content;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.where > .sep,
+.where > .gate,
+.where > .st {
+  flex: none;
+}
+.where > .runner {
+  flex: 0 1 auto;
+}
+.sep {
+  color: var(--label-dim);
+}
+/* A runner's host and name clip apart, each to its own ellipsis: the host gives way first,
+   the separator never. */
+.runner {
+  display: flex;
+  min-width: 0;
+  color: var(--text);
+}
+.r-host,
+.r-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-host {
+  flex: 0 1000 auto;
+  color: var(--label);
+}
+.r-name {
+  flex: 0 1 auto;
+}
+.r-sep {
+  flex: none;
+  color: var(--label-dim);
+}
+
+.ask {
+  color: var(--text);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .st {
   color: var(--amber-hi);

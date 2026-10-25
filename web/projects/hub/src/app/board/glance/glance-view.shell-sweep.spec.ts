@@ -3,21 +3,44 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
+import type { GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
 
 const VITALS: Vitals = {
   needsYou: 2,
   running: 1,
+  ready: 1,
+  doneToday: 1,
   runnersUpLabel: '7/257',
-  live: true,
-  liveLabel: 'live',
 };
+
+const LONG_TITLE = 'Add idempotency keys to POST /payments so retried requests from flaky mobile networks never double-charge a customer';
+
+const row = (chunkId: string, fields: Partial<GlanceRow>): GlanceRow => ({
+  chunkId,
+  shortId: chunkId,
+  lane: 'running',
+  status: 'running',
+  statusWord: null,
+  node: 'build',
+  runner: null,
+  gated: false,
+  ask: null,
+  lines: [],
+  itemsRead: true,
+  costUsd: 0,
+  costPartial: false,
+  estimatedCostUsd: null,
+  projectColor: null,
+  ...fields,
+});
 
 /**
  * The glance board's phone-width column, exercised in a real Chromium rather
  * than jsdom, which does not resolve its actual row positions or overflow. The
- * section sequence is load-bearing: attention comes first, then motion, the
- * queue's next dispatches, and only then completed work.
+ * sequence is load-bearing: the vitals and the day's spend, then one list of
+ * cards — attention and work in flight, READY over the divider over BACKLOG,
+ * then completed work.
  *
  * See `blizzard-context:/verification/blizzard/commands/web/shell-sweep.md`
  * §web:shell-sweep.
@@ -36,24 +59,22 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(GlanceView);
     fixture.componentRef.setInput('vitals', VITALS);
-    fixture.componentRef.setInput('needsYou', [
-      { chunkId: 'ch_needs', shortId: 'ch_needs', lines: [{ label: 'toy-api#4', title: 'Add idempotency keys to POST /payments so retried requests from flaky mobile networks never double-charge a customer' }], itemsRead: true, status: null, sub: 'Review the delivery.' },
-      { chunkId: 'ch_gate', shortId: 'ch_gate', lines: [], itemsRead: true, status: 'gate', sub: 'approve-a-very-long-gate-node-name-that-must-wrap-inside-the-panel' },
-    ]);
-    fixture.componentRef.setInput('needsYouState', 'ready');
-    fixture.componentRef.setInput('inMotion', [
-      { chunkId: 'ch_motion', shortId: 'ch_motion', node: 'deliver', lines: [{ label: 'toy-api#4', title: 'Add idempotency keys to POST /payments so retried requests from flaky mobile networks never double-charge a customer' }], itemsRead: true, status: 'delivering', costUsd: 1.25, costPartial: false, estimatedCostUsd: null },
-    ]);
-    fixture.componentRef.setInput('inMotionState', 'ready');
-    fixture.componentRef.setInput('upNext', [
-      { chunkId: 'ch_next', shortId: 'ch_next', node: 'build-a-very-long-upcoming-node-name-that-must-wrap-inside-the-panel', lines: [{ label: 'toy-web#5', title: null }], itemsRead: false },
-    ]);
-    fixture.componentRef.setInput('upNextState', 'ready');
-    fixture.componentRef.setInput('doneToday', [
-      { chunkId: 'ch_done', shortId: 'ch_done', lines: [{ label: 'blizzard#79', title: 'Done item' }], itemsRead: true, status: 'stopped' },
-    ]);
-    fixture.componentRef.setInput('doneTodayState', 'ready');
-    fixture.componentRef.setInput('doneTodayTotal', 257);
+    fixture.componentRef.setInput('list', {
+      live: [
+        row('ch_needs', { lane: 'needs', status: 'needs_human', lines: [{ label: 'toy-api#4', title: LONG_TITLE }], ask: 'Review the delivery.' }),
+        row('ch_gate', { lane: 'waiting', status: 'waiting_on_human', node: 'approve-a-very-long-gate-node-name-that-must-clip-inside-the-card', gated: true }),
+        row('ch_motion', {
+          node: 'deliver-a-very-long-node-name-that-must-clip-inside-the-card',
+          lines: [{ label: 'toy-api#4', title: LONG_TITLE }],
+          runner: { host: 'a-very-long-runner-host-name', name: 'a-very-long-runner-name' },
+          costUsd: 1.25,
+        }),
+      ],
+      ready: [row('ch_next', { lane: 'ready', status: 'ready', lines: [{ label: 'toy-web#5', title: null }], itemsRead: false })],
+      backlog: [row('ch_later', { lane: 'notready', status: 'not_ready' })],
+      done: [row('ch_done', { lane: 'done', status: 'stopped', statusWord: 'stopped', lines: [{ label: 'blizzard#79', title: 'Done item' }] })],
+    });
+    fixture.componentRef.setInput('listState', 'ready');
     fixture.componentRef.setInput('spendState', 'ready');
     const root = fixture.nativeElement as HTMLElement;
     // The production route gives the host a bounded, scrolling height. This
@@ -68,33 +89,45 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
         await page.viewport(width, 800);
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        const panels = ['needs-you-panel', 'in-motion-panel', 'up-next-panel', 'done-today-panel'].map((testid) => {
-          const panel = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
-          expect(panel, `${width}px: ${testid} is absent`).not.toBeNull();
-          return panel!;
-        });
-        for (let index = 1; index < panels.length; index += 1) {
-          expect(
-            panels[index].getBoundingClientRect().top,
-            `${width}px: ${panels[index].getAttribute('data-testid')} is not below the preceding section`,
-          ).toBeGreaterThan(panels[index - 1].getBoundingClientRect().top);
+        const items = [...root.querySelectorAll<HTMLElement>('[data-testid="glance-list"] > li')];
+        expect(items.map((li) => li.dataset['chunk'] ?? li.dataset['testid'])).toEqual([
+          'ch_needs',
+          'ch_gate',
+          'ch_motion',
+          'ch_next',
+          'glance-ready-divider',
+          'ch_later',
+          'ch_done',
+        ]);
+        for (let index = 1; index < items.length; index += 1) {
+          expect(items[index].getBoundingClientRect().top, `${width}px: list item ${index} is not below the one before it`).toBeGreaterThan(
+            items[index - 1].getBoundingClientRect().top,
+          );
         }
-        const gateRow = root.querySelector<HTMLElement>('[data-testid="needs-you-row"][data-chunk="ch_gate"]');
-        expect(gateRow?.textContent, `${width}px: the gate row is absent`).toContain('gate');
-        const needsYou = panels[0].getBoundingClientRect();
-        expect(gateRow!.getBoundingClientRect().right, `${width}px: the gate row overflows its section`).toBeLessThanOrEqual(needsYou.right);
-        // The day's spend sits under the vitals strip and above "Needs you".
+        // The day's spend sits under the vitals strip and above the list.
         const spend = root.querySelector<HTMLElement>('[data-testid="glance-spend-panel"]')!;
         const vitals = root.querySelector<HTMLElement>('[data-testid="glance-vitals"]')!;
         expect(spend.getBoundingClientRect().top, `${width}px: spend is not below the vitals`).toBeGreaterThan(vitals.getBoundingClientRect().top);
-        expect(panels[0].getBoundingClientRect().top, `${width}px: "Needs you" is not below spend`).toBeGreaterThan(spend.getBoundingClientRect().top);
-        // A row's head: the work ref holds the left, the short id the right, on one line.
-        const motionRow = root.querySelector<HTMLElement>('[data-testid="in-motion-row"][data-chunk="ch_motion"]')!;
+        expect(items[0].getBoundingClientRect().top, `${width}px: the list is not below spend`).toBeGreaterThan(spend.getBoundingClientRect().top);
+        // A card's head: the work ref holds the left, the short id the right, on one line.
+        const motionRow = root.querySelector<HTMLElement>('[data-testid="glance-card"][data-chunk="ch_motion"]')!;
+        const card = motionRow.getBoundingClientRect();
         const ref = motionRow.querySelector<HTMLElement>('.head [data-testid="glance-work-ref"]')!.getBoundingClientRect();
         const cid = motionRow.querySelector<HTMLElement>('.head .cid')!.getBoundingClientRect();
         expect(Math.abs(ref.top - cid.top), `${width}px: the work ref and short id are not on one line`).toBeLessThan(4);
         expect(cid.left, `${width}px: the short id does not sit right of the work ref`).toBeGreaterThan(ref.right);
-        expect(cid.right, `${width}px: the short id overflows its row`).toBeLessThanOrEqual(motionRow.getBoundingClientRect().right);
+        expect(cid.right, `${width}px: the short id overflows its card`).toBeLessThanOrEqual(card.right);
+        // The meta line holds one line: a long node and runner clip, and the cost keeps its place inside the card.
+        const step = motionRow.querySelector<HTMLElement>('.step')!.getBoundingClientRect();
+        const runner = motionRow.querySelector<HTMLElement>('[data-testid="glance-runner"]')!.getBoundingClientRect();
+        const cost = motionRow.querySelector<HTMLElement>('[data-testid="glance-cost"]')!.getBoundingClientRect();
+        expect(Math.abs(step.top - runner.top), `${width}px: the node and runner are not on one line`).toBeLessThan(4);
+        expect(cost.right, `${width}px: the cost overflows its card`).toBeLessThanOrEqual(card.right);
+        expect(runner.right, `${width}px: the runner runs into the cost`).toBeLessThanOrEqual(cost.left);
+        const gateCard = root.querySelector<HTMLElement>('[data-testid="glance-card"][data-chunk="ch_gate"]')!;
+        expect(gateCard.querySelector('.gate')!.getBoundingClientRect().right, `${width}px: the gate pill overflows its card`).toBeLessThanOrEqual(
+          gateCard.getBoundingClientRect().right,
+        );
         // A long title wraps to two lines and clamps there.
         const title = motionRow.querySelector<HTMLElement>('[data-testid="glance-title"]')!;
         const lineHeight = parseFloat(getComputedStyle(title).lineHeight);

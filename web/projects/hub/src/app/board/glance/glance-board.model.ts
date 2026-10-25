@@ -1,7 +1,7 @@
-import { RunnerConnection, STATUS_TONE, ageMs, compactRef, type ChunkCountsView, type ChunkStatus, type ChunkSummary, type DecisionView, type QuestionView, type QueuePeekEntry, type RunnerRegistryView, type SseStatus, type WorkItemsView } from 'fleet';
+import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, ageMs, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
 
 import { workLines } from '../board-card/board-card.model';
-import type { AttentionRow, DoneRow, MotionRow, RowWork, UpNextRow, Vitals } from './glance-view';
+import type { RowWork, Vitals } from './glance-view';
 
 /** How far back "Done today" reaches — a rolling window, not a calendar day. */
 const DONE_TODAY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -20,157 +20,101 @@ function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string,
   return { lines: workLines(chunk.work_refs ?? [], view), itemsRead: view !== undefined };
 }
 
-/** The status a row names — only where its panel's heading does not already say it, so a row reads
- * `paused` or `delivering` but never repeats the panel it sits in. */
-function rowStatus(status: ChunkStatus | undefined, panelNamesakes: readonly ChunkStatus[]): string | null {
-  return status === undefined || panelNamesakes.includes(status) ? null : status.replaceAll('_', ' ');
+/** The vitals strip, counted off the mobile list: what needs a person, what is moving, what is queued, what
+ * finished today, and the registry's online fraction. */
+export function glanceVitals(runners: readonly RunnerRegistryView[], list: GlanceListGroups): Vitals {
+  const online = runners.filter((runner) => runner.online).length;
+  return {
+    needsYou: list.live.filter((row) => row.lane === 'needs' || row.lane === 'waiting').length,
+    running: list.live.filter((row) => row.lane === 'running').length,
+    ready: list.ready.length,
+    doneToday: list.done.length,
+    runnersUpLabel: `${online}/${runners.length}`,
+  };
 }
 
-/**
- * Open asks first (the more specific "why"), then open gates, then any chunk in a human-attention tone
- * (`STATUS_TONE` — `waiting` or `needs`) neither has already covered — one attention-ordered list,
- * deduped by chunk id so a parked chunk with an open ask or gate shows once, not twice.
- */
-export function needsYouRows(
+/** One card of the mobile list — a chunk read the way the desktop list row reads it. */
+export interface GlanceRow extends RowWork {
+  readonly chunkId: string;
+  readonly shortId: string;
+  /** The board lane it sits in — the card's icon. */
+  readonly lane: string;
+  readonly status: ChunkStatus;
+  /** `paused` or `stopped`, which the icon alone cannot tell from its lane on a touch screen; else `null`. */
+  readonly statusWord: string | null;
+  readonly node: string;
+  /** The holding runner's host and name, or `null` when none holds it. */
+  readonly runner: RunnerBoardParts | null;
+  readonly gated: boolean;
+  /** An open ask's question, shown under the card. */
+  readonly ask: string | null;
+  readonly costUsd: number;
+  readonly costPartial: boolean;
+  readonly estimatedCostUsd: number | null;
+  /** The chunk's project palette color, which tints the card as it does a desktop card; `null` untinted. */
+  readonly projectColor: string | null;
+}
+
+/** The mobile list in render order: attention and work in flight, then READY over BACKLOG, then done today. */
+export interface GlanceListGroups {
+  readonly live: readonly GlanceRow[];
+  readonly ready: readonly GlanceRow[];
+  readonly backlog: readonly GlanceRow[];
+  readonly done: readonly GlanceRow[];
+}
+
+/** `order`'s order as a rank lookup; an unranked chunk sorts last, keeping its own relative order. */
+function byRank<T extends { readonly chunkId: string }>(rows: T[], order: readonly { readonly chunk_id: string }[]): T[] {
+  const rank = new Map(order.map((entry, index) => [entry.chunk_id, index]));
+  const of = (row: T): number => rank.get(row.chunkId) ?? Number.POSITIVE_INFINITY;
+  return rows.sort((a, b) => (of(a) === of(b) ? 0 : of(a) < of(b) ? -1 : 1));
+}
+
+/** Every chunk as a mobile list card, grouped and ordered as the desktop list orders its rows: READY by the
+ * hub's queue, BACKLOG by its backlog. */
+export function glanceListGroups(
+  chunks: readonly ChunkSummary[],
   questions: readonly QuestionView[],
   decisions: readonly DecisionView[],
-  chunks: readonly ChunkSummary[],
+  readyOrder: readonly { readonly chunk_id: string }[],
+  backlogOrder: readonly { readonly chunk_id: string }[],
+  runnerHosts: ReadonlyMap<string, string>,
+  projectColors: ReadonlyMap<string, string>,
+  now: number,
   workItems: ReadonlyMap<string, WorkItemsView>,
-): readonly AttentionRow[] {
-  const rows = new Map<string, AttentionRow>();
-  const chunksById = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk]));
-  for (const question of questions) {
-    rows.set(question.chunk_id, {
-      chunkId: question.chunk_id,
-      shortId: compactRef(question.chunk_id),
-      ...rowWork(chunksById.get(question.chunk_id), workItems),
-      status: null,
-      sub: question.question,
-    });
-  }
-  for (const decision of decisions) {
-    if (rows.has(decision.chunk_id)) continue;
-    rows.set(decision.chunk_id, {
-      chunkId: decision.chunk_id,
-      shortId: compactRef(decision.chunk_id),
-      ...rowWork(chunksById.get(decision.chunk_id), workItems),
-      status: 'gate',
-      sub: decision.node_name,
-    });
-  }
+): GlanceListGroups {
+  const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
+  const gated = new Set(decisions.map((decision) => decision.chunk_id));
+  const byLane = new Map<string, GlanceRow[]>();
   for (const chunk of chunks) {
-    if (rows.has(chunk.chunk_id)) continue;
-    const tone = STATUS_TONE(chunk.status);
-    if (tone !== 'needs' && tone !== 'waiting') continue;
-    rows.set(chunk.chunk_id, {
+    const lane = chunkLane(chunk);
+    const row: GlanceRow = {
       chunkId: chunk.chunk_id,
       shortId: compactRef(chunk.chunk_id),
-      ...rowWork(chunk, workItems),
-      status: rowStatus(chunk.status, ['needs_human', 'waiting_on_human']),
-      sub: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-    });
-  }
-  return [...rows.values()];
-}
-
-/** Chunks in `STATUS_TONE`'s running lane (`running` + `delivering`) — the "In motion" rows. */
-export function inMotionRows(
-  chunks: readonly ChunkSummary[],
-  workItems: ReadonlyMap<string, WorkItemsView>,
-): readonly MotionRow[] {
-  return chunks
-    .filter((chunk) => STATUS_TONE(chunk.status) === 'running')
-    .map((chunk) => ({
-      chunkId: chunk.chunk_id,
-      shortId: compactRef(chunk.chunk_id),
+      lane,
+      status: chunk.status,
+      statusWord: chunk.status === 'paused' || chunk.status === 'stopped' ? chunk.status : null,
       node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+      runner: chunk.runner_id ? runnerBoardParts(chunk.runner_id, chunk.runner_name, runnerHosts.get(chunk.runner_id) ?? null) : null,
+      gated: gated.has(chunk.chunk_id),
+      ask: asks.get(chunk.chunk_id) ?? null,
       ...rowWork(chunk, workItems),
-      status: rowStatus(chunk.status, ['running']),
       costUsd: chunk.cost?.cost_usd ?? 0,
       costPartial: chunk.cost?.cost_partial ?? false,
       estimatedCostUsd: chunk.cost?.estimated_cost_usd ?? null,
-    }));
-}
-
-/** READY chunks in the hub's dispatch order. The queue is the ordering fact; the chunk list confirms each
- * entry is still currently ready, so a queue entry with no ready chunk behind it drops. */
-export function upNextRows(
-  queue: readonly QueuePeekEntry[],
-  chunks: readonly ChunkSummary[],
-  workItems: ReadonlyMap<string, WorkItemsView>,
-): readonly UpNextRow[] {
-  const chunksById = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk]));
-  return queue
-    .map((entry) => chunksById.get(entry.chunk_id))
-    .filter((chunk): chunk is ChunkSummary => chunk?.status === 'ready')
-    .map((chunk) => ({
-      chunkId: chunk.chunk_id,
-      shortId: compactRef(chunk.chunk_id),
-      node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-      ...rowWork(chunk, workItems),
-    }));
-}
-
-/** Terminal chunks (the hub's own `terminal` flag) completed in the rolling 24 hours before `now`, newest
- * first. `ageMs` rejects missing, malformed, and meaningfully future instants. */
-export function doneTodayRows(
-  chunks: readonly ChunkSummary[],
-  now: number,
-  workItems: ReadonlyMap<string, WorkItemsView>,
-): readonly DoneRow[] {
-  return chunks
-    .flatMap((chunk) => {
+      projectColor: projectColors.get(chunk.project_id ?? '') ?? null,
+    };
+    if (lane === DONE_LANE) {
       const age = ageMs(chunk.completed_at, now);
-      if (!chunk.terminal || age === null || age > DONE_TODAY_WINDOW_MS) return [];
-      return [{
-        age,
-        row: {
-          chunkId: chunk.chunk_id,
-          shortId: compactRef(chunk.chunk_id),
-          ...rowWork(chunk, workItems),
-          status: rowStatus(chunk.status, ['done']),
-        },
-      }];
-    })
-    .sort((left, right) => left.age - right.age)
-    .map(({ row }) => row);
-}
-
-/** Every terminal chunk the fleet has ever held, from the all-time counts read — `0` before it resolves. */
-export function terminalTotal(counts: ChunkCountsView | undefined): number {
-  return counts === undefined ? 0 : counts.terminal;
-}
-
-/** Done today's denominator — withheld (`null`) until the counts read succeeds, so its empty fallback never
- * falsely advertises `0/0`. */
-export function doneTodayTotal(isPending: boolean, isError: boolean, total: number): number | null {
-  return isPending || isError ? null : total;
-}
-
-/** The vitals strip: the attention and motion counts, the registry's online fraction, and the live spine's
- * connection label — `offline` only once the health read has failed while the stream is neither open nor
- * reconnecting. */
-export function glanceVitals(
-  runners: readonly RunnerRegistryView[],
-  streamState: SseStatus,
-  healthIsError: boolean,
-  needsYouCount: number,
-  runningCount: number,
-): Vitals {
-  const online = runners.filter((runner) => runner.online).length;
-  const liveLabel =
-    streamState === 'open'
-      ? 'live'
-      : streamState === 'reconnecting'
-        ? 'reconnecting'
-        : healthIsError
-          ? 'offline'
-          : 'connecting';
+      if (age === null || age > DONE_TODAY_WINDOW_MS) continue;
+    }
+    byLane.set(lane, [...(byLane.get(lane) ?? []), row]);
+  }
+  const lane = (key: string): GlanceRow[] => byLane.get(key) ?? [];
   return {
-    needsYou: needsYouCount,
-    running: runningCount,
-    runnersUpLabel: `${online}/${runners.length}`,
-    live: streamState === 'open',
-    liveLabel,
+    live: [...lane('needs'), ...lane('waiting'), ...lane('running'), ...lane(UNKNOWN_LANE)],
+    ready: byRank(lane('ready'), readyOrder),
+    backlog: byRank(lane('notready'), backlogOrder),
+    done: lane(DONE_LANE),
   };
 }
