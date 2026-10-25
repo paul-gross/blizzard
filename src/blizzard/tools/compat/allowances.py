@@ -106,7 +106,7 @@ def stale(
 ) -> list[Stale]:
     """The entries that fail the run: a line outside the window, or its in-window release judged with no match."""
     supported = {_line_of(tag): tag for tag in in_window}
-    failures = []
+    failures: list[Stale] = []
     for entry in entries:
         release = supported.get(entry.line)
         if release is None:

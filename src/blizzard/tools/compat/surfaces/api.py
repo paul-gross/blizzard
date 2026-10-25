@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from blizzard.tools.compat.surfaces.wire import classify_spec_diff, is_any_operation
 from blizzard.tools.compat.violation import Violation
 
 SURFACE = "http-api"
 
 
-def classify_api(base: dict, head: dict, *, wire: list[Violation] | None = None) -> list[Violation]:
+def classify_api(base: dict[str, Any], head: dict[str, Any], *, wire: list[Violation] | None = None) -> list[Violation]:
     """Every break between two OpenAPI documents, minus the ones ``wire`` already reported.
 
     The wire is a subset of the hub's API, so a wire finding is reported once, under the wire."""

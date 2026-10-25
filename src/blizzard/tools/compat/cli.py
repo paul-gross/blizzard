@@ -12,7 +12,7 @@ composition root: it alone reads the packaged window type and maps it to compat'
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,7 +59,7 @@ def _window(version_window: VersionWindow) -> Window:
 
 
 def _head_documents(root: Path) -> dict[str, dict[str, Any]]:
-    documents = {}
+    documents: dict[str, dict[str, Any]] = {}
     for document in DOCUMENTS:
         path = document.path
         try:
@@ -70,7 +70,7 @@ def _head_documents(root: Path) -> dict[str, dict[str, Any]]:
 
 
 def _check_release(repo: Repository, rev: str, head: dict[str, dict[str, Any]]) -> list[Outcome]:
-    outcomes = []
+    outcomes: list[Outcome] = []
     for document in DOCUMENTS:
         path = document.path
         text = repo.show(rev, path)
@@ -223,7 +223,7 @@ def _inherited(
 
 
 def _base_documents(repo: Repository, rev: str) -> dict[str, dict[str, Any]]:
-    documents = {}
+    documents: dict[str, dict[str, Any]] = {}
     for document in DOCUMENTS:
         path = document.path
         text = repo.show(rev, path)
@@ -233,7 +233,7 @@ def _base_documents(repo: Repository, rev: str) -> dict[str, dict[str, Any]]:
 
 
 @contextmanager
-def _git_errors() -> Iterator[None]:
+def _git_errors() -> Generator[None]:
     """A failed git call ends the command with its one-line message, not a traceback."""
     try:
         yield
@@ -312,13 +312,13 @@ def _run(commits: str | None, line: str | None, as_json: bool) -> None:
     tags = repo.tags()
     window = _read_head_window(root)
     releases = _resolve(line, tags, window)
-    say = (lambda _text: None) if as_json else click.echo
+    say: Callable[[str], None] = (lambda _text: None) if as_json else click.echo
     say("supported releases: " + (", ".join(r.tag for r in releases) or "none"))
     base_rev = _split_range(commits) if commits else None
     acknowledged = gate.is_acknowledged(repo.subjects(commits)) if commits else False
     if commits and not line:
         say(f"change acknowledges a break with `!`: {'yes' if acknowledged else 'no'}")
-    declared = _declared(repo, root, base_rev) if base_rev else frozenset()
+    declared: frozenset[tuple[str, str]] = _declared(repo, root, base_rev) if base_rev else frozenset()
     entries = _read_allowances(root)
     allowed = allowances.admitting(
         entries, _line_key(line_of(line)) if line else None, [r.tag for r in parse_releases(tags)]
