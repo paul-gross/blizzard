@@ -108,9 +108,9 @@ A restart into a standing `chunk pause` does not resume it: the runner checks th
 path ([recovery.md](./recovery.md)), so a chunk still paused when the runner comes back is re-parked, not respawned —
 the claim kept exactly as if the pause had landed on a live tick. Of the brakes, only the per-chunk pause outranks a
 restart: a paused chunk parks and honors the move on the tick after the pause lifts; the hub's runner brake does nothing
-to a restart (it gates new claims only, so the teardown and re-entry proceed); the runner's local brake kills and closes the
-fenced-out worker at once, and defers only the re-entry — a spawn, and the local brake starts no processes — until the
-first tick past the brake.
+to a restart (it gates new claims only, so the teardown and re-entry proceed); the runner's local brake kills and closes
+the fenced-out worker at once, and defers only the re-entry — a spawn, and the local brake starts no processes — until
+the first tick past the brake.
 
 Restarting an escalated chunk clears the hub-side row immediately — the chunk leaves the needs-human feed — but the
 runner that raised it keeps listing it in `runner status` and its panel until something terminal happens to the chunk,
@@ -184,8 +184,8 @@ Delete is irreversible — there is no un-delete — and, like stop, needs no li
 The two runner-level brakes — the hub brake (`blizzard hub runner pause`/`resume`) and the runner's own local brake
 (`runner pause`/`start`, or the runner panel's control; [runner-doors.md](./runner-doors.md)) — are per-runner, not
 per-chunk, and neither kills any worker: the hub brake stops only new claims, the local brake additionally blocks every
-other spawn site (restart-resume, answer-resume, requeue respawn) but never a worker already running; the one exception is a restart's fenced-out worker, which is killed at once
-(see [Restart](#restart)).
+other spawn site (restart-resume, answer-resume, requeue respawn) but never a worker already running; the one exception
+is a restart's fenced-out worker, which is killed at once (see [Restart](#restart)).
 
 A usage limit is no brake: it holds the usage-limit floor of the subscription the runner spends — every runner of the
 host spending it — or, for a runner naming none, that runner's own floor, until a sample shows the window open or its
