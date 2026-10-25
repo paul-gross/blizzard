@@ -35,12 +35,24 @@ class Row:
 class Finding:
     name: str
     rule: str
-    severity: Literal["FAIL", "WARN"]
+    severity: Literal["FAIL", "WARN", "NOTE"]
     message: str
 
 
-def derive(snapshots: list[Snapshot], head: FlagRegistry, mode: Mode) -> tuple[list[Row], list[Finding]]:
-    """Decide lifecycle policy over ordered releases and the current tree, without Git I/O."""
+def derive(
+    snapshots: list[Snapshot],
+    head: FlagRegistry,
+    mode: Mode,
+    *,
+    supported: frozenset[str] = frozenset(),
+    base: FlagRegistry | None = None,
+    noted: frozenset[str] = frozenset(),
+) -> tuple[list[Row], list[Finding]]:
+    """Decide lifecycle policy over ordered releases and the current tree, without Git I/O.
+
+    ``supported`` is the tags of the supported releases, ``base`` the registry a pull request merges into, and
+    ``noted`` the flag names an unreleased note at HEAD names.
+    """
     rows: list[Row] = []
     findings: list[Finding] = []
     names = sorted(
@@ -73,6 +85,16 @@ def derive(snapshots: list[Snapshot], head: FlagRegistry, mode: Mode) -> tuple[l
             )
         )
 
+        if (
+            mode == "pr"
+            and base is not None
+            and name in base.live
+            and not base.live[name].default
+            and name in head.live
+            and head.live[name].default
+            and name not in noted
+        ):
+            findings.append(Finding(name, "flip-without-note", "FAIL", "turned on with no unreleased note naming it"))
         if not snapshots:
             continue
         states = [(s.release.tag, s.registry, s.release.is_stable()) for s in snapshots] + [("HEAD", head, False)]
@@ -107,6 +129,13 @@ def derive(snapshots: list[Snapshot], head: FlagRegistry, mode: Mode) -> tuple[l
                 )
             elif mode == "pr":
                 findings.append(Finding(name, "on-live", "WARN", f"on since {on.tag}; retire after promotion"))
+        held_live = [s.release.tag for s in snapshots if s.release.tag in supported and name in s.registry.live]
+        if name in head.retired and not held_live:
+            findings.append(Finding(name, "tombstone-removable", "NOTE", "no supported release holds it live; may go"))
+        if held_live and name not in head.live and name not in head.retired:
+            findings.append(
+                Finding(name, "tombstone-removed", "FAIL", f"gone from HEAD while {held_live[0]} holds it live")
+            )
         if name in head.live and off_for >= 12:
             findings.append(Finding(name, "off-twelve-releases", "WARN", f"off in {off_for} tagged releases"))
     return rows, findings

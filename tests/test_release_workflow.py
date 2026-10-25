@@ -176,6 +176,7 @@ def test_build_waits_for_the_rehearsal_and_runs_past_it_only_when_skipped() -> N
         "proof",
         "gate",
         "compat",
+        "flag-lifecycle",
         "upper-tiers",
         "isolation-cross-check",
         "wheel",
@@ -484,6 +485,15 @@ def test_proof_runs_first_and_alone_holds_the_actions_scope() -> None:
     assert steps[0]["with"]["sparse-checkout"] == "scripts/borrowed-proof.sh"
     assert "borrowed-proof.sh" in steps[1]["run"] and '>> "$GITHUB_OUTPUT"' in steps[1]["run"]
     assert jobs["proof"]["outputs"] == {"borrowed": "${{ steps.proof.outputs.borrowed }}"}
+
+
+def test_the_flag_lifecycle_job_runs_tag_mode_before_any_build_on_every_tag() -> None:
+    job = _job("flag-lifecycle")
+    assert job["permissions"] == {"contents": "read"}
+    assert job["steps"][0]["with"]["fetch-depth"] == 0
+    assert job["steps"][-1]["run"] == "uv run blizzard-flag-lifecycle tag"
+    assert "needs" not in job and "if" not in job
+    assert "flag-lifecycle" in _build_job()["needs"]
 
 
 @pytest.mark.parametrize("name", ["gate", "upper-tiers", "isolation-cross-check"])

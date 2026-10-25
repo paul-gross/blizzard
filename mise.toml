@@ -114,7 +114,7 @@ run = "uv run blizzard-change-notes check"
 
 [tasks.flag-lifecycle]
 description = "Check release-derived flag lifetimes against HEAD (pr mode by default; cut and tag also available)"
-run = "uv run blizzard-flag-lifecycle"
+run = "uv run blizzard-flag-lifecycle --base origin/master"
 
 [tasks.release-notes]
 description = "Print the release notes a tag publishes with blizzard-change-notes render: `mise run release-notes v0.8.0`"
