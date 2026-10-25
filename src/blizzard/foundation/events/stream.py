@@ -20,21 +20,50 @@ from blizzard.foundation.roles import domain_model
 DEFAULT_KEEPALIVE_SECONDS = 15.0
 
 
+class CursorRefused(ValueError):
+    """A request's join point is one no stream can honour: an unknown ``from`` value, or ``from=latest``
+    alongside ``?last_event_id=``."""
+
+
 @domain_model
 @dataclass(frozen=True)
 class Cursor:
-    """A subscriber's resume point, read tolerantly: a missing, empty, or malformed
-    ``Last-Event-ID`` header (or ``?last_event_id=``) degrades to ``0`` — the whole tail."""
+    """A subscriber's resume point. ``Last-Event-ID`` (or ``?last_event_id=``) is read tolerantly: a missing,
+    empty, or malformed one is not ``readable`` and degrades to ``0`` — the whole tail. ``?from=latest`` joins at
+    the latest event instead, skipping the replay ring; only a readable ``Last-Event-ID`` at or below the join
+    mark beats it, so an ``EventSource`` reconnect still resumes."""
 
     last_event_id: int
+    from_latest: bool = False
+    readable: bool = True
 
     @classmethod
     def of(cls, request: Request) -> Cursor:
-        raw = request.headers.get("last-event-id") or request.query_params.get("last_event_id")
+        """Read the cursor off ``request``; raises :class:`CursorRefused` for an unknown ``from`` value, or
+        for ``from=latest`` with a ``last_event_id`` query key present, even an empty one."""
+        params = request.query_params
+        from_latest = False
+        if "from" in params:
+            if params["from"] != "latest":
+                raise CursorRefused(f"unknown 'from' value {params['from']!r}; the only join point is 'latest'")
+            if "last_event_id" in params:
+                raise CursorRefused(
+                    "'from=latest' cannot be combined with 'last_event_id'; send 'Last-Event-ID' to resume"
+                )
+            from_latest = True
+        raw = request.headers.get("last-event-id") or params.get("last_event_id")
         try:
-            return cls(int(raw) if raw is not None else 0)
+            return cls(int(raw) if raw is not None else 0, from_latest, raw is not None)
         except ValueError:
-            return cls(0)
+            return cls(0, from_latest, False)
+
+    def resume_from(self, joined_at: int) -> int:
+        """The event id to replay after, and to dedup live events against, for a subscriber that joined when the
+        broker's latest id was ``joined_at``. A cursor above ``joined_at`` is a prior instance's id: it degrades to
+        the whole tail, or under ``from=latest`` to ``joined_at`` itself, which replays nothing."""
+        if self.from_latest:
+            return self.last_event_id if self.readable and self.last_event_id <= joined_at else joined_at
+        return self.last_event_id if self.last_event_id <= joined_at else 0
 
 
 @dataclass(frozen=True)
@@ -72,10 +101,8 @@ class Stream:
 
         shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
         sub = broker.subscribe(self.owner)
-        # A cursor above this broker's high-water mark is a prior instance's id — degrade it to 0
-        # (``Cursor.of``'s own fallback) for one value shared by the replay and the dedup below.
-        latest = broker.latest_id()
-        resume_from = self.cursor.last_event_id if self.cursor.last_event_id <= latest else 0
+        # One value, taken against the mark recorded at registration, shared by the replay and the dedup below.
+        resume_from = self.cursor.resume_from(sub.joined_at)
         last_sent = resume_from
         try:
             yield self.reserved_comment.encode()

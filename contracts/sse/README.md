@@ -34,3 +34,8 @@ These are decisions, not accidents:
   the periodic keepalive comment, both named in `manifest.json`.
 - **`id` is monotonic and is the reconnect cursor** (`Last-Event-ID`); it is not part of any golden payload, since it is
   assigned per-broadcast rather than per-kind.
+- **`?from=latest` joins at the latest event**: the stream skips the replay ring and sends exactly the events published
+  after its subscription registered. A readable `Last-Event-ID` at or below the latest id still wins, so an
+  `EventSource` reconnect resumes; a missing, malformed, or past-latest one joins at the latest. An unknown `from`
+  value, or `from=latest` with `?last_event_id=`, answers `422` before the stream opens. A stream without `from` replays
+  the ring as before.
