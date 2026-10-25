@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.api.events import events_stream
@@ -227,3 +228,40 @@ async def test_from_latest_sends_only_the_projects_frames_published_after_it_joi
     broker.close()
 
     assert [payload.get("chunk_id") for _, payload in await _sent(frames)] == ["ch_mine"]
+
+
+async def _route(query: dict[str, str], header: str | None = None, *, broker: EventBroker) -> AsyncIterator[bytes]:
+    request = _ConnectedRequest(None if header is None else int(header))
+    request.query_params.update(query)
+    services = SimpleNamespace(events=broker, registry=_Registry())
+    response = await events_stream(request, services, None)  # type: ignore[arg-type]
+    return response.body_iterator  # type: ignore[return-value]
+
+
+@pytest.mark.parametrize("query", [{"from": "earliest"}, {"from": "latest", "last_event_id": "1"}])
+async def test_the_hub_route_refuses_an_unknown_from_and_from_latest_with_a_query_cursor(query: dict[str, str]) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await _route(query, broker=EventBroker())
+    assert exc_info.value.status_code == 422
+
+
+async def test_the_hub_route_from_latest_sends_the_comment_then_only_later_events() -> None:
+    broker = EventBroker()
+    broker.publish_queue_changed()
+    frames = await _route({"from": "latest"}, broker=broker)
+    assert (await anext(frames)).startswith(b": blizzard hub event stream")
+    broker.publish_chunk_changed("ch_new", "ready", project_id=_MINE)
+    broker.close()
+
+    assert [kind for kind, _ in await _sent(frames)] == ["chunk-changed"]
+
+
+async def test_the_hub_route_from_latest_resumes_from_a_last_event_id_header() -> None:
+    broker = EventBroker()
+    broker.publish_queue_changed()
+    broker.publish_chunk_changed("ch_two", "ready", project_id=_MINE)
+    frames = await _route({"from": "latest"}, "1", broker=broker)
+    assert (await anext(frames)).startswith(b": blizzard hub event stream")
+    broker.close()
+
+    assert [payload.get("chunk_id") for _, payload in await _sent(frames)] == ["ch_two"]
