@@ -1,12 +1,9 @@
-"""The route-token rekey re-reads its holder and ended-chunk guards under the chunk-row lock (component tier).
-
-Holds the rekey after its unlocked route read, lands a detach (and a reclaim) in the gap, then releases it: the
-former holder is refused, and no ``route_token_minted`` fact is appended (``bzh:store-exclusive-write``)."""
-
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -32,7 +29,7 @@ nodes:
 """
 
 
-def _register(hub, runner_id: str) -> None:  # type: ignore[no-untyped-def]
+def _register(hub: Any, runner_id: str) -> None:
     assert hub.client.post(
         "/api/fleet/runners",
         json={
@@ -43,7 +40,7 @@ def _register(hub, runner_id: str) -> None:  # type: ignore[no-untyped-def]
     ).is_success
 
 
-def _claim(hub, chunk_id: str, runner_id: str) -> None:  # type: ignore[no-untyped-def]
+def _claim(hub: Any, chunk_id: str, runner_id: str) -> None:
     resp = hub.client.post(
         "/api/fleet/routes",
         json={
@@ -56,7 +53,7 @@ def _claim(hub, chunk_id: str, runner_id: str) -> None:  # type: ignore[no-untyp
     assert resp.status_code == 201, resp.text
 
 
-def _claimed_chunk(hub) -> str:  # type: ignore[no-untyped-def]
+def _claimed_chunk(hub: Any) -> str:
     _register(hub, "runner-a")
     _register(hub, "runner-b")
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
@@ -68,20 +65,21 @@ def _claimed_chunk(hub) -> str:  # type: ignore[no-untyped-def]
     return str(chunk_id)
 
 
-def _token_facts(hub, chunk_id: str) -> int:  # type: ignore[no-untyped-def]
+def _token_facts(hub: Any, chunk_id: str) -> int:
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     return 0 if facts is None else len(facts.route_tokens_minted)
 
 
-def _rekey_held_between_read_and_write(hub, chunk_id: str, interleave) -> int:  # type: ignore[no-untyped-def]
-    """Run runner-a's rekey, parked after its unlocked route read; run ``interleave`` there; return the status."""
+def _rekey_held_between_read_and_write(
+    hub: Any, chunk_id: str, monkeypatch: pytest.MonkeyPatch, interleave: Callable[[], object]
+) -> int:
     reached = threading.Event()
     release = threading.Event()
     route_repo = hub.services.chunks.route
     real_route_of = route_repo.route_of
     armed = [True]
 
-    def _held_route_of(cid):  # type: ignore[no-untyped-def]
+    def _held_route_of(cid: str) -> object:
         route = real_route_of(cid)
         if armed[0]:
             armed[0] = False
@@ -89,7 +87,7 @@ def _rekey_held_between_read_and_write(hub, chunk_id: str, interleave) -> int:  
             assert release.wait(timeout=5), "test never released the rekey"
         return route
 
-    route_repo.route_of = _held_route_of  # type: ignore[method-assign]
+    monkeypatch.setattr(route_repo, "route_of", _held_route_of)
     result: dict[str, int] = {}
 
     def _rekey() -> None:
@@ -107,24 +105,27 @@ def _rekey_held_between_read_and_write(hub, chunk_id: str, interleave) -> int:  
     finally:
         release.set()
         thread.join(timeout=5)
-        route_repo.route_of = real_route_of  # type: ignore[method-assign]
     return result["status"]
 
 
-def test_a_detach_between_the_rekeys_read_and_write_refuses_it_and_mints_no_token(tmp_path: Path) -> None:
+def test_a_detach_between_the_rekeys_read_and_write_refuses_it_and_mints_no_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _claimed_chunk(hub)
     before = _token_facts(hub, chunk_id)
 
     status = _rekey_held_between_read_and_write(
-        hub, chunk_id, lambda: hub.client.post(f"/api/chunks/{chunk_id}/detach").raise_for_status()
+        hub, chunk_id, monkeypatch, lambda: hub.client.post(f"/api/chunks/{chunk_id}/detach").raise_for_status()
     )
 
     assert status == 404
     assert _token_facts(hub, chunk_id) == before
 
 
-def test_a_detach_and_reclaim_by_another_runner_refuses_the_former_holders_rekey(tmp_path: Path) -> None:
+def test_a_detach_and_reclaim_by_another_runner_refuses_the_former_holders_rekey(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _claimed_chunk(hub)
     before = _token_facts(hub, chunk_id)
@@ -133,10 +134,10 @@ def test_a_detach_and_reclaim_by_another_runner_refuses_the_former_holders_rekey
         hub.client.post(f"/api/chunks/{chunk_id}/detach").raise_for_status()
         _claim(hub, chunk_id, "runner-b")
 
-    status = _rekey_held_between_read_and_write(hub, chunk_id, _detach_and_reclaim)
+    status = _rekey_held_between_read_and_write(hub, chunk_id, monkeypatch, _detach_and_reclaim)
 
     assert status == 403
-    assert _token_facts(hub, chunk_id) == before + 1  # runner-b's own claim token, no rekey's
+    assert _token_facts(hub, chunk_id) == before + 1
 
 
 def test_a_sequential_rekey_of_a_held_chunk_mints_a_token(tmp_path: Path) -> None:
