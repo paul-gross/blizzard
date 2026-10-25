@@ -101,7 +101,8 @@ class _FakeServices:
     reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
     (started unconditionally, no source gate), ``event_derivation``
     (started unconditionally too), ``tenant_teardown_sweep`` (likewise), ``trace_export`` (``None`` — tracing is off),
-    ``egress_export`` (``None`` — no directory), and ``action_loop`` (started and stopped around the sweeps)."""
+    ``egress_export`` (``None`` — no directory), ``action_loop`` (started and stopped around the sweeps), and
+    ``close_tenant_objects`` (run before the loop stops)."""
 
     def __init__(
         self,
@@ -119,6 +120,7 @@ class _FakeServices:
         self.trace_export = None
         self.egress_export = None
         self.action_loop = ActionLoop()
+        self.close_tenant_objects = lambda: None
 
 
 class _FakeState:

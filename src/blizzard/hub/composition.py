@@ -191,6 +191,8 @@ from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
+from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.forge.repository_commits import ICommitForge, RepositoryCommitResolver
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
@@ -309,6 +311,8 @@ class TenantServices:
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
+    #: Each repository's forge roles, built from its records — called by whoever builds a visit, never an action.
+    forges: ForgeRegistry
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
@@ -430,6 +434,9 @@ class HubServices:
     tenant_hosts: Callable[[TenantId], IReadHostRegistry]
     #: The one thread every tenant's hub action passes run on — started and stopped by the hub's lifespan.
     action_loop: ActionLoop
+    #: Closes the objects every served tenant's configured records built — run at shutdown, before the action loop
+    #: stops, so each forge client closes on a live loop.
+    close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
     #: The hub's own event log, read newest-first — by hub administrators alone.
@@ -658,6 +665,14 @@ class TenantCache:
         if entry is not None and entry.served is not None:
             entry.served.live.objects.close()
 
+    def close_served(self) -> None:
+        """Close the objects every served tenant's configured records built, keeping the entries — the hub is
+        shutting down, and each forge adapter's client must close while the action loop still runs."""
+        with self._lock:
+            served = [entry.served for entry in self._entries.values() if entry.served is not None]
+        for each in served:
+            each.live.objects.close()
+
     def _entry(self, scope: StoreScope) -> _TenantEntry:
         with self._lock:
             entry = self._entries.get(scope.tenant)
@@ -866,6 +881,16 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
 #: Builds a tenant's work-source registry over its stores and its live configuration.
 type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig], IWorkSourceRegistry]
 
+#: Builds a tenant's forge registry over its stores and its live configuration.
+type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig], ForgeRegistry]
+
+
+def default_forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+    """A tenant's forge registry with every forge kind's adapter, uninstrumented."""
+    return build_forge_registry(
+        records=stores.repository_records, objects=live.objects, secrets=live.secrets, clock=stores.clock
+    )
+
 
 @dataclass(frozen=True)
 class TenantServiceParts:
@@ -878,6 +903,7 @@ class TenantServiceParts:
     secret_cipher: ISecretCipher
     graph_yaml: IConfigCodec
     work_sources: WorkSourceRegistryFactory
+    forges: ForgeRegistryFactory
     system_artifacts: PackagedSystemArtifacts
     commit_forge: ICommitForge
     public_url: str | None
@@ -920,6 +946,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_exclusive = chunk_stores.exclusive
     live = build_live_config(stores, cipher=parts.secret_cipher)
     work_sources = parts.work_sources(stores, live)
+    forges = parts.forges(stores, live)
     transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)
     transcript_store = TranscriptSegmentStore(tenant_connections)
@@ -1020,6 +1047,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     work_ref_label = _work_ref_label(work_sources)
     services = TenantServices(
+        forges=forges,
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1264,6 +1292,7 @@ def build_services(
     core: HubCore,
     *,
     work_sources: WorkSourceRegistryFactory,
+    forges: ForgeRegistryFactory = default_forge_registry,
     secret_keys: IHubKeyProvider,
     brokers: TenantBrokers | None = None,
     public_url: str | None = None,
@@ -1293,7 +1322,7 @@ def build_services(
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
     are one pass per hub, each acting on a row through the services of the row's tenant, opened from
     the cache. ``work_sources`` builds a tenant's
-    work-source registry; an explicit ``oauth_registry`` wins over
+    work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
     may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
     later; ``forge_handles`` builds a landing action's handle on each repository's forge."""
@@ -1312,6 +1341,7 @@ def build_services(
         secret_cipher=secret_cipher(secret_keys),
         graph_yaml=YAML_CODEC,
         work_sources=work_sources,
+        forges=forges,
         system_artifacts=system_artifacts,
         # Bound as `.for_project` per tenant (a project to a plain `delivery.validation.CommitResolver`
         # callable), so `TenantServices.commit_resolver_for` carries no dependency on the concrete class.
@@ -1509,6 +1539,7 @@ def build_services(
         tenant_registry=lambda tenant: core.open(scope_of(tenant)).registry,
         tenant_hosts=lambda tenant: core.open(scope_of(tenant)).hosts,
         action_loop=action_loop,
+        close_tenant_objects=core.tenants.close_served,
         hub_event_log=hub_event_log,
         hub_events=hub_events,
         tenant_admin=tenant_admin,

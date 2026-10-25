@@ -124,6 +124,8 @@ from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.forge.internal.factory import build_forge_registry
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.layout import SIGNING_KEYS_PARTS
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
@@ -402,6 +404,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     for task in tasks:
         await task
     if services is not None:
+        services.close_tenant_objects()
         services.action_loop.stop()
 
 
@@ -563,6 +566,15 @@ def build_hosted_app(
             instrument_client=platform_tracing.instrument_client,
         )
 
+    def forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+        return build_forge_registry(
+            records=stores.repository_records,
+            objects=live.objects,
+            secrets=live.secrets,
+            clock=stores.clock,
+            instrument=platform_tracing.instrument_client,
+        )
+
     tracing = TracingSettings.of(os.environ)
 
     # The provider-login seam is built only under `oauth`: under `none`
@@ -579,6 +591,7 @@ def build_hosted_app(
     services = build_services(
         core,
         work_sources=work_source_registry,
+        forges=forge_registry,
         public_url=config.public_url,
         forge_http_client=forge_client,
         oauth_providers=oauth_providers,
