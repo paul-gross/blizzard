@@ -47,11 +47,8 @@ _UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 def canonical_origin(url: str) -> str:
     """The one form a forge address is compared in; :class:`OriginRefused` when it is not one.
 
-    Whitespace around it is trimmed and inside it refused. The scheme is ``http`` or ``https``, lowercased, and a
-    host is required: lowercased, one trailing dot dropped, an internationalized host in its ASCII form through the
-    ``idna`` codec (IDNA 2003), an IPv6 literal kept bracketed, a percent-escaped host refused. The scheme's default
-    port and an empty port are dropped. The path keeps its case, its escapes are normalized as RFC 3986 asks, and its
-    trailing slashes are stripped. A user, password, query, or fragment is refused rather than cleaned."""
+    The rule is pinned case by case in ``tests/fixtures/canonical_origin_cases.json``: ``http(s)`` scheme and host
+    lowercased, IDNA 2003 host, default port dropped, path escapes normalized and trailing slashes stripped."""
     text = url.strip()
     if re.search(r"\s", text):
         raise OriginRefused(OriginRefusal.NOT_AN_ORIGIN, "it has whitespace inside it")
