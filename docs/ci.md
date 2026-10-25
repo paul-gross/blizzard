@@ -231,6 +231,11 @@ that already exists. Anyone can run the same check as `scripts/verify-release.sh
 `attestation` command), `cosign`, and `uv`, and no checkout; it refuses a release cut before `v0.2.0-rc.2`, the first
 one it can verify.
 
+Who tags what, and when, is the operator's: the procedures for cutting and promoting a candidate, patching a line, and
+opening a major live in the workspace's
+[`context/project/workflows/`](https://github.com/paul-gross/blizzard-workspace/blob/master/context/project/workflows/index.md),
+and [Versioning](./versioning.md#the-train) states what they promise.
+
 The release tag fan-out (`vX.Y.Z` → exact + minor, plus `latest` only when no higher stable tag exists; `vX.Y.Z-rc.*` →
 exact only) lives in [`scripts/image-tags.sh`](../scripts/image-tags.sh), unit-tested by `tests/test_image_tags.py` —
 `build` hands it the repository's tags and `publish` creates the GitHub Release with `--latest=false` unless `latest`

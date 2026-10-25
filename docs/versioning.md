@@ -6,16 +6,66 @@ project reaches 1.0 — so under semver's own pre-1.0 carve-out a `MINOR` bump m
 These rules bind what a release shipped. An `edge` or `sha-` image, a dev wheel, or a wheel built from a source checkout
 carries no promise; `0.2.0` is the first release that does.
 
+## The train
+
+Releases are cut on a weekly train that runs on Monday, UTC. A train does two things, in order: it promotes the
+candidate cut a week before, if one is waiting, and it cuts the next candidate, if `master` moved since the last one. An
+operator may hold a train, skipping that week, but never runs two in one week; a held week is noted in the next
+candidate's notes.
+
+| Thing             | Spelling          | Cut from                                              |
+| ----------------- | ----------------- | ----------------------------------------------------- |
+| Release branch    | `release/X.Y`     | the minor's cut commit on `master`                    |
+| Candidate         | `vX.Y.0-rc.K`     | `release/X.Y`, `K` counting from 1                    |
+| Stable minor      | `vX.Y.0`          | the commit its newest candidate was tagged at         |
+| Patch             | `vX.Y.P`, `P ≥ 1` | `release/X.Y`                                         |
+| Major's candidate | `vX.0.0-rc.K`     | `master` while it is open for `X`, then `release/X.0` |
+
+A candidate runs on blizzard's own fleet for the week before it is promoted. A fix the week finds is a further candidate
+on the same branch, `vX.Y.0-rc.(K+1)`, and does not restart the week. A candidate is promoted when its train day comes,
+its `release` run is green, and no open `release-blocker` issue on `paul-gross/blizzard` names its line. The stable
+release is the same commit as the candidate, rebuilt with its stable version stamped; nothing in it is new code. A
+candidate with an open blocker is set aside instead: its minor never has a stable release, its GitHub Release says so
+and names the minor that supersedes it, and version numbers skip it. A branch is never deleted, and a tag, once pushed,
+is never moved, deleted, or reused. [What a tag publishes](#what-a-tag-publishes) owns the ancestry check and the
+`pyproject.toml` version, and [`docs/ci.md`](./ci.md) owns the proof a stable tag borrows from its candidate.
+
+A minor counts trains, not milestones: it says when a release was cut and nothing about how much changed in it.
+
+## Support
+
+A **line** is a minor's release branch once that minor has a stable release. Only some lines receive patches:
+
+| When                     | Lines patched                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| Before 1.0               | The newest stable minor alone                                                                    |
+| Within a major, past 1.0 | The newest stable minor of the newest major                                                      |
+| After a new major ships  | Also the previous major's final minor, for three months from the new major's `.0`, critical only |
+
+A candidate is not a line, and a set-aside minor never is. The closing date of an old major's three months is written
+out here the day the next major ships; after it that line receives nothing more.
+
+A patch is for what cannot wait the week, and *critical* means the same three things on every line: a hole in security,
+data lost or corrupted, or a fleet that has stopped working. Anything else rides the next train. A patch carries the
+fix, its tests, and its change note alone: it adds no surface, turns no flag on, and carries no store revision
+(`bzh:patch-scope`), so moving onto a patch, or back off it, needs no `migrate`.
+
+## Schedule
+
+No major date is published yet. 1.0 is not on the six-month cadence; the cadence counts from it. From 1.0, two majors a
+year ship on dates published here, each date published no later than the day the major before it ships, and each on a
+train day. A date moves only by being republished later with its reason, and never earlier.
+
 ## What counts as breaking
 
-| Surface         | A release breaks it when it…                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP API        | removes a route, adds a required field to a request, removes a response field or changes its meaning, or adds a response enum value a release's clients read closed |
-| hub↔runner wire | is not wire-compatible with the previous minor — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on   |
-| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, or moves or removes a durable path under the runtime root                                     |
-| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                  |
-| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                      |
-| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                          |
+| Surface         | A release breaks it when it…                                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP API        | removes a route, adds a required field to a request, removes a response field or changes its meaning, or adds a response enum value a release's clients read closed                                          |
+| hub↔runner wire | is not wire-compatible with a runner inside the [skew window](#the-hubrunner-skew-window) — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on |
+| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, or moves or removes a durable path under the runtime root                                                                              |
+| Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                                                           |
+| Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                                                               |
+| Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                                                                   |
 
 [`docs/backup.md`](./backup.md) owns the current durable layout. Every schema revision blizzard has ever shipped keeps a
 working `downgrade()`, held mechanically for every revision in the tree by
@@ -111,15 +161,15 @@ class used in both directions: `TurnSegmentView.kind` (`src/blizzard/wire/transc
 fails the whole ingest batch, so adding a value to `TurnKind` is breaking against the skew window, not additive.
 
 The capability-matched fleet peek sits on the additive side of that same window from two directions at once:
-`POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a previous-minor runner simply never
-calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty like every
-other optional field on that model, so a previous-minor runner still parses and registers. An empty snapshot matches no
-chunk, though, so a runner that predates capability reporting registers but is never matched and has every claim
-refused; [`docs/upgrade.md`](./upgrade.md) owns that boundary.
+`POST /api/fleet/queue/peek` is a wholly new route beside the unchanged `GET`, so a runner that predates the route
+simply never calls it and keeps reading the unfiltered order; and a registration's `capabilities` field defaults empty
+like every other optional field on that model, so a runner that predates the field still parses and registers. An empty
+snapshot matches no chunk, though, so a runner that predates capability reporting registers but is never matched and has
+every claim refused; [`docs/upgrade.md`](./upgrade.md) owns that boundary.
 
-A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a previous-minor runner that
-has never heard of a declared roster simply omits it, and the hub falls back to its pre-existing age-gated membership
-rule for that runner rather than rejecting the registration or defaulting the roster to empty.
+A registration's `subscriptions` field is additive the same way: it defaults to `None`, so a runner that has never heard
+of a declared roster simply omits it, and the hub falls back to its pre-existing age-gated membership rule for that
+runner rather than rejecting the registration or defaulting the roster to empty.
 
 ## What a tag publishes
 
