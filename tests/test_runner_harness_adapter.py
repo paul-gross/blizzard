@@ -1295,7 +1295,7 @@ def test_sum_transcript_usage_reads_a_non_numeric_token_field_as_absent(spawn_ex
     usage = {
         "input_tokens": "12",
         "output_tokens": ["x"],
-        "cache_read_input_tokens": True,
+        "cache_read_input_tokens": "many",
         "cache_creation_input_tokens": {"n": 1},
     }
     lines = [
@@ -1306,7 +1306,7 @@ def test_sum_transcript_usage_reads_a_non_numeric_token_field_as_absent(spawn_ex
     sample = _adapter(spawn_executor).sum_transcript_usage(lines, "spawn")
 
     counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
-    assert counts == (2, 3, 0, 0)
+    assert counts == (14, 3, 0, 0)
 
 
 @pytest.mark.unit
@@ -1316,8 +1316,8 @@ def test_parse_usage_reads_non_numeric_token_and_model_usage_fields_as_absent(sp
             "type": "result",
             "result": "ok",
             "model": "claude-opus-4-8",
-            "usage": {"input_tokens": "120", "output_tokens": 45, "cache_read_input_tokens": None},
-            "modelUsage": {"claude-opus-4-8": {"inputTokens": "9", "outputTokens": 4, "cacheReadInputTokens": False}},
+            "usage": {"input_tokens": "lots", "output_tokens": 45.7, "cache_read_input_tokens": None},
+            "modelUsage": {"claude-opus-4-8": {"inputTokens": "9", "outputTokens": 4, "cacheReadInputTokens": ["x"]}},
         }
     )
 
@@ -1326,7 +1326,7 @@ def test_parse_usage_reads_non_numeric_token_and_model_usage_fields_as_absent(sp
     assert sample is not None
     counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
     assert counts == (0, 45, 0, 0)
-    assert sample.cost_scope_tokens == 4
+    assert sample.cost_scope_tokens == 13
 
 
 @pytest.mark.unit

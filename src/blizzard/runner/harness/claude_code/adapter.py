@@ -8,6 +8,7 @@ session-sticky, so each is reasserted on every resume. Every child env comes fro
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -80,8 +81,17 @@ _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
 
 def _as_int(value: JsonValue) -> int:
-    """``value`` as a count, or ``0`` — a malformed usage field reads as absent, never crashes."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+    """``value`` as a count, or ``0`` — a numeric usage field reads as ``int()`` reads it, a malformed one as absent."""
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) else 0
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _matches_model(expected: str, observed: str) -> bool:
