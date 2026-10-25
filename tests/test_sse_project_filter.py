@@ -211,3 +211,19 @@ def test_every_chunk_scoped_publish_site_stamps_the_chunks_project() -> None:
                     unstamped.append(f"{path.relative_to(root)}:{node.lineno}")
     assert sites >= 8, "the scan found the publish sites"
     assert unstamped == []
+
+
+async def test_from_latest_sends_only_the_projects_frames_published_after_it_joined() -> None:
+    broker = EventBroker()
+    broker.publish_chunk_changed("ch_old", "ready", project_id=_MINE)
+    request = _ConnectedRequest()
+    request.query_params["from"] = "latest"
+    services = SimpleNamespace(events=broker, registry=_Registry())
+    response = await events_stream(request, services, _MINE)  # type: ignore[arg-type]
+    frames: AsyncIterator[bytes] = response.body_iterator  # type: ignore[assignment]
+    assert (await anext(frames)).startswith(b": blizzard hub event stream")
+    broker.publish_chunk_changed("ch_mine", "ready", project_id=_MINE)
+    broker.publish_chunk_changed("ch_theirs", "ready", project_id=_THEIRS)
+    broker.close()
+
+    assert [payload.get("chunk_id") for _, payload in await _sent(frames)] == ["ch_mine"]

@@ -15,13 +15,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.events.stream import Cursor, Stream
+from blizzard.foundation.events.stream import Cursor, CursorRefused, Stream
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -55,14 +55,21 @@ async def events_stream(
     """Subscribe to the live event stream of the request's tenant, resuming from ``Last-Event-ID`` if
     present. The stream ends when the tenant's broker is dropped, or when the viewer's membership in the
     tenant ends. ``?project=`` sends only the frames :class:`ProjectLens` selects for that project, the
-    replay tail's included."""
+    replay tail's included. ``?from=latest`` skips the replay ring and sends only events published after the
+    subscription registered; an unknown ``from`` value, or ``from=latest`` with ``?last_event_id=``, is a ``422``."""
+    cursor = _cursor(request)
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     admits = None if project is None else (await _stream_lens(services, project)).admits
     owner = viewer.user_id if viewer is not None else None
-    stream = Stream(
-        services.events, request, Cursor.of(request), _RESERVED_COMMENT, shutdown, admits=admits, owner=owner
-    )
+    stream = Stream(services.events, request, cursor, _RESERVED_COMMENT, shutdown, admits=admits, owner=owner)
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
+
+
+def _cursor(request: Request) -> Cursor:
+    try:
+        return Cursor.of(request)
+    except CursorRefused as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
 async def _stream_lens(services: TenantServices, project: ProjectId) -> ProjectLens:

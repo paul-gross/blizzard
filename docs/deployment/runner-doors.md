@@ -79,11 +79,12 @@ clear; the override `prompt clear` drops is the host's, per workspace.
 
 The TCP door also carries `GET /api/events/stream`, a `text/event-stream` route deliberately absent from the OpenAPI
 spec (no generated client calls it): it publishes lease, ask, escalation, takeover, environment, and fact changes the
-instant they happen, replaying from `Last-Event-ID` on reconnect like the hub's own stream
-([observability.md](./observability.md)). Every runner-scoped frame carries its runner's `runner_id`; an
-`environment-changed` frame is the host's and carries none. The panel renders leases, environments, asks, escalations,
-takeovers, and facts live off that stream; dashboard and leases reads keep a one-minute poll only as a backstop, and the
-session read has no poll — a stream 401 routes into the same recovery seam as any read's 401.
+instant they happen, replaying from `Last-Event-ID` on reconnect like the hub's own stream (`?from=latest` instead joins
+at the latest event, with no replay) ([observability.md](./observability.md)). Every runner-scoped frame carries its
+runner's `runner_id`; an `environment-changed` frame is the host's and carries none. The panel renders leases,
+environments, asks, escalations, takeovers, and facts live off that stream; dashboard and leases reads keep a one-minute
+poll only as a backstop, and the session read has no poll — a stream 401 routes into the same recovery seam as any
+read's 401.
 
 The panel's top-bar Pause/Resume control issues the identical `PATCH /runners/{runner_id}/api/runner` the CLI's local
 verbs use — the same write path, not a second one.

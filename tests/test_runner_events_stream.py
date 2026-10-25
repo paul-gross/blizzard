@@ -9,6 +9,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS, Stream
@@ -77,3 +78,30 @@ def test_events_stream_excluded_from_openapi() -> None:
     # A route this same schema *does* carry — the exclusion is deliberate, not an
     # export that lost its routes wholesale.
     assert "/runners/{runner_id}/api/leases" in paths
+
+
+async def test_stream_endpoint_refuses_an_unknown_from_and_a_from_latest_with_a_query_cursor() -> None:
+    for query in ({"from": "earliest"}, {"from": "latest", "last_event_id": "1"}):
+        request = _FakeRequest(EventBroker())
+        request.query_params.update(query)
+        with pytest.raises(HTTPException) as exc_info:
+            await events_stream(request)  # type: ignore[arg-type]
+        assert exc_info.value.status_code == 422
+
+
+async def test_stream_endpoint_from_latest_joins_after_the_ring_but_resumes_a_header() -> None:
+    broker = EventBroker()
+    for n in range(3):
+        broker.publish("fact-changed", {"n": n})
+
+    async def first_frames(header: str | None) -> list[bytes]:
+        request = _FakeRequest(broker)
+        request.query_params["from"] = "latest"
+        if header is not None:
+            request.headers["last-event-id"] = header
+        response = await events_stream(request)  # type: ignore[arg-type]
+        return [c.encode() if isinstance(c, str) else bytes(c) async for c in response.body_iterator]
+
+    assert await first_frames(None) == [_RESERVED_COMMENT.encode()]
+    resumed = await first_frames("1")
+    assert [f.split(b"\n")[0] for f in resumed[1:]] == [b"id: 2", b"id: 3"]

@@ -35,14 +35,22 @@ class Event:
 class Subscriber:
     """One live SSE connection: its event queue, the loop that drains it, the principal it was opened
     for (``None`` when its daemon names none), and the signal that it has ended — its broker closed, or
-    its owner was ended — set after every event published before the end is queued."""
+    its owner was ended — set after every event published before the end is queued. ``joined_at`` is the
+    broker's latest event id when it registered: an event above it reaches the queue, one at or below never does."""
 
-    __slots__ = ("ended", "loop", "owner", "queue")
+    __slots__ = ("ended", "joined_at", "loop", "owner", "queue")
 
-    def __init__(self, queue: asyncio.Queue[Event], loop: asyncio.AbstractEventLoop, owner: str | None = None) -> None:
+    def __init__(
+        self,
+        queue: asyncio.Queue[Event],
+        loop: asyncio.AbstractEventLoop,
+        owner: str | None = None,
+        joined_at: int = 0,
+    ) -> None:
         self.queue = queue
         self.loop = loop
         self.owner = owner
+        self.joined_at = joined_at
         self.ended = asyncio.Event()
 
 
@@ -80,9 +88,13 @@ class EventBroker:
 
     def subscribe(self, owner: str | None = None) -> Subscriber:
         """Register a live connection opened for ``owner``, capturing the running loop for the handoff. A
-        connection to a closed broker is ended from the start."""
-        sub = Subscriber(asyncio.Queue(), asyncio.get_running_loop(), owner)
+        connection to a closed broker is ended from the start. The latest event id is recorded in the same
+        lock acquisition that registers the connection, so it splits events exactly into those the
+        connection was queued and those it was not."""
+        queue: asyncio.Queue[Event] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
         with self._lock:
+            sub = Subscriber(queue, loop, owner, self._next_id)
             if self._closed:
                 sub.ended.set()
             else:
