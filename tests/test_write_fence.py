@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Table
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
 from tests.support import (
@@ -73,6 +75,9 @@ nodes:
           to: done
 """
 
+# Carried by every fenced submission: a refusal must leave no artifact row behind either.
+_ARTIFACT = {"name": "notes", "kind": "asset", "content": "n"}
+
 _STALE = "stale epoch 1; chunk is at 2"
 _TERMINAL = "chunk is terminal"
 
@@ -103,7 +108,7 @@ class _Chunk:
             "epoch": epoch,
             "runner_id": "r1",
             "from_node_id": self.nodes[node],
-            "artifacts": [],
+            "artifacts": [_ARTIFACT],
         }
         if decision_id is not None:
             body["decision_id"] = decision_id
@@ -114,7 +119,7 @@ class _Chunk:
     def decide(self, node: str, *, epoch: int) -> dict:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/decisions",
-            json={"from_node_id": self.nodes[node], "epoch": epoch, "runner_id": "r1", "artifacts": []},
+            json={"from_node_id": self.nodes[node], "epoch": epoch, "runner_id": "r1", "artifacts": [_ARTIFACT]},
         )
         assert resp.status_code == 200, resp.text
         return resp.json()
@@ -195,6 +200,7 @@ def test_a_stale_completion_is_refused_and_records_no_transition(tmp_path: Path)
 
     assert result["outcome"] == "failure" and _STALE in result["detail"]
     assert chunk.rows(s.transitions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_completion_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
@@ -205,6 +211,7 @@ def test_a_completion_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
 
     assert result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_completion_at_the_current_epoch_after_done_is_refused_as_terminal(tmp_path: Path) -> None:
@@ -216,6 +223,7 @@ def test_a_completion_at_the_current_epoch_after_done_is_refused_as_terminal(tmp
 
     assert result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 1
+    assert chunk.rows(s.artifacts) == 1
 
 
 def test_a_replayed_completion_still_absorbs_once_the_chunk_is_done(tmp_path: Path) -> None:
@@ -235,6 +243,7 @@ def test_a_completion_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> N
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_completion_blocks_behind_a_restart_and_then_refuses(tmp_path: Path) -> None:
@@ -246,6 +255,7 @@ def test_a_completion_blocks_behind_a_restart_and_then_refuses(tmp_path: Path) -
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and _STALE in result["detail"]
     assert chunk.rows(s.transitions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_stale_gate_resolution_is_refused(tmp_path: Path) -> None:
@@ -257,6 +267,7 @@ def test_a_stale_gate_resolution_is_refused(tmp_path: Path) -> None:
 
     assert result["outcome"] == "failure" and _STALE in result["detail"]
     assert chunk.rows(s.transitions) == 1  # only the arrival at the gate
+    assert chunk.rows(s.artifacts) == 1  # only the arrival's
 
 
 def test_a_gate_resolution_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
@@ -268,6 +279,7 @@ def test_a_gate_resolution_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None
 
     assert result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 1
+    assert chunk.rows(s.artifacts) == 1  # only the arrival's
 
 
 def test_a_gate_resolution_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> None:
@@ -282,6 +294,7 @@ def test_a_gate_resolution_blocks_behind_a_stop_and_then_refuses(tmp_path: Path)
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.transitions) == 1
+    assert chunk.rows(s.artifacts) == 1  # only the arrival's
 
 
 def test_a_stale_runner_config_decision_is_refused_and_opens_nothing(tmp_path: Path) -> None:
@@ -292,6 +305,7 @@ def test_a_stale_runner_config_decision_is_refused_and_opens_nothing(tmp_path: P
 
     assert result["outcome"] == "failure" and _STALE in result["detail"]
     assert chunk.rows(s.decisions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_runner_config_decision_on_a_stopped_chunk_is_refused(tmp_path: Path) -> None:
@@ -302,6 +316,7 @@ def test_a_runner_config_decision_on_a_stopped_chunk_is_refused(tmp_path: Path) 
 
     assert result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.decisions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_a_runner_config_decision_after_done_is_refused_as_terminal(tmp_path: Path) -> None:
@@ -312,6 +327,7 @@ def test_a_runner_config_decision_after_done_is_refused_as_terminal(tmp_path: Pa
 
     assert result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.decisions) == 0
+    assert chunk.rows(s.artifacts) == 1
 
 
 def test_a_runner_config_decision_blocks_behind_a_stop_and_then_refuses(tmp_path: Path) -> None:
@@ -321,6 +337,7 @@ def test_a_runner_config_decision_blocks_behind_a_stop_and_then_refuses(tmp_path
 
     assert isinstance(result, dict) and result["outcome"] == "failure" and result["detail"] == _TERMINAL
     assert chunk.rows(s.decisions) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def _ask(chunk: _Chunk, *, epoch: int) -> dict:
@@ -461,7 +478,20 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
             at=hub.clock.now(),
-            artifacts=[],
+            artifacts=[
+                StoredArtifact(
+                    kind=ArtifactKind.ASSET,
+                    name="notes",
+                    data="n",
+                    repo=None,
+                    forge=None,
+                    artifact_id="art_fence",
+                    chunk_id=chunk.chunk_id,
+                    node_id=chunk.nodes["build"],
+                    node_name="build",
+                    epoch=epoch,
+                )
+            ],
             source=MigrationSource.AUTHORED_EDGE,
         )
 
@@ -469,6 +499,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
     chunk.stop()
     assert migrate(2) == FenceRefusal.terminal(2)
     assert chunk.rows(s.chunk_migrations) == 0
+    assert chunk.rows(s.artifacts) == 0
 
 
 def test_the_store_refuses_a_write_at_the_epoch_a_transition_reached_done_as_terminal(tmp_path: Path) -> None:

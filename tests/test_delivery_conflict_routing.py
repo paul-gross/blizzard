@@ -170,6 +170,7 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     assert detail["status"] == "needs_human"
     assert len(detail["bounces"]) == DEFAULT_BOUNCE_CAP + 1
     assert detail["escalation"]["cause"] == "bounce-cap"
+    assert detail["escalation"]["takeover_command"] == ""
     assert detail["escalation"]["detail"] == (
         f"bounce cap ({DEFAULT_BOUNCE_CAP}) crossed after {DEFAULT_BOUNCE_CAP + 1} bounces"
     )
