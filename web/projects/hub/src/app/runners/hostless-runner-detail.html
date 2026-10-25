@@ -1,12 +1,15 @@
 <div class="hd" data-testid="fleet-detail-title">
   <app-status-light class="dot" [light]="light()" />
-  <h2 class="name" data-testid="fleet-detail-name">{{ detail().row.runner_name }}</h2>
+  <h2 class="name" data-testid="fleet-detail-name" [title]="detail().row.runner_name">{{ detail().row.runner_name }}</h2>
+  <span class="sep" aria-hidden="true">·</span>
   <span class="ref" data-testid="fleet-detail-ref" [title]="detail().row.runner_id">{{ detail().ref }}</span>
+  <span class="sep" aria-hidden="true">·</span>
   <fleet-kit-badge class="state" data-testid="fleet-detail-state" variant="text" [tone]="state().tone">{{
     state().label
   }}</fleet-kit-badge>
-  <span class="report" data-testid="fleet-detail-report">{{
-    detail().row.connection === connection.NEVER_CONNECTED ? 'stands alone' : seenLabel(detail().row) + ' · stands alone'
+  <span class="sep" aria-hidden="true">·</span>
+  <span class="report" data-testid="fleet-detail-report" [title]="seenLabel(detail().row)">{{
+    detail().row.connection === connection.NEVER_CONNECTED ? 'stands alone' : ageTag(detail().row) + ' · stands alone'
   }}</span>
 </div>
 <fleet-kit-panel class="sec" label="Workspace" [count]="slotsLabel()" [bodyScroll]="false" data-testid="fleet-runner-workspace">
@@ -22,13 +25,10 @@
     }
   </div>
 </fleet-kit-panel>
-<fleet-kit-panel class="sec" label="Subscription usage" [bodyScroll]="false" data-testid="fleet-subscriptions">
-  <fleet-kit-async-state
-    [state]="detail().row.subscriptionPaces.length > 0 ? 'ready' : 'empty'"
-    placement="inline"
-    emptyText="NO SUBSCRIPTIONS REPORTED"
-    emptyTestid="fleet-subscriptions-empty"
-  >
+<!-- Only a runner reporting a subscription has usage to show; one on API credentials leaves the
+     panel out entirely. -->
+@if (detail().row.subscriptionPaces.length > 0) {
+  <fleet-kit-panel class="sec" label="Subscription usage" [bodyScroll]="false" data-testid="fleet-subscriptions">
     <div class="sec-bd">
       <fleet-subscription-pace-group
         class="subs"
@@ -36,8 +36,8 @@
         [subscriptionPaces]="detail().row.subscriptionPaces"
       />
     </div>
-  </fleet-kit-async-state>
-</fleet-kit-panel>
+  </fleet-kit-panel>
+}
 <fleet-kit-panel class="sec" label="Runner" [bodyScroll]="false" data-testid="fleet-runner-detail">
   <div role="list">
     <app-fleet-runner-row

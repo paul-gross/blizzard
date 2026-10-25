@@ -11,13 +11,17 @@
   <div class="r1">
     <app-status-light class="dot" [light]="light()" />
     <span class="name" data-testid="fleet-runner-name">{{ row().runner_name }}</span>
+    <span class="dsep" aria-hidden="true">·</span>
     <span class="ref" [title]="row().runner_id">{{ ref() }}</span>
     @if (summary(); as text) {
+      <span class="dsep" aria-hidden="true">·</span>
       <span class="summary" data-testid="fleet-runner-summary">{{ text }}</span>
     }
+    <span class="dsep" aria-hidden="true">·</span>
+    <span class="seen" data-testid="fleet-runner-seen" [title]="seenLabel(row())">{{ ageTag(row()) }}</span>
     <span class="grow"></span>
-    <span class="seen" data-testid="fleet-runner-seen">{{ seenLabel(row()) }}</span>
     @if (canPause()) {
+      <span class="toggle-slot">
       <fleet-kit-button
         class="toggle"
         testid="fleet-runner-toggle"
@@ -29,6 +33,7 @@
       >
         {{ row().hub_paused ? 'Resume' : 'Pause' }}
       </fleet-kit-button>
+      </span>
     }
   </div>
   <div class="rgrid">
@@ -46,7 +51,7 @@
             <li class="claim">
               <a class="claim-link" data-testid="fleet-runner-claim-link" [routerLink]="['/board', 'chunk', claim.chunkId] | lensLink">
                 <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
-                <span class="node">{{ claim.node }}</span>
+                <span class="node" [title]="claim.node">{{ claim.node }}</span>
                 <span class="sep">·</span>
                 <fleet-kit-badge variant="soft" [tone]="toneFor(claim.status)">{{ claim.status }}</fleet-kit-badge>
               </a>

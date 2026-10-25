@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { KitAsyncState, KitBadge, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
+import { KitBadge, KitFactList, KitPanel, KitSlotBar, RunnerConnection, SubscriptionPaceGroup } from 'fleet';
 import type { RunnerDetailVm } from './fleet-page.model';
 import { FleetRunnerRow } from './fleet-runner-row';
 import { runnerLight, runnerTitleState } from './connection-status.model';
-import { runnerSeenLabel, type RunnerRow } from './runner-rows.model';
+import { runnerSeenLabel, runnerSeenTag, type RunnerRow } from './runner-rows.model';
 import { StatusLight } from './status-light';
 
 /**
@@ -18,7 +18,7 @@ import { StatusLight } from './status-light';
 @Component({
   selector: 'app-hostless-runner-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRunnerRow, KitAsyncState, KitBadge, KitFactList, KitPanel, KitSlotBar, StatusLight, SubscriptionPaceGroup],
+  imports: [FleetRunnerRow, KitBadge, KitFactList, KitPanel, KitSlotBar, StatusLight, SubscriptionPaceGroup],
   templateUrl: './hostless-runner-detail.html',
   styleUrls: ['./fleet-detail.css', './hostless-runner-detail.css'],
 })
@@ -31,6 +31,7 @@ export class HostlessRunnerDetail {
 
   protected readonly connection = RunnerConnection;
   protected readonly seenLabel = runnerSeenLabel;
+  protected readonly ageTag = runnerSeenTag;
 
   protected readonly light = computed(() => runnerLight(this.detail().row));
 

@@ -59,7 +59,7 @@ export class HostDetail {
   protected readonly reportText = computed(() => {
     const card = this.detail().card;
     if (card.connection === RunnerConnection.NEVER_CONNECTED) return 'never reported';
-    return card.reportedAgo === null ? null : `reported ${card.reportedAgo}`;
+    return card.reportedAgo;
   });
 
   protected readonly envsLabel = computed(() => {

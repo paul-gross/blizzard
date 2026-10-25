@@ -135,7 +135,13 @@ describe('HostlessRunnerDetail', () => {
 
     const bare = await render(row('rn_bare'));
     expect(bare.querySelector('[data-testid="fleet-runner-subscription-groups"]')).toBeNull();
-    expect(bare.querySelector('[data-testid="fleet-subscriptions-empty"]')?.textContent?.trim()).toBe('NO SUBSCRIPTIONS REPORTED');
+    expect(bare.querySelector('[data-testid="fleet-subscriptions"]')).toBeNull();
+  });
+
+  it('titles a seen runner with the age tag of its last contact', async () => {
+    const el = await render(row('rn_a', { last_seen_at: new Date(Date.parse(NOW) - 45_000).toISOString() }));
+
+    expect(el.querySelector('[data-testid="fleet-detail-report"]')?.textContent?.trim()).toBe('[45s] · stands alone');
   });
 
   it('names a never-connected runner once in its title', async () => {

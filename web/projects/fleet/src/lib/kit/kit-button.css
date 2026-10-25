@@ -14,6 +14,8 @@
      untouched consumer is unchanged, and `cta` below still wins outright. */
   padding: var(--kit-button-pad, 2px 7px);
   font-size: var(--kit-button-fs, var(--fs-xs));
+  /* A consumer's hook for a button that fills its slot — a phone-width action row. */
+  width: var(--kit-button-width, auto);
 }
 .act.primary {
   color: var(--cyan);

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { DENSE_AFTER } from './kit-slot-bar';
 
-/** How many blocks the `blocks` variant draws — one per tenth of the window. */
+/** How many blocks the `blocks` variant draws by default — one per tenth of the window. */
 export const PACE_BLOCKS = 10;
 
 /** How a pace bar draws its window: `bars` as a stacked pair of continuous bars, `blocks` as one compact line of blocks. */
@@ -14,6 +14,8 @@ interface PaceBlock {
   /** The clock sits on this block's left edge — or, on the last block, `clockAfter` its right. */
   readonly clockBefore: boolean;
   readonly clockAfter: boolean;
+  /** This block opens a new group — the wider gap before it marks the line's divisions. */
+  readonly groupStart: boolean;
 }
 
 /** Clamps a percentage input to `[0, 100]` — the defensive posture every kit primitive
@@ -23,8 +25,9 @@ function clampPct(pct: number): number {
   return Math.min(100, Math.max(0, pct));
 }
 
-function toTenths(clampedPct: number): number {
-  return Math.round(clampedPct / (100 / PACE_BLOCKS));
+/** A percentage as a whole number of `count` blocks. */
+function toBlocks(clampedPct: number, count: number): number {
+  return Math.round(clampedPct / (100 / count));
 }
 
 /**
@@ -38,7 +41,7 @@ function toTenths(clampedPct: number): number {
  * resets.** Top behind bottom is the comfortable case — usage is lagging the window's
  * own clock. The utilization also reads as a whole-percent figure closing the row.
  *
- * The `blocks` variant is the compact form of the same reading: {@link PACE_BLOCKS} blocks filled to
+ * The `blocks` variant is the compact form of the same reading: `count` blocks filled to
  * the utilization, a notch where the window's clock stands, the whole line red once usage runs ahead of
  * that clock, and the figures as its tooltip.
  */
@@ -65,6 +68,13 @@ export class KitPaceBar {
   /** How the window is drawn — see {@link PaceBarVariant}. */
   readonly variant = input<PaceBarVariant>('bars');
 
+  /** How many blocks the `blocks` variant draws; past {@link DENSE_AFTER} they pack to a 1px gap. */
+  readonly count = input(PACE_BLOCKS);
+
+  /** Blocks per group — a wider gap opens before each group after the first, so the line reads in
+   * divisions (40 blocks in groups of 10 mark its quarters); `0` draws one even run. */
+  readonly groupEvery = input(0);
+
   /** What the `blocks` variant's accessible name leads with, ahead of the window's figures — the subscription it belongs to. */
   readonly subject = input<string | null>(null);
 
@@ -86,12 +96,15 @@ export class KitPaceBar {
   protected readonly ariaLabel = computed(() => (this.subject() === null ? this.hint() : `${this.subject()} ${this.hint()}`));
 
   protected readonly cells = computed<readonly PaceBlock[]>(() => {
-    const used = toTenths(this.clampedUtilization());
-    const clock = toTenths(this.clampedElapsed());
-    return Array.from({ length: PACE_BLOCKS }, (_unused, i) => ({
+    const count = Math.max(1, Math.round(this.count()));
+    const used = toBlocks(this.clampedUtilization(), count);
+    const clock = toBlocks(this.clampedElapsed(), count);
+    const group = Math.max(0, Math.round(this.groupEvery()));
+    return Array.from({ length: count }, (_unused, i) => ({
+      groupStart: group > 0 && i > 0 && i % group === 0,
       on: i < used,
       clockBefore: i === clock,
-      clockAfter: i === PACE_BLOCKS - 1 && clock === PACE_BLOCKS,
+      clockAfter: i === count - 1 && clock === count,
     }));
   });
 }

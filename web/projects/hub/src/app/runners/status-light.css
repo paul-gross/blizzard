@@ -1,8 +1,15 @@
+/* A flex box, not an inline one: the beacon inside is itself inline-block, and on an inline line
+   box it would sit on the text baseline below the light's own square rather than in it. */
 :host {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   width: 7px;
   height: 7px;
+}
+fleet-kit-beacon {
+  display: block;
 }
 /* Added at the hub but never started: no contact yet, so no lit beacon — a hollow mark. */
 .hollow {
