@@ -305,7 +305,7 @@ class ApplyService:
         # so a firing intent or follow-latest drift writes no transition row of its own.
         landing = Landing.consult(chunk, plan.edge, targets)
         if landing is not None:
-            return self._land_migration(chunk, graph, from_node, submission, landing, submission.artifacts)
+            return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
         return self._transition(chunk, graph, from_node, submission, plan, artifacts)
 
     def _transition(

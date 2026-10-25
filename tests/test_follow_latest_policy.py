@@ -16,8 +16,8 @@ import pytest
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.graph.model import FollowLatest
-from blizzard.hub.store.schema import graph_policy_facts
-from tests.support import HubHarness, build_hub, hub_store_connections, pointer_token, report_lease
+from blizzard.hub.store.schema import artifacts, graph_policy_facts
+from tests.support import HubHarness, build_hub, chunk_rows, hub_store_connections, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 
@@ -155,6 +155,39 @@ def test_a_policy_true_graph_repins_the_chunk_to_the_newest_mint(tmp_path: Path)
     # Recorded as a migration fact, never disguised as a transition.
     assert len(facts.migrations) == 1
     assert len(facts.transitions) == 0
+
+
+@pytest.mark.component
+def test_a_gate_resolution_landing_on_a_migration_records_its_artifact_once(tmp_path: Path) -> None:
+    """The artifact landed with the decision; the resolving submission's landing consult
+    must not record it a second time with the migration."""
+    hub = build_hub(tmp_path, follow_latest=True)
+    chunk_id, build_node, v2 = _arm(hub)
+    artifact = {"name": "notes", "kind": "asset", "content": "n"}
+    decided = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/decisions",
+        json={"from_node_id": build_node, "epoch": 1, "runner_id": "r1", "artifacts": [artifact]},
+    )
+    assert decided.status_code == 200, decided.text
+    decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
+    resolved = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "pass"})
+    assert resolved.status_code == 200, resolved.text
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": build_node,
+            "decision_id": decision_id,
+            "artifacts": [artifact],
+        },
+    )
+
+    assert resp.json()["outcome"] == "migrated", resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == v2
+    assert chunk_rows(hub, artifacts, chunk_id) == 1
 
 
 @pytest.mark.component

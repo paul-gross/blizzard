@@ -110,6 +110,7 @@ def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Pat
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"
     assert detail["escalation"]["cause"] == "bounce-cap"
+    assert detail["escalation"]["takeover_command"] == ""
     assert _count(hub, s.route_released, chunk_id) == 0
     assert chunk_facts_of(hub, chunk_id).routes.newest is not None
 
