@@ -410,7 +410,7 @@ def parse_sweep_modes(raw_sweeps: ConfigView) -> SweepModes:
     modes: dict[SweepName, SweepMode] = {}
     for name in SweepName:
         value = raw_sweeps.table(name).get("mode", SweepMode.TIMED.value)
-        if value not in set(SweepMode):
+        if not isinstance(value, str) or value not in set(SweepMode):
             raise ConfigError(f"sweeps.{name}.mode must be one of {[str(mode) for mode in SweepMode]}, got {value!r}")
         modes[name] = SweepMode(value)
     return SweepModes(modes)

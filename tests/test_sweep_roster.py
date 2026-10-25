@@ -61,9 +61,10 @@ def test_every_sweep_is_timed_unless_its_table_says_stepped() -> None:
 
 
 @pytest.mark.unit
-def test_a_mode_outside_timed_and_stepped_is_refused_naming_its_key() -> None:
+@pytest.mark.parametrize("mode", ["bogus", 5, ["a"], {"a": 1}])
+def test_a_mode_outside_timed_and_stepped_is_refused_naming_its_key(mode: object) -> None:
     with pytest.raises(ConfigError, match=r"sweeps\.close_drain\.mode"):
-        parse_sweep_modes(ConfigView.unchecked({"close_drain": {"mode": "bogus"}}))
+        parse_sweep_modes(ConfigView.unchecked({"close_drain": {"mode": mode}}))
 
 
 _EVERY: SweepLock = (SweepName.CLOSE_DRAIN, None)
