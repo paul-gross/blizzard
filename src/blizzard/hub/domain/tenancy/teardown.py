@@ -20,6 +20,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from structlog.contextvars import bound_contextvars
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
@@ -237,10 +239,11 @@ class TenantTeardownSweep:
 
     def sweep(self) -> None:
         for tenant in self._teardowns.underway():
-            try:
-                self._teardown.advance(tenant, budget=DRAIN_PASS_ROWS if self._budget is None else self._budget)
-            except Exception as exc:
-                _log.warning("tenant teardown pass failed", tenant=tenant, fault=repr(exc))
+            with bound_contextvars(tenant_id=tenant):
+                try:
+                    self._teardown.advance(tenant, budget=DRAIN_PASS_ROWS if self._budget is None else self._budget)
+                except Exception as exc:
+                    _log.warning("tenant teardown pass failed", fault=repr(exc))
 
 
 __all__ = [

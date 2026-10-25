@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
+from structlog.contextvars import bound_contextvars
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.event_log import EventLogKind
@@ -293,13 +295,14 @@ class CloseDrainSweep:
         tally = CloseDrainTally()
         failed: list[TenantId] = []
         for tenant, intents in by_tenant.items():
-            try:
-                self._tenant(tenant).drain(intents, tally)
-            except (TenantClosed, UnknownTenant):
-                _log.info("close intent drain skipped a closed tenant", tenant=tenant, intents=len(intents))
-            except Exception as exc:
-                failed.append(tenant)
-                _log.warning("close intent drain failed for a tenant", tenant=tenant, fault=repr(exc))
+            with bound_contextvars(tenant_id=tenant):
+                try:
+                    self._tenant(tenant).drain(intents, tally)
+                except (TenantClosed, UnknownTenant):
+                    _log.info("close intent drain skipped a closed tenant", intents=len(intents))
+                except Exception as exc:
+                    failed.append(tenant)
+                    _log.warning("close intent drain failed for a tenant", fault=repr(exc))
         _log.info(
             "close intent drain sweep completed",
             closed=tally.closed,

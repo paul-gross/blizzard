@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Literal, Protocol
 
+from structlog.contextvars import bound_contextvars
+
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -221,15 +223,16 @@ class AnnotationReconciler:
         unconverged: list[TenantId] = []
         annotating: dict[TenantId, Sequence[str]] = {}
         for tenant in sorted(self._tenants()):
-            try:
-                opened[tenant] = self._tenant(tenant)
-                annotating[tenant] = opened[tenant].annotating()
-            except (TenantClosed, UnknownTenant):
-                opened.pop(tenant, None)
-            except Exception as exc:
-                opened.pop(tenant, None)
-                unconverged.append(tenant)
-                _log.warning("forge-status sweep could not open a tenant", tenant=tenant, fault=repr(exc))
+            with bound_contextvars(tenant_id=tenant):
+                try:
+                    opened[tenant] = self._tenant(tenant)
+                    annotating[tenant] = opened[tenant].annotating()
+                except (TenantClosed, UnknownTenant):
+                    opened.pop(tenant, None)
+                except Exception as exc:
+                    opened.pop(tenant, None)
+                    unconverged.append(tenant)
+                    _log.warning("forge-status sweep could not open a tenant", fault=repr(exc))
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in opened}
         signatures = self._corpus.live_work_refs_signature()
         probes = {
@@ -252,19 +255,22 @@ class AnnotationReconciler:
         tally = AnnotationTally()
         reconciled = 0
         for tenant in due:
-            try:
-                converged = opened[tenant].reconcile(tenant, annotating[tenant], partial(corpus.rows_of, tenant), tally)
-            except (TenantClosed, UnknownTenant):
-                _log.info("forge-status sweep skipped a closed tenant", tenant=tenant)
-                continue
-            except Exception as exc:
-                converged = False
-                _log.warning("forge-status sweep failed for a tenant", tenant=tenant, fault=repr(exc))
-            if converged:
-                self._converged[tenant] = (probes[tenant], now)
-                reconciled += 1
-            else:
-                unconverged.append(tenant)
+            with bound_contextvars(tenant_id=tenant):
+                try:
+                    converged = opened[tenant].reconcile(
+                        tenant, annotating[tenant], partial(corpus.rows_of, tenant), tally
+                    )
+                except (TenantClosed, UnknownTenant):
+                    _log.info("forge-status sweep skipped a closed tenant")
+                    continue
+                except Exception as exc:
+                    converged = False
+                    _log.warning("forge-status sweep failed for a tenant", fault=repr(exc))
+                if converged:
+                    self._converged[tenant] = (probes[tenant], now)
+                    reconciled += 1
+                else:
+                    unconverged.append(tenant)
         _log.info(
             "forge-status sweep completed",
             written=tally.written,
