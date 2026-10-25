@@ -26,6 +26,38 @@
       "type": "table"
     },
     {
+      "default": null,
+      "deprecated": false,
+      "path": "auth.login_throttle",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": 10,
+      "deprecated": false,
+      "path": "auth.login_throttle.capacity",
+      "replaced_by": null,
+      "required": false,
+      "type": "integer"
+    },
+    {
+      "default": true,
+      "deprecated": false,
+      "path": "auth.login_throttle.enabled",
+      "replaced_by": null,
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "default": 6,
+      "deprecated": false,
+      "path": "auth.login_throttle.refill_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
       "default": "none",
       "deprecated": false,
       "path": "auth.mode",

@@ -9,6 +9,7 @@ from blizzard.foundation.config_keys import (
     ARRAY_OF_TABLES,
     BOOLEAN,
     INTEGER,
+    NUMBER,
     OPEN_TABLE,
     STRING,
     STRING_LIST,
@@ -18,6 +19,7 @@ from blizzard.foundation.config_keys import (
     DurablePath,
 )
 from blizzard.foundation.trace_export.config import TRACING_KEYS
+from blizzard.hub.auth.throttle import DEFAULT_CAPACITY, DEFAULT_REFILL_SECONDS
 from blizzard.hub.config_defaults import (
     AUTH_MODE_NONE,
     DEFAULT_ACTION_PASS_SECONDS,
@@ -61,6 +63,10 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("auth", TABLE),
         ConfigKey("auth.mode", STRING, default=AUTH_MODE_NONE),
         ConfigKey("auth.superuser", STRING),
+        ConfigKey("auth.login_throttle", TABLE),
+        ConfigKey("auth.login_throttle.enabled", BOOLEAN, default=True),
+        ConfigKey("auth.login_throttle.capacity", INTEGER, default=DEFAULT_CAPACITY),
+        ConfigKey("auth.login_throttle.refill_seconds", NUMBER, default=DEFAULT_REFILL_SECONDS),
         ConfigKey("auth.oauth", TABLE),
         ConfigKey("auth.oauth.provider", ARRAY_OF_TABLES),
         ConfigKey("auth.oauth.provider[].name", STRING, required=True),

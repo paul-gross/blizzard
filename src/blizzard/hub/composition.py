@@ -63,7 +63,7 @@ from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.config import HubConfig, OAuthProviderConfig
+from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
@@ -486,7 +486,8 @@ class HubServices:
     #: The configured OAuth provider registry — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
     #: Per-IP token-bucket throttle shared by the authorize/callback routes.
-    auth_throttle: IpThrottle
+    #: ``None`` when ``[auth.login_throttle]`` turns the throttle off.
+    auth_throttle: IpThrottle | None
     #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
     #: The hub's IdP signing-key lifecycle — ``None`` when no keypair exists.
@@ -1295,6 +1296,7 @@ def build_services(
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
     trusted_proxies: TrustedProxies | None = None,
+    login_throttle: LoginThrottleConfig | None = None,
     transcript_caps: TranscriptCaps | None = None,
     system_artifacts: PackagedSystemArtifacts | None = None,
     trace_exporter: ITraceExporter | None = None,
@@ -1518,7 +1520,14 @@ def build_services(
     # The hub's IdP signing-key lifecycle — constructed only when a keys
     # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
-    auth_throttle = IpThrottle(clock=clock)
+    login_throttle = login_throttle or LoginThrottleConfig()
+    auth_throttle = (
+        IpThrottle(clock=clock, capacity=login_throttle.capacity, refill_per_second=1 / login_throttle.refill_seconds)
+        if login_throttle.enabled
+        else None
+    )
+    if auth_throttle is None:
+        get_logger("blizzard.hub").warning("sign-ins are unthrottled", key="auth.login_throttle.enabled")
     return HubServices(
         tenants=TenantServicesOpener(
             open_services=core.open_services,

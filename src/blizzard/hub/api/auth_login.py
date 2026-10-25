@@ -106,7 +106,8 @@ class ProviderLogin:
         return LoginRefusal(self.services.auth_facts, actor=self.origin.ip, subject=self.name)
 
     def assert_not_throttled(self) -> None:
-        if not self.services.auth_throttle.allow(self.origin.ip):
+        throttle = self.services.auth_throttle
+        if throttle is not None and not throttle.allow(self.origin.ip):
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
 
 

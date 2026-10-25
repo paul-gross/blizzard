@@ -30,6 +30,7 @@ from blizzard.foundation.flags import (
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.hub.auth.throttle import DEFAULT_CAPACITY, DEFAULT_REFILL_SECONDS
 from blizzard.hub.config_defaults import (
     AUTH_MODE_NONE,
     AUTH_MODE_OAUTH,
@@ -313,6 +314,31 @@ class OAuthProviderConfig:
 
 @domain_model
 @dataclass(frozen=True)
+class LoginThrottleConfig:
+    """Resolved ``[auth.login_throttle]`` — the per-client-address token bucket on the provider-login routes.
+
+    The defaults are the throttle's own; ``enabled = false`` builds no throttle at all."""
+
+    enabled: bool = True
+    capacity: int = DEFAULT_CAPACITY
+    refill_seconds: float = DEFAULT_REFILL_SECONDS
+
+    @classmethod
+    def of(cls, throttle: ConfigView) -> LoginThrottleConfig:
+        enabled = throttle.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"auth.login_throttle.enabled must be a boolean, got {enabled!r}")
+        capacity = throttle.get("capacity", DEFAULT_CAPACITY)
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
+            raise ConfigError(f"auth.login_throttle.capacity must be a positive integer, got {capacity!r}")
+        refill = throttle.get("refill_seconds", DEFAULT_REFILL_SECONDS)
+        if isinstance(refill, bool) or not isinstance(refill, (int, float)) or refill <= 0:
+            raise ConfigError(f"auth.login_throttle.refill_seconds must be a positive number, got {refill!r}")
+        return cls(enabled=enabled, capacity=capacity, refill_seconds=refill)
+
+
+@domain_model
+@dataclass(frozen=True)
 class AuthConfig:
     """Resolved ``[auth]`` config — the human-auth rollout knob.
 
@@ -321,6 +347,7 @@ class AuthConfig:
     mode: str = AUTH_MODE_NONE
     superuser: str | None = None
     oauth_providers: tuple[OAuthProviderConfig, ...] = ()
+    login_throttle: LoginThrottleConfig = LoginThrottleConfig()
 
     @classmethod
     def of(cls, auth: ConfigView) -> AuthConfig:
@@ -332,6 +359,7 @@ class AuthConfig:
             mode=mode,
             superuser=str(superuser_raw) if superuser_raw else None,
             oauth_providers=OAuthProviderConfig.providers(auth.table("oauth")),
+            login_throttle=LoginThrottleConfig.of(auth.table("login_throttle")),
         )
 
 

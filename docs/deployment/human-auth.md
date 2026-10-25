@@ -203,6 +203,12 @@ direct client cannot forge its scheme or spoof `X-Forwarded-For`; empty (the def
 peer. Only `X-Forwarded-*` headers are honored — RFC 7239 `Forwarded` and proxy-protocol framing are not consulted, and
 no `X-Forwarded-Host` is read, so a rewritten Host cannot be recovered.
 
+`[auth.login_throttle]` in `blizzard-hub.toml` tunes the login throttle that bucket feeds, while `trusted_proxies` still
+decides what a client address is. `capacity` (default `10`) is the tokens per client address and `refill_seconds`
+(default `6`) the seconds per token refilled; a sign-in spends two. `enabled = false` admits every sign-in unthrottled
+and logs `sign-ins are unthrottled` at boot. Lift the throttle only on a hub whose every sign-in is the operator's own,
+or a test hub.
+
 The proxy must set `X-Forwarded-Proto` and `X-Forwarded-For`, and in front of a runner must also pass the browser's
 original Host through unchanged, since per-origin callback selection reads that header and nothing else; nginx replaces
 Host by default, so set `proxy_set_header Host $host` explicitly. Caddy's `reverse_proxy` and `tailscale serve` set all

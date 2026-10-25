@@ -596,6 +596,7 @@ def build_hosted_app(
         signing_keys_dir=signing_keys_dir,
         secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
+        login_throttle=config.auth.login_throttle,
         transcript_caps=_transcript_caps(config),
         # No exporter is built unless OpenTelemetry's own variables enable tracing.
         trace_exporter=(
