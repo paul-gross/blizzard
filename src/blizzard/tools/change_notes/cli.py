@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from blizzard.tools.change_notes import owed as owed_rules
+from blizzard.tools.change_notes.breaks import BreaksFileInvalid, compat_breaks, cross_check, read_breaks, unnamed_lines
 from blizzard.tools.change_notes.contract import Failure, Note
 from blizzard.tools.change_notes.cut import CutRefused, cut
 from blizzard.tools.change_notes.flags import turned_on, working_registry
@@ -17,6 +18,7 @@ from blizzard.tools.change_notes.schedule import due_without_removal, latest_rel
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, parse_note, read_tree
 from blizzard.tools.change_notes.validate import validate
 from blizzard.tools.compat.git import GitError, Repository
+from blizzard.tools.compat.reader import CompatError, supported_tags
 from blizzard.tools.compat.releases import parse_release, parse_releases
 
 
@@ -109,7 +111,7 @@ def cut_command(version: str) -> None:
     if not (root / CHANGES_DIR).is_dir():
         raise click.UsageError(f"no {CHANGES_DIR}/ directory under {root}; run from the repository root")
     try:
-        report = cut(root, version)
+        report = cut(root, version, lambda: compat_breaks(root, version))
     except CutRefused as exc:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
@@ -125,11 +127,20 @@ def cut_command(version: str) -> None:
         click.echo(f"moved upgrade boundary {anchor}")
     for anchor in report.left:
         click.echo(f"left upgrade boundary {anchor} in place: it is not staged for the next release")
+    for surface, where in report.unrecorded:
+        click.echo(f"declared break {surface} {where} is recorded by no compat break")
 
 
 @main.command(name="render")
 @click.argument("tag")
-def render_command(tag: str) -> None:
+@click.option(
+    "--breaks",
+    "breaks_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="compat-breaks.json: fail on a recorded break no note names, and list the recorded breaks.",
+)
+def render_command(tag: str, breaks_path: Path | None) -> None:
     """Print the Markdown release notes TAG's tree publishes: its notes by section, then its commits."""
     release = parse_release(tag)
     if release is None:
@@ -137,8 +148,20 @@ def render_command(tag: str) -> None:
     version = f"{release.major}.{release.minor}.{release.patch}"
     repo = Repository(Path.cwd())
     try:
-        earlier = [r for r in parse_releases(repo.tags()) if r.order() < release.order()]
         notes = notes_at(repo, tag, version)
+        supported = supported_tags(version) if notes else frozenset()
+        earlier = [r for r in parse_releases(repo.tags()) if r.order() < release.order() and r.tag in supported]
+        named = ()
+        if breaks_path is not None:
+            recorded_tag, entries = read_breaks(breaks_path)
+            if recorded_tag != tag:
+                raise ReleasedNoteInvalid(f"{breaks_path} judged {recorded_tag}, not {tag}")
+            check = cross_check(entries, notes)
+            if check.unnamed:
+                raise ReleasedNoteInvalid(unnamed_lines(check))
+            named = check.named
+            for surface, where in check.unrecorded:
+                click.echo(f"declared break {surface} {where} is recorded by no compat break", err=True)
         history = _tag_notes(repo, tag) if notes else []
         opening = release.patch == 0 and (release.major != 0 or release.minor != 0)
         introduction = ""
@@ -157,8 +180,9 @@ def render_command(tag: str) -> None:
             commit_block(repo, tag),
             turned_on(repo, tag),
             latest_released_schedule(history),
+            named,
         )
-    except (GitError, ReleasedNoteInvalid) as exc:
+    except (GitError, ReleasedNoteInvalid, BreaksFileInvalid, CompatError) as exc:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
     click.echo(text, nl=False)

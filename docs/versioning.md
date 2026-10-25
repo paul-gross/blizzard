@@ -209,6 +209,7 @@ removals in `changes/unreleased/`. Before 1.0 the line is a minor such as `0.12`
 The current removal line is the latest *released* postponement's `removes-in`, or the deprecation's own when none has
 shipped. The cut refuses a new deprecation due no later than the cut line, a non-advancing postponement, or an opening
 line with an unretired promise, before moving any notes or boundaries. `check` validates the note format and references
-independently of those release-readiness decisions. Older tags without `changes/` still render their commit block.
+independently of those release-readiness decisions. The cut and `render` also refuse a `blizzard-compat` break no
+breaking note names. Older tags without `changes/` still render their commit block.
 
 [`docs/ci.md`](./ci.md) owns the release and dev-publish workflow contracts.

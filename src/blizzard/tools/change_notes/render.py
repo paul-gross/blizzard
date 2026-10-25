@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
+from blizzard.tools.change_notes.breaks import NamedBreak
 from blizzard.tools.change_notes.contract import UPGRADE_HEADING, Kind, Note, headings
 
 UPGRADE_DOC_URL = "https://github.com/paul-gross/blizzard/blob/{tag}/docs/upgrade.md#{anchor}"
@@ -45,10 +46,19 @@ def _section_of(note: Note) -> str:
 
 
 def _upgrade_entry(note: Note, tag: str, prose: str, upgrade: str) -> str:
+    return f"### {_title(note, tag, prose)}\n\n{upgrade}"
+
+
+def _title(note: Note, tag: str, prose: str) -> str:
     sentence = _SENTENCE_END.split(" ".join(prose.split()), maxsplit=1)[0]
     guide = note.fields.get("upgrade-guide")
-    title = f"[{sentence}]({UPGRADE_DOC_URL.format(tag=tag, anchor=guide)})" if isinstance(guide, str) else sentence
-    return f"### {title}\n\n{upgrade}"
+    return f"[{sentence}]({UPGRADE_DOC_URL.format(tag=tag, anchor=guide)})" if isinstance(guide, str) else sentence
+
+
+def _break_entry(named: NamedBreak, tag: str) -> str:
+    entry = named.entry
+    title = _title(named.note, tag, _split(named.note)[0])
+    return f"### {title}\n\nBreaks {entry.where} ({entry.surface}) in {entry.release}."
 
 
 def render(
@@ -58,6 +68,7 @@ def render(
     commits: str,
     turned_on: Sequence[str] = (),
     schedule: Mapping[str, str] | None = None,
+    breaks: Sequence[NamedBreak] = (),
 ) -> str:
     """The published notes for ``tag``: sections in order, empty ones omitted, then the collapsed commits."""
     grouped: dict[str, list[str]] = {}
@@ -71,6 +82,7 @@ def render(
         grouped.setdefault(_section_of(note), []).append(_item(prose, marker, trailer))
         if upgrade:
             upgrades.append(_upgrade_entry(note, tag, prose, upgrade))
+    upgrades.extend(_break_entry(named, tag) for named in breaks)
     order = ("Breaking changes", "Deprecated", *(title for _, title in _KIND_SECTIONS))
     sections = [
         _section("Upgrade notes", upgrades, separator="\n\n"),

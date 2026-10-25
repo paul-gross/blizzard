@@ -12,6 +12,7 @@ from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.schedule import latest_released_schedule, line_order, release_line
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries
 from blizzard.tools.change_notes.validate import validate
+from tests.compat_stub import entry, stub_compat
 
 pytestmark = pytest.mark.unit
 
@@ -66,10 +67,15 @@ def _tree(tmp_path: Path, notes: dict[str, str], doc: str | None = _DOC) -> Path
 
 
 def _snapshot(root: Path) -> dict[str, bytes]:
-    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+    return {
+        p.relative_to(root).as_posix(): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and p.name != "compat-breaks.json"
+    }
 
 
-def _cut(root: Path, version: str, monkeypatch: pytest.MonkeyPatch):
+def _cut(root: Path, version: str, monkeypatch: pytest.MonkeyPatch, breaks: list | None = None, tag_exit: int = 0):
+    stub_compat(root, monkeypatch, breaks=[] if breaks is None else breaks, tag_exit=tag_exit)
     monkeypatch.chdir(root)
     return CliRunner().invoke(main, ["cut", version])
 
@@ -472,3 +478,47 @@ def test_opening_cut_checks_all_due_notes_with_mixed_pending_and_released_remova
     assert _snapshot(root) == before
     (root / "changes" / "unreleased" / "third-removal.md").write_text(_REMOVAL.replace("old", "third"))
     assert _cut(root, "2.0.0", monkeypatch).exit_code == 0
+
+
+_ROUTE = entry("v0.2.0", "http-api", "GET /old")
+_NAMING = "---\nkind: changed\nbreaking: true\nsurfaces: [http-api]\nbreaks: ['GET /old', 'GET /ghost']\n---\n\nDrops the route.\n\n## Upgrade\n\nMove.\n"
+_UNRELATED = "---\nkind: changed\nbreaking: true\nsurfaces: [config]\nbreaks: [other]\n---\n\nChanges other.\n\n## Upgrade\n\nMove.\n"
+
+
+def test_cut_refuses_a_compat_break_no_note_names_and_writes_nothing(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"unreleased/other.md": _UNRELATED})
+    before = _snapshot(root)
+    result = _cut(root, "0.3.0", monkeypatch, [_ROUTE])
+    assert result.exit_code == 1
+    assert "http-api GET /old (breaks v0.2.0)" in result.output
+    assert _snapshot(root) == before
+
+
+def test_cut_passes_once_a_breaking_note_names_the_break_and_reports_unrecorded(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"unreleased/route.md": _NAMING})
+    result = _cut(root, "0.3.0", monkeypatch, [_ROUTE])
+    assert result.exit_code == 0, result.output
+    assert "declared break http-api GET /ghost is recorded by no compat break" in result.output
+    assert (root / "changes" / "0.3.0" / "route.md").is_file()
+
+
+def test_cut_counts_a_note_an_earlier_candidate_already_moved(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"0.3.0/route.md": _NAMING, "unreleased/fix.md": _FIXED})
+    assert _cut(root, "0.3.0", monkeypatch, [_ROUTE]).exit_code == 0
+
+
+def test_cut_refuses_when_compat_exits_non_zero_relaying_its_output(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"unreleased/fix.md": _FIXED})
+    before = _snapshot(root)
+    result = _cut(root, "0.3.0", monkeypatch, [], tag_exit=1)
+    assert result.exit_code == 1 and "compat ran" in result.output
+    assert _snapshot(root) == before
+
+
+def test_cut_does_not_trust_a_stale_breaks_file(tmp_path: Path, monkeypatch) -> None:
+    root = _tree(tmp_path, {"unreleased/fix.md": _FIXED})
+    (root / "compat-breaks.json").write_text('{"tag": "v0.3.0", "breaks": []}')
+    stub_compat(root, monkeypatch, tag_exit=0)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(main, ["cut", "0.3.0"])
+    assert result.exit_code == 1 and "left no readable" in result.output

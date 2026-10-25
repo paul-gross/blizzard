@@ -14,6 +14,7 @@ from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.guide import guide
 from blizzard.tools.change_notes.render import render
 from blizzard.tools.change_notes.schedule import due_without_removal
+from tests.compat_stub import stub_compat
 from tests.repo_files import repo_root
 from tests.test_change_notes_render import _commit, _git
 
@@ -180,6 +181,7 @@ def test_tagged_render_sees_history_at_tag_not_working_tree_and_candidate_is_rep
         {"changes/3.0.0/gone.md": _file("removed", "Gone.\n\n## Upgrade\n\nSwitch.", retires="old")},
     )
     _git(repo, "tag", "v3.0.0-rc.1")
+    stub_compat(repo, monkeypatch)
     monkeypatch.chdir(repo)
     candidate = CliRunner().invoke(main, ["render", "v2.0.0-rc.1"])
     assert candidate.exit_code == 0, candidate.output
@@ -218,6 +220,7 @@ def test_tagged_opening_does_not_borrow_pending_removal_from_tag_or_worktree(
         },
     )
     _git(repo, "tag", "v2.0.0")
+    stub_compat(repo, monkeypatch)
     monkeypatch.chdir(repo)
     result = CliRunner().invoke(main, ["render", "v2.0.0"])
     assert result.exit_code == 1 and "old" in result.output
