@@ -15,6 +15,9 @@ from blizzard.foundation.roles import domain_model
 
 REDACTED = "<redacted>"
 
+# JSON-compatible data plus tuples, which sanitization preserves as tuples.
+type SanitizableValue = None | bool | int | float | str | Sequence[SanitizableValue] | Mapping[str, SanitizableValue]
+
 _SENSITIVE_KEY_NAMES = frozenset(
     {
         "access_token",
@@ -190,15 +193,15 @@ def _redact_bearer(match: re.Match[str]) -> str:
 
 
 def sanitize_value(
-    value: object,
+    value: SanitizableValue,
     *,
     secrets: Sequence[str] = (),
     path_replacements: Sequence[tuple[str, str]] = (),
-) -> object:
+) -> SanitizableValue:
     """Return a recursively sanitized copy of a JSON-compatible value."""
 
     if isinstance(value, Mapping):
-        sanitized: dict[object, object] = {}
+        sanitized: dict[str, SanitizableValue] = {}
         for key, nested in value.items():
             sanitized_key = (
                 sanitize_text(key, secrets=secrets, path_replacements=path_replacements)
@@ -226,12 +229,12 @@ def sanitize_value(
 
 
 def _sanitize_http_mapping(
-    value: Mapping[object, object],
+    value: Mapping[str, SanitizableValue],
     *,
     secrets: Sequence[str],
     path_replacements: Sequence[tuple[str, str]],
-) -> dict[object, object]:
-    sanitized: dict[object, object] = {}
+) -> dict[str, SanitizableValue]:
+    sanitized: dict[str, SanitizableValue] = {}
     for key, nested in value.items():
         sanitized_key = (
             sanitize_text(key, secrets=secrets, path_replacements=path_replacements) if isinstance(key, str) else key
@@ -249,7 +252,7 @@ def _sanitize_http_mapping(
 
 
 def sanitize_json(
-    value: object,
+    value: SanitizableValue,
     *,
     secrets: Sequence[str] = (),
     path_replacements: Sequence[tuple[str, str]] = (),
@@ -270,13 +273,14 @@ class OpenCodeSanitizer:
     secrets: tuple[str, ...] = ()
     path_replacements: tuple[tuple[str, str], ...] = ()
 
-    def value(self, value: object) -> object:
+    def value(self, value: SanitizableValue) -> SanitizableValue:
         return sanitize_value(value, secrets=self.secrets, path_replacements=self.path_replacements)
 
 
 __all__ = [
     "REDACTED",
     "OpenCodeSanitizer",
+    "SanitizableValue",
     "is_absolute_host_path",
     "sanitize_json",
     "sanitize_text",

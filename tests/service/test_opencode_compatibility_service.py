@@ -511,12 +511,16 @@ def test_version_preflight_uses_disposable_cwd_and_isolated_child_scopes(tmp_pat
     assert not caller_marker.exists()
     preflight = probe.evidence["preflight"]
     assert isinstance(preflight, dict)
-    preflight_cwd = Path(preflight["cwd"])
+    cwd = preflight["cwd"]
+    environment_keys = preflight["environment_keys"]
+    assert isinstance(cwd, str)
+    assert isinstance(environment_keys, list)
+    preflight_cwd = Path(cwd)
     assert preflight_cwd != Path.cwd()
     assert preflight_cwd.name == "preflight-cwd"
     version_operation = probe.evidence["operations"][0]  # type: ignore[index]
     assert version_operation["cwd"] == str(preflight_cwd)  # type: ignore[index]
-    assert set(preflight["environment_keys"]) >= {
+    assert set(environment_keys) >= {
         "OPENCODE_CONFIG_DIR",
         "XDG_CONFIG_HOME",
         "XDG_DATA_HOME",

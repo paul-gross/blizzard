@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode.shapes import OpenCodeSessionExport
 from blizzard.runner.harness.opencode.transcript.cursor import (
     MessagePartCursor,
@@ -54,7 +55,7 @@ class TranscriptProof:
     def valid(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
         return not self.failures
 
-    def to_payload(self) -> dict[str, object]:
+    def to_payload(self) -> JsonObject:
         return {
             "during_export": self.during_export,
             "after_export": self.after_export,
@@ -66,9 +67,9 @@ class TranscriptProof:
             "repeated_live_exports": self.repeated_live_exports,
             "repeated_after_exports": self.repeated_after_exports,
             "compaction_pruned": self.compaction_pruned,
-            "failures": list(self.failures),
-            "read_failures": list(self.read_failures),
-            "cursor_failures": list(self.cursor_failures),
+            "failures": [*self.failures],
+            "read_failures": [*self.read_failures],
+            "cursor_failures": [*self.cursor_failures],
         }
 
 
@@ -243,7 +244,7 @@ def _cursor_history(
     return compaction_observed, compaction_pruned, tuple(dict.fromkeys(appended_after_compaction)), no_replay
 
 
-def _identity_payload(identity: MessagePartIdentity) -> dict[str, str | None]:
+def _identity_payload(identity: MessagePartIdentity) -> JsonObject:
     return {"message_id": identity.message_id, "part_id": identity.part_id}
 
 

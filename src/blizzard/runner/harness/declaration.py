@@ -108,7 +108,7 @@ class SharedHarnessInputs:
     #: `[tracing] harness_telemetry` together with platform tracing — whether a binding captures its telemetry.
     harness_telemetry_enabled: bool = False
     #: The runner's own environ, where a binding finds whether it has a destination to capture a signal to.
-    runner_environ: Mapping[str, str] = field(default_factory=dict)
+    runner_environ: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 class IHarnessDeclaration(Protocol[SectionT_contra]):

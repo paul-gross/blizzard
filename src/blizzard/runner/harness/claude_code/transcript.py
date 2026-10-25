@@ -14,6 +14,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION, NormalizedFile, TranscriptEntry
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.transcript import (
     IHarnessTranscriptSource,
     TranscriptBatch,
@@ -56,7 +57,7 @@ class Position:
         if since is None:
             return cls(main=0, sidecars={})
         try:
-            data = json.loads(since.token)
+            data = decode_json(since.token)
         except (json.JSONDecodeError, TypeError):
             return cls(main=0, sidecars={})
         if not isinstance(data, dict):

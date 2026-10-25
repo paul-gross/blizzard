@@ -7,7 +7,6 @@ untouched."""
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import stat
@@ -31,6 +30,7 @@ from blizzard.runner.harness.bundle import (
     HarnessSource,
     companion_path,
 )
+from blizzard.runner.harness.json_value import decode_json
 
 # A staging directory older than this belongs to a publish that died; a younger one may be live.
 _STALE_STAGING_SECONDS = 3600.0
@@ -107,7 +107,7 @@ def _plan(config_dir: Path, layouts: tuple[HarnessLayout, ...]) -> _Plan:
     if not config_dir.is_dir():
         raise HarnessBundleError(config_dir, "the configured bundle directory is missing or is not a directory")
     by_name = {layout.dirname: layout for layout in layouts}
-    harnesses = []
+    harnesses: list[tuple[HarnessLayout, Path, tuple[str, ...], tuple[PurePosixPath, ...]]] = []
     for entry in sorted(config_dir.iterdir()):
         layout = by_name.get(entry.name)
         if layout is None or not entry.is_dir():
@@ -142,7 +142,7 @@ def _companions(
     file: Path, directory: Path, extract: Callable[[Mapping[str, Any]], tuple[str, ...]] | None
 ) -> Iterator[PurePosixPath]:
     try:
-        document = json.loads(file.read_text())
+        document = decode_json(file.read_text())
     except (OSError, ValueError) as exc:
         raise HarnessBundleError(file, f"cannot read as JSON: {exc}") from exc
     if not isinstance(document, dict):

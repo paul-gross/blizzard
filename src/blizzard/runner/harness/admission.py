@@ -8,12 +8,13 @@ here."""
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
+from blizzard.runner.harness.json_value import JsonValue
 
 # A semver pre-release: `X.Y.Z-<identifiers>`, which `Version` would otherwise parse by PEP 440's rules instead.
 _SEMVER_PRERELEASE_PATTERN = re.compile(r"^\d+\.\d+\.\d+-")
@@ -62,7 +63,7 @@ def select_reference_corpus(
     return candidates[-1][1] if candidates else None
 
 
-def classification_of_manifest(manifest: object) -> CompatibilityClassification | None:
+def classification_of_manifest(manifest: JsonValue | Mapping[str, JsonValue]) -> CompatibilityClassification | None:
     """The pinned classification a parsed corpus manifest records under
     ``live_evidence.classification``, or ``None`` when the manifest is not that shape or names
     no known classification."""

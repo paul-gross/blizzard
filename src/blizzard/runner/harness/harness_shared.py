@@ -8,12 +8,14 @@ in both ``src/blizzard/runner/harness/claude_code/adapter.py`` and
 from __future__ import annotations
 
 import contextlib
+import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import IO
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.json_value import JsonObject, decode_json
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal
 from blizzard.runner.process.child_env import AllowlistedEnv
 
@@ -28,6 +30,14 @@ SEMVER_VERSION_GROUP = (
     r"(?P<version>\d+\.\d+\.\d+"
     r"(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
 )
+
+
+def decode_json_object(text: str) -> JsonObject:
+    """``text`` decoded as a JSON object; a document that is valid JSON but not an object fails as invalid JSON does."""
+    document = decode_json(text)
+    if not isinstance(document, dict):
+        raise json.JSONDecodeError("Expecting a JSON object", text, 0)
+    return document
 
 
 def receiver_env(signal: TelemetrySignal, local_api_url: str, lease_token: str) -> dict[str, str]:

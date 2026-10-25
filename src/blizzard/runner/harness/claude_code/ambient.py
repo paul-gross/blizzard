@@ -7,14 +7,13 @@ there is neutralized by the runner's own pin)."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 
 BYPASS_PERMISSIONS = "bypassPermissions"
 MANAGED_SETTINGS_PATHS = (Path("/etc/claude-code/managed-settings.json"),)
@@ -36,10 +35,10 @@ class AmbientRule:
     key: str
     applies: Callable[[str | None], bool] = lambda _mode: True
 
-    def hit(self, document: Mapping[str, Any], permission_mode: str | None) -> bool:
+    def hit(self, document: Mapping[str, JsonValue], permission_mode: str | None) -> bool:
         if not self.applies(permission_mode):
             return False
-        value: Any = document
+        value: JsonValue | Mapping[str, JsonValue] = document
         for part in self.key.split("."):
             if not isinstance(value, Mapping) or part not in value:
                 return False
@@ -117,9 +116,9 @@ def _files(sources: AmbientSources) -> list[tuple[SettingsScope, Path]]:
     return files
 
 
-def _read(path: Path) -> Mapping[str, Any] | None:
+def _read(path: Path) -> JsonObject | None:
     try:
-        document = json.loads(path.read_text())
+        document = decode_json(path.read_text())
     except (OSError, ValueError):
         return None
     return document if isinstance(document, dict) else None

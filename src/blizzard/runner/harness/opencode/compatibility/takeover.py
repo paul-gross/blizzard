@@ -14,6 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.compatibility import CompatibilityProbe, ProbeObservation
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode.compatibility.attach import IAttachProxyFactory
 from blizzard.runner.harness.opencode.compatibility.facts import has_takeover_prompt
 from blizzard.runner.harness.opencode.compatibility.loopback import (
@@ -71,7 +72,7 @@ class TakeoverOutcome:
     """What the attended attach concluded, and the evidence the probe retains for it."""
 
     observation: ProbeObservation
-    evidence: dict[str, object]
+    evidence: JsonObject
 
 
 class OpenCodeTakeoverProbe:
@@ -264,7 +265,7 @@ class OpenCodeTakeoverProbe:
                     "takeover/event-stream",
                     "takeover/continuation",
                 )
-        takeover_evidence: dict[str, object] = {
+        takeover_evidence: JsonObject = {
             "interactive": True,
             "attachment_observed": signal.observed,
             "session_matches": signal.session_matches,

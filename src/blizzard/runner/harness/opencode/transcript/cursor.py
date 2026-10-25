@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonValue, decode_json
 from blizzard.runner.harness.opencode.shapes import OpenCodeSessionExport
 
 CURSOR_VERSION = 1
@@ -44,7 +45,7 @@ class MessagePartRevision:
     """One identity and its current shape, ready for admission."""
 
     identity: MessagePartIdentity
-    payload: object
+    payload: JsonValue | Mapping[str, JsonValue]
     fingerprint: str
 
     @classmethod
@@ -52,7 +53,7 @@ class MessagePartRevision:
         cls,
         message_id: str,
         part_id: str | None,
-        payload: object,
+        payload: JsonValue | Mapping[str, JsonValue],
     ) -> MessagePartRevision:
         return cls(MessagePartIdentity(message_id, part_id), payload, _fingerprint(payload))
 
@@ -117,7 +118,7 @@ class MessagePartCursor:
         if token is None:
             return cls.start()
         try:
-            decoded = json.loads(token)
+            decoded = decode_json(token)
         except json.JSONDecodeError as exc:
             raise CursorError("cursor token is not valid JSON") from exc
         if not isinstance(decoded, dict):
@@ -212,7 +213,7 @@ def _is_compaction_record(record: MessagePartRevision) -> bool:
     return isinstance(record.payload, Mapping) and record.payload.get("type") == "compaction"
 
 
-def _fingerprint(value: object) -> str:
+def _fingerprint(value: JsonValue | Mapping[str, JsonValue]) -> str:
     try:
         canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     except (TypeError, ValueError):

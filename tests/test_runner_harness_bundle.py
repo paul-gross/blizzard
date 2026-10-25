@@ -19,7 +19,8 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, companion_path
+from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, HarnessComposition, companion_path
+from blizzard.runner.harness.claude_code.bundle import _composer
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.internal import bundle_publisher as bundle_module
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
@@ -652,3 +653,20 @@ def test_a_companion_reference_resolves_to_a_bundle_relative_path_or_is_skipped(
 def test_a_companion_reference_that_escapes_the_harness_directory_is_refused(reference: str) -> None:
     with pytest.raises(CompanionEscapes):
         companion_path(reference)
+
+
+@pytest.mark.parametrize("document", [[], "text", 3, None])
+def test_claude_code_compose_fails_a_non_object_settings_document_as_invalid_json_does(
+    tmp_path: Path, document: object
+) -> None:
+    source, staged = tmp_path / "source", tmp_path / "staged"
+    source.mkdir()
+    staged.mkdir()
+    (staged / "settings.json").write_text(json.dumps(document))
+    compose = _composer(None)
+
+    with pytest.raises(json.JSONDecodeError):
+        compose(HarnessComposition(source_dir=source, staged_dir=staged))
+    (staged / "settings.json").write_text("{not json")
+    with pytest.raises(json.JSONDecodeError):
+        compose(HarnessComposition(source_dir=source, staged_dir=staged))

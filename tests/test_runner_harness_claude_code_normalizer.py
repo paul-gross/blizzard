@@ -13,6 +13,7 @@ import pytest
 
 from blizzard.runner.harness.claude_code import normalizer as normalizer_module
 from blizzard.runner.harness.claude_code.normalizer import NormalizedFile, Run, TranscriptEntry
+from blizzard.runner.harness.json_value import JsonObject
 from tests import transcript_fixtures as fx
 
 # --- TranscriptEntry collapse — env/asst/tool ---
@@ -106,6 +107,21 @@ def test_ansi_escapes_are_stripped_from_text() -> None:
     result = NormalizedFile.of_lines([fx.ansi_text("hello")])
     assert result.turns[0].text == "hello"
     assert "\x1b" not in result.turns[0].text
+
+
+@pytest.mark.unit
+def test_a_null_text_block_reads_as_absent_not_the_string_none() -> None:
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": None}, {"type": "text", "text": "hi"}],
+            },
+        }
+    )
+    result = NormalizedFile.of_lines([line])
+    assert [t.text for t in result.turns] == ["hi"]
 
 
 @pytest.mark.unit
@@ -507,7 +523,7 @@ def test_threading_stays_fast_under_duplicate_uuid_values() -> None:
     # 40,000 records — the quadratic implementation measured 29.4s here, so the 5s
     # threshold carries ~6x headroom against a reintroduced quadratic walk.
     n = 40_000
-    records: list[dict[str, object]] = [
+    records: list[JsonObject] = [
         {"type": "user", "uuid": "dup", "parentUuid": "orphan", "isSidechain": True},
     ]
     for i in range(n):

@@ -30,6 +30,7 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
@@ -165,7 +166,7 @@ class _PendingOpenCodeIdentity:
             if not line:
                 continue
             try:
-                decoded = json.loads(line.decode("utf-8"))
+                decoded = decode_json(line.decode("utf-8"))
                 return parse_run_event(decoded)
             except (UnicodeDecodeError, ValueError, OpenCodeShapeError):
                 continue
@@ -186,11 +187,11 @@ class _UsageStep:
     model_id: str | None
 
 
-def _instants_of(decoded: dict) -> list[int]:
+def _instants_of(decoded: JsonObject) -> list[int]:
     """Every epoch-ms instant one decoded line shows, for closing an unended task's window."""
     found: list[int] = []
 
-    def take(container: object, *keys: str) -> None:
+    def take(container: JsonValue, *keys: str) -> None:
         if isinstance(container, dict):
             for key in keys:
                 value = container.get(key)
@@ -571,7 +572,10 @@ class OpenCodeAdapter:
             if not overrides:
                 return env
             content = env.get("OPENCODE_CONFIG_CONTENT")
-            document = merge_overrides(json.loads(content) if content else {}, overrides)
+            base = decode_json(content) if content else {}
+            if not isinstance(base, dict):
+                raise json.JSONDecodeError("OPENCODE_CONFIG_CONTENT is not a JSON object", content or "", 0)
+            document = merge_overrides(base, overrides)
             composed = {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
             remaining = residual_asks(resolver.resolve(cwd=cwd, env=self._worker_env.worker(composed)).agent_rulesets)
         except (OpenCodePermissionResolveError, json.JSONDecodeError) as exc:
@@ -601,7 +605,7 @@ class OpenCodeAdapter:
             if not stripped:
                 continue
             try:
-                decoded = json.loads(stripped)
+                decoded = decode_json(stripped)
                 events.append(parse_run_event(decoded))
             except (json.JSONDecodeError, OpenCodeShapeError):
                 continue
@@ -816,7 +820,7 @@ class OpenCodeAdapter:
 
     @staticmethod
     def _bounded_tasks(parts: Iterable[OpenCodePart], start_ms: int | None, end_ms: int | None) -> list[OpenCodePart]:
-        bounded = []
+        bounded: list[OpenCodePart] = []
         for part in parts:
             started = part.started_at_ms()
             if start_ms is not None and (started is None or started < start_ms):
@@ -829,11 +833,11 @@ class OpenCodeAdapter:
     @staticmethod
     def _horizon_of(events: Sequence[OpenCodeRunEvent]) -> int | None:
         """The latest event timestamp, epoch ms."""
-        stamps = [
-            event.raw["timestamp"]
-            for event in events
-            if isinstance(event.raw.get("timestamp"), int) and not isinstance(event.raw.get("timestamp"), bool)
-        ]
+        stamps: list[int] = []
+        for event in events:
+            stamp = event.raw.get("timestamp")
+            if isinstance(stamp, int) and not isinstance(stamp, bool):
+                stamps.append(stamp)
         return max(stamps) if stamps else None
 
     def _estimate_unbilled(self, steps: Sequence[_UsageStep], model: str | None) -> float | None:
@@ -856,21 +860,21 @@ class OpenCodeAdapter:
         return total
 
     @staticmethod
-    def _decode_line(line: str) -> dict | None:
+    def _decode_line(line: str) -> JsonObject | None:
         """One transcript line, JSON-decoded if it is a well-formed object — shared by every
         per-line reader below so one line is decoded at most once per pass over ``lines``."""
         stripped = line.strip()
         if not stripped:
             return None
         try:
-            decoded = json.loads(stripped)
+            decoded = decode_json(stripped)
         except json.JSONDecodeError:
             return None
         return decoded if isinstance(decoded, dict) else None
 
     @staticmethod
     def _parts_and_model_from_decoded(
-        decoded: dict,
+        decoded: JsonObject,
     ) -> tuple[list[tuple[OpenCodePart, str | None, str | None]], tuple[str, str] | None]:
         """One decoded transcript line's completed-step parts with the ``(provider, model)``
         its shape carries, and the line's own observed ``(provider, model)`` independent of
@@ -965,7 +969,7 @@ class OpenCodeAdapter:
         )
 
     @classmethod
-    def _task_parts_of_decoded(cls, decoded: dict) -> list[OpenCodePart]:
+    def _task_parts_of_decoded(cls, decoded: JsonObject) -> list[OpenCodePart]:
         """The ``task`` tool parts one decoded line carries; an unparseable line carries none."""
         try:
             event = parse_run_event(decoded)

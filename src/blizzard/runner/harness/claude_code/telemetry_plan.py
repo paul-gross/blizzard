@@ -7,7 +7,6 @@ answers both through the seam. Name rules: ``src/blizzard/runner/harness/claude_
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.claude_code.telemetry import RUNNER_OWNED_NAMES, operator_configured
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.telemetry_signals import TelemetrySignal, signal_exportable
 from blizzard.runner.process.child_env import AllowlistedEnv
 
@@ -81,7 +81,7 @@ def _settings_env(path: str | None) -> dict[str, str]:
     if not path:
         return {}
     try:
-        document = json.loads(Path(path).read_text())
+        document = decode_json(Path(path).read_text())
     except (OSError, ValueError):
         return {}
     env = document.get("env") if isinstance(document, dict) else None

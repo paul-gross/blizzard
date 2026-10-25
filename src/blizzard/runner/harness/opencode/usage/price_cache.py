@@ -7,7 +7,6 @@ caller of :class:`IOpenCodePriceCatalog`."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 
 _log = get_logger("blizzard.runner.harness")
 
@@ -136,15 +136,15 @@ class FileOpenCodePriceCatalog:
             )
         return price
 
-    def _read_document(self) -> dict[str, object] | None:
+    def _read_document(self) -> JsonObject | None:
         try:
             raw = self._path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             _log.warning("opencode price cache is unreadable", path=str(self._path), detail=str(exc))
             return None
         try:
-            decoded = json.loads(raw)
-        except (json.JSONDecodeError, RecursionError) as exc:
+            decoded = decode_json(raw)
+        except (ValueError, RecursionError) as exc:
             _log.warning("opencode price cache is malformed", path=str(self._path), detail=str(exc))
             return None
         if not isinstance(decoded, dict):
@@ -168,7 +168,7 @@ def resolve_price_cache_path(env: Mapping[str, str]) -> Path | None:
     return Path(home) / ".cache" / "opencode" / "models.json"
 
 
-def _parse_price(cost: object) -> OpenCodeModelPrice | None:
+def _parse_price(cost: JsonValue) -> OpenCodeModelPrice | None:
     if not isinstance(cost, dict):
         return None
     base = _parse_rate(cost)
@@ -187,7 +187,7 @@ def _parse_price(cost: object) -> OpenCodeModelPrice | None:
     return OpenCodeModelPrice(base=base, context_over_200k=context_over_200k, tiers=tiers)
 
 
-def _parse_rate(rate: Mapping[str, object]) -> OpenCodeRate | None:
+def _parse_rate(rate: Mapping[str, JsonValue]) -> OpenCodeRate | None:
     input_rate = _parse_number(rate.get("input"))
     output_rate = _parse_number(rate.get("output"))
     if input_rate is None or output_rate is None:
@@ -200,7 +200,7 @@ def _parse_rate(rate: Mapping[str, object]) -> OpenCodeRate | None:
     )
 
 
-def _parse_tier(entry: Mapping[str, object]) -> OpenCodeContextTier | None:
+def _parse_tier(entry: Mapping[str, JsonValue]) -> OpenCodeContextTier | None:
     tier = entry.get("tier")
     if not isinstance(tier, dict) or tier.get("type") != _CONTEXT_TIER_TYPE:
         return None
@@ -211,7 +211,7 @@ def _parse_tier(entry: Mapping[str, object]) -> OpenCodeContextTier | None:
     return OpenCodeContextTier(size=size, rate=rate)
 
 
-def _parse_number(value: object) -> float | None:
+def _parse_number(value: JsonValue) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)

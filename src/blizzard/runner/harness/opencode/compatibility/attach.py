@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import http.client
-import json
 import threading
 import time
 from collections.abc import Callable
@@ -15,6 +14,7 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from blizzard.foundation.roles import adapter_model
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode.compatibility.loopback import (
     ILoopbackTransport,
     LoopbackRequest,
@@ -433,7 +433,7 @@ class OpenCodeAttachProxy:
 
     def _session_shape(self, body: bytes) -> tuple[bool, bool]:
         try:
-            payload = json.loads(body)
+            payload = decode_json(body)
         except (UnicodeDecodeError, ValueError):
             return False, False
         if not isinstance(payload, dict):

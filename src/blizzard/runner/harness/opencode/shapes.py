@@ -12,9 +12,10 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 
 OpenCodeEventType = Literal[
     "step_start", "text", "reasoning", "tool_use", "step_finish", "error", "permission", "compaction"
@@ -50,26 +51,26 @@ class UnknownOpenCodeShapeError(OpenCodeShapeError):
     """OpenCode emitted a discriminator this pinned parser does not know."""
 
 
-def _object(value: object, where: str) -> dict[str, Any]:
+def _object(value: JsonValue, where: str) -> JsonObject:
     if not isinstance(value, dict):
         raise OpenCodeShapeError(f"{where} must be an object, got {type(value).__name__}")
     return value
 
 
-def _required(value: Mapping[str, Any], key: str, where: str) -> object:
+def _required(value: Mapping[str, JsonValue], key: str, where: str) -> JsonValue:
     if key not in value:
         raise OpenCodeShapeError(f"{where} is missing required field {key!r}")
     return value[key]
 
 
-def _string(value: Mapping[str, Any], key: str, where: str) -> str:
+def _string(value: Mapping[str, JsonValue], key: str, where: str) -> str:
     raw = _required(value, key, where)
     if not isinstance(raw, str) or not raw:
         raise OpenCodeShapeError(f"{where}.{key} must be a non-empty string")
     return raw
 
 
-def _optional_string(value: Mapping[str, Any], key: str, where: str, *, allow_empty: bool = False) -> str | None:
+def _optional_string(value: Mapping[str, JsonValue], key: str, where: str, *, allow_empty: bool = False) -> str | None:
     if key not in value or value[key] is None:
         return None
     raw = value[key]
@@ -79,21 +80,21 @@ def _optional_string(value: Mapping[str, Any], key: str, where: str, *, allow_em
     return raw
 
 
-def _integer(value: Mapping[str, Any], key: str, where: str) -> int:
+def _integer(value: Mapping[str, JsonValue], key: str, where: str) -> int:
     raw = _required(value, key, where)
     if not isinstance(raw, int) or isinstance(raw, bool) or raw < 0:
         raise OpenCodeShapeError(f"{where}.{key} must be a non-negative integer")
     return raw
 
 
-def _number(value: Mapping[str, Any], key: str, where: str) -> float:
+def _number(value: Mapping[str, JsonValue], key: str, where: str) -> float:
     raw = _required(value, key, where)
     if not isinstance(raw, int | float) or isinstance(raw, bool) or raw < 0 or not math.isfinite(float(raw)):
         raise OpenCodeShapeError(f"{where}.{key} must be a non-negative number")
     return float(raw)
 
 
-def _optional_number(value: Mapping[str, Any], key: str, where: str) -> float | None:
+def _optional_number(value: Mapping[str, JsonValue], key: str, where: str) -> float | None:
     if key not in value or value[key] is None:
         return None
     raw = value[key]
@@ -102,14 +103,14 @@ def _optional_number(value: Mapping[str, Any], key: str, where: str) -> float | 
     return float(raw)
 
 
-def _list(value: Mapping[str, Any], key: str, where: str) -> list[object]:
+def _list(value: Mapping[str, JsonValue], key: str, where: str) -> list[JsonValue]:
     raw = _required(value, key, where)
     if not isinstance(raw, list):
         raise OpenCodeShapeError(f"{where}.{key} must be an array")
     return raw
 
 
-def _epoch_ms(container: object, key: str) -> int | None:
+def _epoch_ms(container: JsonValue, key: str) -> int | None:
     """``container[key]`` as epoch ms, or ``None`` when absent or not a number — never a parse failure."""
     if not isinstance(container, Mapping):
         return None
@@ -131,7 +132,7 @@ class OpenCodeTokenUsage:
     cache_write_tokens: int
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "tokens") -> OpenCodeTokenUsage:
+    def parse(cls, value: JsonValue, *, where: str = "tokens") -> OpenCodeTokenUsage:
         tokens = _object(value, where)
         cache = _object(_required(tokens, "cache", where), f"{where}.cache")
         return cls(
@@ -143,7 +144,7 @@ class OpenCodeTokenUsage:
         )
 
 
-def _child_session_id(metadata: object) -> str | None:
+def _child_session_id(metadata: JsonValue) -> str | None:
     if not isinstance(metadata, Mapping):
         return None
     for key in ("sessionId", "sessionID"):
@@ -159,7 +160,7 @@ class OpenCodeToolState:
     """A pending, running, completed, or failed tool invocation state."""
 
     status: OpenCodeToolStatus
-    input: Mapping[str, Any]
+    input: Mapping[str, JsonValue]
     output: str | None
     error: str | None
     title: str | None
@@ -169,7 +170,7 @@ class OpenCodeToolState:
     child_session_id: str | None = None
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "tool.state") -> OpenCodeToolState:
+    def parse(cls, value: JsonValue, *, where: str = "tool.state") -> OpenCodeToolState:
         state = _object(value, where)
         raw_status = _string(state, "status", where)
         if raw_status not in KNOWN_TOOL_STATUSES:
@@ -213,7 +214,7 @@ class OpenCodePart:
     tokens: OpenCodeTokenUsage | None
     cost: float | None
     tail_start_id: str | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     def started_at_ms(self) -> int | None:
         """A tool part's ``state.time.start``, else the part's own ``time.start``; ``None`` when absent."""
@@ -222,7 +223,7 @@ class OpenCodePart:
         return _epoch_ms(self.raw.get("time"), "start")
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "part") -> OpenCodePart:
+    def parse(cls, value: JsonValue, *, where: str = "part") -> OpenCodePart:
         part = _object(value, where)
         part_id = _string(part, "id", where)
         session_id = _string(part, "sessionID", where)
@@ -280,10 +281,10 @@ class OpenCodeError:
     name: str
     message: str
     status_code: int | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "error") -> OpenCodeError:
+    def parse(cls, value: JsonValue, *, where: str = "error") -> OpenCodeError:
         error = _object(value, where)
         name = _string(error, "name", where)
         data = _object(_required(error, "data", where), f"{where}.data")
@@ -305,10 +306,10 @@ class OpenCodePermissionRequest:
     id: str
     permission: str
     patterns: tuple[str, ...]
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "permission") -> OpenCodePermissionRequest:
+    def parse(cls, value: JsonValue, *, where: str = "permission") -> OpenCodePermissionRequest:
         permission = _object(value, where)
         permission_id = _string(permission, "id", where)
         name = _string(permission, "permission", where)
@@ -341,10 +342,10 @@ class OpenCodeRunEvent:
     part: OpenCodePart | None
     error: OpenCodeError | None
     permission: OpenCodePermissionRequest | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "event") -> OpenCodeRunEvent:
+    def parse(cls, value: JsonValue, *, where: str = "event") -> OpenCodeRunEvent:
         event = _object(value, where)
         raw_type = _string(event, "type", where)
         if raw_type not in KNOWN_EVENT_TYPES:
@@ -372,13 +373,13 @@ class OpenCodeRunEvent:
         return cls(event_type, session_id, part, error, permission, event)
 
 
-def parse_run_event(value: object) -> OpenCodeRunEvent:
+def parse_run_event(value: JsonValue) -> OpenCodeRunEvent:
     """Parse one JSON event, rejecting unknown required event kinds explicitly."""
 
     return OpenCodeRunEvent.parse(value)
 
 
-def parse_run_events(value: object) -> tuple[OpenCodeRunEvent, ...]:
+def parse_run_events(value: JsonValue) -> tuple[OpenCodeRunEvent, ...]:
     """Parse an array of JSON event objects in emitted order."""
 
     if not isinstance(value, list):
@@ -394,7 +395,7 @@ def parse_run_jsonl(value: str) -> tuple[OpenCodeRunEvent, ...]:
         if not line.strip():
             continue
         try:
-            decoded = json.loads(line)
+            decoded = decode_json(line)
         except json.JSONDecodeError as exc:
             raise OpenCodeShapeError(f"event line {index} is not JSON: {exc.msg}") from exc
         events.append(OpenCodeRunEvent.parse(decoded, where=f"event line {index}"))
@@ -411,10 +412,10 @@ class OpenCodeSessionInfo:
     directory: str | None
     title: str | None
     project_id: str | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "info") -> OpenCodeSessionInfo:
+    def parse(cls, value: JsonValue, *, where: str = "info") -> OpenCodeSessionInfo:
         info = _object(value, where)
         return cls(
             id=_string(info, "id", where),
@@ -440,7 +441,7 @@ class OpenCodeMessageInfo:
     variant: str | None
     tokens: OpenCodeTokenUsage | None
     cost: float | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @property
     def created_at_ms(self) -> int | None:
@@ -448,7 +449,7 @@ class OpenCodeMessageInfo:
         return _epoch_ms(self.raw.get("time"), "created")
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "message.info") -> OpenCodeMessageInfo:
+    def parse(cls, value: JsonValue, *, where: str = "message.info") -> OpenCodeMessageInfo:
         info = _object(value, where)
         message_id = _string(info, "id", where)
         session_id = _string(info, "sessionID", where)
@@ -480,10 +481,10 @@ class OpenCodeMessage:
 
     info: OpenCodeMessageInfo
     parts: tuple[OpenCodePart, ...]
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "message") -> OpenCodeMessage:
+    def parse(cls, value: JsonValue, *, where: str = "message") -> OpenCodeMessage:
         message = _object(value, where)
         info = OpenCodeMessageInfo.parse(_required(message, "info", where), where=f"{where}.info")
         parts_raw = _list(message, "parts", where)
@@ -506,10 +507,10 @@ class OpenCodeSessionExport:
 
     info: OpenCodeSessionInfo
     messages: tuple[OpenCodeMessage, ...]
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "export") -> OpenCodeSessionExport:
+    def parse(cls, value: JsonValue, *, where: str = "export") -> OpenCodeSessionExport:
         export = _object(value, where)
         info = OpenCodeSessionInfo.parse(_required(export, "info", where), where=f"{where}.info")
         messages_raw = _list(export, "messages", where)
@@ -528,7 +529,7 @@ class OpenCodeSessionExport:
         return cls(info=info, messages=messages, raw=export)
 
 
-def parse_session_export(value: object) -> OpenCodeSessionExport:
+def parse_session_export(value: JsonValue) -> OpenCodeSessionExport:
     """Parse an OpenCode export and all of its message parts."""
 
     return OpenCodeSessionExport.parse(value)
@@ -544,20 +545,20 @@ class OpenCodeChildSession:
     directory: str | None
     title: str | None
     project_id: str | None
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "child") -> OpenCodeChildSession:
+    def parse(cls, value: JsonValue, *, where: str = "child") -> OpenCodeChildSession:
         info = OpenCodeSessionInfo.parse(value, where=where)
         if info.parent_id is None:
             raise OpenCodeShapeError(f"{where}.parentID is required for a child session")
         return cls(info.id, info.parent_id, info.directory, info.title, info.project_id, info.raw)
 
 
-def parse_child_sessions(value: object) -> tuple[OpenCodeChildSession, ...]:
+def parse_child_sessions(value: JsonValue) -> tuple[OpenCodeChildSession, ...]:
     """Parse the documented child-session array (or its named response wrapper)."""
 
-    raw_children: object = _required(value, "children", "children response") if isinstance(value, dict) else value
+    raw_children: JsonValue = _required(value, "children", "children response") if isinstance(value, dict) else value
     if not isinstance(raw_children, list):
         raise OpenCodeShapeError(f"children must be an array, got {type(raw_children).__name__}")
     return tuple(
@@ -575,7 +576,7 @@ class OpenCodeModelReference:
     variant: str | None
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "model") -> OpenCodeModelReference:
+    def parse(cls, value: JsonValue, *, where: str = "model") -> OpenCodeModelReference:
         if isinstance(value, str):
             raw = value
             variant = None
@@ -602,7 +603,7 @@ def _validate_model_component(value: str, where: str) -> None:
         raise OpenCodeShapeError(f"{where} must use the exact provider/model form")
 
 
-def parse_model_reference(value: object) -> OpenCodeModelReference:
+def parse_model_reference(value: JsonValue) -> OpenCodeModelReference:
     """Parse either ``provider/model`` or the explicit provider/model/variant object."""
 
     return OpenCodeModelReference.parse(value)
@@ -615,10 +616,10 @@ class OpenCodeWorkerConfig:
 
     permissions: Mapping[str, str | Mapping[str, str]]
     plugins: tuple[str, ...]
-    raw: Mapping[str, Any]
+    raw: Mapping[str, JsonValue]
 
     @classmethod
-    def parse(cls, value: object, *, where: str = "config") -> OpenCodeWorkerConfig:
+    def parse(cls, value: JsonValue, *, where: str = "config") -> OpenCodeWorkerConfig:
         config = _object(value, where)
         permission_raw = _object(_required(config, "permission", where), f"{where}.permission")
         permissions: dict[str, str | Mapping[str, str]] = {}
@@ -654,7 +655,7 @@ class OpenCodeWorkerConfig:
         return cls(permissions=permissions, plugins=tuple(plugins), raw=config)
 
 
-def parse_worker_config(value: object) -> OpenCodeWorkerConfig:
+def parse_worker_config(value: JsonValue) -> OpenCodeWorkerConfig:
     """Parse the runner-owned permission/plugin configuration shape."""
 
     return OpenCodeWorkerConfig.parse(value)
@@ -673,7 +674,7 @@ class OpenCodePermissionRule:
 _AGENT_LIST_HEADER = re.compile(r"^(\S+) \((?:primary|subagent|all)\)$", re.MULTILINE)
 
 
-def parse_permission_ruleset(value: object, *, where: str = "ruleset") -> tuple[OpenCodePermissionRule, ...]:
+def parse_permission_ruleset(value: JsonValue, *, where: str = "ruleset") -> tuple[OpenCodePermissionRule, ...]:
     """Parse one agent's ordered resolved ruleset (the later rule wins)."""
 
     if not isinstance(value, list):
@@ -706,18 +707,18 @@ def parse_agent_rulesets(text: str) -> dict[str, tuple[OpenCodePermissionRule, .
         end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
         name = header.group(1)
         try:
-            body = json.loads(text[header.end() : end])
+            body = decode_json(text[header.end() : end])
         except json.JSONDecodeError as exc:
             raise OpenCodeShapeError(f"agent list ruleset for {name!r} is not JSON: {exc.msg}") from exc
         rulesets[name] = parse_permission_ruleset(body, where=f"agent {name!r} ruleset")
     return rulesets
 
 
-def parse_resolved_config(text: str) -> dict[str, Any]:
+def parse_resolved_config(text: str) -> JsonObject:
     """Parse ``opencode debug config`` stdout: the merged configuration object."""
 
     try:
-        return _object(json.loads(text), "debug config")
+        return _object(decode_json(text), "debug config")
     except json.JSONDecodeError as exc:
         raise OpenCodeShapeError(f"debug config is not JSON: {exc.msg}") from exc
 

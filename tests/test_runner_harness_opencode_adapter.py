@@ -21,6 +21,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle, WorkerIdentityError, WorkerPreamble
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
@@ -32,6 +33,8 @@ from blizzard.runner.harness.opencode.adapter import (
 )
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
+from blizzard.runner.harness.opencode.permissions.permission_resolver import OpenCodeEffectivePermissions
+from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.opencode.usage.price_cache import (
     FileOpenCodePriceCatalog,
     IOpenCodePriceCatalog,
@@ -498,6 +501,21 @@ def test_spawn_without_a_stdout_path_raises(spawn_executor: Executor) -> None:
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
     with pytest.raises(HarnessSpawnError):
         adapter.spawn(envelope, _preamble("/ws/e1"), session_hint="hint")
+
+
+class _AskingResolver:
+    def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+        return OpenCodeEffectivePermissions(
+            merged_config={}, agent_rulesets={"build": (OpenCodePermissionRule("bash", "*", "ask"),)}
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("content", ["[]", '"text"', "3", "null"])
+def test_non_object_config_content_fails_the_launch_as_a_spawn_error(spawn_executor: Executor, content: str) -> None:
+    adapter = _adapter(spawn_executor, autonomy=Autonomy.Normal, permission_resolver=_AskingResolver())
+    with pytest.raises(HarnessSpawnError, match="cannot establish"):
+        adapter._deny_unanswerable_asks("/ws/e1", {"OPENCODE_CONFIG_CONTENT": content})
 
 
 # --------------------------------------------------------------------------- #

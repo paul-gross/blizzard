@@ -18,6 +18,7 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import (
     _compose,
@@ -25,6 +26,7 @@ from blizzard.runner.harness.opencode.bundle import (
     _merge_plugins,
     _plugins,
     ambient_plugin_sources,
+    check_ambient_plugins,
     content_with_snapshot_references,
     plugin_identity,
 )
@@ -199,7 +201,8 @@ def test_merge_plugins_blames_the_incoming_path(tmp_path: Path) -> None:
 
 def test_plugins_errors_carry_the_source_path(tmp_path: Path) -> None:
     source = tmp_path / "opencode.json"
-    for bad in ("x", [""], [1]):
+    bad_plugins: tuple[JsonValue, ...] = ("x", [""], [1])
+    for bad in bad_plugins:
         with pytest.raises(HarnessBundleError, match="plugin must be an array of non-empty strings") as raised:
             _plugins({"plugin": bad}, source)
         assert raised.value.path == source
@@ -277,6 +280,29 @@ def test_content_resolves_references_nested_in_lists(tmp_path: Path) -> None:
             [f"{{file:{(tmp_path / 'b.txt').resolve()}}}", "plain", 3],
         ]
     }
+
+
+@pytest.mark.parametrize("native", [[], "text", 3, None])
+def test_compose_fails_a_non_object_native_config_as_invalid_json_does(tmp_path: Path, native: object) -> None:
+    worker = _worker(tmp_path, _WORKER)
+    composition = _composition(tmp_path, None)
+    (composition.source_dir / "opencode.json").write_text(json.dumps(native))
+    with pytest.raises(json.JSONDecodeError):
+        _compose(composition, worker)
+    (composition.source_dir / "opencode.json").write_text("{not json")
+    with pytest.raises(json.JSONDecodeError):
+        _compose(composition, worker)
+
+
+@pytest.mark.parametrize("document", [[], "text", 3, None])
+def test_check_ambient_plugins_fails_a_non_object_effective_config_as_invalid_json_does(
+    tmp_path: Path, document: object
+) -> None:
+    effective = tmp_path / "effective"
+    effective.mkdir()
+    (effective / "opencode.json").write_text(json.dumps(document))
+    with pytest.raises(json.JSONDecodeError):
+        check_ambient_plugins(effective, tmp_path, {})
 
 
 def _composition(tmp_path: Path, native: object | None) -> HarnessComposition:

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping
-from typing import Any
 
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.json_value import JsonObject, JsonValue
 
 #: Claude Code's own vocabulary for each runner-wide autonomy value (`--permission-mode`).
 PERMISSION_MODES = {
@@ -41,12 +41,12 @@ def resolved_permission_mode(autonomy: Autonomy, override: str | None) -> str | 
 
 
 def compose_settings(
-    operator: Mapping[str, Any], runner: Mapping[str, Any], *, permission_mode: str | None
-) -> dict[str, Any]:
+    operator: Mapping[str, JsonValue], runner: Mapping[str, JsonValue], *, permission_mode: str | None
+) -> JsonObject:
     """The operator's document with the runner's wiring added; raises :class:`SettingsCollision`."""
-    composed: dict[str, Any] = copy.deepcopy(dict(operator))
+    composed: JsonObject = copy.deepcopy(dict(operator))
     runner_hooks = _object(runner.get("hooks"), "hooks")
-    runner_deny = _rules(runner.get("permissions", {}).get("deny"), "permissions.deny")
+    runner_deny = _rules(_object(runner.get("permissions", {}), "permissions").get("deny"), "permissions.deny")
     _check_flags(composed, permission_mode)
     permissions = _object(composed.get("permissions", {}), "permissions")
     rules = {name: _rules(permissions.get(name, []), f"permissions.{name}") for name in _RULE_LISTS}
@@ -61,7 +61,7 @@ def compose_settings(
     return composed
 
 
-def _check_flags(operator: Mapping[str, Any], permission_mode: str | None) -> None:
+def _check_flags(operator: Mapping[str, JsonValue], permission_mode: str | None) -> None:
     if operator.get("disableAllHooks") is True:
         raise SettingsCollision("disableAllHooks", "would silence the runner's heartbeat and session-end hooks")
     permissions = operator.get("permissions")
@@ -75,11 +75,11 @@ def _check_flags(operator: Mapping[str, Any], permission_mode: str | None) -> No
         )
 
 
-def _merge_hooks(operator: dict[str, Any], runner: Mapping[str, Any]) -> dict[str, Any]:
+def _merge_hooks(operator: JsonObject, runner: Mapping[str, JsonValue]) -> JsonObject:
     merged = dict(operator)
     for event, runner_groups in runner.items():
         groups = _list(merged.get(event, []), f"hooks.{event}")
-        merged[event] = [*groups, *runner_groups]
+        merged[event] = [*groups, *_list(runner_groups, f"hooks.{event}")]
     return merged
 
 
@@ -87,21 +87,22 @@ def _tool_name(rule: str) -> str:
     return rule.split("(", 1)[0].strip()
 
 
-def _object(value: Any, path: str) -> dict[str, Any]:
+def _object(value: JsonValue, path: str) -> JsonObject:
     if not isinstance(value, dict):
         raise SettingsCollision(path, "must be a JSON object")
     return value
 
 
-def _list(value: Any, path: str) -> list[Any]:
+def _list(value: JsonValue, path: str) -> list[JsonValue]:
     if not isinstance(value, list):
         raise SettingsCollision(path, "must be a JSON array")
     return value
 
 
-def _rules(value: Any, path: str) -> list[str]:
-    rules = _list(value, path)
-    for index, rule in enumerate(rules):
+def _rules(value: JsonValue, path: str) -> list[str]:
+    rules: list[str] = []
+    for index, rule in enumerate(_list(value, path)):
         if not isinstance(rule, str):
             raise SettingsCollision(f"{path}[{index}]", "must be a string")
+        rules.append(rule)
     return rules

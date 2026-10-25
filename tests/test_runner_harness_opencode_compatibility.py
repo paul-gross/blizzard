@@ -36,6 +36,7 @@ from blizzard.runner.harness.compatibility import (
     classify_observation,
 )
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.attach import (
     OpenCodeAttachProxy,
@@ -292,7 +293,7 @@ def test_manifest_retains_sanitized_live_diagnostic_summary() -> None:
 
 def test_permission_denial_ignores_nonterminal_part_updates_but_rejects_two_terminal_denials() -> None:
     def event(status: str, *, part_id: str = "prt_permission", error: str | None = None) -> OpenCodeRunEvent:
-        state: dict[str, object] = {"status": status, "input": {"command": "printf permission-probe"}}
+        state: JsonObject = {"status": status, "input": {"command": "printf permission-probe"}}
         if status == "pending":
             state["raw"] = "printf permission-probe"
         elif status == "running":
@@ -730,7 +731,7 @@ def test_cursor_rejects_malformed_or_versionless_tokens() -> None:
 
 
 def test_sanitizer_redacts_known_keys_and_embedded_credentials_without_mutating_input() -> None:
-    raw: dict[str, object] = {
+    raw: JsonObject = {
         "authorization": "Bearer provider-secret",
         "accessToken": "access-secret",
         "nested": {"OPENCODE_API_KEY": "key-secret", "tokens": {"input": 3}},
