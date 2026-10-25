@@ -193,5 +193,15 @@
     "case": "fragment",
     "input": "https://forge.example/api#top",
     "refused": "needs-cleaning"
+  },
+  {
+    "case": "backslash in host",
+    "input": "https://host\\path",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "ipv6 zone id",
+    "input": "https://[fe80::1%25eth0]/",
+    "refused": "not-an-origin"
   }
 ]

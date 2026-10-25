@@ -39,6 +39,7 @@ class OriginRefused(ValueError):
 
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
 _SCHEME = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*)://(.*)", re.DOTALL)
+_HOST_CHARS = re.compile(r"[a-z0-9._-]+")
 _PERCENT_ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
@@ -81,6 +82,8 @@ def _host_and_port(authority: str) -> tuple[str, str]:
         if end < 0:
             raise OriginRefused(OriginRefusal.NOT_AN_ORIGIN, "its IPv6 literal is not closed")
         literal, tail = authority[1:end], authority[end + 1 :]
+        if "%" in literal:
+            raise OriginRefused(OriginRefusal.NOT_AN_ORIGIN, "its IPv6 literal carries a percent-escape or zone")
         try:
             ipaddress.IPv6Address(literal)
         except ValueError:
@@ -100,6 +103,8 @@ def _host_and_port(authority: str) -> tuple[str, str]:
         host = host.encode("idna").decode("ascii")
     except UnicodeError:
         raise OriginRefused(OriginRefusal.NOT_AN_ORIGIN, f"{host} is not a valid host name") from None
+    if not _HOST_CHARS.fullmatch(host):
+        raise OriginRefused(OriginRefusal.NOT_AN_ORIGIN, f"{host} is not a valid host name")
     return host, _port(port)
 
 

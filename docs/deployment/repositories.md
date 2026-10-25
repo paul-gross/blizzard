@@ -111,7 +111,7 @@ blizzard hub config check-forges --dir /path/to/hub
 ```
 
 It exits 0 when nothing is named, or when the store is already carried over, and 1 when it names any record, so a deploy
-script can gate on it. The hub's startup log carries the same finding as one warning per case,
+script can gate on it. The hub's startup log carries the same finding as one warning per refusal,
 `forge migration would refuse records`, naming the tenant, the case, and the slugs; it never stops the hub starting.
 
 ## How delivery uses a record
