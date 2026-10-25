@@ -1,0 +1,197 @@
+[
+  {
+    "case": "plain https",
+    "input": "https://api.github.com",
+    "origin": "https://api.github.com"
+  },
+  {
+    "case": "uppercase scheme and host",
+    "input": "HTTPS://API.GitHub.com",
+    "origin": "https://api.github.com"
+  },
+  {
+    "case": "default https port",
+    "input": "https://API.GitHub.com:443/",
+    "origin": "https://api.github.com"
+  },
+  {
+    "case": "default http port",
+    "input": "http://forge.example:80",
+    "origin": "http://forge.example"
+  },
+  {
+    "case": "empty port",
+    "input": "https://forge.example:",
+    "origin": "https://forge.example"
+  },
+  {
+    "case": "kept port",
+    "input": "http://127.0.0.1:8123/",
+    "origin": "http://127.0.0.1:8123"
+  },
+  {
+    "case": "other scheme's default port is kept",
+    "input": "http://forge.example:443",
+    "origin": "http://forge.example:443"
+  },
+  {
+    "case": "trailing dot",
+    "input": "https://api.github.com.",
+    "origin": "https://api.github.com"
+  },
+  {
+    "case": "idna host",
+    "input": "https://bücher.example/api",
+    "origin": "https://xn--bcher-kva.example/api"
+  },
+  {
+    "case": "idna host uppercase",
+    "input": "https://BÜCHER.example",
+    "origin": "https://xn--bcher-kva.example"
+  },
+  {
+    "case": "ipv6 literal",
+    "input": "https://[2001:DB8::1]:8443/api/v3/",
+    "origin": "https://[2001:db8::1]:8443/api/v3"
+  },
+  {
+    "case": "ipv6 literal default port",
+    "input": "http://[::1]:80",
+    "origin": "http://[::1]"
+  },
+  {
+    "case": "surrounding whitespace",
+    "input": "  https://forge.example/api/v3  ",
+    "origin": "https://forge.example/api/v3"
+  },
+  {
+    "case": "path case is kept",
+    "input": "https://ghe.acme.internal/API/v3",
+    "origin": "https://ghe.acme.internal/API/v3"
+  },
+  {
+    "case": "path case differs from lowercase",
+    "input": "https://ghe.acme.internal/api/v3",
+    "origin": "https://ghe.acme.internal/api/v3"
+  },
+  {
+    "case": "trailing slashes",
+    "input": "https://forge.example/api///",
+    "origin": "https://forge.example/api"
+  },
+  {
+    "case": "escape hex uppercased",
+    "input": "https://forge.example/a%2fb",
+    "origin": "https://forge.example/a%2Fb"
+  },
+  {
+    "case": "escape of unreserved decoded",
+    "input": "https://forge.example/%61pi%7E",
+    "origin": "https://forge.example/api~"
+  },
+  {
+    "case": "empty path stays empty",
+    "input": "https://forge.example/",
+    "origin": "https://forge.example"
+  },
+  {
+    "case": "whitespace inside",
+    "input": "https://forge .example",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "no scheme",
+    "input": "ghe.acme",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "no scheme with path",
+    "input": "ghe.acme/api/v3",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "scheme other than http",
+    "input": "ftp://forge.example",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "ssh scheme",
+    "input": "ssh://git@forge.example",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "no host",
+    "input": "https://",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "no host with path",
+    "input": "https:///api",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "only a dot for host",
+    "input": "https://./api",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "percent-escaped host",
+    "input": "https://for%67e.example",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "port not a number",
+    "input": "https://forge.example:http",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "port out of range",
+    "input": "https://forge.example:99999",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "unclosed ipv6 literal",
+    "input": "https://[::1",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "bad ipv6 literal",
+    "input": "https://[nope]",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "malformed escape in path",
+    "input": "https://forge.example/a%zz",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "empty string",
+    "input": "",
+    "refused": "not-an-origin"
+  },
+  {
+    "case": "user",
+    "input": "https://user@forge.example",
+    "refused": "needs-cleaning"
+  },
+  {
+    "case": "user and password",
+    "input": "https://user:pw@forge.example/api",
+    "refused": "needs-cleaning"
+  },
+  {
+    "case": "query",
+    "input": "https://forge.example/api?x=1",
+    "refused": "needs-cleaning"
+  },
+  {
+    "case": "query on bare origin",
+    "input": "https://forge.example?x=1",
+    "refused": "needs-cleaning"
+  },
+  {
+    "case": "fragment",
+    "input": "https://forge.example/api#top",
+    "refused": "needs-cleaning"
+  }
+]

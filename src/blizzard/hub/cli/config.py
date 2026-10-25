@@ -65,7 +65,7 @@ def _refusal(cli: CliContext, resp: Response) -> str:
 
 @click.group("config")
 def config_group() -> None:
-    """Operator verbs over configuration: changes, apply, export, import-legacy."""
+    """Operator verbs over configuration: changes, apply, export, import-legacy, check-forges."""
 
 
 @config_group.command("changes", cls=FleetCommand)
@@ -182,3 +182,52 @@ def config_import_legacy(directory: str, tenant: str | None) -> None:
     for outcome in result.outcomes:
         click.echo(f"{'created' if outcome.created else 'skipped':<8}  {outcome.kind.value} {outcome.key}")
     click.echo("imported the legacy configuration; remove its keys, then restart the hub")
+
+
+@config_group.command("check-forges")
+@click.option(
+    "--dir",
+    "directory",
+    default=".",
+    envvar="BZ_HUB_DIR",
+    help="Hub runtime directory (overrides $BZ_HUB_DIR).",
+)
+@click.option(
+    "--allow-external-db",
+    "allow_external_db",
+    is_flag=True,
+    default=False,
+    help="Proceed even if the config's db_url names a database outside this directory.",
+)
+def config_check_forges(directory: str, allow_external_db: bool) -> None:
+    """Name every record the forge migration would refuse — offline, read-only, while the hub serves.
+
+    Reads the store's address columns directly, so run it from the build you are about to install against the store
+    the current hub still serves. Exits 1 when it names any record, so a deploy script can gate on it."""
+    from blizzard.hub.app import check_forges
+    from blizzard.hub.config import ConfigError, HubConfig
+
+    try:
+        check = check_forges(
+            HubConfig.load(
+                Path(directory),
+                allow_external_db=allow_external_db,
+                flag_registry=packaged_flag_registry(),
+                strict=strict_config(),
+            )
+        )
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if check.carried_over:
+        click.echo("the store is already carried over to forges; nothing left to carry")
+        return
+    for tenant in check.tenants:
+        for refusal in tenant.refusals:
+            click.echo(
+                f"tenant {tenant.tenant_name} ({tenant.tenant_id})  {refusal.case.value}  "
+                f"{refusal.subject} {', '.join(refusal.slugs)}: {refusal.reason}"
+            )
+    if not check.refused:
+        click.echo("no record the forge migration would refuse")
+        return
+    raise SystemExit(1)

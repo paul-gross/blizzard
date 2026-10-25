@@ -244,6 +244,7 @@ also_copy = [
     "src/blizzard/wire/window.toml",
     "tests/daemon-env.json",
     "tests/fixtures/claude_code_telemetry",
+    "tests/fixtures/canonical_origin_cases.json",
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",
     "scripts/prose_density.py",

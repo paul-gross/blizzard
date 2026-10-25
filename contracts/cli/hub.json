@@ -2272,6 +2272,37 @@
           "path": "hub config changes",
           "short_help": "List configuration changes newest first \u2014 who changed which record, through which door, and what."
         },
+        "check-forges": {
+          "help": "Name every record the forge migration would refuse \u2014 offline, read-only, while the hub serves.\n\nReads the store's address columns directly, so run it from the build you are about to install against the store\nthe current hub still serves. Exits 1 when it names any record, so a deploy script can gate on it.",
+          "params": [
+            {
+              "help": "Hub runtime directory (overrides $BZ_HUB_DIR).",
+              "hidden": false,
+              "kind": "option",
+              "name": "directory",
+              "opts": [
+                "--dir"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Proceed even if the config's db_url names a database outside this directory.",
+              "hidden": false,
+              "kind": "option",
+              "name": "allow_external_db",
+              "opts": [
+                "--allow-external-db"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            }
+          ],
+          "path": "hub config check-forges",
+          "short_help": "Name every record the forge migration would refuse \u2014 offline, read-only, while the hub serves."
+        },
         "export": {
           "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it.",
           "params": [
@@ -2359,10 +2390,10 @@
           "short_help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host."
         }
       },
-      "help": "Operator verbs over configuration: changes, apply, export, import-legacy.",
+      "help": "Operator verbs over configuration: changes, apply, export, import-legacy, check-forges.",
       "params": [],
       "path": "hub config",
-      "short_help": "Operator verbs over configuration: changes, apply, export, import-legacy."
+      "short_help": "Operator verbs over configuration: changes, apply, export, import-legacy, check-forges."
     },
     "decision": {
       "commands": {
