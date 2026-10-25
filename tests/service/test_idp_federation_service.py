@@ -121,12 +121,15 @@ def _federated_runner(
     try:
         await_http(proc, client, "/api/health", log=log)
         # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
-        # daemon's first registration — the one that declares this federation identity.
-        with httpx2.Client(base_url=hub_url, timeout=15.0) as operator:
-            operator.get(f"/api/auth/{sign_in}/authorize", follow_redirects=True)
-            assert poll_until(lambda: operator.get(f"/api/runners/{runner_id}").json()["registered_at"] is not None), (
-                "the runner never registered at its hub"
+        # daemon's first registration — the one that declares this federation identity. The hub
+        # records that registration before the daemon has read the answer, so readiness is the
+        # daemon's own: its sign-in stops answering 503 once it holds the id.
+        assert poll_until(
+            lambda: (
+                client.get("/api/auth/login?return_to=/", follow_redirects=False).status_code
+                != httpx2.codes.SERVICE_UNAVAILABLE
             )
+        ), f"the runner never took up its hub-minted id {runner_id}"
         yield _FederatedRunner(client, CookieNames(runner_id))
     finally:
         client.close()
