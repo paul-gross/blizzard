@@ -18,7 +18,7 @@ import { CapabilityBadgeGroup } from './capability-badge-group';
 import { GateBadgeGroup } from './gate-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
-import { decliningLabels, runnerSeenLabel, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
+import { decliningLabels, runnerSeenLabel, runnerSeenTag, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 import { StatusLight } from './status-light';
@@ -66,6 +66,7 @@ export class FleetRunnerRow {
   readonly togglePause = output<RunnerRow>();
 
   protected readonly seenLabel = runnerSeenLabel;
+  protected readonly ageTag = runnerSeenTag;
   protected readonly toggleHint = runnerToggleHint;
 
   private readonly serves = viewChild.required<TemplateRef<unknown>>('serves');

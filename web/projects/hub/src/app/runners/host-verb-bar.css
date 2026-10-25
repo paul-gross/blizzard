@@ -1,7 +1,10 @@
 :host {
   display: block;
 }
+/* Sized to the chunk detail header's action targets, the board's reference for a button's size. */
 .verbs {
+  --kit-button-pad: 10px 14px;
+  --kit-button-fs: var(--fs-sm);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

@@ -17,10 +17,10 @@
       }
       @for (line of lines; track $index) {
         <li class="binding" data-testid="runner-binding" [attr.data-workspace-id]="line.workspaceId">
-          <fleet-kit-badge data-testid="runner-binding-project" variant="soft" tone="idle" [attr.data-project]="line.project">
-            {{ line.project }}
-          </fleet-kit-badge>
+          <span class="b-proj" data-testid="runner-binding-project" [attr.data-project]="line.project">{{ line.project }}</span>
+          <span class="b-sep" aria-hidden="true">·</span>
           <span class="b-ws" data-testid="runner-binding-workspace">{{ line.workspaceId }}</span>
+          <span class="b-sep" aria-hidden="true">·</span>
           <span class="b-agents" data-testid="runner-binding-agents">{{ line.agentsInUse }} working</span>
           @if (line.unreported) {
             <fleet-kit-badge

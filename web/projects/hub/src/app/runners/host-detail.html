@@ -1,12 +1,15 @@
 <div class="hd" data-testid="fleet-detail-title">
   <app-status-light class="dot" [light]="light()" />
-  <h2 class="name" data-testid="fleet-detail-name">{{ detail().card.hostName }}</h2>
+  <h2 class="name" data-testid="fleet-detail-name" [title]="detail().card.hostName">{{ detail().card.hostName }}</h2>
+  <span class="sep" aria-hidden="true">·</span>
   <span class="ref" data-testid="fleet-detail-ref" [title]="detail().card.hostId">{{ detail().ref }}</span>
+  <span class="sep" aria-hidden="true">·</span>
   <fleet-kit-badge class="state" data-testid="fleet-detail-state" variant="text" [tone]="state().tone">{{
     state().label
   }}</fleet-kit-badge>
   @if (reportText(); as text) {
-    <span class="report" data-testid="fleet-detail-report">{{ text }}</span>
+    <span class="sep" aria-hidden="true">·</span>
+    <span class="report" data-testid="fleet-detail-report" title="Last report">{{ text }}</span>
   }
   <app-host-verb-bar
     class="verbs"
@@ -61,23 +64,15 @@
     }
   </fleet-kit-async-state>
 </fleet-kit-panel>
-<fleet-kit-panel
-  class="sec"
-  label="Subscription usage"
-  [bodyScroll]="false"
-  data-testid="fleet-subscriptions"
->
-  <fleet-kit-async-state
-    [state]="detail().card.subscriptionPaces.length > 0 ? 'ready' : 'empty'"
-    placement="inline"
-    emptyText="NO SUBSCRIPTIONS REPORTED"
-    emptyTestid="fleet-subscriptions-empty"
-  >
+<!-- Only a host whose runners report a subscription has usage to show; one running on API
+     credentials leaves the panel out entirely. -->
+@if (detail().card.subscriptionPaces.length > 0) {
+  <fleet-kit-panel class="sec" label="Subscription usage" [bodyScroll]="false" data-testid="fleet-subscriptions">
     <div class="sec-bd">
       <fleet-subscription-pace-group class="subs" [subscriptionPaces]="detail().card.subscriptionPaces" />
     </div>
-  </fleet-kit-async-state>
-</fleet-kit-panel>
+  </fleet-kit-panel>
+}
 <fleet-kit-panel class="sec" [label]="'Runners · ' + detail().rows.length" [bodyScroll]="false" data-testid="fleet-runners">
   <fleet-kit-async-state
     [state]="detail().rows.length > 0 ? 'ready' : 'empty'"

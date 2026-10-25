@@ -5,10 +5,10 @@ import { KitPaceBar } from './kit-pace-bar';
 const meta: Meta<KitPaceBar> = {
   title: 'Kit/Pace bar',
   component: KitPaceBar,
-  args: { label: '5h', utilizationPct: 32, elapsedPct: 55, variant: 'bars' },
+  args: { label: '5h', utilizationPct: 32, elapsedPct: 55, variant: 'bars', count: 10, groupEvery: 0 },
   render: (args) => ({
     props: args,
-    template: `<div style="width: 280px"><fleet-kit-pace-bar [label]="label" [utilizationPct]="utilizationPct" [elapsedPct]="elapsedPct" [variant]="variant" /></div>`,
+    template: `<div style="width: 280px"><fleet-kit-pace-bar [label]="label" [utilizationPct]="utilizationPct" [elapsedPct]="elapsedPct" [variant]="variant" [count]="count" [groupEvery]="groupEvery" /></div>`,
   }),
 };
 export default meta;
@@ -41,3 +41,5 @@ export const BlocksEmpty: Story = { args: { variant: 'blocks', utilizationPct: 0
 /** A window fully spent, its clock notched past the last block. */
 export const BlocksSpent: Story = { args: { variant: 'blocks', utilizationPct: 100, elapsedPct: 100 } };
 export const BlocksOutOfRangeClamped: Story = { args: { variant: 'blocks', utilizationPct: 140, elapsedPct: -20 } };
+/** Forty blocks in groups of ten, the gaps marking the window's quarters — a subscription's pace line. */
+export const BlocksGrouped: Story = { args: { variant: 'blocks', count: 40, groupEvery: 10, utilizationPct: 62, elapsedPct: 70 } };

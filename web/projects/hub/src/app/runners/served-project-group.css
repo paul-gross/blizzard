@@ -47,3 +47,10 @@
   color: var(--label);
   font-size: var(--fs-xs);
 }
+/* A binding reads as one dotted line — project · workspace · how many are working. */
+.b-proj {
+  color: var(--text);
+}
+.b-sep {
+  color: var(--label-dim);
+}

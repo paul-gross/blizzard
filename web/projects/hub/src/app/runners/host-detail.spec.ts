@@ -23,7 +23,7 @@ function card(over: Partial<HostCard> = {}): HostCard {
     addedAt: '2026-01-01T00:00:00Z',
     addedBy: 'paul',
     lastSeenLabel: 'Jul 16 11:59',
-    reportedAgo: '4s ago',
+    reportedAgo: '[4s]',
     heldChunks: new Map(),
     ...over,
   };
@@ -81,7 +81,7 @@ describe('HostDetail', () => {
     const el = await render(vm(card()));
 
     expect(text(el, 'fleet-detail-state')).toBe('ONLINE');
-    expect(text(el, 'fleet-detail-report')).toBe('reported 4s ago');
+    expect(text(el, 'fleet-detail-report')).toBe('[4s]');
   });
 
   it('says never reported only for a never-connected host, and states no age it cannot read', async () => {
@@ -98,7 +98,7 @@ describe('HostDetail', () => {
   it('states the connection: last report with its age, URL, token enrollment, and agents busy across its runners', async () => {
     const el = await render(vm(card(), [row('rn_1', 2, 1), row('rn_2', 3, 2)]));
 
-    expect(text(el, 'fleet-fact-last-report')).toBe('Jul 16 11:59 4s ago');
+    expect(text(el, 'fleet-fact-last-report')).toBe('Jul 16 11:59 [4s]');
     expect(text(el, 'fleet-fact-url')).toBe('https://atlas.example');
     expect(text(el, 'fleet-fact-token')).toBe('ENROLLED');
     expect(text(el, 'fleet-fact-agents')).toBe('3 / 5 busy across 2 runners');
@@ -107,14 +107,14 @@ describe('HostDetail', () => {
     expect(text(unenrolled, 'fleet-fact-token')).toBe('UNENROLLED');
   });
 
-  it('counts environments in use over capacity, and says when a section has nothing reported', async () => {
+  it('counts environments in use over capacity, says when a section has nothing reported, and leaves out a usage panel with no subscription', async () => {
     const el = await render(vm(card({ workspaces: [ws('ws_a', 3, 1), ws('ws_b', 2, 1)] })));
     expect(text(el, 'fleet-workspaces')).toContain('2 / 5 in use');
     expect(el.querySelectorAll('[data-testid="fleet-env-free"]')).toHaveLength(3);
 
     const bare = await render(vm(card()));
     expect(text(bare, 'fleet-workspaces-empty')).toBe('NO WORKSPACES REPORTED');
-    expect(text(bare, 'fleet-subscriptions-empty')).toBe('NO SUBSCRIPTIONS REPORTED');
+    expect(bare.querySelector('[data-testid="fleet-subscriptions"]')).toBeNull();
     expect(text(bare, 'fleet-runners-empty')).toBe('NO RUNNERS UNDER THIS HOST');
   });
 });

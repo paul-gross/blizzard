@@ -44,6 +44,17 @@
 .grow {
   flex: 1;
 }
+/* Pause/Resume, sized to the chunk detail header's action targets as the host's verbs are. */
+.toggle-slot {
+  display: contents;
+  --kit-button-pad: 10px 14px;
+  --kit-button-fs: var(--fs-sm);
+}
+.dsep {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+  margin: 0 -4px;
+}
 .seen {
   color: var(--label-dim);
   font-size: var(--fs-label);
@@ -75,6 +86,16 @@
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
 }
+/* Every box between the column and a held chunk's line may narrow, so the line's node can clip. */
+.held,
+.held fleet-kit-async-state,
+.claims,
+.claim {
+  min-width: 0;
+}
+.held fleet-kit-async-state {
+  display: block;
+}
 .held-hd {
   margin-bottom: 4px;
   color: var(--label);
@@ -101,6 +122,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
   padding: 3px 0;
   color: inherit;
   text-decoration: none;
@@ -109,7 +131,9 @@
 .claim-link:focus-visible .c-id {
   text-decoration: underline;
 }
+/* The id never gives way; the node is the one thing on the line that clips, to a single line. */
 .c-id {
+  flex: none;
   color: var(--amber-hi);
 }
 .node {
@@ -117,10 +141,19 @@
   font-size: var(--fs-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sep {
+  flex: none;
   color: var(--label-dim);
   font-size: var(--fs-label);
+}
+.claim-link > fleet-kit-badge {
+  flex: none;
 }
 
 .declining {
@@ -131,6 +164,13 @@
 /* A phone-width detail column: the facts and the held chunks stack rather than share a row, and
    each held chunk grows to a finger-sized line. */
 @container fleet-detail (max-width: 560px) {
+  /* On a phone the toggle leaves the header line for a full-width row of its own beneath it. */
+  .toggle-slot {
+    display: block;
+    flex-basis: 100%;
+    order: 99;
+    --kit-button-width: 100%;
+  }
   .rgrid {
     grid-template-columns: minmax(0, 1fr);
     padding-left: 0;

@@ -65,16 +65,9 @@ describe('SubscriptionPaceGroup', () => {
     // than merging into one shared bar list.
     expect(defaultGroup?.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
     expect(secondaryGroup?.querySelectorAll('[data-pace-window="5h"]')).toHaveLength(1);
-    expect(
-      defaultGroup?.querySelector('[data-pace-window="5h"] [data-testid="pace-bar-utilization"] .fill')?.getAttribute(
-        'style',
-      ),
-    ).toContain('width: 40%');
-    expect(
-      secondaryGroup
-        ?.querySelector('[data-pace-window="5h"] [data-testid="pace-bar-utilization"] .fill')
-        ?.getAttribute('style'),
-    ).toContain('width: 90%');
+    const filled = (group: Element | null) => group?.querySelectorAll('[data-pace-window="5h"] .cell.on').length;
+    expect(filled(defaultGroup)).toBe(16);
+    expect(filled(secondaryGroup)).toBe(36);
   });
 
   it('reports no usage windows for a subscription with a sampled empty window list', async () => {
@@ -110,6 +103,7 @@ describe('SubscriptionPaceGroup', () => {
         paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
         sampledAt: '2026-07-16T11:20:00.000Z',
         refreshedLabel: 'refreshed 40m ago',
+        refreshedTag: '[40m]',
         freshness: 'aging',
       }),
     ]);
@@ -119,10 +113,11 @@ describe('SubscriptionPaceGroup', () => {
     expect(group?.querySelector('[data-testid="subscription-pace-group-lapsed"]')?.textContent?.trim()).toBe(
       'credential lapsed — log in again on this runner',
     );
-    // The refreshed label and its tier still render — they describe the last good
+    // The refreshed tag and its tier still render — they describe the last good
     // sample, not the lapsed notice itself.
     const refreshed = group?.querySelector('[data-testid="subscription-pace-group-refreshed"]');
-    expect(refreshed?.textContent?.trim()).toBe('refreshed 40m ago');
+    expect(refreshed?.textContent?.trim()).toBe('[40m]');
+    expect(refreshed?.getAttribute('title')).toBe('refreshed 40m ago');
     expect(refreshed?.getAttribute('data-freshness')).toBe('aging');
   });
 
@@ -144,10 +139,10 @@ describe('SubscriptionPaceGroup', () => {
   });
 
   it.each([
-    ['fresh', 'refreshed 5m ago'],
-    ['aging', 'refreshed 30m ago'],
-    ['stale', 'refreshed 2h ago'],
-  ] as const)('renders the %s tier label carrying its own data-freshness attribute', async (tier, label) => {
+    ['fresh', 'refreshed 5m ago', '[5m]'],
+    ['aging', 'refreshed 30m ago', '[30m]'],
+    ['stale', 'refreshed 2h ago', '[2h]'],
+  ] as const)('renders the %s tier tag beside the name, carrying its own data-freshness attribute', async (tier, label, tag) => {
     const el = await render([
       pace({
         slug: 'anthropic-default',
@@ -155,12 +150,14 @@ describe('SubscriptionPaceGroup', () => {
         paceBars: [{ window: '5h', utilizationPct: 40, elapsedPct: 20 }],
         sampledAt: '2026-07-16T11:55:00.000Z',
         refreshedLabel: label,
+        refreshedTag: tag,
         freshness: tier,
       }),
     ]);
 
-    const refreshed = el.querySelector('[data-testid="subscription-pace-group-refreshed"]');
-    expect(refreshed?.textContent?.trim()).toBe(label);
+    const refreshed = el.querySelector('.sub-lead [data-testid="subscription-pace-group-refreshed"]');
+    expect(refreshed?.textContent?.trim()).toBe(tag);
+    expect(refreshed?.getAttribute('title')).toBe(label);
     expect(refreshed?.getAttribute('data-freshness')).toBe(tier);
   });
 
@@ -196,19 +193,18 @@ describe('SubscriptionPaceGroup', () => {
     expect(condition?.classList.contains('miss')).toBe(false);
   });
 
-  it('names the spenders and the renewal only when the row carries them', async () => {
+  it('names the renewal only when the row carries it, and never the spenders', async () => {
     const el = await render([
       pace({ slug: 'anthropic', name: 'Anthropic', spenders: ['rA', 'rB'], renewalLabel: 'renewed 1m ago' }),
       pace({ slug: 'openai', name: 'OpenAI', spenders: [] }),
     ]);
 
     const spent = el.querySelector('[data-subscription-slug="anthropic"]');
-    expect(spent?.querySelector('[data-testid="subscription-pace-group-spenders"]')?.textContent).toBe('spent by rA, rB');
+    expect(spent?.textContent).not.toContain('rA');
     expect(spent?.querySelector('[data-testid="subscription-pace-group-renewal"]')?.textContent).toBe(
       'renewal: renewed 1m ago',
     );
     const unspent = el.querySelector('[data-subscription-slug="openai"]');
-    expect(unspent?.querySelector('[data-testid="subscription-pace-group-spenders"]')).toBeNull();
     expect(unspent?.querySelector('[data-testid="subscription-pace-group-renewal"]')).toBeNull();
     expect(unspent?.querySelector('[data-testid="subscription-pace-group-provider"]')).toBeNull();
   });

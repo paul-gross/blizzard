@@ -7,7 +7,7 @@ import {
   ageMs,
   compactRef,
   formatAbsolute,
-  formatAgo,
+  formatSeenTag,
   formatSeenAgo,
   hostSubscriptionPaces,
   hostWorkspaceRows,
@@ -86,7 +86,7 @@ export interface HostCard {
   readonly addedAt: string;
   readonly addedBy: string | null;
   readonly lastSeenLabel: string;
-  /** The bare age of the host's last report ("4s ago"); `null` when no age can be read — it
+  /** The age tag of the host's last report (`[4s]`); `null` when no age can be read — it
    * never reported, or its instant is unreadable or ahead of this clock. */
   readonly reportedAgo: string | null;
   /** The live chunks each workspace holds, by workspace id; a workspace holding none is absent. */
@@ -192,7 +192,7 @@ function workspaceHeld(
 
 function reportedAgo(lastSeenAt: string | null | undefined, nowMs: number): string | null {
   const delta = ageMs(lastSeenAt, nowMs);
-  return delta === null ? null : formatAgo(delta);
+  return delta === null ? null : formatSeenTag(lastSeenAt, nowMs);
 }
 
 /**

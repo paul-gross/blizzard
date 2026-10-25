@@ -12,11 +12,14 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
+/* One line, always: a long name clips first, then the report, while the light, ref, state, and
+   verbs keep their room. */
 .hd {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 12px;
+  min-width: 0;
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--bezel);
   background: linear-gradient(180deg, var(--header-hi), transparent);
@@ -33,7 +36,21 @@
   font-size: var(--fs-lg);
   font-weight: normal;
   letter-spacing: 0.12em;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 0 1000 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hd > .ref,
+.hd > .state,
+.hd > .sep,
+.hd > .verbs {
+  flex: none;
+}
+.hd > .sep {
+  color: var(--label-dim);
+  margin: 0 -6px;
 }
 .hd .ref {
   color: var(--label-dim);
@@ -43,6 +60,11 @@
 .hd .report {
   color: var(--label);
   font-size: var(--fs-xs);
+  min-width: 0;
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .hd .verbs {
   margin-left: auto;
@@ -71,8 +93,12 @@
   .hd {
     padding: 10px 12px;
   }
+  /* Each section runs the column's full width, snug to both edges: only its top and bottom rules
+     stay, so the sections read as bands under the header rather than inset cards. */
   .sec {
-    margin: 10px 8px 0;
+    margin: 10px 0 0;
+    border-left: 0;
+    border-right: 0;
   }
   .subs {
     grid-template-columns: minmax(0, 1fr);

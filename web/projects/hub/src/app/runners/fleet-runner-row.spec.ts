@@ -113,11 +113,20 @@ describe('FleetRunnerRow', () => {
     expect(el.querySelector('[title="spend ceiling $5.00 reached"]')?.textContent).toContain('LOCALLY PAUSED');
   });
 
+  it('tags a seen runner with the age of its last contact, its full label in the tag\'s title', async () => {
+    const { el } = await render(row('rn_a', { last_seen_at: new Date(Date.parse(NOW) - 45_000).toISOString() }));
+
+    const seen = el.querySelector('[data-testid="fleet-runner-seen"]');
+    expect(seen?.textContent).toBe('[45s]');
+    expect(seen?.getAttribute('title')).toContain('45s ago');
+  });
+
   it('shows a never-connected runner with the badge, a hollow mark and no beacon', async () => {
     const { el } = await render(row('rn_new', { connection: 'never_connected', online: false, registered_at: null, last_seen_at: null }));
 
     expect(el.textContent).toContain('NEVER CONNECTED');
-    expect(el.querySelector('[data-testid="fleet-runner-seen"]')?.textContent).toBe('never connected');
+    expect(el.querySelector('[data-testid="fleet-runner-seen"]')?.textContent).toBe('[never]');
+    expect(el.querySelector('[data-testid="fleet-runner-seen"]')?.getAttribute('title')).toBe('never connected');
     expect(el.querySelector('.dot .hollow')).not.toBeNull();
     expect(el.querySelector('fleet-kit-beacon')).toBeNull();
   });

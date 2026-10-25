@@ -6,9 +6,19 @@ import { KitPaceBar, type PaceBarVariant } from './kit-pace-bar';
 @Component({
   selector: 'fleet-test-host',
   imports: [KitPaceBar],
-  template: `<fleet-kit-pace-bar [label]="label()" [utilizationPct]="utilizationPct()" [elapsedPct]="elapsedPct()" [variant]="variant()" [subject]="subject()" />`,
+  template: `<fleet-kit-pace-bar
+    [label]="label()"
+    [utilizationPct]="utilizationPct()"
+    [elapsedPct]="elapsedPct()"
+    [variant]="variant()"
+    [subject]="subject()"
+    [count]="count()"
+    [groupEvery]="groupEvery()"
+  />`,
 })
 class TestHost {
+  readonly count = signal(10);
+  readonly groupEvery = signal(0);
   readonly label = signal('5h');
   readonly utilizationPct = signal(40);
   readonly elapsedPct = signal(20);
@@ -16,8 +26,17 @@ class TestHost {
   readonly subject = signal<string | null>(null);
 }
 
-async function render(label: string, utilizationPct: number, elapsedPct: number, variant: PaceBarVariant = 'bars', subject: string | null = null): Promise<HTMLElement> {
+async function render(
+  label: string,
+  utilizationPct: number,
+  elapsedPct: number,
+  variant: PaceBarVariant = 'bars',
+  subject: string | null = null,
+  layout: { count?: number; groupEvery?: number } = {},
+): Promise<HTMLElement> {
   const fixture = TestBed.createComponent(TestHost);
+  fixture.componentInstance.count.set(layout.count ?? 10);
+  fixture.componentInstance.groupEvery.set(layout.groupEvery ?? 0);
   fixture.componentInstance.label.set(label);
   fixture.componentInstance.utilizationPct.set(utilizationPct);
   fixture.componentInstance.elapsedPct.set(elapsedPct);
@@ -120,6 +139,32 @@ describe('KitPaceBar', () => {
       const under = await render('5h', -5, -1, 'blocks');
       expect(cells(under).some((c) => c.classList.contains('on'))).toBe(false);
       expect(cells(under)[0].classList.contains('clock')).toBe(true);
+    });
+
+    it('draws `count` blocks, filling and notching each to the nearest block', async () => {
+      const el = await render('5h', 62, 70, 'blocks', null, { count: 40 });
+
+      expect(cells(el)).toHaveLength(40);
+      expect(cells(el).filter((c) => c.classList.contains('on'))).toHaveLength(25);
+      expect(cells(el).findIndex((c) => c.classList.contains('clock'))).toBe(28);
+      expect(el.querySelector('.cells')?.classList.contains('dense')).toBe(true);
+
+      const spent = await render('5h', 100, 100, 'blocks', null, { count: 40 });
+      expect(cells(spent)[39].classList.contains('clock-end')).toBe(true);
+    });
+
+    it('packs ten blocks or fewer at their own gap', async () => {
+      const el = await render('5h', 62, 70, 'blocks');
+
+      expect(el.querySelector('.cells')?.classList.contains('dense')).toBe(false);
+    });
+
+    it('opens a group every `groupEvery` blocks after the first, and none by default', async () => {
+      const grouped = await render('5h', 62, 70, 'blocks', null, { count: 40, groupEvery: 10 });
+      expect(cells(grouped).flatMap((c, i) => (c.classList.contains('group-start') ? [i] : []))).toEqual([10, 20, 30]);
+
+      const even = await render('5h', 62, 70, 'blocks', null, { count: 40 });
+      expect(even.querySelector('.group-start')).toBeNull();
     });
 
     it('names the window by its figures, led by the subject where one is given', async () => {

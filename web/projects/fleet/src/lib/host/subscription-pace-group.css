@@ -15,6 +15,12 @@
   align-items: baseline;
   gap: 8px;
 }
+.sub-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
 .sub-name {
   color: var(--label-dim);
   font-size: var(--fs-label);
@@ -64,7 +70,6 @@
   color: var(--red);
 }
 .sub-sampled,
-.sub-spenders,
 .sub-renewal {
   color: var(--label-dim);
   font-size: var(--fs-label);

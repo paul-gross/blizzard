@@ -167,7 +167,7 @@ describe('foldHostCards', () => {
     expect(card.hostId).toBe('h1');
     expect(card.hostName).toBe('h1-name');
     expect(card.reportLabel).toBe('seen 12s ago');
-    expect(card.reportedAgo).toBe('12s ago');
+    expect(card.reportedAgo).toBe('[12s]');
     expect(card.workspaces.map((ws) => [ws.workspaceId, ws.inUse, ws.capacity])).toEqual([
       ['ws-1', 3, 3],
       ['ws-2', 0, null],

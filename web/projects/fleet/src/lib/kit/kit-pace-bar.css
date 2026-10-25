@@ -102,3 +102,17 @@
 .cell.clock-end::after {
   right: -2px;
 }
+.cells.dense .cell.clock::before {
+  left: -1.5px;
+}
+/* A group's first block stands further off its neighbour — a 4px gap where the line's own gap is
+   1px — so the line's divisions read. */
+.cell.group-start {
+  margin-left: 3px;
+}
+.cells.dense .cell.group-start.clock::before {
+  left: -3px;
+}
+.cells.dense .cell.clock-end::after {
+  right: -1.5px;
+}
