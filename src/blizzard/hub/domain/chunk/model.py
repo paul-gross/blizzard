@@ -912,11 +912,13 @@ class GateDecision:
         taken = next((c for c in self.choices if c.name == choice), None)
         return taken is not None and ChecksGate(taken.requires_checks, self.check_results).violated
 
-    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, choice: str) -> str | None:
+    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, epoch: int, choice: str) -> str | None:
         """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the
-        gate belongs to another chunk or node, is not yet resolved, or resolved to another choice."""
+        gate belongs to another chunk, node or visit, is not yet resolved, or resolved to another choice."""
         if self.chunk_id != chunk_id or self.node_id != node_id:
             return f"decision {self.decision_id} does not match node `{node_name}`"
+        if self.epoch != epoch:
+            return f"decision {self.decision_id} belongs to epoch {self.epoch}, not current visit {epoch}"
         if self.resolved_choice is None:
             return f"decision {self.decision_id} is not yet resolved"
         if choice != self.resolved_choice:
@@ -1186,6 +1188,27 @@ class ChunkFacts:
         if not ranked:
             return None
         return ranked[max(ranked)]
+
+    def arrival_epoch_at(self, node_id: str) -> int | None:
+        """The current visit's landing epoch, independent of a later claim's reservation.
+
+        A transition, migration, or restart can land on the same node more than once;
+        only the newest movement's epoch identifies this visit.
+        """
+        arrivals = [
+            (MovementKind.TRANSITION.order_key(t.recorded_at, t.epoch), t.to_node_id, t.epoch) for t in self.transitions
+        ]
+        arrivals += [
+            (MovementKind.MIGRATION.order_key(m.recorded_at, m.epoch), m.landed_node_id, m.epoch)
+            for m in self.migrations
+        ]
+        arrivals += [
+            (MovementKind.RESTART.order_key(r.recorded_at, r.epoch), r.to_node_id, r.epoch) for r in self.restarts
+        ]
+        if not arrivals:
+            return None
+        _, landed_node_id, epoch = max(arrivals)
+        return epoch if landed_node_id == node_id else None
 
     def current_node_id(self) -> str | None:
         """The chunk's current node id — the newest movement fact's target, else ``None``.

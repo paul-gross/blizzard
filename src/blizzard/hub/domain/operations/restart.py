@@ -14,8 +14,10 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, person_note
+from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository, Node
 from blizzard.hub.domain.operations.edit import MigrationTargetIsCurrentPin
 
@@ -170,11 +172,13 @@ class RestartService:
         self,
         *,
         movement: IWriteChunkMovementRepository,
+        decisions: IWriteChunkDecisionsRepository,
         graphs: IReadGraphRepository,
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
     ) -> None:
         self._movement = movement
+        self._decisions = decisions
         # Read for one thing only — whether a cross-graph target is retired. The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
@@ -220,7 +224,7 @@ class RestartService:
             # `record_restart_locked` derives the fence epoch inside its own transaction —
             # one above every prior attempt, so the displaced worker's completion is
             # rejected (`bzh:epoch-fencing`).
-            return self._movement.record_restart_locked(
+            restart_id = self._movement.record_restart_locked(
                 handle,
                 chunk.chunk_id,
                 from_node_id=plan.from_node_id,
@@ -233,3 +237,15 @@ class RestartService:
                 to_graph_id=plan.to_graph_id,
                 note=person_note(note),
             )
+            landed = handle.facts(chunk.chunk_id)
+            assert landed is not None
+            open_graph_gate_on_arrival(
+                self._decisions,
+                handle,
+                self._clock,
+                chunk_id=chunk.chunk_id,
+                graph=to_graph if to_graph is not None else graph,
+                node_id=plan.to_node_id,
+                epoch=landed.epoch_floor(),
+            )
+            return restart_id

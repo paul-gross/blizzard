@@ -77,6 +77,7 @@ from blizzard.runner.lifecycle.model import (
     exited_worker_settled_move,
     failure_move,
     free_slots,
+    gate_resolution_epoch,
     gate_resolution_lease_id,
     held_chunk_move,
     held_chunk_reads_local_epoch,
@@ -644,11 +645,17 @@ def test_takeover_suppresses_only_session_arms() -> None:
     assert move(_view(ChunkStatus.DELIVERING)) is HeldChunkMove.POLL_HUB_NODE
 
 
+def test_gate_resolution_epoch_follows_the_current_claim() -> None:
+    decision = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=1, resolved_choice="ok")
+    assert gate_resolution_epoch(None, decision) == 1
+    assert gate_resolution_epoch(1, decision) == 1
+    assert gate_resolution_epoch(2, decision) == 2
+
+
 def test_gate_resolution_lease_id() -> None:
-    decision = ChunkGate(decision_id="dc_1", node_id="nd_gate", epoch=2, resolved_choice="ok")
-    assert gate_resolution_lease_id(_lease(epoch=2), decision) == "lease_1"
-    assert gate_resolution_lease_id(_lease(epoch=1), decision) is None
-    assert gate_resolution_lease_id(None, decision) is None
+    assert gate_resolution_lease_id(_lease(epoch=2), 2) == "lease_1"
+    assert gate_resolution_lease_id(_lease(epoch=1), 2) is None
+    assert gate_resolution_lease_id(None, 2) is None
 
 
 # --- the outbound drain ----------------------------------------------------------------------- #

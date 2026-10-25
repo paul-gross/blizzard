@@ -60,6 +60,16 @@ def test_human_gate_node_mints_without_a_judgement_prompt() -> None:
     assert result.ok, result.errors
 
 
+def test_hub_executor_cannot_declare_human_judgement() -> None:
+    nodes = {
+        **_GATE_NODES,
+        "deliver": {**_GATE_NODES["deliver"], "judgement": {**_GATE_NODES["deliver"]["judgement"], "by": "human"}},
+    }
+    result = Validator.of(_doc({"name": "g", "entry": "build", "nodes": nodes}), TEST_CATALOGUE).result
+    assert not result.ok
+    assert any("hub executor cannot have a human judgement" in e for e in result.errors)
+
+
 def test_human_gate_with_a_judgement_prompt_is_rejected() -> None:
     nodes = {**_GATE_NODES}
     nodes["approve-gate"] = {

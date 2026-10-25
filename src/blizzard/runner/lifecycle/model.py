@@ -706,9 +706,16 @@ def _held_chunk_move(
     return HeldChunkMove.HOLD
 
 
-def gate_resolution_lease_id(parked: Lease | None, decision: ChunkGate) -> str | None:
-    """The resolving submission names the parked lease only when it sits at the decision's epoch."""
-    return parked.lease_id if parked is not None and parked.epoch == decision.epoch else None
+def gate_resolution_epoch(hub_epoch: int | None, decision: ChunkGate) -> int:
+    """The epoch the resolving submission is fenced at: the chunk's current epoch. A decision
+    belongs to the visit that opened it, and a claim reserved after a route-releasing landing
+    sits at a later epoch than the decision — the decision id, not its epoch, carries the visit."""
+    return max(hub_epoch, decision.epoch) if hub_epoch is not None else decision.epoch
+
+
+def gate_resolution_lease_id(parked: Lease | None, epoch: int) -> str | None:
+    """The resolving submission names the parked lease only when it sits at the submission epoch."""
+    return parked.lease_id if parked is not None and parked.epoch == epoch else None
 
 
 # --------------------------------------------------------------------------------------------- #
