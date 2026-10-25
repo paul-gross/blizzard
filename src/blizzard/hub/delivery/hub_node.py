@@ -26,7 +26,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.forge_handle import ForgeHandleFactory, IGitHubHandle
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     Effect,
@@ -38,6 +37,7 @@ from blizzard.hub.domain.actions.effects import (
     RecordGardenDelivery,
     RecordReviewFindings,
 )
+from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requirement
 from blizzard.hub.domain.actions.visit import (
     GitCommits,
     LandingProject,
@@ -63,14 +63,16 @@ from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
+    RepositoryId,
     RepositoryOutcome,
     RepositoryResolution,
+    RepositorySecretUnavailable,
     ResolvedRepository,
     resolve_chunk_repositories,
 )
-from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
@@ -90,6 +92,8 @@ from blizzard.hub.domain.graph.model import (
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.forge.landing import RepositoryForge
+from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
@@ -98,6 +102,8 @@ _UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
 _EVENT_UNROUTABLE_OUTCOME: EventLogKind = "hub-node-unroutable-outcome"
 _EVENT_ACTION_OVERRAN: EventLogKind = "hub-action-overran"
 _EVENT_ACTION_MISSING: EventLogKind = "hub-action-missing"
+_EVENT_CAPABILITY_MISSING: EventLogKind = "forge-capability-missing"
+_CAPABILITY_MISSING_STEP = "forge-capability-missing"
 _HUB_LOG_PREFIX = "hub-log."
 # The one reserved wait a pass answers; the executor never authors it.
 (_PENDING,) = RESERVED_WAITS
@@ -282,13 +288,13 @@ class HubNodeExecutor:
         repositories: IReadRepositoryRecordRepository,
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
-        secrets: ISecretReader,
         actions: HubActions,
         passes: ActionPassDriver,
         review_findings: ReviewFindingsRecorder,
         garden_delivery: GardenDeliveryRecorder,
         run_context: IReadRunContextRepository,
-        forge_handles: ForgeHandleFactory,
+        forges: ForgeRegistry,
+        requirements: Mapping[str, Requirement] = ACTION_REQUIREMENTS,
         public_url: str | None = None,
         work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
@@ -306,13 +312,13 @@ class HubNodeExecutor:
         self._repositories = repositories
         self._links = links
         self._projects = projects
-        self._secrets = secrets
         self._actions = actions
         self._passes = passes
         self._review_findings = review_findings
         self._garden_delivery = garden_delivery
         self._run_context = run_context
-        self._forge_handles = forge_handles
+        self._forges = forges
+        self._requirements = requirements
         self._public_url = public_url
         self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
@@ -459,26 +465,103 @@ class HubNodeExecutor:
             )
         return escalation, outcome
 
-    def _reveal_tokens(self, resolution: RepositoryResolution) -> tuple[dict[str, str], tuple[str, str] | None]:
-        """Each resolved record's revealed secret by record id, or the refusal a secret that cannot be revealed
-        routes with."""
-        tokens: dict[str, str] = {}
-        revealed: dict[str, str] = {}
+    def _missing_capability(
+        self, action_name: str, resolution: RepositoryResolution
+    ) -> tuple[ResolvedRepository, Capability] | None:
+        """The first resolved repository whose forge lacks a capability ``action_name`` requires of it, and that
+        capability; ``None`` when every forge offers what the action needs. An action naming no requirement
+        needs nothing."""
+        requirement = self._requirements.get(action_name)
+        if requirement is None:
+            return None
         for target in resolution.targets:
+            offered = self._forges.offered(target.forge_api_url, RepositoryId(target.record))
+            missing = sorted(requirement(target) - offered)
+            if missing:
+                return target, missing[0]
+        return None
+
+    def _escalate_capability_missing(
+        self,
+        chunk: Chunk,
+        node: Node,
+        action_name: str,
+        target: ResolvedRepository,
+        capability: Capability,
+        *,
+        epoch: int,
+    ) -> HubRunResult:
+        """Refuse the visit before its pass: only an operator can change what a forge offers or what an action
+        asks of it, so the chunk escalates. Its ``hub-log`` artifact is written first, as a pass's log is, once
+        per visit; its event only when the escalation takes — a second visit finds the chunk escalated and
+        records neither again."""
+        detail = (
+            f"repository {target.slug or target.record} on {target.forge_api_url} does not offer `{capability}`, "
+            f"which `{action_name}` requires"
+        )
+        self._artifacts.record_hub_artifact(
+            chunk.chunk_id,
+            node_id=node.node_id,
+            node_name=node.name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=f"{_HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
+            content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
+            at=self._clock.now(),
+        )
+        escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
+        outcome = self._record_escalation(chunk, escalation, epoch=epoch)
+        if outcome is BounceEscalationOutcome.RECORDED:
+            self._record_capability_missing(chunk, node, target, capability, detail, epoch=epoch)
+        return self._escalated(escalation, outcome)
+
+    def _record_capability_missing(
+        self,
+        chunk: Chunk,
+        node: Node,
+        target: ResolvedRepository,
+        capability: Capability,
+        detail: str,
+        *,
+        epoch: int,
+    ) -> None:
+        self._events.record(
+            kind=_EVENT_CAPABILITY_MISSING,
+            runner_id=None,
+            chunk_id=chunk.chunk_id,
+            project_id=chunk.project_id,
+            lease_id=None,
+            node_name=node.name,
+            message=detail,
+            detail={
+                "epoch": epoch,
+                "capability": str(capability),
+                "repository": target.record,
+                "forge": target.forge_api_url,
+            },
+            at=self._clock.now(),
+        )
+
+    def _visit_forges(
+        self, resolution: RepositoryResolution
+    ) -> tuple[dict[RepositoryId, RepositoryForge], tuple[str, str] | None]:
+        """Each resolved record's forge by record id, or the refusal a secret that cannot be revealed routes
+        with."""
+        forges: dict[RepositoryId, RepositoryForge] = {}
+        for target in resolution.targets:
+            repository = RepositoryId(target.record)
             try:
-                if target.secret_name not in revealed:
-                    revealed[target.secret_name] = self._secrets.reveal(SecretName.parse(target.secret_name)).expose()
-            except (SecretNotFound, SecretRetired) as exc:
+                forges[repository] = self._forges.repository_forge(repository)
+            except RepositorySecretUnavailable as exc:
                 return {}, ("repository-secret-unavailable", f"repository {target.slug}: {exc}")
-            tokens[target.record] = revealed[target.secret_name]
-        return tokens, None
+        return forges, None
 
     def _take_pass(
         self, chunk: Chunk, graph: Graph, node: Node, action_name: str, *, epoch: int, hub_exec: DerivedContext
     ) -> HubRunResult:
         """Take one pass of the node's action: resolve the chunk's repositories and refuse as the visit
-        cannot run, read the visit, and route what the pass answers. A repository's secret is revealed only for an
-        action that lands."""
+        cannot run, escalate a forge lacking what the action requires, read the visit, and route what the pass answers.
+        A repository's forge is built only for an action that lands."""
         action = self._actions.action(action_name)
         if action is None:
             return self._refuse(
@@ -499,15 +582,13 @@ class HubNodeExecutor:
             project=project.slug,
         )
         refusal = self._resolution_refusal(resolution)
-        forges: dict[str, IGitHubHandle] = {}
+        forges: dict[RepositoryId, RepositoryForge] = {}
         if refusal is None and spec.lands:
             refusal = self._ambiguity_refusal(resolution)
+        if refusal is None and (missing := self._missing_capability(action_name, resolution)) is not None:
+            return self._escalate_capability_missing(chunk, node, action_name, *missing, epoch=epoch)
         if refusal is None and spec.lands:
-            tokens, refusal = self._reveal_tokens(resolution)
-            if refusal is None:
-                forges = {
-                    target.record: self._forge_handles(target, tokens[target.record]) for target in resolution.targets
-                }
+            forges, refusal = self._visit_forges(resolution)
         if refusal is not None:
             step, detail = refusal
             self._record_refusal_event(chunk, node, resolution, epoch=epoch)

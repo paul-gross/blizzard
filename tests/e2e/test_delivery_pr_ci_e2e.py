@@ -450,3 +450,204 @@ def test_pr_ci_bounces_a_poll_timeout_back_to_build(
             )
 
     assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a poll timeout"
+
+
+def _open_pull(forge: httpx2.Client) -> dict:
+    """The one PR the chunk's delivery opened."""
+    pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+    assert len(pulls) == 1, f"expected exactly one PR: {pulls}"
+    return pulls[0]
+
+
+def _assert_nothing_merged(forge: httpx2.Client) -> None:
+    pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+    assert pulls and not any(p.get("merged") for p in pulls), f"a PR merged: {pulls}"
+
+
+def test_pr_ci_lands_an_unstable_pr_once_checks_are_green(tmp_path: Path) -> None:
+    """GitHub's `unstable` — mergeable, with a non-required check not passing — is mergeable: once the
+    required checks read green the PR merges."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        # The forced state is per PR, so hold the PR blocked until it exists, then force it `unstable`.
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        number = _open_pull(forge)["number"]
+        forced = forge.post("/_levers/mergeable_state", json={"repo": REPO, "number": number, "state": "unstable"})
+        assert forced.status_code == 200, forced.text
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+
+        done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
+        assert done["status"] == "done", f"an unstable, green PR did not land (status {done['status']!r})"
+        assert done["landed"] is True
+        assert _open_pull(forge)["merged"] is True
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() != main_before, "bare main did not move"
+
+
+@pytest.mark.parametrize("state", ["draft", "has_hooks"])
+def test_pr_ci_waits_on_a_draft_or_hooked_pr(tmp_path: Path, state: str) -> None:
+    """A green PR the forge reports `draft` or `has_hooks` is not yet mergeable: delivery pends over
+    repeated polls and merges nothing."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        number = _open_pull(forge)["number"]
+        forced = forge.post("/_levers/mergeable_state", json={"repo": REPO, "number": number, "state": state})
+        assert forced.status_code == 200, forced.text
+        # Checks go green; only the forced state holds the PR back.
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+
+        previous = pending["pending"]["next_poll_at"]
+        for _ in range(3):
+            later = _drive_until(
+                config,
+                hub,
+                chunk_id,
+                fenced,
+                lambda b, seen=previous: (
+                    b["status"] != "delivering" or (bool(b.get("pending")) and b["pending"]["next_poll_at"] != seen)
+                ),
+            )
+            assert later["status"] == "delivering", f"a {state} PR left delivery: {later['status']!r}"
+            assert later["landed"] is False
+            assert not later.get("bounces"), later["bounces"]
+            previous = later["pending"]["next_poll_at"]
+        _assert_nothing_merged(forge)
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, f"bare main moved on a {state} PR"
+
+
+def test_pr_ci_waits_on_a_startup_failure_check_then_lands(tmp_path: Path) -> None:
+    """A check concluded `startup_failure` never ran, so it is no verdict on the change: delivery pends
+    rather than routing `failure`, and lands once the check reads green."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_startup_failure", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        again = _drive_until(
+            config,
+            hub,
+            chunk_id,
+            fenced,
+            lambda b: (
+                bool(b.get("bounces"))
+                or (bool(b.get("pending")) and b["pending"]["next_poll_at"] != pending["pending"]["next_poll_at"])
+            ),
+        )
+        assert not again.get("bounces"), f"a startup_failure check routed a bounce: {again['bounces']}"
+        assert again["landed"] is False
+        _assert_nothing_merged(forge)
+
+        assert forge.delete("/_levers/checks_startup_failure", params={"repo": REPO}).status_code == 200
+        done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
+        assert done["status"] == "done", f"did not land once the check went green (status {done['status']!r})"
+        assert not done.get("bounces"), done["bounces"]
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() != main_before, "bare main did not move"
+
+
+def test_pr_ci_routes_conflict_when_updating_a_behind_branch_conflicts(tmp_path: Path) -> None:
+    """A behind PR whose base really conflicts with the change: the self-heal's update-branch is refused
+    as a merge conflict, and delivery routes `conflict` rather than retrying or failing."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        # The base lands its own PR_CI_LANDED.md, so merging it into the head conflicts for real.
+        _push_commit(origin_bare, "main", tmp_path / "base-clone", "PR_CI_LANDED.md")
+        main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+        assert forge.post("/_levers/stale_branch", json={"repo": REPO}).status_code == 200
+
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "conflict", bounced["bounces"]
+        assert bounced["landed"] is False
+        _assert_nothing_merged(forge)
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved despite the conflict"
+
+
+def test_pr_ci_escalates_a_rejected_credential_as_forge_auth(tmp_path: Path) -> None:
+    """The forge rejecting the repository's credential is nothing a worker can repair: delivery escalates
+    the chunk to a person with cause `forge-auth` instead of bouncing it back to build."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        assert forge.post("/_levers/token_rejected", json={"repo": REPO}).status_code == 200
+
+        escalated = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] == "needs_human")
+        escalation = escalated["escalation"]
+        assert escalation is not None and escalation["cause"] == "forge-auth", escalation
+        assert REPO in (escalation["detail"] or ""), escalation
+        assert escalated["landed"] is False
+        assert escalated["current_node_name"] == "deliver"
+
+        assert forge.delete("/_levers/token_rejected", params={"repo": REPO}).status_code == 200
+        _assert_nothing_merged(forge)
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a rejected token"
+
+
+def test_pr_ci_escalates_a_repository_the_forge_does_not_know_as_forge_config(tmp_path: Path) -> None:
+    """A repository record whose forge does not know it is a configuration fault: delivery escalates the
+    chunk with cause `forge-config`. The mock forge backs a repository by its name under any owner, so the
+    record is pointed at an API root on that forge that serves no repository at all."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        nowhere = f"http://127.0.0.1:{forge_port}/no-such-api"
+        moved = hub.patch(f"/api/repositories/{REPO_NAME}", json={"forge_api_url": nowhere})
+        assert moved.status_code == 200, moved.text
+
+        escalated = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] == "needs_human")
+        escalation = escalated["escalation"]
+        assert escalation is not None and escalation["cause"] == "forge-config", escalation
+        assert nowhere in (escalation["detail"] or ""), escalation
+        assert escalated["landed"] is False
+        _assert_nothing_merged(forge)
+
+    assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on an unknown repo"

@@ -18,7 +18,6 @@ from sqlalchemy import insert, select
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.delivery.hub_node import HubRunResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
@@ -28,6 +27,7 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -485,7 +485,7 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
         revealed.append(name.value)
         raise SecretRetired(name.value)
 
-    monkeypatch.setattr(hub.services.hub_node._secrets, "reveal", retired)
+    monkeypatch.setattr(hub.services.hub_node._forges._secrets, "reveal", retired)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
 

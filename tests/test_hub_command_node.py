@@ -21,7 +21,6 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
@@ -43,6 +42,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
+from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from tests.crash_points import discover_crash_points
 from tests.support import (

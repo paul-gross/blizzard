@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.graph.actions import PASS
+from blizzard.hub.forge.landing import VisitForges
 
 
 class PassAction:
