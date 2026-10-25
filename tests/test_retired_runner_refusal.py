@@ -11,7 +11,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.api import transcripts as transcripts_api
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.execution.facts import PushedFact
 from blizzard.hub.domain.execution.submissions import Completion, GateSubmission
 from blizzard.hub.domain.graph.model import Graph
@@ -186,9 +186,7 @@ _GUARDED: dict[str, Callable[[_Routed], object]] = {
     "decision": lambda r: r.hub.services.decisions.submit(
         r.chunk, r.graph, GateSubmission(from_node_id=r.node_id, epoch=1, runner_id=_RUNNER)
     ),
-    "route-token rekey": lambda r: r.hub.services.claim.rekey(
-        r.route, ChunkFacts.or_default(r.hub.services.chunks.facts.load_facts(r.chunk_id))
-    ),
+    "route-token rekey": lambda r: r.hub.services.claim.rekey(r.route),
     "runner read": lambda r: r.hub.services.fleet.own_liveness(_registration(r.hub)),
 }
 
