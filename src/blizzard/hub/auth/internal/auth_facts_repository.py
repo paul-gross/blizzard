@@ -38,7 +38,7 @@ class AuthFactsRepository:
             )
 
     @staticmethod
-    def _fact(row) -> AuthFact:  # type: ignore[no-untyped-def]
+    def _fact(row) -> AuthFact:
         return AuthFact(
             kind=row.kind, actor=row.actor, subject=row.subject, detail=row.detail, recorded_at=row.recorded_at
         )

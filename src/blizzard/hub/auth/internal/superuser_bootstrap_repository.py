@@ -47,7 +47,7 @@ class SuperuserBootstrapRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _bootstrap(row) -> SuperuserBootstrap:  # type: ignore[no-untyped-def]
+    def _bootstrap(row) -> SuperuserBootstrap:
         return SuperuserBootstrap(email=row.email, claimed_user_id=row.claimed_user_id, updated_at=row.updated_at)
 
 

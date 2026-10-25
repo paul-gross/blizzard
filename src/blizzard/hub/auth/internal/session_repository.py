@@ -66,7 +66,7 @@ class SessionRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _session(row) -> Session:  # type: ignore[no-untyped-def]
+    def _session(row) -> Session:
         return Session(
             id_hash=row.id_hash,
             user_id=row.user_id,

@@ -96,7 +96,7 @@ class IdentityRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _identity(row) -> Identity:  # type: ignore[no-untyped-def]
+    def _identity(row) -> Identity:
         return Identity(
             provider_name=row.provider_name,
             subject=row.subject,

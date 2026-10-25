@@ -96,7 +96,7 @@ class UserRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _user(row) -> User:  # type: ignore[no-untyped-def]
+    def _user(row) -> User:
         return User(
             user_id=row.id,
             username=row.username,

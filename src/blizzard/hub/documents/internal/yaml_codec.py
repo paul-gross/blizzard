@@ -36,7 +36,7 @@ class _StrictLoader(yaml.SafeLoader):
 
     yaml_implicit_resolvers: dict[Any, Any] = {}  # noqa: RUF012 - replaces, never mutates, the parent's table
 
-    def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[Hashable, Any]:  # type: ignore[override]
+    def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[Hashable, Any]:
         seen: set[Hashable] = set()
         for key_node, _ in node.value:
             if key_node.tag == "tag:yaml.org,2002:merge":

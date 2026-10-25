@@ -79,7 +79,7 @@ class ConfigChangeStore:
             return conn.execute(query).scalar_one()
 
     @staticmethod
-    def _filtered(query, *, record_kind, record_key, project_id):  # type: ignore[no-untyped-def]
+    def _filtered(query, *, record_kind, record_key, project_id):
         """``query`` narrowed by the log's filters; a ``project_id`` keeps the tenant-wide rows beside the project's."""
         if record_kind is not None:
             query = query.where(config_changes.c.record_kind == record_kind.value)
@@ -90,7 +90,7 @@ class ConfigChangeStore:
         return query
 
     @staticmethod
-    def _of(row) -> ConfigChange:  # type: ignore[no-untyped-def]
+    def _of(row) -> ConfigChange:
         return ConfigChange(
             id=row.id,
             recorded_at=row.recorded_at,

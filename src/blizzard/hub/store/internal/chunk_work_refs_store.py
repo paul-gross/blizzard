@@ -154,7 +154,7 @@ class ChunkWorkRefsStore:
         the group fold's own write, on ``handle``'s already-locked connection."""
         self._add_work_refs_conn(conn_of(handle), chunk_id, pointers)
 
-    def _add_work_refs_conn(self, conn, chunk_id: str, pointers: list[WorkRef]) -> None:  # type: ignore[no-untyped-def]
+    def _add_work_refs_conn(self, conn, chunk_id: str, pointers: list[WorkRef]) -> None:
         existing = {
             (p.source, p.ref)
             for p in conn.execute(

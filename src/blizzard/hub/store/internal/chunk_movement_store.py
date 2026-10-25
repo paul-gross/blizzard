@@ -397,7 +397,7 @@ class ChunkMovementStore:
             note=note,
         )
 
-    def _record_restart_conn(  # type: ignore[no-untyped-def]
+    def _record_restart_conn(
         self,
         conn,
         chunk_id: str,

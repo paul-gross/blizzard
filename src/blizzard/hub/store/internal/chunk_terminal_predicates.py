@@ -46,7 +46,7 @@ def _unsuperseded_terminal(stmts: ScopedStatements, terminal: Any) -> list[Colum
     completion instant ranks exactly the transitions that settle."""
     other = s.transitions.alias("other_transition")
 
-    def not_older(row):  # type: ignore[no-untyped-def]
+    def not_older(row):
         return or_(
             row.c.recorded_at > terminal.c.recorded_at,
             and_(row.c.recorded_at == terminal.c.recorded_at, row.c.epoch >= terminal.c.epoch),

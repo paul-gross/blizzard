@@ -93,7 +93,7 @@ class ChunkDependenciesStore:
         dependency declare's own write, on ``handle``'s already-locked connection."""
         return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
-    def _declare_conn(  # type: ignore[no-untyped-def]
+    def _declare_conn(
         self, conn, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge:
         dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
@@ -148,7 +148,7 @@ class ChunkDependenciesStore:
         the group fold's own write, on ``handle``'s already-locked connection."""
         return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
 
-    def _record_fold_conn(  # type: ignore[no-untyped-def]
+    def _record_fold_conn(
         self, conn, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
     ) -> dict[str, int]:
         grouped_ids: dict[str, int] = {}
@@ -178,7 +178,7 @@ class ChunkDependenciesStore:
         return grouped_ids
 
 
-def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):  # type: ignore[no-untyped-def]
+def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):
     return conn.execute(
         statements_of(conn)
         .select(s.chunk_dependencies)
@@ -192,7 +192,7 @@ def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_
     ).first()
 
 
-def _edge(row) -> DependencyEdge:  # type: ignore[no-untyped-def]
+def _edge(row) -> DependencyEdge:
     return DependencyEdge(
         dependency_id=row.dependency_id,
         dependent_chunk_id=row.dependent_chunk_id,

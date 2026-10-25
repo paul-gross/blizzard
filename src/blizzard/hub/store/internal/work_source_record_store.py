@@ -278,11 +278,11 @@ class WorkSourceRecordStore:
         return resolve_work_source_reference(value, self)
 
 
-def _reconstituted(conn: Connection, row: Row) -> ConfiguredWorkSource:  # type: ignore[type-arg]
+def _reconstituted(conn: Connection, row: Row) -> ConfiguredWorkSource:
     return _of(row, retired=row.work_source_id in _retired_ids(conn, [WorkSourceId(row.work_source_id)]))
 
 
-def _of(row: Row, *, retired: bool) -> ConfiguredWorkSource:  # type: ignore[type-arg]
+def _of(row: Row, *, retired: bool) -> ConfiguredWorkSource:
     return ConfiguredWorkSource(
         work_source_id=WorkSourceId(row.work_source_id),
         slug=row.slug,

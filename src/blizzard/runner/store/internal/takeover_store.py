@@ -127,7 +127,7 @@ class TakeoverStore:
         )
 
     @staticmethod
-    def _row_to_takeover(r) -> OpenTakeover:  # type: ignore[no-untyped-def]
+    def _row_to_takeover(r) -> OpenTakeover:
         return OpenTakeover(
             takeover_id=str(r.takeover_id),
             chunk_id=str(r.chunk_id),

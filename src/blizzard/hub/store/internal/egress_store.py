@@ -102,7 +102,7 @@ class EgressStore:
             )
 
 
-def _cursor(row) -> EgressCheckpoint:  # type: ignore[no-untyped-def]
+def _cursor(row) -> EgressCheckpoint:
     events = (
         EventsPosition(row.position_at, row.segment_id, row.extractor_version or "", _tenant(row.events_tenant_id))
         if row.segment_id is not None

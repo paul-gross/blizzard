@@ -95,5 +95,5 @@ class GithubEntry(ProviderEntry):
             client_id=self.config.client_id,
             client_secret=self.secret,
             http_client=client,
-            **bases,  # type: ignore[arg-type]
+            **bases,
         )

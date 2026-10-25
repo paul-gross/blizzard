@@ -91,7 +91,7 @@ class FederationToken:
         try:
             claims = jwt.decode(
                 self.raw,
-                key=key,  # type: ignore[arg-type]
+                key=key,
                 algorithms=["RS256"],
                 audience=self.runner_id,
                 leeway=CLOCK_SKEW_LEEWAY_SECONDS,

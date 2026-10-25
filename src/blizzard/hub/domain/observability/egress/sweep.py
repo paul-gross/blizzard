@@ -225,7 +225,7 @@ class EgressSweep:
         placed: list[PlacedFile] = []
         for partition in sorted(by_partition):
             written = guarded(
-                lambda partition=partition: self._writer.write(  # type: ignore[misc]
+                lambda partition=partition: self._writer.write(
                     EgressBatch(schema, partition, egress_pass, by_partition[partition])
                 )
             )
@@ -266,7 +266,7 @@ class EgressSweep:
         if self._latch.succeeded():
             self._record(_RECOVERED, "fact egress recovered; held rows are being written", None)
 
-    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
+    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:
         self._events.record(
             kind=kind,
             message=message,

@@ -501,7 +501,7 @@ def create_app(
     if platform_tracing is not None:
 
         @app.middleware("http")
-        async def _suppress_excluded(request: Request, call_next):  # type: ignore[no-untyped-def]
+        async def _suppress_excluded(request: Request, call_next):
             if is_excluded(request.scope):
                 with platform_tracing.suppressed():
                     return await call_next(request)
@@ -514,7 +514,7 @@ def create_app(
 
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
-    async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def _gate_web_surface(request: Request, call_next):
         if not is_api_path(request.url.path):
             try:
                 require_human_session(request)

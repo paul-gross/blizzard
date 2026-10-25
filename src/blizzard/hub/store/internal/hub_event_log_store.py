@@ -82,7 +82,7 @@ class HubEventLogStore:
         severity: EventLogSeverity,
         kind: HubEventKind,
         message: str,
-        detail: dict | None,  # type: ignore[type-arg]
+        detail: dict | None,
         at: datetime,
     ) -> int:
         with self._store.write("hub_event_log_record") as conn:

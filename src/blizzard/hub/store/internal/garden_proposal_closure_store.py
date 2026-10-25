@@ -143,7 +143,7 @@ class GardenProposalClosureStore:
             return False
 
     @staticmethod
-    def _of(row) -> GardenProposalClosure:  # type: ignore[no-untyped-def]
+    def _of(row) -> GardenProposalClosure:
         return GardenProposalClosure(
             proposal_id=row.proposal_id,
             closure=GardenProposalClosureKind(row.closure),

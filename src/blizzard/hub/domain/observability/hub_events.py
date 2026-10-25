@@ -75,7 +75,7 @@ class HubEventEntry:
     kind: HubEventKind
     at: datetime
     message: str
-    detail: dict | None  # type: ignore[type-arg]
+    detail: dict | None
 
 
 class IReadHubEventLog(Protocol):
@@ -106,7 +106,7 @@ class HubEventLogService:
     def __init__(self, *, events: IWriteHubEventLog) -> None:
         self._events = events
 
-    def record(self, *, kind: HubEventKind, message: str, detail: dict | None, at: datetime) -> int:  # type: ignore[type-arg]
+    def record(self, *, kind: HubEventKind, message: str, detail: dict | None, at: datetime) -> int:
         """Append the row and return its id."""
         return self._events.append(severity=HUB_EVENT_SEVERITY[kind], kind=kind, message=message, detail=detail, at=at)
 

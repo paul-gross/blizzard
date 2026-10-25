@@ -146,7 +146,7 @@ def _color_of(stored: str) -> ProjectColor | HexColor:
         return stored
 
 
-def _of(row: Row) -> Project:  # type: ignore[type-arg]
+def _of(row: Row) -> Project:
     return Project(
         project_id=ProjectId(row.project_id),
         slug=row.slug,

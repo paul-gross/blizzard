@@ -293,7 +293,7 @@ class Routine:
             changes["default_harnesses"] = validated_harnesses(list(changes["default_harnesses"]))  # type: ignore[call-overload]
         if edit.default_effort is not UNSET:
             changes["default_effort"] = edit.default_effort
-        return replace(self, **changes)  # type: ignore[arg-type]
+        return replace(self, **changes)
 
     def _diff(self, old: Routine | None) -> tuple[FieldChange, ...]:
         """The fields that differ from ``old``, by wire name. With no ``old`` (a create),

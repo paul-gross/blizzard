@@ -96,7 +96,7 @@ class ChunkRecordStore:
         with self._store.read("get") as conn:
             return self.get_conn(conn, chunk_id)
 
-    def get_conn(self, conn, chunk_id: str) -> Chunk | None:  # type: ignore[no-untyped-def]
+    def get_conn(self, conn, chunk_id: str) -> Chunk | None:
         """`get`'s already-open-connection sibling — the locked-transaction seam's own
         read (``bzh:store-exclusive-write``), resolved on the caller's connection rather
         than a fresh one."""
@@ -115,7 +115,7 @@ class ChunkRecordStore:
         with self._store.read("get_many") as conn:
             return self.get_many_conn(conn, chunk_ids)
 
-    def get_many_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, Chunk]:  # type: ignore[no-untyped-def]
+    def get_many_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
         """`get_many`'s already-open-connection sibling — the locked-transaction seam's
         own batched read (``bzh:store-exclusive-write``), resolved on the caller's
         connection rather than a fresh one."""
@@ -308,7 +308,7 @@ class ChunkRecordStore:
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``)."""
         self._set_graph_conn(conn_of(handle), chunk_id, graph_id=graph_id)
 
-    def _set_graph_conn(self, conn, chunk_id: str, *, graph_id: str) -> None:  # type: ignore[no-untyped-def]
+    def _set_graph_conn(self, conn, chunk_id: str, *, graph_id: str) -> None:
         conn.execute(self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_defaults_locked(
@@ -331,7 +331,7 @@ class ChunkRecordStore:
             default_harnesses=default_harnesses,
         )
 
-    def _set_defaults_conn(  # type: ignore[no-untyped-def]
+    def _set_defaults_conn(
         self, conn, chunk_id: str, *, default_model: list[str], default_effort: str | None, default_harnesses: list[str]
     ) -> None:
         conn.execute(
@@ -352,7 +352,7 @@ class ChunkRecordStore:
         overwrite, editable at any non-terminal status; the column carries no timestamp."""
         self._set_intended_migration_conn(conn_of(handle), chunk_id, intended=intended)
 
-    def _set_intended_migration_conn(self, conn, chunk_id: str, *, intended: IntendedMigration | None) -> None:  # type: ignore[no-untyped-def]
+    def _set_intended_migration_conn(self, conn, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         conn.execute(
             self._store.update(s.chunks)
             .where(s.chunks.c.chunk_id == chunk_id)

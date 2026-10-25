@@ -375,7 +375,7 @@ class WorkItemStore:
         return str(row.next_ref - 1)
 
     @staticmethod
-    def _record(row) -> HubWorkItem:  # type: ignore[no-untyped-def]
+    def _record(row) -> HubWorkItem:
         payload = json.loads(row.author_payload)
         author_kind = WorkItemAuthorKind(row.author_kind)
         author = (

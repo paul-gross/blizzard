@@ -439,7 +439,7 @@ class TranscriptSegmentStore:
         return zlib.decompress(content).decode("utf-8")
 
     @staticmethod
-    def _index_row(segment_id: str, rows: list) -> SegmentSummary:  # type: ignore[type-arg]
+    def _index_row(segment_id: str, rows: list) -> SegmentSummary:
         return SegmentSummary(
             segment_id=segment_id,
             node_id=rows[0].node_id,

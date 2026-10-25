@@ -478,7 +478,7 @@ class FindingStore:
             ).first()
         return row is not None
 
-    def _facts(self, conn, finding_id: str) -> list[FindingFact]:  # type: ignore[no-untyped-def]
+    def _facts(self, conn, finding_id: str) -> list[FindingFact]:
         rows = conn.execute(
             self._store.select(finding_facts)
             .where(finding_facts.c.finding_id == finding_id)
@@ -487,7 +487,7 @@ class FindingStore:
         return [self._fact_of(r) for r in rows]
 
     @staticmethod
-    def _fact_of(row) -> FindingFact:  # type: ignore[no-untyped-def]
+    def _fact_of(row) -> FindingFact:
         return FindingFact(
             kind=row.kind,
             recorded_at=row.recorded_at,
@@ -498,7 +498,7 @@ class FindingStore:
         )
 
     @staticmethod
-    def _of(row, summary: FindingFactSummary) -> Finding:  # type: ignore[no-untyped-def]
+    def _of(row, summary: FindingFactSummary) -> Finding:
         state = liveness_of(summary)
         return Finding(
             finding_id=row.finding_id,
@@ -619,7 +619,7 @@ class FindingSetStore:
         return [self._of(row) for row in rows]
 
     @staticmethod
-    def _of(row) -> FindingSet:  # type: ignore[no-untyped-def]
+    def _of(row) -> FindingSet:
         return FindingSet(
             finding_set_id=row.finding_set_id,
             artifact_id=row.artifact_id,

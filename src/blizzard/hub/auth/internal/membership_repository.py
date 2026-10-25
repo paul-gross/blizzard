@@ -83,7 +83,7 @@ class MembershipRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _membership(row) -> Membership:  # type: ignore[no-untyped-def]
+    def _membership(row) -> Membership:
         return Membership(tenant_id=TenantId(row.tenant_id), user_id=row.user_id, role=Role(row.role))
 
 

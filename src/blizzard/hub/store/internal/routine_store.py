@@ -160,7 +160,7 @@ def set_linked_scopes(
     append_change(conn, change)
 
 
-def _routine_select(stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+def _routine_select(stmts: ScopedStatements) -> Select:
     """Every ``routines`` column beside its default scope's slug, labelled
     ``default_scope_slug`` — the one read :meth:`RoutineStore._of` maps."""
     with_scope = stmts.scope_join(routines, scopes, routines.c.default_scope_id == scopes.c.scope_id)
@@ -226,7 +226,7 @@ class RoutineStore:
                 found.update({row.name: self._of(row, retired=row.routine_id in retired) for row in rows})
         return found
 
-    def _one(self, where, operation: str) -> Routine | None:  # type: ignore[no-untyped-def]
+    def _one(self, where, operation: str) -> Routine | None:
         with self._store.read(operation) as conn:
             row = conn.execute(_routine_select(self._store).where(where)).one_or_none()
             if row is None:
@@ -253,7 +253,7 @@ class RoutineStore:
             return _retired_ids(conn)
 
     @staticmethod
-    def _of(row, *, retired: bool) -> Routine:  # type: ignore[no-untyped-def]
+    def _of(row, *, retired: bool) -> Routine:
         return Routine(
             routine_id=row.routine_id,
             name=row.name,

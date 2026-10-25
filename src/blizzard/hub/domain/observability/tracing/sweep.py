@@ -138,7 +138,7 @@ class TraceExportSweep:
                 {"reason": jump.reason.value, "since": _key_detail(since), "until": iso_utc(jump.to.at)},
             )
 
-    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:  # type: ignore[type-arg]
+    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:
         self._events.record(
             kind=kind,
             message=message,

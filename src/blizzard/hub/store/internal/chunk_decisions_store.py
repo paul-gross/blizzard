@@ -118,7 +118,7 @@ class ChunkDecisionsStore:
         ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
         return and_(*(~stmts.exists(table, table.c.decision_id == decision_id) for table in _DECISION_CLOSURE_TABLES))
 
-    def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select:  # type: ignore[type-arg]
+    def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select:
         """The newest not-yet-transitioned decision of each chunk in ``chunk_ids``, one row per chunk:
         a decision no newer not-closed decision of its chunk beats, in ``(submitted_at, decision_id)``
         order. The not-closed rule binds the competing row too — an older open decision under a newer
@@ -385,14 +385,14 @@ class ChunkDecisionsStore:
             )
             return True
 
-    def _decision_row(self, conn: Connection, row) -> GateDecision:  # type: ignore[no-untyped-def]
+    def _decision_row(self, conn: Connection, row) -> GateDecision:
         resolution = conn.execute(
             self._store.select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         transitioned = row.decision_id in decision_closure_ids(conn, [row.decision_id])
         return self._build_row(row, resolution, transitioned)
 
-    def _hydrate(self, conn: Connection, rows: Sequence) -> list[GateDecision]:  # type: ignore[no-untyped-def]
+    def _hydrate(self, conn: Connection, rows: Sequence) -> list[GateDecision]:
         """``rows``' resolution/closure state, each read batched once across the
         whole list rather than once per row — :meth:`list_open_decisions`'s own
         hydration, sharing :meth:`_build_row`'s assembly with the single-row
@@ -423,7 +423,7 @@ class ChunkDecisionsStore:
         ]
 
     @staticmethod
-    def _build_row(row, resolution, transitioned: bool) -> GateDecision:  # type: ignore[no-untyped-def]
+    def _build_row(row, resolution, transitioned: bool) -> GateDecision:
         """The one ``decisions`` row + resolution + transitioned flag ->
         :class:`GateDecision` assembly, shared by :meth:`_decision_row` (one row) and
         :meth:`_hydrate` (batched) so neither keeps its own copy of the shape."""
