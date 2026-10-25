@@ -98,6 +98,9 @@ adding, retiring or retyping a key is always a deliberate edit to the document.
 A key marked `deprecated` is still read, or still refused with a message naming its home; `replaced_by` names the key or
 table that took its place, and is `null` when nothing did. Removing a deprecated key is the breaking change.
 
+Surface behind a feature flag that is off is already released and held to all of this; [`flags.md`](./flags.md) owns
+what a flag and its `[flags]` override are.
+
 ## The trace contract
 
 [`contracts/traces/`](../contracts/traces/README.md) pins the shape of a chunk's traces — the work root, its step roots
