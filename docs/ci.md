@@ -66,8 +66,14 @@ format [`changes/README.md`](../changes/README.md) documents, naming the file an
 
 `gate / flag lifecycle` runs only on pull requests with a full tag history. It parses HEAD and the registries at valid
 release tags, reports each flag's release-derived lifetime and rule-labelled findings, and fails on lifecycle
-violations. Run `mise run flag-lifecycle pr` locally; `mise run flag-lifecycle cut` and `mise run flag-lifecycle tag`
-apply the stricter due-flag policy when checking a release cut or tag.
+violations. It runs in `cut` mode on a release-cut pull request — detected by `scripts/release-cut-in-range.sh` over the
+pull request's base and head, the detector the upgrade rehearsal uses — and in `pr` mode otherwise, passing `--base` the
+base SHA. Three rules read the supported releases from `blizzard-compat releases --json`, failing the check by name when
+that call fails: `tombstone-removable` (a `NOTE`, never failing) names a `[retired]` entry no supported release holds
+live; `tombstone-removed` fails when a name a supported release holds live is in neither HEAD's live nor retired flags;
+and `flip-without-note` (`pr` mode only) fails a flag turned from `off` to `on` against `--base` when no
+`changes/unreleased/` note at HEAD names it. `mise run flag-lifecycle` runs `pr` mode with `--base origin/master`; pass
+`cut` or `tag` to apply the stricter due-flag policy when checking a release cut or tag.
 
 ## The upper tiers
 
@@ -206,7 +212,9 @@ candidate to borrow from, so it runs the full suite; a candidate never borrows. 
 hold the commit to `origin/release/X.Y`. Unless the proof is borrowed, the run executes the full suite — gate, the
 `compat` backstop, and `upper-tiers` called with `full_suite: true` and the **full** crash sweep (service tier, crash
 sweep, e2e, journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag
-alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `compat`
+alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `flag-lifecycle`
+(`release / flag lifecycle`) runs `blizzard-flag-lifecycle tag` with full history before any build, on every tag — a
+stable tag's borrowed-proof run included, which skips `gate` — and `build` waits on it. `compat`
 (`release / compatibility against supported releases`) runs `blizzard-compat --tag <version>` before any build: it
 judges the tag's tree against each supported release over that release's own `R..HEAD` range, fails a break the version
 does not admit, and uploads `compat-breaks.json`, which `build` fetches to the repository root. `wheel` checks the

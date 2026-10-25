@@ -218,8 +218,15 @@ jobs:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync
-      - name: flag lifecycle (pr)
-        run: uv run blizzard-flag-lifecycle pr
+      # A release cut is judged in `cut` mode, found by the same detector the upgrade rehearsal
+      # uses; flips are judged against the pull request's base.
+      - name: flag lifecycle (cut on a release cut, else pr)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$(./scripts/release-cut-in-range.sh "$BASE_SHA" "$HEAD_SHA")" = "true" ]; then mode="cut"; else mode="pr"; fi
+          uv run blizzard-flag-lifecycle "$mode" --base "$BASE_SHA"
 
   frontend:
     name: eslint + vitest + client drift

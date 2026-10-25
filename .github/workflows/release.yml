@@ -1,6 +1,7 @@
 # Tag v* — the release build.
 #
-# Pushing a `v*` tag builds a release. `proof` runs first: a stable tag whose commit carries a
+# Pushing a `v*` tag builds a release. `flag-lifecycle` and `compat` judge the tag's tree against the
+# supported releases before any build, borrowed proof included. `proof` runs first: a stable tag whose commit carries a
 # green candidate (`vX.Y.Z-rc.K`) run borrows it and skips the full suite, a promotion without one
 # is refused, and a patch runs the suite. Otherwise the full suite runs, the
 # wheel is built with the embedded frontend, and a GitHub Release is published
@@ -88,6 +89,27 @@ jobs:
           name: compat-breaks
           path: compat-breaks.json
           if-no-files-found: error
+
+  flag-lifecycle:
+    name: flag lifecycle
+    # Tombstones and due flags against the supported releases, before any build. Unconditional, like
+    # `compat`: the gate does not run on a borrowed proof, and a stable tag's run is still judged.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag, to read each release's registry.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: flag lifecycle (tag)
+        run: uv run blizzard-flag-lifecycle tag
 
   upper-tiers:
     needs: [proof, gate]
@@ -189,7 +211,7 @@ jobs:
 
   build:
     name: build the image, sign and attest, assemble the inventory
-    needs: [proof, gate, compat, upper-tiers, isolation-cross-check, wheel, rehearsal, store-baseline]
+    needs: [proof, gate, compat, flag-lifecycle, upper-tiers, isolation-cross-check, wheel, rehearsal, store-baseline]
     # Runs when `rehearsal`, `store-baseline`, or (on a borrowed proof) the suite was skipped, never
     # when any need failed.
     if: ${{ !cancelled() && !failure() }}
