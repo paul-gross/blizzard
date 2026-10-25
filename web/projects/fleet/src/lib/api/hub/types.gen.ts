@@ -2916,7 +2916,10 @@ export const EscalationCause = {
     BOUNCE_CAP: 'bounce-cap',
     MIGRATION_TARGET_UNRESOLVABLE: 'migration-target-unresolvable',
     HUB_ACTION_MISSING: 'hub-action-missing',
-    UNROUTABLE_OUTCOME: 'unroutable-outcome'
+    UNROUTABLE_OUTCOME: 'unroutable-outcome',
+    FORGE_AUTH: 'forge-auth',
+    FORGE_CONFIG: 'forge-config',
+    FORGE_CAPABILITY_MISSING: 'forge-capability-missing'
 } as const;
 
 /**

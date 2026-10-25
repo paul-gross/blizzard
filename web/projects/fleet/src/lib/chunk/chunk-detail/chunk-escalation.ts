@@ -87,6 +87,9 @@ const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
     [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",
     [EscalationCause.HUB_ACTION_MISSING]: 'The hub node the chunk stands at names no action the hub can take',
     [EscalationCause.UNROUTABLE_OUTCOME]: "The hub node's answer has no edge to route the chunk on",
+    [EscalationCause.FORGE_AUTH]: "The repository's forge refused the hub's credential",
+    [EscalationCause.FORGE_CONFIG]: "The repository's forge could not find the repository with the hub's credential",
+    [EscalationCause.FORGE_CAPABILITY_MISSING]: "The repository's forge does not offer what the hub node's action needs",
   },
   (raw) => `Escalated: ${raw}`,
 );

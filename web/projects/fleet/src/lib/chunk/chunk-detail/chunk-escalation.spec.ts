@@ -266,6 +266,21 @@ describe('ChunkEscalation', () => {
         'hub node `deliver` answered `landed`, which no edge routes',
         "The hub node's answer has no edge to route the chunk on (epoch 3).",
       ],
+      [
+        'forge-auth',
+        'blizzard/toy-api at https://api.github.com answered 401 Bad credentials',
+        "The repository's forge refused the hub's credential (epoch 3).",
+      ],
+      [
+        'forge-config',
+        'blizzard/toy-api at https://api.github.com does not exist or cannot be seen with this credential',
+        "The repository's forge could not find the repository with the hub's credential (epoch 3).",
+      ],
+      [
+        'forge-capability-missing',
+        'blizzard/toy-api at https://api.github.com does not offer checks.read',
+        "The repository's forge does not offer what the hub node's action needs (epoch 3).",
+      ],
     ])('renders the hub-authored cause %s with its detail', async (cause, given, expected) => {
       const { sentence, detail } = await causeOf(cause, given);
       expect(sentence).toBe(expected);

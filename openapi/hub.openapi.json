@@ -4948,7 +4948,10 @@
           "bounce-cap",
           "migration-target-unresolvable",
           "hub-action-missing",
-          "unroutable-outcome"
+          "unroutable-outcome",
+          "forge-auth",
+          "forge-config",
+          "forge-capability-missing"
         ],
         "title": "EscalationCause",
         "type": "string"
