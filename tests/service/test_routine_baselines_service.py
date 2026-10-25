@@ -1,6 +1,6 @@
 """``GET /api/routines/{routine_id}/baselines`` (service tier) — the
 shape a delivered run's baseline serves against a real hub daemon, and the 404 on an
-unknown routine id. Reuses the garden delivery stack `tests/service/test_finding_exits_service.py`
+unknown routine id. Reuses the garden delivery stack `tests/service/support.py`
 already stands up; FLEET_VIEW enforcement is the component-tier
 `tests/test_route_permission_matrix.py`'s own concern. Run with ``BLIZZARD_SERVICE=1``."""
 
@@ -11,8 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.fleet_world import REPO_NAME
-from tests.service.support import service_gate
-from tests.service.test_finding_exits_service import Garden, add_op, deliver, garden_stack, seed
+from tests.service.support import Garden, add_op, deliver, garden_stack, seed, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

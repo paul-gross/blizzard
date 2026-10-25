@@ -9,73 +9,15 @@ refusal with no session. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
-import contextlib
-import dataclasses
-import os
-import subprocess
-import sys
-from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx2
 import pytest
 
-from blizzard.auth_core import Role
-from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.config import AuthConfig, OAuthProviderConfig
-from tests.config_inputs import load_hub_config
-from tests.fleet_launchers import await_http, terminate
-from tests.service.support import require_stub_idp, service_gate, stub_idp
-from tests.support import daemon_log_sink, default_tenant, free_port, seed_invitation
+from blizzard.hub.config import OAuthProviderConfig
+from tests.service.support import SECRET_ENV, oauth_hub, require_stub_idp, service_gate, stub_idp
+from tests.support import free_port, invite
 
 pytestmark = [pytest.mark.service, service_gate]
-
-_SECRET_ENV = "BZ_OAUTH_TEST_SECRET"
-_SECRET = "test-secret"
-
-
-@contextlib.contextmanager
-def _oauth_hub(
-    hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
-) -> Iterator[httpx2.Client]:
-    """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
-    configured providers — mirrors ``tests/fleet_launchers.py``'s own ``run_hub``,
-    minus the work-source wiring this scenario does not need (login/`` /api/me`` alone).
-    ``superuser`` sets ``auth.superuser`` so the bootstrap lifecycle runs at
-    this real boot, same as any other deployment."""
-    env = {**os.environ, _SECRET_ENV: _SECRET}
-    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
-    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = load_hub_config(hub_dir)
-    config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers, superuser=superuser))
-    config.config_path.write_text(config.to_toml())
-    log = hub_dir / "daemon.log"
-    proc = subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
-        env=env,
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
-    try:
-        await_http(proc, client, "/api/health", log=log)
-        yield client
-    finally:
-        client.close()
-        terminate(proc)
-
-
-def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
-    """Invite ``email`` into the running hub's first tenant as ``role``, issued now — the way a person the hub has
-    not seen arrives — and return the link's token for ``authorize?invite=``."""
-    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
-    try:
-        _invitation_id, token = seed_invitation(engine, default_tenant(engine), email, role, at=datetime.now(UTC))
-    finally:
-        engine.dispose()
-    return token
 
 
 def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path) -> None:
@@ -93,11 +35,11 @@ def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=True,
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             providers_resp = hub.get("/api/auth/providers")
             assert providers_resp.status_code == 200
             assert providers_resp.json() == [{"name": "oidc-co", "display_name": "Stub SSO", "type": "oidc"}]
@@ -128,10 +70,10 @@ def test_github_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Pa
             type="github",
             display_name="GitHub",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             api_base=f"http://127.0.0.1:{idp_port}",
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             token = invite(tmp_path / "hub", "hub@example.com")
             hub.get(f"/api/auth/github/authorize?invite={token}", follow_redirects=True)
             assert "bz_session" in hub.cookies
@@ -156,11 +98,11 @@ def test_login_then_logout_round_trips_over_the_wire(tmp_path: Path) -> None:
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=True,
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             token = invite(tmp_path / "hub", "octocat@example.com")
             hub.get(f"/api/auth/oidc-co/authorize?invite={token}", follow_redirects=True)
             assert hub.get("/api/me").status_code == 200
@@ -189,7 +131,7 @@ def test_providers_endpoint_lists_both_configured_providers_over_the_wire(tmp_pa
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=True,
         )
@@ -198,10 +140,10 @@ def test_providers_endpoint_lists_both_configured_providers_over_the_wire(tmp_pa
             type="github",
             display_name="GitHub",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             api_base=f"http://127.0.0.1:{idp_port}",
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(github, oidc)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(github, oidc)) as hub:
             providers_resp = hub.get("/api/auth/providers")
             assert providers_resp.status_code == 200
             listed = {p["name"]: p for p in providers_resp.json()}
@@ -226,11 +168,11 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=True,
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             resp = hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
             # The stub redirects back with `error=access_denied` and no `code`; the
             # callback's `state` still resolves but the missing code fails the exchange.
@@ -254,10 +196,10 @@ def test_an_uninvited_first_sign_in_lands_on_the_invite_only_refusal_with_no_ses
             type="github",
             display_name="GitHub",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             api_base=f"http://127.0.0.1:{idp_port}",
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,)) as hub:
             landed = hub.get("/api/auth/github/authorize", follow_redirects=True)
 
             callback = landed.history[-1]
@@ -288,11 +230,11 @@ def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path:
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=authoritative,
         )
-        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="root@example.com") as hub:
+        with oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="root@example.com") as hub:
             landed = hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
             if not authoritative:
                 assert landed.history[-1].headers["location"] == "/login?refusal=invite_only"

@@ -142,7 +142,7 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
 from blizzard.wire.work_source import WorkSourceDocument
-from tests.config_inputs import VERSION_WINDOW, create_hub_app
+from tests.config_inputs import VERSION_WINDOW, create_hub_app, load_hub_config
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -1740,6 +1740,55 @@ def seed_invitation(
             )
         )
     return invitation_id, token
+
+
+def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
+    """Invite ``email`` into the running hub's first tenant as ``role``, issued now — the way a person the hub has
+    not seen arrives — and return the link's token for ``authorize?invite=``."""
+    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
+    try:
+        _invitation_id, token = seed_invitation(engine, default_tenant(engine), email, role, at=datetime.now(UTC))
+    finally:
+        engine.dispose()
+    return token
+
+
+def graph_yaml() -> str:
+    """A scripted ``default-delivery`` graph — build -> review -> deliver — named so the
+    hub's lazy ``ensure_default`` reuses it; prompts are inert, the mock runner just
+    submits the judgement choice over the wire."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# build",
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "review"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "review": {
+                "executor": "runner",
+                "prompt": "# review",
+                "session": "fresh",
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "clean", "to": "deliver"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "action": "pass",
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
 
 
 def seed_session(hub: HubHarness, user: User) -> str:

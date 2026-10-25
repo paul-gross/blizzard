@@ -6,162 +6,31 @@ ad-hoc SQL. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import subprocess
 import sys
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx2
 import pytest
-import yaml
 
-from blizzard.hub.graphs import PACKAGED
-from tests.fleet_launchers import run_forge, run_hub
-from tests.fleet_world import REPO_NAME, mint_world
+from tests.fleet_world import REPO_NAME
 from tests.service.support import (
-    mock_runner,
+    GARDEN_ROUTINE,
+    GARDEN_SCOPE,
+    Garden,
+    add_op,
+    deliver,
+    garden_stack,
+    live,
     poll_until,
-    require_mock_fleet,
+    seed,
     service_gate,
 )
-from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
-
-_ROUTINE = "garden-service"
-_SCOPE = "garden-svc"
-
-
-@dataclass(frozen=True)
-class Garden:
-    """A real hub daemon with a garden routine seated on it, plus the mock runner that
-    submits a run's artifacts and the fixture commit a delta's revisions cite."""
-
-    hub: httpx2.Client
-    hub_port: int
-    runner: httpx2.Client
-    routine_id: str
-    nodes: dict[str, str]
-    head: str
-
-
-@contextlib.contextmanager
-def garden_stack(tmp_path: Path) -> Iterator[Garden]:
-    bin_dir = require_mock_fleet()
-    _workspace, origins, bare = mint_world(bin_dir, tmp_path / "scratch")
-    head = subprocess.run(
-        ["git", "-C", str(bare), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-    ).stdout.strip()
-    forge_port, hub_port = free_port(), free_port()
-    with (
-        run_forge(bin_dir, origins, forge_port),
-        run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
-        mock_runner(bin_dir, free_port(), hub_port) as runner,
-    ):
-        minted = hub.post(
-            "/api/graphs", json={"definition_yaml": yaml.safe_dump(PACKAGED.named("garden-routine").body)}
-        )
-        assert minted.status_code == 201, minted.text
-        graph = hub.get(f"/api/graphs/{minted.json()['graph_id']}")
-        assert graph.status_code == 200, graph.text
-        nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-
-        created = hub.post(
-            "/api/routines",
-            json={
-                "name": _ROUTINE,
-                "graph_name": "garden-routine",
-                "default_scope_slug": _SCOPE,
-                "default_model": [],
-                "default_effort": None,
-            },
-        )
-        assert created.status_code == 201, created.text
-        assert runner.post("/_drive/register").json()["status"] == 201
-        yield Garden(
-            hub=hub,
-            hub_port=hub_port,
-            runner=runner,
-            routine_id=created.json()["routine_id"],
-            nodes=nodes,
-            head=head,
-        )
-
-
-def deliver(
-    g: Garden,
-    ops: Sequence[dict[str, Any]],
-    *,
-    scope: str = _SCOPE,
-    proposals: Sequence[dict[str, Any]] = (),
-    routine_id: str | None = None,
-) -> httpx2.Response:
-    """One routine run's whole delivery: mint the run, claim its entry node as the mock
-    runner, submit the run's artifacts over the wire, then post the hub's own
-    garden-delivery route. Returns that route's response — ``recorded`` or ``invalid``.
-    ``routine_id`` defaults to ``g``'s own routine; a caller naming a second routine it
-    minted itself sweeps that one instead."""
-    run = g.hub.post(
-        f"/api/routines/{routine_id or g.routine_id}/run",
-        json={"scope_slug": scope, "mode": "full", "note": "sweep"},
-    )
-    assert run.status_code == 201, run.text
-    chunk_id = run.json()["chunk_id"]
-    assert g.hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    assert g.runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
-
-    delta = {
-        "scope": scope,
-        "revisions": {REPO_NAME: g.head},
-        "measurement": "service sweep",
-        "findings": list(ops),
-    }
-    artifacts = [
-        {"name": "survey", "kind": "asset", "content": "{}", "attached": True},
-        {"name": "delta", "kind": "asset", "content": json.dumps(delta), "attached": True},
-    ]
-    if proposals:
-        artifacts.append({"name": "docket", "kind": "asset", "content": json.dumps(list(proposals)), "attached": True})
-    completed = g.runner.post(
-        "/_drive/complete", json={"chunk_id": chunk_id, "choice": "found", "artifacts": artifacts}
-    ).json()
-    assert completed["response"]["outcome"] == "next", completed
-
-    epoch = g.hub.get(f"/api/chunks/{chunk_id}").json()["latest_epoch"]
-    return g.hub.post(
-        f"/api/chunks/{chunk_id}/garden-delivery",
-        params={"node_id": g.nodes["deliver"], "epoch": epoch},
-        json={"delta": ["delta"], "proposals": ["docket"] if proposals else []},
-    )
-
-
-def add_op(locus: str, *, introduced: str | None = None) -> dict[str, Any]:
-    op: dict[str, Any] = {"op": "add", "class": "stale-docstring", "locus": locus, "summary": f"weed at {locus}"}
-    if introduced is not None:
-        op["introduced"] = introduced
-    return op
-
-
-def seed(g: Garden, count: int, *, introduced: str | None = None) -> list[str]:
-    """``count`` fresh live findings on the routine, newest-first ids as the read serves
-    them — one delivery, one ``add`` per locus."""
-    recorded = deliver(g, [add_op(f"src/app.py:{i}", introduced=introduced) for i in range(count)])
-    assert recorded.status_code == 200 and recorded.json()["outcome"] == "recorded", recorded.text
-    rows = live(g)
-    assert len(rows) >= count
-    return [r["finding_id"] for r in rows[:count]]
-
-
-def live(g: Garden) -> list[dict[str, Any]]:
-    resp = g.hub.get("/api/findings", params={"routine": _ROUTINE, "scope": _SCOPE})
-    assert resp.status_code == 200, resp.text
-    return resp.json()["findings"]
 
 
 def read_back(g: Garden, finding_id: str) -> dict[str, Any]:
@@ -245,7 +114,9 @@ def test_every_exit_verb_and_reopen_land_through_the_real_cli(tmp_path: Path) ->
 
         (row,) = json.loads(cli(g, "hub", "finding", "reopen", a, "--note", "it came back", "--json").stdout)
         assert (row["state"], row["live"]) == ("live", True), row
-        listed = json.loads(cli(g, "hub", "finding", "list", "--routine", _ROUTINE, "--scope", _SCOPE, "--json").stdout)
+        listed = json.loads(
+            cli(g, "hub", "finding", "list", "--routine", GARDEN_ROUTINE, "--scope", GARDEN_SCOPE, "--json").stdout
+        )
         assert sorted(r["finding_id"] for r in listed) == sorted([a, f])
 
 
@@ -312,7 +183,7 @@ def _trend(g: Garden, *, since: datetime, until: datetime, boundary: datetime, p
     resp = g.hub.get(
         "/api/routines/trend",
         params={
-            "routine": _ROUTINE,
+            "routine": GARDEN_ROUTINE,
             "since": since.isoformat(),
             "until": until.isoformat(),
             "introduced_boundary": boundary.isoformat(),
@@ -365,7 +236,7 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
 
         since, until = t0 - timedelta(days=14), t0 + timedelta(days=1)
         body = _trend(g, since=since, until=until, boundary=t0 - timedelta(hours=1))
-        assert body["routine_name"] == _ROUTINE
+        assert body["routine_name"] == GARDEN_ROUTINE
         assert body["period_days"] == 7
         assert len(body["periods"]) == 3  # 15 days of window cut into 7-day slices
         assert [p["created"] for p in body["periods"]] == [0, 0, 3]
@@ -393,7 +264,7 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
             "hub",
             "routine",
             "trend",
-            _ROUTINE,
+            GARDEN_ROUTINE,
             "--since",
             (local - timedelta(days=14)).isoformat(timespec="seconds"),
             "--until",
@@ -414,7 +285,7 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
             "hub",
             "routine",
             "trend",
-            _ROUTINE,
+            GARDEN_ROUTINE,
             "--since",
             (local - timedelta(days=14)).isoformat(timespec="seconds"),
             "--until",
@@ -429,7 +300,7 @@ def test_the_trend_is_served_over_http_and_through_the_real_cli(tmp_path: Path) 
         bad = g.hub.get(
             "/api/routines/trend",
             params={
-                "routine": _ROUTINE,
+                "routine": GARDEN_ROUTINE,
                 "since": since.isoformat(),
                 "until": until.isoformat(),
                 "introduced_boundary": t0.isoformat(),
@@ -469,15 +340,15 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["routine_name"] == _ROUTINE
+        assert body["routine_name"] == GARDEN_ROUTINE
 
         by_scope = {row["scope_slug"]: row for row in body["last_swept"]}
         assert not_linked not in by_scope
-        assert by_scope[_SCOPE]["finding_set_id"] is not None
+        assert by_scope[GARDEN_SCOPE]["finding_set_id"] is not None
         assert by_scope[retired_swept]["finding_set_id"] is not None
 
         swept_scopes = {m["scope_slug"] for m in body["measurements"]}
-        assert swept_scopes == {_SCOPE, retired_swept}
+        assert swept_scopes == {GARDEN_SCOPE, retired_swept}
         assert all(m["measurement"] == "service sweep" for m in body["measurements"])
 
         cli_out = cli(
@@ -485,7 +356,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
             "hub",
             "routine",
             "sweeps",
-            _ROUTINE,
+            GARDEN_ROUTINE,
             "--since",
             (t0_local - timedelta(days=1)).isoformat(timespec="seconds"),
             "--until",
@@ -493,7 +364,7 @@ def test_sweeps_reports_last_swept_across_scopes_and_the_windowed_measurement_se
             "--json",
         ).stdout
         from_cli = json.loads(cli_out)
-        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {_SCOPE, retired_swept}
+        assert {row["scope_slug"] for row in from_cli["last_swept"]} == {GARDEN_SCOPE, retired_swept}
 
 
 def test_sweeps_404s_on_an_unknown_routine_id(tmp_path: Path) -> None:
@@ -540,10 +411,10 @@ def test_retiring_a_scope_does_not_hide_its_already_delivered_findings(tmp_path:
         before = live(g)
         assert len(before) == 1
 
-        retired = g.hub.post(f"/api/scopes/{_SCOPE}/retire", json={"by": "operator"})
+        retired = g.hub.post(f"/api/scopes/{GARDEN_SCOPE}/retire", json={"by": "operator"})
         assert retired.status_code == 202, retired.text
 
-        after = g.hub.get("/api/findings", params={"scope": _SCOPE})
+        after = g.hub.get("/api/findings", params={"scope": GARDEN_SCOPE})
         assert after.status_code == 200, after.text
         after_findings = after.json()["findings"]
         assert [f["finding_id"] for f in after_findings] == [f["finding_id"] for f in before]
