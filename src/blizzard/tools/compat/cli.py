@@ -12,7 +12,7 @@ composition root: it alone reads the packaged window type and maps it to compat'
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +26,7 @@ from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.tree import CHANGES_DIR, README, read_tree
 from blizzard.tools.compat import allowances, gate
 from blizzard.tools.compat.git import GitError, Repository
+from blizzard.tools.compat.registry import DOCUMENTS
 from blizzard.tools.compat.releases import (
     Release,
     Window,
@@ -37,36 +38,10 @@ from blizzard.tools.compat.releases import (
     releases_document,
     supported,
 )
-from blizzard.tools.compat.surfaces.api import classify_api
-from blizzard.tools.compat.surfaces.config import classify_config
-from blizzard.tools.compat.surfaces.egress import classify_egress
-from blizzard.tools.compat.surfaces.store import classify_store
-from blizzard.tools.compat.surfaces.traces import classify_traces
-from blizzard.tools.compat.surfaces.wire import classify_spec_diff
 from blizzard.tools.compat.violation import Violation
 
 _WINDOW_PATH = "src/blizzard/wire/window.toml"
 BREAKS_FILE = "compat-breaks.json"
-
-type Classifier = Callable[[dict[str, Any], dict[str, Any]], list[Violation]]
-
-
-def _classify_hub_api(base: dict[str, Any], head: dict[str, Any]) -> list[Violation]:
-    wire = classify_spec_diff(base, head)
-    return [*wire, *classify_api(base, head, wire=wire)]
-
-
-#: Each committed document, the surface(s) it carries, and the classifier that diffs it.
-_DOCUMENTS: tuple[tuple[str, str, Classifier], ...] = (
-    ("openapi/hub.openapi.json", "wire, http-api", _classify_hub_api),
-    ("openapi/runner.openapi.json", "http-api", classify_api),
-    ("contracts/config/hub.json", "config", classify_config),
-    ("contracts/config/host.json", "config", classify_config),
-    ("contracts/traces/dictionary.json", "trace", classify_traces),
-    ("contracts/egress/dictionary.json", "egress", classify_egress),
-    ("contracts/store/hub.json", "store", classify_store),
-    ("contracts/store/runner.json", "store", classify_store),
-)
 
 
 @domain_model
@@ -85,7 +60,8 @@ def _window(version_window: VersionWindow) -> Window:
 
 def _head_documents(root: Path) -> dict[str, dict[str, Any]]:
     documents = {}
-    for path, _surface, _classify in _DOCUMENTS:
+    for document in DOCUMENTS:
+        path = document.path
         try:
             documents[path] = json.loads((root / path).read_text())
         except OSError as error:
@@ -95,10 +71,11 @@ def _head_documents(root: Path) -> dict[str, dict[str, Any]]:
 
 def _check_release(repo: Repository, rev: str, head: dict[str, dict[str, Any]]) -> list[Outcome]:
     outcomes = []
-    for path, surface, classify in _DOCUMENTS:
+    for document in DOCUMENTS:
+        path = document.path
         text = repo.show(rev, path)
-        findings = None if text is None or path not in head else tuple(classify(json.loads(text), head[path]))
-        outcomes.append(Outcome(path, surface, findings))
+        findings = None if text is None or path not in head else tuple(document.classify(json.loads(text), head[path]))
+        outcomes.append(Outcome(path, document.surface, findings))
     return outcomes
 
 
@@ -255,7 +232,8 @@ def _inherited(
 
 def _base_documents(repo: Repository, rev: str) -> dict[str, dict[str, Any]]:
     documents = {}
-    for path, _surface, _classify in _DOCUMENTS:
+    for document in DOCUMENTS:
+        path = document.path
         text = repo.show(rev, path)
         if text is not None:
             documents[path] = json.loads(text)
