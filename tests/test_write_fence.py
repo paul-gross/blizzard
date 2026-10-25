@@ -16,8 +16,8 @@ from sqlalchemy import Table
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
-from blizzard.hub.domain.execution.submissions import CompletionArtifact
 from blizzard.hub.store import schema as s
 from tests.support import (
     HubHarness,
@@ -478,7 +478,20 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
             at=hub.clock.now(),
-            artifacts=[CompletionArtifact(name="notes", kind=ArtifactKind.ASSET, content="n")],
+            artifacts=[
+                StoredArtifact(
+                    kind=ArtifactKind.ASSET,
+                    name="notes",
+                    data="n",
+                    repo=None,
+                    forge=None,
+                    artifact_id="art_fence",
+                    chunk_id=chunk.chunk_id,
+                    node_id=chunk.nodes["build"],
+                    node_name="build",
+                    epoch=epoch,
+                )
+            ],
             source=MigrationSource.AUTHORED_EDGE,
         )
 
