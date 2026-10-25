@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodePermissionRule,
     OpenCodeShapeError,
@@ -36,7 +37,7 @@ class OpenCodePermissionResolveError(RuntimeError):
 class OpenCodeEffectivePermissions:
     """The merged configuration plus every agent's ordered resolved ruleset."""
 
-    merged_config: Mapping[str, Any]
+    merged_config: Mapping[str, JsonValue]
     agent_rulesets: Mapping[str, tuple[OpenCodePermissionRule, ...]]
 
 

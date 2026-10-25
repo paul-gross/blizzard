@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.json_value import JsonObject
 
 
 class CompatibilityProbe(StrEnum):
@@ -275,7 +276,7 @@ class CompatibilityReport:
 
     @property
     def blocking_reasons(self) -> tuple[str, ...]:  # ast-grep-ignore: bzh:property-delegates
-        reasons = []
+        reasons: list[str] = []
         if not self.version_admitted:
             reasons.append(f"observed {self.observed_version!r}, admitted range: {self.admitted_range}")
         reasons.extend(
@@ -285,7 +286,7 @@ class CompatibilityReport:
         )
         return tuple(reasons)
 
-    def to_payload(self) -> dict[str, object]:
+    def to_payload(self) -> JsonObject:
         """Render stable report data for a later diagnostic without exposing raw observations.
 
         Carries the admitted range the report was judged against alongside the observed

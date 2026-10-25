@@ -29,6 +29,7 @@ from blizzard.runner.harness.compatibility import (
     EvidenceState,
     ProbeObservation,
 )
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.compatibility.attach import IAttachProxyFactory
 from blizzard.runner.harness.opencode.compatibility.compaction import (
     IOpenCodeCompactor,
@@ -190,12 +191,12 @@ class OpenCodeCompatibilityProbe:
         self.admitted_range = ADMITTED_OPENCODE_RANGE_DISPLAY
         self.observed_version = "unknown"
         self.version_admitted = False
-        self._evidence: dict[str, object] = {}
+        self._evidence: JsonObject = {}
         self._config_snapshots: dict[Path, bytes] = {}
         self._security_markers: tuple[Path, Path] | None = None
 
     @property
-    def evidence(self) -> Mapping[str, object]:
+    def evidence(self) -> Mapping[str, JsonValue]:
         """Raw process evidence for the outer sanitizer; never print this mapping directly."""
 
         return dict(self._evidence)
@@ -227,7 +228,7 @@ class OpenCodeCompatibilityProbe:
                 preflight_env = child_env(None, roots)
                 self._evidence["preflight"] = {
                     "cwd": str(preflight_cwd),
-                    "environment_keys": sorted(preflight_env),
+                    "environment_keys": [*sorted(preflight_env)],
                 }
                 sandbox_preflight = getattr(self._process, "preflight", None)
                 if not callable(sandbox_preflight):
@@ -274,7 +275,7 @@ class OpenCodeCompatibilityProbe:
                     self._config_snapshots = runner_config.snapshots
                     self._evidence["config"] = runner_config.evidence
                     env = child_env(config_path, roots)
-                    self._evidence["environment_keys"] = sorted(env)
+                    self._evidence["environment_keys"] = [*sorted(env)]
                     fresh = self._fresh_turn(repo.workdir, env)
                     if fresh.provider_refusal is not None:
                         self._evidence["provider_refusal"] = fresh.provider_refusal
@@ -615,7 +616,7 @@ class OpenCodeCompatibilityProbe:
         if result.returncode != 0:
             return None, self._exit_detail(result, "export")
         try:
-            export = parse_session_export(json.loads(result.stdout))
+            export = parse_session_export(decode_json(result.stdout))
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             return None, self._safe_error(exc)
         if export.info.id != session_id:
@@ -895,7 +896,7 @@ class OpenCodeCompatibilityProbe:
                 "config/effective",
             )
         try:
-            effective = json.loads(effective_result.stdout)
+            effective = decode_json(effective_result.stdout)
         except (TypeError, ValueError, json.JSONDecodeError):
             return ProbeObservation.failed(
                 CompatibilityProbe.CONFIGURATION_ISOLATION,
@@ -1036,7 +1037,7 @@ class OpenCodeCompatibilityProbe:
                 "children/exit",
             )
         try:
-            children = parse_child_sessions(json.loads(result.stdout))
+            children = parse_child_sessions(decode_json(result.stdout))
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             return ProbeObservation.failed(CompatibilityProbe.CHILD_SESSIONS, self._safe_error(exc), "children/shape")
         if not children:
@@ -1252,7 +1253,7 @@ class OpenCodeCompatibilityProbe:
         operations = self._evidence.setdefault("operations", [])
         if not isinstance(operations, list):
             return
-        operation_record: dict[str, object] = {
+        operation_record: JsonObject = {
             "operation": operation,
             "cwd": str(cwd),
         }
@@ -1287,7 +1288,7 @@ class OpenCodeCompatibilityProbe:
         operations = self._evidence.setdefault("operations", [])
         if not isinstance(operations, list):
             return
-        operation_record: dict[str, object] = {
+        operation_record: JsonObject = {
             "operation": operation,
             "cwd": str(cwd),
             "http": {"method": method, "path": path, "status": status},

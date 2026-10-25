@@ -13,6 +13,7 @@ from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.claude_code.ambient import AmbientSources, detect_ambient_conflicts
 from blizzard.runner.harness.health import DeclaredDegradation
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
 # Currently >=2.1,<3.0, corpus-free: membership via `version_admitted` admits it alone.
@@ -81,7 +82,7 @@ class ClaudeCodeHealthProbe:
         except OSError:
             return False
         try:
-            data = json.loads(raw)
+            data = decode_json(raw)
         except json.JSONDecodeError:
             return False
         oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None

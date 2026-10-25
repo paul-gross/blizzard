@@ -11,6 +11,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.harness.compatibility import CompatibilityReport
+from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.opencode.compatibility.sanitizer import OpenCodeSanitizer, is_absolute_host_path
 
 
@@ -48,7 +49,7 @@ class OpenCodeEvidence:
         except (OSError, ValueError) as exc:
             raise OpenCodeEvidenceError("the compatibility evidence directory is not usable") from exc
 
-    def write(self, report: CompatibilityReport, runtime: Mapping[str, object]) -> tuple[Path, Path]:
+    def write(self, report: CompatibilityReport, runtime: Mapping[str, JsonValue]) -> tuple[Path, Path]:
         """Persist only sanitized JSON and return the two retained paths."""
 
         self.validate()
@@ -83,7 +84,7 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _runtime_path_replacements(runtime: Mapping[str, object]) -> tuple[tuple[str, str], ...]:
+def _runtime_path_replacements(runtime: Mapping[str, JsonValue]) -> tuple[tuple[str, str], ...]:
     operations = runtime.get("operations")
     if not isinstance(operations, Sequence) or isinstance(operations, (str, bytes, bytearray)):
         return ()
@@ -124,11 +125,11 @@ _OBSERVED_IDENTIFIER_KEYS = {
 }
 
 
-def _runtime_identifier_replacements(runtime: Mapping[str, object]) -> tuple[tuple[str, str], ...]:
+def _runtime_identifier_replacements(runtime: Mapping[str, JsonValue]) -> tuple[tuple[str, str], ...]:
     serialized = json.dumps(runtime, ensure_ascii=False)
     observed: dict[str, set[str]] = {kind: set() for kind in ("session", "message", "part", "call")}
 
-    def collect(value: object, context_kind: str | None = None) -> None:
+    def collect(value: JsonValue | Mapping[str, JsonValue], context_kind: str | None = None) -> None:
         if isinstance(value, Mapping):
             for key, nested in value.items():
                 key_name = re.sub(r"[-.]", "_", key.lower()) if isinstance(key, str) else ""

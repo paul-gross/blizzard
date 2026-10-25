@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -134,7 +135,7 @@ class OpenCodeDescendantUsage:
             return exports[session_id]
         parsed: OpenCodeSessionExport | None
         try:
-            parsed = parse_session_export(json.loads(self._exporter.export(session_id)))
+            parsed = parse_session_export(decode_json(self._exporter.export(session_id)))
         except (OpenCodeExportError, json.JSONDecodeError, OpenCodeShapeError) as exc:
             _log.warning("opencode_descendant_export_unreadable", session_id=session_id, error=str(exc))
             parsed = None

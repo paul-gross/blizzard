@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from blizzard.foundation.roles import adapter_model
+from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 
 _ASK = "ask"
@@ -54,7 +54,7 @@ def residual_asks(agent_rulesets: Mapping[str, tuple[OpenCodePermissionRule, ...
     )
 
 
-def _holds_ask(permission_node: object, permission: str, pattern: str) -> bool:
+def _holds_ask(permission_node: JsonValue, permission: str, pattern: str) -> bool:
     """Whether a config ``permission`` object itself writes this ``ask``."""
     if not isinstance(permission_node, dict):
         return False
@@ -64,25 +64,26 @@ def _holds_ask(permission_node: object, permission: str, pattern: str) -> bool:
     return isinstance(entry, dict) and entry.get(pattern) == _ASK
 
 
-def _is_map(permission_node: object, permission: str) -> bool:
+def _is_map(permission_node: JsonValue, permission: str) -> bool:
     return isinstance(permission_node, dict) and isinstance(permission_node.get(permission), dict)
 
 
-def _deny_in(target: dict[str, Any], permission: str, pattern: str, *, as_map: bool) -> None:
+def _deny_in(target: JsonObject, permission: str, pattern: str, *, as_map: bool) -> None:
     """Write the deny in the shape the layer wrote the ask: a scalar for a bare ``*``, else a pattern map."""
     existing = target.get(permission)
     if pattern == "*" and not as_map and not isinstance(existing, dict):
         target[permission] = _DENY
         return
     if not isinstance(existing, dict):
-        existing = {} if existing is None else {"*": existing}
-        target[permission] = existing
+        wrapped: JsonObject = {} if existing is None else {"*": existing}
+        target[permission] = wrapped
+        existing = wrapped
     existing[pattern] = _DENY
 
 
 def compose_ask_denials(
-    merged_config: Mapping[str, Any], agent_rulesets: Mapping[str, tuple[OpenCodePermissionRule, ...]]
-) -> dict[str, Any]:
+    merged_config: Mapping[str, JsonValue], agent_rulesets: Mapping[str, tuple[OpenCodePermissionRule, ...]]
+) -> JsonObject:
     """The override document (empty when nothing can ask) that rewrites every reachable ``ask`` to ``deny``.
 
     An ask the merged config writes is denied in place — top-level ``permission`` or ``agent.<name>.permission``,
@@ -90,8 +91,8 @@ def compose_ask_denials(
     layer, and the same permission's later default rules are restated after it so their outcome survives."""
     top = merged_config.get("permission")
     agents = merged_config.get("agent")
-    top_overrides: dict[str, Any] = {}
-    agent_overrides: dict[str, dict[str, Any]] = {}
+    top_overrides: JsonObject = {}
+    agent_overrides: dict[str, JsonObject] = {}
     for agent, rules in sorted(agent_rulesets.items()):
         agent_node = agents.get(agent) if isinstance(agents, dict) else None
         agent_permission = agent_node.get("permission") if isinstance(agent_node, dict) else None
@@ -115,7 +116,7 @@ def compose_ask_denials(
                 for later in later_rules:
                     if isinstance(restated, dict) and restated.get(later.pattern) != _DENY:
                         restated[later.pattern] = later.action
-    document: dict[str, Any] = {}
+    document: JsonObject = {}
     if top_overrides:
         document["permission"] = top_overrides
     if agent_overrides:
@@ -123,7 +124,7 @@ def compose_ask_denials(
     return document
 
 
-def merge_overrides(base: dict[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+def merge_overrides(base: JsonObject, overrides: Mapping[str, JsonValue]) -> JsonObject:
     """``overrides`` deep-merged into ``base`` the way OpenCode merges config layers: objects recurse, anything
     else replaces, and an existing key keeps its position."""
     merged = dict(base)

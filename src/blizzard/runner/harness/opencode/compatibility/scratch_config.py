@@ -16,6 +16,7 @@ from importlib import resources
 from pathlib import Path
 
 from blizzard.foundation.roles import adapter_model
+from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode.compatibility.proof_script import (
     CONFIG_PERMISSION_COMMAND,
     PERMISSION_AGENT,
@@ -34,7 +35,7 @@ RUNNER_CONFIG_USERNAME = "blizzard-runner-config"
 COMPACTION_TAIL_TURNS = 1
 PROJECT_CONFIG_SENTINEL = "project-config-sentinel"
 USER_CONFIG_SENTINEL = "user-config-sentinel"
-ISOLATION_EVIDENCE = {
+ISOLATION_EVIDENCE: JsonObject = {
     "config": "isolated",
     "data": "isolated",
     "state": "isolated",
@@ -113,7 +114,7 @@ class IsolationRoots:
             self.tool_bin,
         )
 
-    def to_payload(self) -> dict[str, str]:
+    def to_payload(self) -> JsonObject:
         return {field: str(getattr(self, field)) for field in _ISOLATION_FIELDS}
 
 
@@ -128,7 +129,7 @@ class WrittenRunnerConfig:
     path: Path
     security_markers: tuple[Path, Path]
     snapshots: dict[Path, bytes]
-    evidence: dict[str, object]
+    evidence: JsonObject
 
 
 def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, variant: str) -> WrittenRunnerConfig:
@@ -142,7 +143,7 @@ def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, var
     auth_probe_command = f"cat {shlex.quote(str(roots.auth_path))} > {shlex.quote(str(auth_marker))}"
     outside_probe_command = f"printf outside > {shlex.quote(str(outside_marker))}"
     security_commands = (auth_probe_command, outside_probe_command)
-    payload = {
+    payload: JsonObject = {
         "$schema": "https://opencode.ai/config.json",
         "username": RUNNER_CONFIG_USERNAME,
         "model": model,
@@ -222,7 +223,7 @@ def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, var
     # Parse the exact config shape before handing it to OpenCode; a malformed runner-owned
     # config must be a proof failure, not an unexplained provider result.
     parse_worker_config(payload)
-    project_config = {
+    project_config: JsonObject = {
         "$schema": "https://opencode.ai/config.json",
         "model": "competing/project-model",
         "username": PROJECT_CONFIG_SENTINEL,
@@ -257,7 +258,7 @@ def write_runner_config(workdir: Path, roots: IsolationRoots, *, model: str, var
         workdir / "opencode.json": (workdir / "opencode.json").read_bytes(),
         user_config: user_config.read_bytes(),
     }
-    evidence = {
+    evidence: JsonObject = {
         "kind": "runner-owned",
         "filename": config_path.name,
         "runner_path": str(config_path),

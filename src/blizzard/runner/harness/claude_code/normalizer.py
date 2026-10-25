@@ -10,12 +10,12 @@ from __future__ import annotations
 import json
 import re
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
     NormalizedTurn,
@@ -55,7 +55,7 @@ _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _CONTEXT_USAGE_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
 
-def _as_int(value: object) -> int:
+def _as_int(value: JsonValue) -> int:
     """``value`` as a count, or ``0`` — a malformed usage field degrades, never crashes."""
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
@@ -97,16 +97,21 @@ class Text:
         return cls(stripped, False)
 
     @classmethod
-    def of_content(cls, content: object) -> Text:
+    def of_content(cls, content: JsonValue | Sequence[JsonValue]) -> Text:
         return cls.of(cls.joined(content))
 
     @staticmethod
-    def joined(content: object) -> str:
+    def joined(content: JsonValue | Sequence[JsonValue]) -> str:
         """A content value's text, uncleaned: the string itself, or its ``text`` blocks."""
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            parts = [str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            # A JSON null `text` is absent, not the string "None".
+            parts = [
+                str(b["text"])
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "text" and b.get("text") is not None
+            ]
             return "\n".join(p for p in parts if p)
         return ""
 
@@ -120,7 +125,7 @@ class TranscriptEntry:
     """One raw JSONL record. Identity-bearing (``eq=False``): two records of identical content
     stay two records, which is what threads a run correctly under duplicate ``uuid`` values."""
 
-    raw: dict[str, Any]
+    raw: JsonObject
 
     @classmethod
     def parse(cls, lines: list[str]) -> list[TranscriptEntry]:
@@ -131,7 +136,7 @@ class TranscriptEntry:
             if not line:
                 continue
             try:
-                decoded = json.loads(line)
+                decoded = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if isinstance(decoded, dict):
@@ -143,14 +148,14 @@ class TranscriptEntry:
         value = self.raw.get(key)
         return value if isinstance(value, str) and value else None
 
-    def blocks(self, kind: str) -> list[dict[str, Any]]:
+    def blocks(self, kind: str) -> list[JsonObject]:
         content = self.content
         if not isinstance(content, list):
             return []
         return [b for b in content if isinstance(b, dict) and b.get("type") == kind]
 
     @property
-    def type(self) -> object:
+    def type(self) -> JsonValue:
         return self.raw.get("type")
 
     @property
@@ -193,7 +198,7 @@ class TranscriptEntry:
         return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
     @property
-    def content(self) -> object:  # ast-grep-ignore: bzh:property-delegates
+    def content(self) -> JsonValue:  # ast-grep-ignore: bzh:property-delegates
         message = self.raw.get("message")
         return message.get("content") if isinstance(message, dict) else None
 
@@ -312,12 +317,12 @@ class ToolInput:
     :class:`~blizzard.runner.harness.transcript.ToolCall` and
     :data:`~blizzard.runner.harness.transcript.ToolInputShape`."""
 
-    mapping: Mapping[str, Any]
+    mapping: Mapping[str, JsonValue]
     unparsed: str | None
     shape: ToolInputShape
 
     @classmethod
-    def of(cls, raw: object) -> ToolInput:
+    def of(cls, raw: JsonValue) -> ToolInput:
         if isinstance(raw, dict):
             return cls(raw, None, "object")
         if raw is None:
@@ -341,8 +346,8 @@ class NormalizedFile:
     harness_version: str | None
     #: The two cross-window handles: results whose call this window never saw,
     #: and the agent-id -> spawning ``tool_use_id`` pairs it revealed.
-    late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
-    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
+    late_tool_outputs: list[LateToolOutput] = field(default_factory=list[LateToolOutput])
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict[str, str])
 
     @classmethod
     def of_lines(cls, lines: list[str], *, is_sidechain_file: bool = False) -> NormalizedFile:
@@ -492,7 +497,7 @@ class _TurnCollapser:
         if record.uuid is not None and tool_indices:
             self.tool_turns_by_record_uuid.setdefault(record.uuid, []).extend(tool_indices)
 
-    def _thinking(self, block: dict[str, Any], at: datetime | None) -> None:
+    def _thinking(self, block: JsonObject, at: datetime | None) -> None:
         raw = str(block.get("thinking", "") or "")
         # Thinking content is redacted universally (empty `thinking` + a `signature`) —
         # the expected shape, not an edge case, so this turn carries *presence*.
@@ -500,7 +505,7 @@ class _TurnCollapser:
         self._append("thinking", at, text=Text.of(raw) if raw else _EMPTY, thinking_redacted=redacted)
 
     @staticmethod
-    def _tool_call(block: dict[str, Any]) -> ToolCall:
+    def _tool_call(block: JsonObject) -> ToolCall:
         arguments = ToolInput.of(block.get("input"))
         tool_use_id = block.get("id")
         return ToolCall(

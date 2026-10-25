@@ -22,6 +22,7 @@ from blizzard.runner.harness.bundle import (
 )
 from blizzard.runner.harness.claude_code.settings_compose import SettingsCollision, compose_settings
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
+from blizzard.runner.harness.harness_shared import decode_json_object
 
 _DIRNAME = "claude-code"
 SETTINGS_FILENAME = "settings.json"
@@ -81,7 +82,7 @@ class ClaudeCodeBundleDelivery:
 def _composer(permission_mode: str | None) -> Callable[[HarnessComposition], None]:
     def compose(composition: HarnessComposition) -> None:
         staged = composition.staged_dir / SETTINGS_FILENAME
-        operator = json.loads(staged.read_text()) if staged.exists() else {}
+        operator = decode_json_object(staged.read_text()) if staged.exists() else {}
         try:
             composed = compose_settings(operator, WorkerSettings.of().document, permission_mode=permission_mode)
         except SettingsCollision as exc:

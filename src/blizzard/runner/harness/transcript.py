@@ -10,11 +10,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol
 
 import structlog
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.json_value import JsonValue
 
 #: The normalized turn vocabulary a source produces.
 NormalizedTurnKind = Literal["env", "asst", "tool", "thinking"]
@@ -49,7 +50,7 @@ class ToolCall:
     while the matching result has not yet arrived — a live turn, not corruption."""
 
     name: str
-    input: Mapping[str, Any]
+    input: Mapping[str, JsonValue]
     input_unparsed: str | None
     input_shape: ToolInputShape
     tool_use_id: str | None
@@ -121,10 +122,10 @@ class TranscriptBatch:
     harness_version: str | None
     #: Results whose own call fell outside this window; defaulted empty, so a
     #: source that resolves every result in-window constructs exactly as before.
-    late_tool_outputs: list[LateToolOutput] = field(default_factory=list)
+    late_tool_outputs: list[LateToolOutput] = field(default_factory=list[LateToolOutput])
     #: Agent-id -> spawning ``tool_use_id`` pairs this window revealed — the handle a LATER
     #: window's sidecar read links by, once the result that named the pair has scrolled away.
-    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict[str, str])
 
 
 class TranscriptErrorFactory:

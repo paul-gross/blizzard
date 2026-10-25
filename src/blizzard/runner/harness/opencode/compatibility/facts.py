@@ -10,6 +10,7 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from blizzard.runner.harness.json_value import JsonObject, decode_json
 from blizzard.runner.harness.opencode.compatibility.proof_script import (
     PERMISSION_DENIAL_MESSAGES,
     PERMISSION_TOOL,
@@ -64,7 +65,7 @@ def is_explicit_permission_denial(event: OpenCodeRunEvent, command: str) -> bool
         return False
     raw_rules = state.error.strip()[len(prefix + marker) :]
     try:
-        rules = json.loads(raw_rules)
+        rules = decode_json(raw_rules)
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
     return isinstance(rules, list) and any(
@@ -81,7 +82,7 @@ def runner_config_denies(env: Mapping[str, str], command: str) -> bool:
     if not path:
         return False
     try:
-        config = parse_worker_config(json.loads(Path(path).read_text(encoding="utf-8")))
+        config = parse_worker_config(decode_json(Path(path).read_text(encoding="utf-8")))
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return False
     bash = config.permissions.get(PERMISSION_TOOL)
@@ -123,7 +124,7 @@ def has_takeover_prompt(export: OpenCodeSessionExport, prompt: str) -> bool:
     )
 
 
-def transcript_evidence(samples: Sequence[TranscriptExportSample], transcript: TranscriptProof) -> dict[str, object]:
+def transcript_evidence(samples: Sequence[TranscriptExportSample], transcript: TranscriptProof) -> JsonObject:
     """Retain identities and state labels without retaining model or tool text."""
 
     payload = transcript.to_payload()

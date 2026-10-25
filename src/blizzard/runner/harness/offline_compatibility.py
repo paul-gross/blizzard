@@ -15,6 +15,7 @@ from packaging.version import Version
 
 from blizzard.runner.harness.admission import classification_of_manifest, select_reference_corpus, version_admitted
 from blizzard.runner.harness.compatibility import CompatibilityClassification
+from blizzard.runner.harness.json_value import JsonValue
 
 
 class ICompatibilityCorpus(Protocol):
@@ -24,7 +25,7 @@ class ICompatibilityCorpus(Protocol):
         """Every version ``harness_id`` has a committed manifest for, in no particular order."""
         ...
 
-    def manifest(self, harness_id: str, version: str) -> Mapping[str, object] | None:
+    def manifest(self, harness_id: str, version: str) -> Mapping[str, JsonValue] | None:
         """That version's manifest, or ``None`` when it is absent or unreadable."""
         ...
 

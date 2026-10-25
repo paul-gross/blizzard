@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.roles import collaborator
+from blizzard.runner.harness.json_value import JsonValue, decode_json
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 
 # Package-relative: the wheel ships only `src/blizzard`, so the corpus lives under `harness/contracts`.
@@ -30,9 +30,9 @@ class CommittedCorpus:
             child.name for child in harness_dir.iterdir() if child.is_dir() and (child / "manifest.json").is_file()
         )
 
-    def manifest(self, harness_id: str, version: str) -> Mapping[str, object] | None:
+    def manifest(self, harness_id: str, version: str) -> Mapping[str, JsonValue] | None:
         try:
-            manifest = json.loads((self.root / harness_id / version / "manifest.json").read_text())
+            manifest = decode_json((self.root / harness_id / version / "manifest.json").read_text())
         except (OSError, ValueError):
             return None
         return manifest if isinstance(manifest, dict) else None

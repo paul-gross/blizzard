@@ -68,12 +68,14 @@ class HarnessHealthCache:
     #: ``None`` on a store-free composition (the OpenAPI exporter, a unit test) — reads as never-run.
     selftest_results: IReadSelfTestResultRepository | None
     #: Per-harness declared (tier, native-model) pairs this runner resolves through it specifically.
-    configured_tiers: Mapping[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
+    configured_tiers: Mapping[str, tuple[tuple[str, str], ...]] = field(
+        default_factory=dict[str, tuple[tuple[str, str], ...]]
+    )
     refresh_seconds: float = HARNESS_VERSION_REFRESH_SECONDS
-    _results: dict[str, HarnessHealthResult] = field(default_factory=dict, compare=False)
-    _computed_at: dict[str, datetime] = field(default_factory=dict, compare=False)
-    _last_version: dict[str, object] = field(default_factory=dict, compare=False)
-    _last_selftest: dict[str, object] = field(default_factory=dict, compare=False)
+    _results: dict[str, HarnessHealthResult] = field(default_factory=dict[str, HarnessHealthResult], compare=False)
+    _computed_at: dict[str, datetime] = field(default_factory=dict[str, datetime], compare=False)
+    _last_version: dict[str, object] = field(default_factory=dict[str, object], compare=False)
+    _last_selftest: dict[str, object] = field(default_factory=dict[str, object], compare=False)
 
     def refresh(
         self, harness_id: str, *, adapter: _ResolvesModelStrict, observed_version: str | None

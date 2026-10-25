@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
     _deny_in,
     _holds_ask,
@@ -26,21 +27,21 @@ pytestmark = pytest.mark.unit
 
 
 def test_a_top_level_scalar_ask_is_denied_in_place() -> None:
-    config = {"permission": {"bash": "ask"}}
+    config: JsonObject = {"permission": {"bash": "ask"}}
     rules = {"build": (Rule("*", "*", "allow"), Rule("bash", "*", "ask"))}
 
     assert compose_ask_denials(config, rules) == {"permission": {"bash": "deny"}}
 
 
 def test_a_pattern_map_ask_denies_only_that_pattern() -> None:
-    config = {"permission": {"bash": {"*": "ask", "ls": "allow"}}}
+    config: JsonObject = {"permission": {"bash": {"*": "ask", "ls": "allow"}}}
     rules = {"build": (Rule("bash", "*", "ask"), Rule("bash", "ls", "allow"))}
 
     assert compose_ask_denials(config, rules) == {"permission": {"bash": {"*": "deny"}}}
 
 
 def test_an_agent_level_ask_is_denied_in_that_agents_layer() -> None:
-    config = {"agent": {"build": {"permission": {"edit": "ask"}}}}
+    config: JsonObject = {"agent": {"build": {"permission": {"edit": "ask"}}}}
     rules = {"build": (Rule("edit", "*", "ask"),), "plan": (Rule("edit", "*", "deny"),)}
 
     assert compose_ask_denials(config, rules) == {"agent": {"build": {"permission": {"edit": "deny"}}}}
@@ -76,18 +77,23 @@ def test_a_narrower_later_rule_does_not_shadow_an_ask() -> None:
 
 
 def test_the_composed_override_merges_in_place_and_clears_the_residual() -> None:
-    base = {"permission": {"question": "deny", "bash": "ask", "edit": "allow"}}
+    base: JsonObject = {"permission": {"question": "deny", "bash": "ask", "edit": "allow"}}
     overrides = compose_ask_denials(base, {"build": (Rule("bash", "*", "ask"),)})
 
     merged = merge_overrides(base, overrides)
 
-    assert list(merged["permission"]) == ["question", "bash", "edit"]
-    assert merged["permission"]["bash"] == "deny"
-    assert base["permission"]["bash"] == "ask"
+    merged_permission = merged["permission"]
+    base_permission = base["permission"]
+    assert isinstance(merged_permission, dict)
+    assert isinstance(base_permission, dict)
+    assert list(merged_permission) == ["question", "bash", "edit"]
+    assert merged_permission["bash"] == "deny"
+    assert base_permission["bash"] == "ask"
 
 
 def test_a_scalar_is_replaced_by_an_override_object() -> None:
-    assert merge_overrides({"permission": {"read": "allow"}}, {"permission": {"read": {"*.env": "deny"}}}) == {
+    base: JsonObject = {"permission": {"read": "allow"}}
+    assert merge_overrides(base, {"permission": {"read": {"*.env": "deny"}}}) == {
         "permission": {"read": {"*.env": "deny"}}
     }
 
@@ -117,7 +123,7 @@ def test_a_malformed_resolved_config_raises_a_shape_error(text: str) -> None:
 
 
 def test_a_deny_promotes_an_existing_scalar_to_a_wildcard_map() -> None:
-    target: dict[str, object] = {"read": "allow"}
+    target: JsonObject = {"read": "allow"}
 
     _deny_in(target, "read", "*.env", as_map=False)
 
@@ -135,7 +141,7 @@ def test_a_deny_promotes_an_existing_scalar_to_a_wildcard_map() -> None:
     ],
 )
 def test_a_deny_is_written_in_the_shape_the_ask_was(
-    target: dict[str, object], pattern: str, as_map: bool, expected: dict[str, object]
+    target: JsonObject, pattern: str, as_map: bool, expected: JsonObject
 ) -> None:
     _deny_in(target, "bash", pattern, as_map=as_map)
 
@@ -156,12 +162,12 @@ def test_a_deny_is_written_in_the_shape_the_ask_was(
         (None, "bash", "*", False),
     ],
 )
-def test_holds_ask_is_true_only_for_the_exact_ask(node: object, permission: str, pattern: str, held: bool) -> None:
+def test_holds_ask_is_true_only_for_the_exact_ask(node: JsonValue, permission: str, pattern: str, held: bool) -> None:
     assert _holds_ask(node, permission, pattern) is held
 
 
 def test_an_agent_level_scalar_ask_is_denied_as_a_scalar_and_a_map_ask_as_a_map() -> None:
-    config = {
+    config: JsonObject = {
         "agent": {
             "build": {"permission": {"edit": "ask"}},
             "plan": {"permission": {"bash": {"*": "allow", "rm": "ask"}}},
@@ -178,7 +184,7 @@ def test_an_agent_level_scalar_ask_is_denied_as_a_scalar_and_a_map_ask_as_a_map(
 
 
 def test_an_agent_layer_ask_wins_over_the_same_ask_at_the_top_level() -> None:
-    config = {"permission": {"edit": "ask"}, "agent": {"build": {"permission": {"edit": "ask"}}}}
+    config: JsonObject = {"permission": {"edit": "ask"}, "agent": {"build": {"permission": {"edit": "ask"}}}}
 
     assert compose_ask_denials(config, {"build": (Rule("edit", "*", "ask"),)}) == {
         "agent": {"build": {"permission": {"edit": "deny"}}}
@@ -186,7 +192,7 @@ def test_an_agent_layer_ask_wins_over_the_same_ask_at_the_top_level() -> None:
 
 
 def test_an_ask_written_by_neither_layer_is_denied_in_the_agent_layer_even_with_a_top_level_scalar() -> None:
-    config = {"permission": {"read": "allow"}, "agent": {"build": {"permission": "bad"}, "plan": "bad"}}
+    config: JsonObject = {"permission": {"read": "allow"}, "agent": {"build": {"permission": "bad"}, "plan": "bad"}}
     rules = {"build": (Rule("read", "*.env", "ask"),), "plan": (Rule("read", "*.env", "ask"),)}
 
     assert compose_ask_denials(config, rules) == {

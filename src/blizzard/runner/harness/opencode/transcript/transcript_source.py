@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass, replace
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -65,7 +66,7 @@ class _Position:
         if token is None:
             return cls.start()
         try:
-            decoded = json.loads(token)
+            decoded = decode_json(token)
         except json.JSONDecodeError as exc:
             raise CursorError("cursor token is not valid JSON") from exc
         if not isinstance(decoded, dict):
@@ -78,12 +79,12 @@ class _Position:
         linked_raw = decoded.get("linked_children", [])
         if not isinstance(linked_raw, list) or not all(isinstance(x, str) and x for x in linked_raw):
             raise CursorError("cursor token 'linked_children' must be an array of non-empty strings")
-        return cls(cursor, frozenset(linked_raw))
+        return cls(cursor, frozenset(x for x in linked_raw if isinstance(x, str)))
 
     @property
     def token(self) -> str:
         return json.dumps(
-            {"cursor": json.loads(self.cursor.token), "linked_children": sorted(self.linked_children)},
+            {"cursor": decode_json(self.cursor.token), "linked_children": sorted(self.linked_children)},
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -282,7 +283,7 @@ class OpenCodeTranscriptSource:
     def _export(self, session_id: str, *, recovered: bool, fresh: bool = False) -> OpenCodeSessionExport | None:
         try:
             raw = self._fetch(session_id) if fresh else self._reuse_or_fetch(session_id)
-            return parse_session_export(json.loads(raw))
+            return parse_session_export(decode_json(raw))
         except _EXPORT_ERRORS as exc:
             message = f"transcript unreadable: {session_id}"
             if recovered:
@@ -332,7 +333,7 @@ class OpenCodeTranscriptSource:
     def _resolve_sidechain(self, *, parent_session_id: str, candidate: ChildCandidate) -> SidechainConversation | None:
         try:
             raw = self._reuse_or_fetch(candidate.session_id)
-            child_export = parse_session_export(json.loads(raw))
+            child_export = parse_session_export(decode_json(raw))
         except _EXPORT_ERRORS as exc:
             self._errors.from_io_recovered(
                 exc,

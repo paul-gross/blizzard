@@ -1291,6 +1291,45 @@ def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines(spawn_ex
 
 
 @pytest.mark.unit
+def test_sum_transcript_usage_reads_a_non_numeric_token_field_as_absent(spawn_executor: Executor) -> None:
+    usage = {
+        "input_tokens": "12",
+        "output_tokens": ["x"],
+        "cache_read_input_tokens": True,
+        "cache_creation_input_tokens": {"n": 1},
+    }
+    lines = [
+        json.dumps({"type": "assistant", "message": {"id": "m1", "usage": usage}}),
+        transcript_fixtures.assistant_usage(input_tokens=2, output_tokens=3, message_id="m2"),
+    ]
+
+    sample = _adapter(spawn_executor).sum_transcript_usage(lines, "spawn")
+
+    counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
+    assert counts == (2, 3, 0, 0)
+
+
+@pytest.mark.unit
+def test_parse_usage_reads_non_numeric_token_and_model_usage_fields_as_absent(spawn_executor: Executor) -> None:
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "result": "ok",
+            "model": "claude-opus-4-8",
+            "usage": {"input_tokens": "120", "output_tokens": 45, "cache_read_input_tokens": None},
+            "modelUsage": {"claude-opus-4-8": {"inputTokens": "9", "outputTokens": 4, "cacheReadInputTokens": False}},
+        }
+    )
+
+    sample = _adapter(spawn_executor).parse_usage(envelope, "judge")
+
+    assert sample is not None
+    counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
+    assert counts == (0, 45, 0, 0)
+    assert sample.cost_scope_tokens == 4
+
+
+@pytest.mark.unit
 def test_sum_transcript_usage_counts_each_empty_id_record_rather_than_collapsing_them(
     spawn_executor: Executor,
 ) -> None:

@@ -18,6 +18,7 @@ from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
     NormalizedTurn,
@@ -127,7 +128,9 @@ def _turn(index: int, text: str) -> NormalizedTurn:
     )
 
 
-def _tool_call(output: str, *, input_: dict[str, object] | None = None, input_unparsed: str | None = None) -> ToolCall:
+def _tool_call(
+    output: str, *, input_: Mapping[str, JsonValue] | None = None, input_unparsed: str | None = None
+) -> ToolCall:
     return ToolCall(
         name="Bash",
         input=input_ or {},
@@ -1427,7 +1430,7 @@ def _unshrinkable_tool_turn(index: int) -> NormalizedTurn:
     """A `MultiEdit`-shaped turn with no shrinkable content at all (every string value is
     empty) whose sheer structural bulk alone still exceeds the cap, even shrunk to
     nothing — the single pathological turn the isolation test needs, isolated from any sibling."""
-    edits = [{"old_string": "", "new_string": ""} for _ in range(_empty_edits_over_cap(1.5))]
+    edits: list[JsonValue] = [{"old_string": "", "new_string": ""} for _ in range(_empty_edits_over_cap(1.5))]
     return NormalizedTurn(
         index=index,
         kind="tool",
@@ -1882,7 +1885,10 @@ def test_pump_shrinking_a_multi_edit_input_never_mutates_the_sources_own_turn() 
     TranscriptPump(ctx).run()
 
     assert turn.tool is not None
-    source_edit = turn.tool.input["edits"][0]
+    edits = turn.tool.input["edits"]
+    assert isinstance(edits, list)
+    source_edit = edits[0]
+    assert isinstance(source_edit, dict)
     assert source_edit["old_string"] == huge  # untouched — full length, not shrunk in place
     assert source_edit["new_string"] == huge
 

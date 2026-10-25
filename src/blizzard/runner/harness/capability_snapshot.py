@@ -22,7 +22,7 @@ class HarnessCapability:
 
     harness_id: str
     version: str | None = None
-    tiers: list[str] = field(default_factory=list)
+    tiers: list[str] = field(default_factory=list[str])
     default: bool = False
     available: bool = True
 
@@ -36,7 +36,9 @@ class HarnessVersionCache:
 
     clock: IClock
     refresh_seconds: float = HARNESS_VERSION_REFRESH_SECONDS
-    _observed: dict[str, tuple[str | None, datetime]] = field(default_factory=dict, compare=False)
+    _observed: dict[str, tuple[str | None, datetime]] = field(
+        default_factory=dict[str, tuple[str | None, datetime]], compare=False
+    )
 
     def get(self, harness_id: str, observe: Callable[[], str | None]) -> str | None:
         now = self.clock.now()

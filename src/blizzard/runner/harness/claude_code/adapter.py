@@ -12,7 +12,6 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
@@ -33,6 +32,7 @@ from blizzard.runner.harness.claude_code.bundle import ClaudeCodeBundleDelivery
 from blizzard.runner.harness.claude_code.settings_compose import PERMISSION_MODES
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
 from blizzard.runner.harness.internal.version_probe import VersionProbe
+from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -79,6 +79,11 @@ _RATE_LIMIT_RESET_RE = re.compile(r"resets\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*\(([^
 _OVERLOAD_TEXT_RE = re.compile(r"529|overloaded", re.IGNORECASE)
 
 
+def _as_int(value: JsonValue) -> int:
+    """``value`` as a count, or ``0`` — a malformed usage field reads as absent, never crashes."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
 def _matches_model(expected: str, observed: str) -> bool:
     return observed == expected or observed.startswith(f"{expected}-") or observed.startswith(f"claude-{expected}-")
 
@@ -91,7 +96,7 @@ class ResultEnvelope:
     A killed worker's stdout can carry partial or non-JSON lines ahead of (or instead of) the
     final envelope, so :meth:`of` scans in reverse and skips anything that fails to parse."""
 
-    fields: Mapping[str, Any]
+    fields: Mapping[str, JsonValue]
 
     @classmethod
     def of(cls, output: str) -> ResultEnvelope | None:
@@ -100,7 +105,7 @@ class ResultEnvelope:
             if not line.startswith("{"):
                 continue
             try:
-                decoded = json.loads(line)
+                decoded = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if isinstance(decoded, dict) and ("result" in decoded or decoded.get("type") == "result"):
@@ -114,7 +119,7 @@ class ResultEnvelope:
         return str(self.fields.get("result", ""))
 
     @property
-    def usage(self) -> Mapping[str, Any] | None:  # ast-grep-ignore: bzh:property-delegates
+    def usage(self) -> Mapping[str, JsonValue] | None:  # ast-grep-ignore: bzh:property-delegates
         usage = self.fields.get("usage")
         return usage if isinstance(usage, dict) else None
 
@@ -142,7 +147,7 @@ class ResultEnvelope:
         for entry in breakdown.values():
             if not isinstance(entry, dict):
                 continue
-            total += sum(int(entry.get(field) or 0) for field in fields)
+            total += sum(_as_int(entry.get(field)) for field in fields)
         return total
 
 
@@ -512,12 +517,12 @@ class ClaudeCodeAdapter:
         if envelope is None or envelope.usage is None:
             return None
         usage = envelope.usage
-        observed = envelope.model
+        observed: str | None = envelope.model
         # The result envelope commonly has no top-level model. The invocation's own
         # assistant records identify its model even when modelUsage includes earlier turns.
         for raw_line in transcript_lines:
             try:
-                record = json.loads(raw_line)
+                record = decode_json(raw_line)
             except json.JSONDecodeError:
                 continue
             if (
@@ -527,12 +532,9 @@ class ClaudeCodeAdapter:
                 and not record.get("isSidechain")
             ):
                 message = record.get("message")
-                if (
-                    isinstance(message, dict)
-                    and isinstance(message.get("model"), str)
-                    and message["model"] != "<synthetic>"
-                ):
-                    observed = message["model"]
+                record_model = message.get("model") if isinstance(message, dict) else None
+                if isinstance(record_model, str) and record_model != "<synthetic>":
+                    observed = record_model
         if observed is None:
             breakdown = envelope.fields.get("modelUsage")
             if isinstance(breakdown, dict) and len(breakdown) == 1:
@@ -546,10 +548,10 @@ class ClaudeCodeAdapter:
         return UsageSample(
             kind=kind,
             model=observed or "unknown",
-            input_tokens=int(usage.get("input_tokens") or 0),
-            output_tokens=int(usage.get("output_tokens") or 0),
-            cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
-            cache_create_tokens=int(usage.get("cache_creation_input_tokens") or 0),
+            input_tokens=_as_int(usage.get("input_tokens")),
+            output_tokens=_as_int(usage.get("output_tokens")),
+            cache_read_tokens=_as_int(usage.get("cache_read_input_tokens")),
+            cache_create_tokens=_as_int(usage.get("cache_creation_input_tokens")),
             cost_usd=envelope.cost_usd,
             cost_scope_tokens=envelope.cost_scope_tokens,
         )
@@ -575,7 +577,7 @@ class ClaudeCodeAdapter:
             if not line.startswith("{"):
                 continue
             try:
-                record = json.loads(line)
+                record = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if not isinstance(record, dict) or record.get("type") != "assistant":
@@ -593,10 +595,10 @@ class ClaudeCodeAdapter:
                 counted.add(message_id)
             # An id-less record cannot be collapsed, so it is counted — an unidentifiable
             # message is more likely one message than a repeat of the last.
-            input_tokens += int(usage.get("input_tokens") or 0)
-            output_tokens += int(usage.get("output_tokens") or 0)
-            cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
-            cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+            input_tokens += _as_int(usage.get("input_tokens"))
+            output_tokens += _as_int(usage.get("output_tokens"))
+            cache_read_tokens += _as_int(usage.get("cache_read_input_tokens"))
+            cache_create_tokens += _as_int(usage.get("cache_creation_input_tokens"))
         resolved = observed if observed is not None else self.observed_model(lines)
         if model and resolved and not _matches_model(model, resolved):
             _log.warning(
@@ -630,7 +632,7 @@ class ClaudeCodeAdapter:
             if not line.startswith("{"):
                 continue
             try:
-                record = json.loads(line)
+                record = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if not isinstance(record, dict) or record.get("type") != "assistant":
@@ -655,7 +657,7 @@ class ClaudeCodeAdapter:
             if not line.startswith("{"):
                 continue
             try:
-                record = json.loads(line)
+                record = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if not isinstance(record, dict) or record.get("type") != "assistant":
@@ -673,13 +675,13 @@ class ClaudeCodeAdapter:
         # overload. `output`'s `-p` envelope shape on a 529 is unobserved, so it plays no
         # part here, mirroring `classify_usage_limit`.
         del output
-        last_assistant: dict[str, Any] | None = None
+        last_assistant: JsonObject | None = None
         for raw_line in lines:
             line = raw_line.strip()
             if not line.startswith("{"):
                 continue
             try:
-                record = json.loads(line)
+                record = decode_json(line)
             except json.JSONDecodeError:
                 continue
             if isinstance(record, dict) and record.get("type") == "assistant":
@@ -694,14 +696,16 @@ class ClaudeCodeAdapter:
         return ProviderOverload(detail=text or "server_error")
 
     @staticmethod
-    def _api_error_text(record: Mapping[str, Any]) -> str:
+    def _api_error_text(record: Mapping[str, JsonValue]) -> str:
         message = record.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, list):
             return ""
         for block in content:
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
-                return block["text"]
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text")
+                if isinstance(text, str):
+                    return text
         return ""
 
     @staticmethod

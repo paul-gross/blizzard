@@ -17,6 +17,7 @@ from packaging.specifiers import SpecifierSet
 
 from blizzard.runner.harness.compatibility import CompatibilityClassification
 from blizzard.runner.harness.internal.committed_corpus import DEFAULT_CORPUS_ROOT, CommittedCorpus
+from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.offline_compatibility import (
     CorpusConfigurationError,
     ICompatibilityCorpus,
@@ -188,13 +189,13 @@ def test_a_semver_prerelease_named_corpus_directory_is_never_admitted(tmp_path: 
 class _FakeCorpus:
     """An in-memory corpus: ``manifests[(harness_id, version)]``."""
 
-    def __init__(self, manifests: dict[tuple[str, str], dict[str, object]]) -> None:
+    def __init__(self, manifests: dict[tuple[str, str], dict[str, JsonValue]]) -> None:
         self._manifests = manifests
 
     def versions(self, harness_id: str) -> tuple[str, ...]:
         return tuple(version for harness, version in self._manifests if harness == harness_id)
 
-    def manifest(self, harness_id: str, version: str) -> dict[str, object] | None:
+    def manifest(self, harness_id: str, version: str) -> dict[str, JsonValue] | None:
         return self._manifests.get((harness_id, version))
 
 

@@ -167,7 +167,7 @@ class _SubprocessStartedProcess:
     _stdout_capture: bytearray = field(default_factory=bytearray)
     _stderr_capture: bytearray = field(default_factory=bytearray)
     _stdout_pending: bytearray = field(default_factory=bytearray)
-    _stdout_lines: list[str] = field(default_factory=list)
+    _stdout_lines: list[str] = field(default_factory=list[str])
     _stdout_line_bytes: int = 0
     _stdout_eof: bool = False
     _stderr_eof: bool = False
