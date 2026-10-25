@@ -5,10 +5,10 @@ its edge reads back, or ``failure`` when the chunk has moved past the visit."""
 from __future__ import annotations
 
 from blizzard.hub.delivery.actions.delivery_outcome import answer_delivery
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass, RecordReviewFindings
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.graph.actions import RECORD_FINDINGS
+from blizzard.hub.forge.landing import VisitForges
 
 _FAILURE_MARKER_NAME = "review-findings-failure"
 

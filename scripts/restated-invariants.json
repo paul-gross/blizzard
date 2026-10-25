@@ -34,6 +34,12 @@
           "file": "src/blizzard/wire/chunk.py",
           "symbol": "ChunkEscalationView",
           "role": "owner"
+        },
+        {
+          "file": "tests/harness/client/wire/hub/types.gen.ts",
+          "symbol": "ChunkEscalationView",
+          "role": "allowed",
+          "reason": "Generated mirror: the e2e harness's wire types are generated from openapi/, so this JSDoc is the wire model's class docstring copied verbatim, not an independent statement; it changes only when that docstring does."
         }
       ]
     },
@@ -477,6 +483,30 @@
           "symbol": "FleetSpendView",
           "role": "allowed",
           "reason": "Published rendered surface: this wire model's class docstring generates into openapi/ and the client's JSDoc, whose reader has no source tree, so it states the PARTIAL rule locally rather than pointing at UsageTotal."
+        },
+        {
+          "file": "tests/harness/client/wire/hub/types.gen.ts",
+          "symbol": "AnalyticsChunkSpendView",
+          "role": "allowed",
+          "reason": "Generated mirror: the e2e harness's wire types are generated from openapi/, so this JSDoc is the wire model's class docstring copied verbatim, not an independent statement; it changes only when that docstring does."
+        },
+        {
+          "file": "tests/harness/client/wire/hub/types.gen.ts",
+          "symbol": "AnalyticsSpendView",
+          "role": "allowed",
+          "reason": "Generated mirror: the e2e harness's wire types are generated from openapi/, so this JSDoc is the wire model's class docstring copied verbatim, not an independent statement; it changes only when that docstring does."
+        },
+        {
+          "file": "tests/harness/client/wire/hub/types.gen.ts",
+          "symbol": "ChunkUsageTotalView",
+          "role": "allowed",
+          "reason": "Generated mirror: the e2e harness's wire types are generated from openapi/, so this JSDoc is the wire model's class docstring copied verbatim, not an independent statement; it changes only when that docstring does."
+        },
+        {
+          "file": "tests/harness/client/wire/hub/types.gen.ts",
+          "symbol": "FleetSpendView",
+          "role": "allowed",
+          "reason": "Generated mirror: the e2e harness's wire types are generated from openapi/, so this JSDoc is the wire model's class docstring copied verbatim, not an independent statement; it changes only when that docstring does."
         }
       ]
     },

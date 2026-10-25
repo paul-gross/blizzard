@@ -17,6 +17,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.forge.landing import Mergeability
 from tests.support import (
     FakeWorkSource,
     HubHarness,
@@ -218,7 +219,7 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
     """A kick-back's own routing transition shares its epoch with the bounce fact by
     construction (`src/blizzard/hub/delivery/hub_node.py` records both). Driven through the REAL hub-node delivery
     path, not a bare bounce write, so the excluded transition actually exists."""
-    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
+    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
@@ -242,7 +243,7 @@ def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tm
     """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
     judged choice on the SAME chunk still counts — the hub step claims a synthetic lease
     at its epoch, so the runner's next lease mints strictly above it and never collides."""
-    hub = build_hub(tmp_path, forge_handles=_forge(mergeable_state="dirty").handle)
+    hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)

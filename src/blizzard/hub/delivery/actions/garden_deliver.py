@@ -6,10 +6,10 @@ has moved past the visit."""
 from __future__ import annotations
 
 from blizzard.hub.delivery.actions.delivery_outcome import answer_delivery
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass, RecordGardenDelivery
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.graph.actions import GARDEN_DELIVER
+from blizzard.hub.forge.landing import VisitForges
 
 _FAILURE_MARKER_NAME = "garden-delivery-failure"
 

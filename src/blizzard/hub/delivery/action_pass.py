@@ -21,9 +21,9 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.actions.base import IHubAction
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.forge.landing import VisitForges
 
 # Crash points for the windows a pass's effects open (`bzh:crash-point-registry`).
 _CP_ACTION_AFTER_EFFECT_BEFORE_WRITE = crashpoint(
@@ -155,11 +155,10 @@ class ActionPassDriver:
         sink: _QueuedEffectSink,
         requests: queue.SimpleQueue[object],
     ) -> PassRun:
-        """On the loop: open each handle's client, take the pass under its bound, and close every client."""
+        """On the loop: take the pass under its bound. Each forge's client belongs to its adapter's cache entry,
+        never to the pass."""
         bound = asyncio.timeout(self._bound.seconds)
         try:
-            for handle in forges.values():
-                await handle.open()
             async with bound:
                 return PassRun(answer=await action.take(visit, forges, sink))
         except TimeoutError:
@@ -169,8 +168,4 @@ class ActionPassDriver:
         except Exception:
             return PassRun(traceback=traceback.format_exc())
         finally:
-            try:
-                for handle in forges.values():
-                    await handle.close()
-            finally:
-                requests.put(_FINISHED)
+            requests.put(_FINISHED)

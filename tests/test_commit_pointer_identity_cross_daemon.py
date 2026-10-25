@@ -95,7 +95,7 @@ def _deliver(
     (tmp_path / "hub").mkdir()
     hub = build_hub(
         tmp_path / "hub",
-        forge_handles=double.handle,
+        forges=double.forges,
         repositories=[
             replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url=forge)
             for owner, forge in itertools.product(owners, forges or ("https://api.github.com",))
@@ -159,8 +159,8 @@ def test_two_envs_on_one_origin_deliver_one_entry(tmp_path: Path) -> None:
     result, double, _ = _deliver(tmp_path, submitted, "acme")
 
     assert result.outcome_choice == "landed"
-    assert [(repo, args["head"]) for repo, args in double.named("open_pull")] == [("acme/widget", "feat/x")]
-    assert [(repo, args["sha"]) for repo, args in double.named("merge")] == [("acme/widget", "a" * 40)]
+    assert [(repo, args["head"]) for repo, args in double.named("open_change")] == [("acme/widget", "feat/x")]
+    assert [(repo, args["expected_head"]) for repo, args in double.named("merge")] == [("acme/widget", "a" * 40)]
 
 
 def test_one_name_at_two_owners_lands_each_entry_on_its_own_record(tmp_path: Path) -> None:
@@ -173,7 +173,7 @@ def test_one_name_at_two_owners_lands_each_entry_on_its_own_record(tmp_path: Pat
     result, double, _ = _deliver(tmp_path, submitted, "owner-a", "owner-b")
 
     assert result.outcome_choice == "landed"
-    assert sorted((repo, args["sha"]) for repo, args in double.named("merge")) == [
+    assert sorted((repo, args["expected_head"]) for repo, args in double.named("merge")) == [
         ("owner-a/widget", "a" * 40),
         ("owner-b/widget", "b" * 40),
     ]

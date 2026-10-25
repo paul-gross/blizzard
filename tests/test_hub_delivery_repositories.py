@@ -14,12 +14,13 @@ import sqlalchemy as sa
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.delivery.forge_handle import IGitHubHandle
+from blizzard.hub.composition import LiveConfig, TenantStores
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.config.repositories import ResolvedRepository
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema
 from tests.github_double import GitHubDouble
@@ -125,16 +126,25 @@ def _event_kinds(hub: HubHarness) -> list[str]:
 
 
 class _Forge:
-    """The ``GitHubDouble`` behind every handle, and each handle built — the record it was built for, as
-    ``(slug, record id, base branch, forge url, owner, token)``."""
+    """The ``GitHubDouble`` behind every adapter, and each adapter built — what it was built from, as
+    ``(forge url, owner/repo, token)``."""
 
     def __init__(self) -> None:
         self.double = GitHubDouble()
-        self.built: list[tuple[str, str, str, str, str, str]] = []
+        self.built: list[tuple[str, str, str]] = []
 
-    def handle(self, target: ResolvedRepository, token: str) -> IGitHubHandle:
-        self.built.append((target.slug, target.record, target.base_branch, target.forge_api_url, target.owner, token))
-        return self.double.handle(target, token)
+    def adapter(self, binding: ForgeBinding) -> IForgeAdapter:
+        self.built.append((binding.api_url, f"{binding.owner}/{binding.repo}", binding.token))
+        return self.double.adapter(binding)
+
+    def forges(self, stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+        return ForgeRegistry(
+            records=stores.repository_records,
+            objects=live.objects,
+            secrets=live.secrets,
+            build=self.adapter,
+            capabilities=FORGE_KIND_CAPABILITIES,
+        )
 
     def push(self, *repos: str) -> None:
         """Push the chunk's branch to each ``owner/repo``, so ``land`` opens and merges a PR for it."""
@@ -144,7 +154,7 @@ class _Forge:
 
 def _hub(tmp_path: Path) -> tuple[HubHarness, _Forge]:
     forge = _Forge()
-    return build_hub(tmp_path, forge_handles=forge.handle, repositories=()), forge
+    return build_hub(tmp_path, forges=forge.forges, repositories=()), forge
 
 
 def _landed(hub: HubHarness, chunk_id: str | None = None) -> list[tuple[str, str, str | None]]:
@@ -162,7 +172,7 @@ def _artifact_names(hub: HubHarness, chunk_id: str) -> list[str]:
     return [a["name"] for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
 
 
-def test_a_resolved_visit_hands_land_a_handle_built_from_the_repository(tmp_path: Path) -> None:
+def test_a_resolved_visit_hands_land_a_forge_built_from_the_repository(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
     create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme", base_branch="trunk")])
     forge.push("acme/widget")
@@ -171,8 +181,8 @@ def test_a_resolved_visit_hands_land_a_handle_built_from_the_repository(tmp_path
 
     assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"
 
-    assert forge.built == [("widget", _ids(hub)["widget"], "trunk", _FORGE, "acme", "fixture-token")]
-    assert [args["base"] for _, args in forge.double.named("open_pull")] == ["trunk"]
+    assert forge.built == [(_FORGE, "acme/widget", "fixture-token")]
+    assert [args["base"] for _, args in forge.double.named("open_change")] == ["trunk"]
 
 
 def test_a_secret_replaced_between_visits_reaches_the_next_visit(tmp_path: Path) -> None:
@@ -190,7 +200,7 @@ def test_a_secret_replaced_between_visits_reaches_the_next_visit(tmp_path: Path)
     _seed_at_deliver(hub, next_chunk_id, next_nodes, [("widget", None)])
     _visit(hub, next_chunk_id, next_nodes)
 
-    assert [built[5] for built in forge.built] == ["fixture-token", "rotated-token"]
+    assert [built[2] for built in forge.built] == ["fixture-token", "rotated-token"]
 
 
 def test_an_unresolved_repository_reaches_no_forge_routes_failure_and_is_recorded(tmp_path: Path) -> None:
@@ -242,7 +252,7 @@ def _second_secret(hub: HubHarness) -> None:
     assert created.status_code == 201, created.text
 
 
-def test_records_differing_in_base_branch_each_get_their_own_handle(tmp_path: Path) -> None:
+def test_records_differing_in_base_branch_each_get_their_own_forge(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
     create_repositories(
         hub.client,
@@ -258,14 +268,8 @@ def test_records_differing_in_base_branch_each_get_their_own_handle(tmp_path: Pa
 
     assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"
 
-    ids = _ids(hub)
-    assert sorted(forge.built) == sorted(
-        [
-            ("widget", ids["widget"], "main", _FORGE, "acme", "fixture-token"),
-            ("gadget", ids["gadget"], "develop", _FORGE, "acme", "fixture-token"),
-        ]
-    )
-    assert sorted((repo, args["base"]) for repo, args in forge.double.named("open_pull")) == [
+    assert sorted(forge.built) == [(_FORGE, "acme/gadget", "fixture-token"), (_FORGE, "acme/widget", "fixture-token")]
+    assert sorted((repo, args["base"]) for repo, args in forge.double.named("open_change")) == [
         ("acme/gadget", "develop"),
         ("acme/widget", "main"),
     ]
@@ -288,7 +292,7 @@ def test_records_differing_in_secret_each_get_their_own_token(tmp_path: Path) ->
 
     _visit(hub, chunk_id, nodes)
 
-    assert forge.double.tokens == {_ids(hub)["widget"]: "fixture-token", _ids(hub)["gadget"]: "other-token"}
+    assert forge.double.tokens == {"acme/widget": "fixture-token", "acme/gadget": "other-token"}
 
 
 def test_an_action_that_lands_nothing_is_handed_no_forge(tmp_path: Path) -> None:
@@ -314,21 +318,22 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
             fixture_repository("gadget", _FORGE, owner="acme") | {"secret_name": "other-forge-token"},
         ],
     )
-    reveal = hub.services.hub_node._secrets.reveal
+    secrets = hub.services.hub_node._forges._secrets
+    reveal = secrets.reveal
 
     def reveal_unless_retired(name: SecretName):  # type: ignore[no-untyped-def]
         if name.value == "other-forge-token":
             raise SecretRetired("other-forge-token")
         return reveal(name)
 
-    monkeypatch.setattr(hub.services.hub_node._secrets, "reveal", reveal_unless_retired)
+    monkeypatch.setattr(secrets, "reveal", reveal_unless_retired)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None), ("gadget", None)])
 
     result = _visit(hub, chunk_id, nodes)
 
     assert result.outcome_choice == "failure"
-    assert forge.built == [] and forge.double.calls == []
+    assert "acme/gadget" not in [repo for _, repo, _ in forge.built] and forge.double.calls == []
     assert "hub-log.repository-secret-unavailable" in _artifact_names(hub, chunk_id)
 
 
@@ -389,7 +394,7 @@ def test_a_name_ambiguous_across_the_tenant_lands_in_the_record_its_project_link
 
     assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"
 
-    assert [(slug, owner) for slug, _, _, _, owner, _ in forge.built] == [("widget-fork", "other")]
+    assert [repo for _, repo, _ in forge.built] == ["other/widget"]
     assert [repo for repo, _ in forge.double.named("merge")] == ["other/widget"]
 
 
@@ -463,10 +468,10 @@ def test_two_projects_linking_one_repository_land_onto_its_one_base_branch_and_r
 
     for chunk_id, nodes in chunks:
         # Each chunk's branch is pushed afresh: the first landing merged and closed the PR for it.
-        forge.double.repo("acme/widget").pulls.clear()
+        forge.double.repo("acme/widget").changes.clear()
         forge.push("acme/widget")
         assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"
 
-    assert {(slug, owner, base) for slug, _, base, _, owner, _ in forge.built} == {("widget", "acme", "trunk")}
-    assert [args["base"] for _, args in forge.double.named("open_pull")] == ["trunk", "trunk"]
+    assert {repo for _, repo, _ in forge.built} == {"acme/widget"}
+    assert [args["base"] for _, args in forge.double.named("open_change")] == ["trunk", "trunk"]
     assert sorted(_landed(hub)) == sorted((chunk_id, "acme/widget", _ids(hub)["widget"]) for chunk_id, _ in chunks)

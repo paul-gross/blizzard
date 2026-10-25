@@ -1,38 +1,67 @@
-"""``land`` against the in-memory GitHub double: each outcome its stages answer, the markers they record,
+"""``land`` against the in-memory forge double: each outcome its stages answer, the markers they record,
 and — through the executor — the landing record a merge writes past the fence (component tier)."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-import httpx2
 import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.delivery.actions.land import Land
-from blizzard.hub.delivery.forge_handle import ForgeReply, ForgeUnreachable
-from blizzard.hub.delivery.internal.github_handle import GitHubHandle
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Marker, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import (
     RepositoryFields,
+    RepositoryId,
     RepositoryOutcome,
     RepositoryResolution,
     ResolvedRepository,
 )
+from blizzard.hub.forge.landing import (
+    Change,
+    ChangeState,
+    Check,
+    CheckOutcome,
+    CommitSummary,
+    ComparisonStatus,
+    FileChange,
+    ForgeNotFound,
+    ForgeObject,
+    ForgeRateLimited,
+    ForgeRejected,
+    ForgeUnavailable,
+    Mergeability,
+    MergeMethod,
+    Update,
+    UpdateMethod,
+    UpdateOutcome,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.github_double import GREEN, DoubleRepo, GitHubDouble, pull_body, unreachable
-from tests.support import HubHarness, build_hub, hub_scoped, hub_store_connections, seed_work_item, stamp
+from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
+from tests.support import (
+    HubHarness,
+    build_hub,
+    emitted_events,
+    hub_scoped,
+    hub_store_connections,
+    seed_work_item,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -142,10 +171,16 @@ def _forge(*repos: str, **state: Any) -> GitHubDouble:
     return double
 
 
-def _land(double: GitHubDouble, visit: Visit | None = None, sink: _Sink | None = None) -> tuple[Pass, _Sink]:
+def _land(
+    double: GitHubDouble,
+    visit: Visit | None = None,
+    sink: _Sink | None = None,
+    offered: frozenset[Capability] = frozenset(Capability),
+) -> tuple[Pass, _Sink]:
     visit = visit or _visit()
     sink = sink or _Sink()
-    forges = MappingProxyType({t.record: double.handle(t, "tok") for t in visit.resolution.targets})
+    repos = dict(zip(visit.resolution.records, visit.resolution.qualified, strict=True))
+    forges = MappingProxyType({RepositoryId(r): double.forge(r, repo, offered) for r, repo in repos.items()})
     return asyncio.run(Land().take(visit, forges, sink)), sink
 
 
@@ -156,7 +191,7 @@ def test_a_clean_green_pr_merges_its_current_head_and_hands_over_the_landing() -
 
     assert answer.choice == "landed"
     ((_, merge),) = double.named("merge")
-    assert (merge["sha"], merge["method"]) == (_SUBMITTED, "merge")
+    assert (merge["expected_head"], merge["method"]) == (_SUBMITTED, MergeMethod.MERGE)
     assert sink.landings() == [LandingRecord(repository="re_widget", repo=_WIDGET, revision=f"merge-{_WIDGET}-1")]
     assert json.loads(sink.markers()[f"delivery-pr/{_WIDGET}/1"]) == {
         "repo": _WIDGET,
@@ -175,51 +210,62 @@ def test_the_pr_title_body_and_merge_message_carry_the_feature_and_its_work_item
 
     _land(double, visit)
 
-    ((_, opened),) = double.named("open_pull")
+    ((_, opened),) = double.named("open_change")
     assert opened["title"] == "Add the widget"
     assert opened["body"] == (
         "Delivered by blizzard.\n\nWork items:\n- Refs acme/widget#7\n- default:8\n\nChunk: ch_1\n\n"
         "Board: https://board.example/board/chunk/ch_1\n"
     )
-    assert double.named("merge")[0][1]["commit_message"] == "Add the widget\n\nRefs acme/widget#7\ndefault:8"
+    assert double.named("merge")[0][1]["message"] == "Add the widget\n\nRefs acme/widget#7\ndefault:8"
 
 
 def test_without_a_feature_title_the_branch_and_the_land_string_stand_in_and_a_long_title_is_cut() -> None:
     double = _forge()
     _land(double)
-    assert double.named("open_pull")[0][1]["title"] == "feat/x"
-    assert double.named("merge")[0][1]["commit_message"] == f"blizzard: land {_WIDGET}"
+    assert double.named("open_change")[0][1]["title"] == "feat/x"
+    assert double.named("merge")[0][1]["message"] == f"blizzard: land {_WIDGET}"
 
     long = _forge()
     _land(long, _visit(feature_title="x" * 300))
-    title = long.named("open_pull")[0][1]["title"]
+    title = long.named("open_change")[0][1]["title"]
     assert len(title) == 256 and title.endswith("…")
 
 
-def test_a_dirty_pr_answers_conflict_without_merging() -> None:
-    double = _forge(mergeable_state="dirty")
+def test_a_conflicting_pr_answers_conflict_without_merging() -> None:
+    double = _forge(mergeability=Mergeability.CONFLICTING)
     answer, sink = _land(double)
     assert answer.choice == "conflict"
     assert double.named("merge") == [] and sink.landings() == []
 
 
-def test_a_behind_pr_fires_update_branch_on_its_head_and_waits() -> None:
-    double = _forge(mergeable_state="behind")
+def test_a_behind_pr_is_updated_from_its_base_on_its_head_and_waits() -> None:
+    double = _forge(mergeability=Mergeability.BEHIND)
     answer, _ = _land(double)
     assert answer.choice == "pending"
-    assert double.named("update_branch")[0][1]["expected_head_sha"] == _SUBMITTED
+    assert double.named("update_from_base")[0][1]["expected_head"] == _SUBMITTED
     assert double.named("merge") == []
 
 
-def test_an_update_branch_conflict_answers_conflict() -> None:
-    double = _forge(mergeable_state="behind", update_reply=ForgeReply(422, {"message": "merge conflict"}))
+def test_an_update_from_base_conflict_answers_conflict() -> None:
+    double = _forge(mergeability=Mergeability.BEHIND, update=Update(UpdateOutcome.CONFLICT, UpdateMethod.MERGE))
     answer, _ = _land(double)
     assert answer.choice == "conflict"
 
 
-@pytest.mark.parametrize("state", ["blocked", "clean", "unstable"])
-def test_a_watched_head_with_checks_still_running_waits_and_names_them(state: str) -> None:
-    double = _forge(mergeable_state=state, checks={_SUBMITTED: [{"name": "build", "status": "in_progress"}]})
+@pytest.mark.parametrize(
+    "refusal", [Update(UpdateOutcome.REFUSED, UpdateMethod.MERGE), ForgeNotFound(ForgeObject.CHANGE)]
+)
+def test_an_update_refused_or_of_a_change_the_forge_lost_waits(refusal: object) -> None:
+    double = _forge(mergeability=Mergeability.BEHIND, replies={"update_from_base": [refusal]})
+    answer, _ = _land(double)
+    assert answer.choice == "pending"
+
+
+@pytest.mark.parametrize("state", [Mergeability.BLOCKED, Mergeability.MERGEABLE])
+def test_a_watched_head_with_checks_still_running_waits_and_names_them(state: Mergeability) -> None:
+    double = _forge(
+        mergeability=state, checks={_SUBMITTED: (check(outcome=CheckOutcome.PENDING, detail="in_progress"),)}
+    )
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert double.named("merge") == []
@@ -227,66 +273,57 @@ def test_a_watched_head_with_checks_still_running_waits_and_names_them(state: st
 
 
 def test_a_blocked_head_with_green_checks_merges() -> None:
-    double = _forge(mergeable_state="blocked")
+    double = _forge(mergeability=Mergeability.BLOCKED)
     answer, _ = _land(double)
     assert answer.choice == "landed"
 
 
-def test_an_unknown_state_never_reads_check_runs_nor_writes_findings() -> None:
-    double = _forge(mergeable_state="unknown")
+@pytest.mark.parametrize("state", [Mergeability.PENDING, Mergeability.DRAFT])
+def test_an_undecided_or_draft_change_never_reads_checks_nor_writes_findings(state: Mergeability) -> None:
+    double = _forge(mergeability=state)
     answer, sink = _land(double)
     assert answer.choice == "pending"
-    assert double.named("check_runs") == []
+    assert double.named("checks") == []
     assert "delivery-findings" not in sink.markers()
 
 
-def test_an_empty_check_runs_list_waits_without_findings() -> None:
-    double = _forge(checks={_SUBMITTED: []})
-    answer, sink = _land(double)
-    assert answer.choice == "pending"
-    assert "delivery-findings" not in sink.markers()
-
-
-def test_a_degraded_check_runs_read_waits_rather_than_failing() -> None:
-    double = _forge(checks={_SUBMITTED: None})
+def test_an_empty_check_list_waits_without_findings() -> None:
+    double = _forge(checks={_SUBMITTED: ()})
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert "delivery-findings" not in sink.markers()
 
 
-def _failing(name: str = "build", conclusion: str = "failure", check_id: int = 1) -> dict[str, Any]:
-    return {
-        "id": check_id,
-        "name": name,
-        "status": "completed",
-        "conclusion": conclusion,
-        "details_url": "https://ci/1",
-    }
+@pytest.mark.parametrize(
+    "refusal", [None, ForgeNotFound(ForgeObject.REVISION), ForgeRejected("Validation Failed")], ids=repr
+)
+def test_a_degraded_check_read_waits_rather_than_failing(refusal: Exception | None) -> None:
+    double = _forge(checks={_SUBMITTED: None}) if refusal is None else _forge(replies={"checks": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert "delivery-findings" not in sink.markers()
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "action_required"])
-def test_a_terminal_check_failure_answers_failure_and_writes_findings(conclusion: str) -> None:
-    double = _forge(checks={_SUBMITTED: [_failing(conclusion=conclusion)], "main": GREEN})
+def _failing(name: str = "build", detail: str = "failure", check_id: str = "1") -> Check:
+    return check(name, CheckOutcome.FAILED, detail, id=check_id, details_url="https://ci/1")
+
+
+def test_a_failing_check_answers_failure_and_writes_findings() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(detail="timed_out"),), "main": GREEN})
     answer, sink = _land(double)
     assert answer.choice == "failure"
     findings = sink.markers()["delivery-findings"]
     assert f"## {_WIDGET}#1" in findings
-    assert f"build: {conclusion} — https://ci/1" in findings
+    assert "build: timed_out — https://ci/1" in findings
     assert "base branch: build is clean — this change broke CI" in findings
     assert double.named("merge") == []
-
-
-def test_a_cancelled_check_is_re_polled_not_failed() -> None:
-    double = _forge(checks={_SUBMITTED: [_failing(conclusion="cancelled")]})
-    answer, _ = _land(double)
-    assert answer.choice == "pending"
 
 
 def test_a_base_red_check_beside_an_own_failure_still_fails_and_names_both() -> None:
     double = _forge(
         checks={
-            _SUBMITTED: [_failing("build"), _failing("lint", check_id=2)],
-            "main": [_failing("lint", check_id=9)],
+            _SUBMITTED: (_failing("build"), _failing("lint", check_id="2")),
+            "main": (_failing("lint", check_id="9"),),
         }
     )
     answer, sink = _land(double)
@@ -294,28 +331,46 @@ def test_a_base_red_check_beside_an_own_failure_still_fails_and_names_both() -> 
     findings = sink.markers()["delivery-findings"]
     assert "base branch: build is clean — this change broke CI" in findings
     assert "base branch: also failing lint — not this change" in findings
-    assert double.named("rerequest") == []
+    assert double.named("rerun_check") == []
 
 
-def test_an_inherited_only_failure_is_re_requested_once_and_waits() -> None:
-    double = _forge(checks={_SUBMITTED: [_failing()], "main": [_failing()]})
+def test_an_inherited_only_failure_is_re_run_once_and_waits() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
     answer, sink = _land(double)
     assert answer.choice == "pending"
-    assert double.named("rerequest") == [(_WIDGET, {"check_id": 1})]
+    assert double.named("rerun_check") == [(_WIDGET, {"id": "1"})]
     assert sink.markers()[f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}"] == _SUBMITTED
 
 
-def test_a_refused_rerequest_writes_no_rerun_marker() -> None:
+@pytest.mark.parametrize(
+    "refusal", [False, ForgeNotFound(ForgeObject.CHECK), ForgeRejected("Resource not accessible")], ids=repr
+)
+def test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure(refusal: object) -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)}, replies={"rerun_check": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "failure"
+    assert not any(name.startswith("ci-rerun/") for name in sink.markers())
+    assert "base branch: also failing build — not this change" in sink.markers()["delivery-findings"]
+
+
+def test_a_re_run_the_forge_did_not_answer_writes_no_marker_and_is_asked_again_next_pass() -> None:
     double = _forge(
-        checks={_SUBMITTED: [_failing()], "main": [_failing()]}, replies={"rerequest": [ForgeReply(403, {})]}
+        checks={_SUBMITTED: (_failing(),), "main": (_failing(),)}, replies={"rerun_check": [ForgeUnavailable("down")]}
     )
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert not any(name.startswith("ci-rerun/") for name in sink.markers())
 
 
-def test_a_re_requested_check_still_red_answers_inherited_failure() -> None:
-    double = _forge(checks={_SUBMITTED: [_failing()], "main": [_failing()]})
+def test_a_forge_that_cannot_re_run_checks_skips_the_re_run_and_answers_inherited_failure() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
+    answer, _ = _land(double, offered=frozenset(Capability) - {Capability.CHECKS_RERUN})
+    assert answer.choice == "inherited-failure"
+    assert double.named("rerun_check") == []
+
+
+def test_a_re_run_check_still_red_answers_inherited_failure() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
     visit = _visit(markers=(f"ci-rerun/{_WIDGET}/build/{_SUBMITTED}",))
     answer, sink = _land(double, visit)
     assert answer.choice == "inherited-failure"
@@ -323,12 +378,12 @@ def test_a_re_requested_check_still_red_answers_inherited_failure() -> None:
     assert "Inherited from the base — re-run once, still failing (not this change):" in findings
     assert f"signature: ci-rerun/{_WIDGET}/build/{_SUBMITTED}" in findings
     assert "base branch: main" in findings
-    assert double.named("rerequest") == []
+    assert double.named("rerun_check") == []
 
 
 def test_two_repos_one_failing_names_only_the_failing_one_and_merges_neither() -> None:
     double = _forge(_WIDGET, _GADGET)
-    double.repos[_GADGET].checks = {_SUBMITTED: [_failing()], "main": GREEN}
+    double.repos[_GADGET].checks = {_SUBMITTED: (_failing(),), "main": GREEN}
     answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
     assert answer.choice == "failure"
     findings = sink.markers()["delivery-findings"]
@@ -355,7 +410,7 @@ def test_a_fully_marked_commit_set_lands_without_a_forge_call() -> None:
 def test_a_branch_adding_no_commit_lands_as_a_no_op_at_the_base_tip() -> None:
     double = _forge(_WIDGET, _GADGET)
     double.repos[_WIDGET].heads = {}
-    double.repos[_WIDGET].compares = {("main", "feat/x"): {"status": "behind"}}
+    double.repos[_WIDGET].compares = {("main", "feat/x"): comparison(ComparisonStatus.BEHIND)}
 
     answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
 
@@ -364,74 +419,93 @@ def test_a_branch_adding_no_commit_lands_as_a_no_op_at_the_base_tip() -> None:
     assert [args["number"] for _, args in double.named("merge")] == [1]
 
 
-def test_an_unreadable_no_op_base_tip_writes_no_landing_and_waits() -> None:
-    double = _forge(heads={}, compares={("main", "feat/x"): {"status": "identical"}}, base_tip="")
+def test_a_missing_base_branch_writes_no_landing_and_waits() -> None:
+    double = _forge(heads={}, compares={("main", "feat/x"): comparison(ComparisonStatus.IDENTICAL)}, base_tip=None)
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert sink.landings() == []
 
 
-def test_a_refused_open_that_is_not_an_empty_branch_waits() -> None:
+@pytest.mark.parametrize(
+    "refusal", [ForgeNotFound(ForgeObject.REVISION), ForgeRejected("No common ancestor")], ids=repr
+)
+def test_a_refused_open_whose_base_comparison_is_refused_is_not_nothing_to_land(refusal: Exception) -> None:
+    double = _forge(heads={}, replies={"compare": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert sink.landings() == []
+
+
+def test_a_refused_open_adopts_the_open_change_someone_else_opened() -> None:
+    double = _forge()
+    raced = change(_WIDGET, 7, branch="feat/x", sha=_SUBMITTED, base="main")
+
+    def opened_meanwhile(**_: object) -> Change:
+        double.repos[_WIDGET].changes[7] = raced
+        raise ForgeRejected("A pull request already exists")
+
+    double.repos[_WIDGET].replies["open_change"] = [opened_meanwhile]
+    answer, _ = _land(double)
+    assert answer.choice == "landed"
+    assert [args["number"] for _, args in double.named("merge")] == [7]
+
+
+def test_a_refused_open_with_nothing_to_adopt_waits() -> None:
     double = _forge(heads={})
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert sink.landings() == []
 
 
-def test_a_merge_answer_without_a_sha_lands_the_reread_merge_commit() -> None:
-    double = _forge(replies={"merge": [ForgeReply(200, {"merged": True})]})
-    double.repos[_WIDGET].on_merge = None
+@pytest.mark.parametrize("refusal", [ForgeNotFound(ForgeObject.CHANGE), ForgeRejected("Server says no")], ids=repr)
+def test_a_change_read_the_forge_refused_waits(refusal: Exception) -> None:
+    double = _forge(replies={"change": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert double.named("merge") == [] and sink.landings() == []
 
-    def merged_pull(number: int) -> ForgeReply:
-        return ForgeReply(
-            200,
-            pull_body(
-                _WIDGET, number, branch="feat/x", sha=_SUBMITTED, base="main", merged=True, merge_commit_sha="m1"
-            ),
-        )
 
-    double.repos[_WIDGET].replies["pull"] = [
-        ForgeReply(200, pull_body(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeable_state="clean")),
-        merged_pull,
-    ]
+def test_a_merge_refused_whose_reread_finds_it_merged_lands_the_merged_revision() -> None:
+    double = _forge(replies={"merge": [ForgeRejected("Base branch was modified")]})
+    open_change = change(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeability=Mergeability.MERGEABLE)
+    merged = replace(open_change, state=ChangeState.MERGED, merged_revision="m1")
+    double.repos[_WIDGET].replies["change"] = [open_change, merged]
     answer, sink = _land(double)
     assert answer.choice == "landed"
     assert sink.landings()[0].revision == "m1"
 
 
 def test_a_merge_no_read_names_the_commit_of_writes_no_landing_and_waits() -> None:
-    double = _forge(replies={"merge": [ForgeReply(200, {"merged": True})]})
-    double.repos[_WIDGET].replies["pull"] = [
-        ForgeReply(200, pull_body(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeable_state="clean")),
-        ForgeReply(200, pull_body(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", merged=True)),
-    ]
+    double = _forge(replies={"merge": [ForgeNotFound(ForgeObject.CHANGE)]})
+    open_change = change(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", mergeability=Mergeability.MERGEABLE)
+    double.repos[_WIDGET].replies["change"] = [open_change, replace(open_change, state=ChangeState.MERGED)]
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert sink.landings() == []
 
 
 def test_a_merge_the_forge_refused_while_the_pr_stays_open_waits() -> None:
-    double = _forge(replies={"merge": [ForgeReply(405, {"message": "not mergeable"})]})
+    double = _forge(replies={"merge": [ForgeRejected("Pull Request is not mergeable")]})
     answer, sink = _land(double)
     assert answer.choice == "pending"
     assert sink.landings() == []
 
 
 def test_a_pr_merged_by_an_earlier_pass_is_recovered_without_a_second_pr_or_merge() -> None:
-    double = _forge(replies={"merge": [ForgeReply(405, {"message": "Pull Request is not mergeable"})]})
-    double.repos[_WIDGET].pulls[4] = pull_body(
-        _WIDGET, 4, branch="feat/x", sha=_SUBMITTED, base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    double = _forge(replies={"merge": [ForgeRejected("Pull Request is not mergeable")]})
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha=_SUBMITTED, base="main", state=ChangeState.MERGED, merged_revision="m4"
     )
     answer, sink = _land(double)
     assert answer.choice == "landed"
-    assert double.named("open_pull") == []
+    assert double.named("open_change") == []
     assert sink.landings()[0].revision == "m4"
 
 
 def test_a_stale_merged_pr_on_a_reused_branch_name_is_not_a_landing() -> None:
     double = _forge()
-    double.repos[_WIDGET].pulls[4] = pull_body(
-        _WIDGET, 4, branch="feat/x", sha="old", base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha="old", base="main", state=ChangeState.MERGED, merged_revision="m4"
     )
     answer, sink = _land(double)
     assert answer.choice == "landed"
@@ -439,91 +513,149 @@ def test_a_stale_merged_pr_on_a_reused_branch_name_is_not_a_landing() -> None:
     assert sink.landings()[0].revision == f"merge-{_WIDGET}-2"
 
 
-def test_a_degraded_merged_pr_lookup_waits_rather_than_opening_a_duplicate() -> None:
-    double = _forge(replies={"closed_pulls": [ForgeReply(502, {})]})
+def test_a_refused_merged_pr_lookup_waits_rather_than_opening_a_duplicate() -> None:
+    double = _forge(replies={"changes": [ForgeRejected("Validation Failed")]})
     answer, _ = _land(double)
     assert answer.choice == "pending"
-    assert double.named("open_pull") == []
+    assert double.named("open_change") == []
 
 
-def test_an_unreachable_forge_on_a_merged_pr_lookup_escapes_the_pass() -> None:
-    double = _forge(replies={"closed_pulls": [unreachable()]})
-    with pytest.raises(ForgeUnreachable):
-        _land(double)
+def test_a_forge_that_does_not_answer_a_merged_pr_lookup_waits() -> None:
+    double = _forge(replies={"changes": [ForgeUnavailable("connection refused")]})
+    answer, _ = _land(double)
+    assert answer.choice == "pending"
+    assert double.named("open_change") == []
+
+
+# --- the forge answers a person must settle -----------------------------------
+
+
+@pytest.mark.parametrize("call", ["changes", "open_change", "change", "update_from_base", "merge", "checks"])
+def test_a_rejected_credential_on_any_call_but_a_re_run_escalates_forge_auth(call: str) -> None:
+    double = _forge(
+        mergeability=Mergeability.BEHIND if call == "update_from_base" else Mergeability.MERGEABLE,
+        replies={call: [ForgeRejected(ForgeRejected.AUTH)]},
+    )
+    answer, sink = _land(double)
+    assert answer.choice is None and answer.escalation is not None
+    assert answer.escalation.cause is EscalationCause.FORGE_AUTH
+    assert _WIDGET in answer.escalation.detail and "https://api.github.example" in answer.escalation.detail
+    assert sink.landings() == []
+
+
+def test_a_repository_the_forge_does_not_know_at_branch_tip_escalates_forge_config() -> None:
+    double = _forge(replies={"branch_tip": [ForgeNotFound(ForgeObject.REPOSITORY)]})
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha="old", base="main", state=ChangeState.MERGED, merged_revision="m4"
+    )
+    answer, _ = _land(double)
+    assert answer.escalation is not None and answer.escalation.cause is EscalationCause.FORGE_CONFIG
+    detail = answer.escalation.detail
+    assert _WIDGET in detail and "https://api.github.example" in detail
+    assert "does not exist, or cannot be seen with this credential" in detail
+
+
+def test_a_rate_limited_head_gate_compare_waits_until_the_limit_lifts() -> None:
+    resume_at = datetime(2026, 10, 24, 12, tzinfo=UTC)
+    double = _forge(heads={"feat/x": "merge1"}, replies={"compare": [ForgeRateLimited(resume_at)]})
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert answer.next_poll_at is not None and answer.next_poll_at >= resume_at
+    assert "delivery-findings" not in sink.markers()
+    assert double.named("merge") == []
 
 
 # --- the head gate ------------------------------------------------------------
 
 
-def _commit(sha: str, *parents: str) -> dict[str, Any]:
-    return {"sha": sha, "parents": [{"sha": p} for p in parents]}
+def _commit(sha: str, *parents: str) -> CommitSummary:
+    return CommitSummary(sha, parents)
 
 
-def _file(name: str, blob: str) -> dict[str, Any]:
-    return {"filename": name, "sha": blob, "patch": "@@ -1 +1 @@\n-a\n+b", "additions": 1, "deletions": 1}
+def _file(name: str, blob: str) -> FileChange:
+    return FileChange(
+        path=name,
+        previous_path=None,
+        status="modified",
+        blob=blob,
+        patch="@@ -1 +1 @@\n-a\n+b",
+        additions=1,
+        deletions=1,
+    )
 
 
-def _advanced(double: GitHubDouble, repo: str, *, merged_files: list[dict[str, Any]]) -> None:
+def _advanced(double: GitHubDouble, repo: str, *, merged_files: tuple[FileChange, ...]) -> None:
     """``repo``'s head advanced past the submitted commit by one merge of the base tip ``b1``."""
     state = double.repos[repo]
     state.heads = {"feat/x": "merge1"}
-    base_files = [_file("a.txt", "blob1")]
+    base_files = (_file("a.txt", "blob1"),)
     state.compares = {
-        ("main", "b1"): {"status": "identical"},
-        (_SUBMITTED, "b1"): {"files": base_files, "merge_base_commit": {"sha": "mb"}},
-        ("mb", _SUBMITTED): {"files": []},
-        (_SUBMITTED, "merge1"): {
-            "status": "ahead",
-            "total_commits": 1,
-            "commits": [_commit("merge1", _SUBMITTED, "b1")],
-            "files": merged_files,
-        },
+        ("main", "b1"): comparison(ComparisonStatus.IDENTICAL),
+        (_SUBMITTED, "b1"): comparison(files=base_files, merge_base="mb"),
+        ("mb", _SUBMITTED): comparison(),
+        (_SUBMITTED, "merge1"): comparison(commits=(_commit("merge1", _SUBMITTED, "b1"),), files=merged_files),
     }
 
 
 def test_a_head_advanced_only_by_a_base_merge_lands_the_verified_head() -> None:
     double = _forge()
-    _advanced(double, _WIDGET, merged_files=[_file("a.txt", "blob1")])
+    _advanced(double, _WIDGET, merged_files=(_file("a.txt", "blob1"),))
     answer, _ = _land(double)
     assert answer.choice == "landed"
-    assert double.named("merge")[0][1]["sha"] == "merge1"
+    assert double.named("merge")[0][1]["expected_head"] == "merge1"
 
 
 def test_a_merge_adding_content_beyond_the_base_change_refuses_with_both_findings() -> None:
     double = _forge()
-    _advanced(double, _WIDGET, merged_files=[_file("a.txt", "blob1"), _file("evil.txt", "x")])
+    _advanced(double, _WIDGET, merged_files=(_file("a.txt", "blob1"), _file("evil.txt", "x")))
     answer, sink = _land(double)
     assert answer.choice == "failure"
     markers = sink.markers()
     assert markers["delivery-findings"] == markers["delivery-findings/foreign-head"]
     assert "merge1 (adds content beyond the base branch's change)" in markers["delivery-findings"]
-    assert double.writes() == ["open_pull"]
+    assert double.writes() == ["open_change"]
+
+
+def test_a_merge_whose_file_list_the_forge_cut_short_refuses() -> None:
+    double = _forge()
+    _advanced(double, _WIDGET, merged_files=(_file("a.txt", "blob1"),))
+    state = double.repos[_WIDGET]
+    state.compares[(_SUBMITTED, "merge1")] = replace(state.compares[(_SUBMITTED, "merge1")], files_truncated=True)
+    answer, sink = _land(double)
+    assert answer.choice == "failure"
+    assert "merge1 (adds content beyond the base branch's change)" in sink.markers()["delivery-findings"]
+
+
+def test_a_comparison_listing_fewer_commits_than_the_head_is_ahead_refuses_the_head_as_truncated() -> None:
+    double = _forge(heads={"feat/x": "merge1"})
+    double.repos[_WIDGET].compares = {
+        (_SUBMITTED, "merge1"): comparison(commits=(_commit("merge1", _SUBMITTED, "b1"),), commits_truncated=True)
+    }
+    answer, sink = _land(double)
+    assert answer.choice == "failure"
+    assert f"the commit list between {_SUBMITTED} and merge1 is truncated" in sink.markers()["delivery-findings"]
 
 
 def test_a_foreign_non_merge_commit_refuses_and_fires_nothing_in_a_behind_sibling() -> None:
     double = _forge(_WIDGET, _GADGET)
     double.repos[_WIDGET].heads = {"feat/x": "foreign"}
-    double.repos[_WIDGET].compares = {
-        (_SUBMITTED, "foreign"): {"status": "ahead", "total_commits": 1, "commits": [_commit("foreign", _SUBMITTED)]}
-    }
-    double.repos[_GADGET].mergeable_state = "behind"
+    double.repos[_WIDGET].compares = {(_SUBMITTED, "foreign"): comparison(commits=(_commit("foreign", _SUBMITTED),))}
+    double.repos[_GADGET].mergeability = Mergeability.BEHIND
 
     answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
 
     assert answer.choice == "failure"
     assert "foreign (not a merge of the base branch)" in sink.markers()["delivery-findings/foreign-head"]
-    assert double.named("update_branch") == [] and double.named("merge") == []
+    assert double.named("update_from_base") == [] and double.named("merge") == []
 
 
 def test_a_merged_pr_whose_head_carries_a_foreign_commit_is_not_a_landing() -> None:
     double = _forge()
     double.repos[_WIDGET].heads = {"feat/x": "foreign"}
-    double.repos[_WIDGET].pulls[4] = pull_body(
-        _WIDGET, 4, branch="feat/x", sha="foreign", base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha="foreign", base="main", state=ChangeState.MERGED, merged_revision="m4"
     )
-    double.repos[_WIDGET].compares = {
-        (_SUBMITTED, "foreign"): {"status": "ahead", "total_commits": 1, "commits": [_commit("foreign", _SUBMITTED)]}
-    }
+    double.repos[_WIDGET].compares = {(_SUBMITTED, "foreign"): comparison(commits=(_commit("foreign", _SUBMITTED),))}
     answer, sink = _land(double)
     assert answer.choice == "failure"
     assert "foreign (not a merge of the base branch)" in sink.markers()["delivery-findings/foreign-head"]
@@ -531,27 +663,38 @@ def test_a_merged_pr_whose_head_carries_a_foreign_commit_is_not_a_landing() -> N
 
 
 def test_a_merged_pr_whose_head_only_merged_the_base_still_lands() -> None:
-    double = _forge()
-    _advanced(double, _WIDGET, merged_files=[_file("a.txt", "blob1")])
-    double.repos[_WIDGET].pulls[4] = pull_body(
-        _WIDGET, 4, branch="feat/x", sha="merge1", base="main", merged=True, merged_at="t", merge_commit_sha="m4"
+    double = _forge(replies={"merge": [ForgeRejected("Pull Request is not mergeable")]})
+    _advanced(double, _WIDGET, merged_files=(_file("a.txt", "blob1"),))
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET, 4, branch="feat/x", sha="merge1", base="main", state=ChangeState.MERGED, merged_revision="m4"
     )
     answer, sink = _land(double)
     assert answer.choice == "landed"
-    assert sink.landings()[0].revision == f"merge-{_WIDGET}-4"
+    assert sink.landings()[0].revision == "m4"
 
 
 def test_a_head_that_no_longer_descends_from_the_submitted_commit_refuses() -> None:
-    double = _forge(heads={"feat/x": "reset"}, compares={(_SUBMITTED, "reset"): {"status": "diverged"}})
+    double = _forge(heads={"feat/x": "reset"}, compares={(_SUBMITTED, "reset"): comparison(ComparisonStatus.DIVERGED)})
     answer, sink = _land(double)
     assert answer.choice == "failure"
     assert "does not descend from the submitted commit" in sink.markers()["delivery-findings"]
 
 
-def test_a_degraded_compare_read_waits_without_writing() -> None:
-    double = _forge(heads={"feat/x": "merge1"}, replies={"compare": [ForgeReply(503, {})]})
+@pytest.mark.parametrize(
+    "refusal", [ForgeNotFound(ForgeObject.REVISION), ForgeRejected("No common ancestor")], ids=repr
+)
+def test_a_head_gate_compare_the_forge_refused_routes_the_head_as_foreign(refusal: Exception) -> None:
+    double = _forge(heads={"feat/x": "merge1"}, replies={"compare": [refusal]})
+    answer, sink = _land(double)
+    assert answer.choice == "failure"
+    assert f"the forge would not compare {_SUBMITTED}...merge1" in sink.markers()["delivery-findings/foreign-head"]
+
+
+def test_a_head_gate_compare_the_forge_did_not_answer_waits_without_writing() -> None:
+    double = _forge(heads={"feat/x": "merge1"}, replies={"compare": [ForgeUnavailable("HTTP 503")]})
     answer, sink = _land(double)
     assert answer.choice == "pending"
+    assert answer.next_poll_at is None
     assert "delivery-findings" not in sink.markers()
     assert double.named("merge") == []
 
@@ -576,57 +719,9 @@ def test_an_unrecorded_pr_marker_answers_failure_before_any_merge() -> None:
 
 
 def test_an_unrecorded_wait_finding_still_waits() -> None:
-    double = _forge(checks={_SUBMITTED: [{"name": "build", "status": "queued"}]})
+    double = _forge(checks={_SUBMITTED: (check(outcome=CheckOutcome.PENDING, detail="queued"),)})
     answer, _ = _land(double, sink=_Sink(refuse=("delivery-findings",)))
     assert answer.choice == "pending"
-
-
-# --- the GitHub handle --------------------------------------------------------
-
-
-def test_the_github_handle_carries_its_credential_and_a_timeout_on_every_call() -> None:
-    seen: list[httpx2.Request] = []
-
-    def transport(request: httpx2.Request) -> httpx2.Response:
-        seen.append(request)
-        return httpx2.Response(200, json={"merged": True, "sha": "m"})
-
-    handle = GitHubHandle("https://api.github.example/", "tok", timeout=7.0)
-
-    async def merge() -> ForgeReply:
-        await handle.open()
-        handle._client._transport = httpx2.MockTransport(transport)  # type: ignore[union-attr]
-        try:
-            return await handle.merge(_WIDGET, 3, sha="h", commit_message="m", method="merge")
-        finally:
-            await handle.close()
-
-    reply = asyncio.run(merge())
-
-    assert reply == ForgeReply(200, {"merged": True, "sha": "m"})
-    (request,) = seen
-    assert str(request.url) == f"https://api.github.example/repos/{_WIDGET}/pulls/3/merge"
-    assert request.headers["Authorization"] == "token tok"
-    assert json.loads(request.content)["merge_method"] == "merge"
-    assert request.extensions["timeout"]["read"] == 7.0
-
-
-def test_a_github_handle_call_that_gets_no_answer_is_unreachable() -> None:
-    def refuse(request: httpx2.Request) -> httpx2.Response:
-        raise httpx2.ConnectError("refused", request=request)
-
-    handle = GitHubHandle("https://api.github.example", "tok")
-
-    async def read() -> ForgeReply:
-        await handle.open()
-        handle._client._transport = httpx2.MockTransport(refuse)  # type: ignore[union-attr]
-        try:
-            return await handle.pull(_WIDGET, 1)
-        finally:
-            await handle.close()
-
-    with pytest.raises(ForgeUnreachable):
-        asyncio.run(read())
 
 
 # --- through the executor -----------------------------------------------------
@@ -661,7 +756,7 @@ _REPOSITORIES = tuple(
 def _hub(
     tmp_path: Path, double: GitHubDouble, repositories: tuple[RepositoryFields, ...] = _REPOSITORIES
 ) -> HubHarness:
-    return build_hub(tmp_path, repositories=repositories, forge_handles=double.handle)
+    return build_hub(tmp_path, repositories=repositories, forges=double.forges)
 
 
 def _chunk(hub: HubHarness, *repos: str, forges: tuple[str | None, ...] = ()) -> str:
@@ -741,8 +836,7 @@ def test_land_lands_each_repository_through_its_own_handle_and_records_each_land
         [(_WIDGET, f"merge-{_WIDGET}-1", widget), (_GADGET, f"merge-{_GADGET}-1", gadget)]
     )
     assert _artifact(hub, chunk_id, f"merged/{_WIDGET}") == f"merge-{_WIDGET}-1"
-    assert set(double.tokens) == {widget, gadget}
-    assert double.opened == double.closed == 2
+    assert set(double.tokens) == {_WIDGET, _GADGET}
 
 
 def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landing_and_spares_the_second(
@@ -796,7 +890,54 @@ def test_one_owner_repo_held_for_two_records_fails_before_the_pass(tmp_path: Pat
     assert result is not None and result.outcome_choice == "failure"
     log = _artifact(hub, chunk_id, "hub-log.repository-ambiguous") or ""
     assert "resolves to two repository records" in log
-    assert double.calls == [] and double.opened == 0
+    assert double.calls == [] and double.tokens == {}
+
+
+def _event_kinds(hub: HubHarness) -> list[str]:
+    logged = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == HubEventType.EVENT_LOGGED]
+    return [e["kind"] for e in logged]
+
+
+def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_path: Path) -> None:
+    double = _forge(_WIDGET)
+    narrower = frozenset(Capability) - {Capability.CHANGES_MERGE_MERGE}
+    hub = build_hub(tmp_path, repositories=_REPOSITORIES, forges=double.forges_offering({"github": narrower}))
+    chunk_id = _chunk(hub, _WIDGET)
+
+    result = _take(hub, chunk_id)
+
+    assert result is not None
+    assert (result.outcome_choice, result.wrote_transition) == ("forge-capability-missing", False)
+    assert double.calls == [] and double.tokens == {}
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
+    assert [(row.epoch, row.cause) for row in rows] == [(2, "forge-capability-missing")]
+    assert "changes.merge.merge" in rows[0].detail and "http://forge.one" in rows[0].detail
+    log = _artifact(hub, chunk_id, "hub-log.forge-capability-missing") or ""
+    assert "does not offer `changes.merge.merge`" in log
+
+    # A second visit finds the chunk escalated and takes nothing.
+    assert _take(hub, chunk_id) is None
+    # One that raced the first past its read records the escalation as already written, and nothing beside it.
+    chunk = hub.services.chunks.record.get(chunk_id)
+    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    node = graph.node_by_name("deliver") if graph is not None else None
+    assert chunk is not None and node is not None
+    target = hub.services.hub_node._repositories.list_all(include_retired=True)[0]
+    resolved = ResolvedRepository(
+        forge_api_url=target.fields.forge_api_url,
+        owner=target.fields.owner,
+        base_branch=target.fields.base_branch,
+        secret_name=target.fields.secret_name,
+        record=str(target.repository_id),
+    )
+    raced = hub.services.hub_node._escalate_capability_missing(
+        chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, epoch=1
+    )
+    assert "already escalated" in raced.detail
+    assert _event_kinds(hub).count("forge-capability-missing") == 1
+    names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
+    assert names.count("hub-log.forge-capability-missing") == 1
 
 
 # --- the landing record's write ------------------------------------------------

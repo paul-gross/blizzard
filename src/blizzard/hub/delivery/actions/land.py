@@ -1,17 +1,20 @@
-"""``land`` — lands a chunk's commits on each repository's base branch through a pull request, self-healing:
-``behind`` updates the branch, ``dirty`` answers ``conflict``, a head beyond the submitted commit and its base
-merges answers ``failure``, and anything else unsettled waits (``pending``). Nothing merges unless every
-repository is ready; each merge is then handed over as a :class:`LandingRecord` and awaited before the next
-repository is touched. A pass reads its node's markers to skip what earlier passes did, and speaks to each
-repository only through its :class:`IGitHubHandle`."""
+"""``land`` — lands a chunk's commits on each repository's base branch through a change, self-healing:
+``behind`` updates the change from its base, ``conflicting`` answers ``conflict``, a head beyond the submitted
+commit and its base merges answers ``failure``, and anything else unsettled waits (``pending``). Nothing merges
+unless every repository is ready; each merge is handed over as a :class:`LandingRecord` and awaited before the next
+repository is touched. A pass skips what its node's markers say earlier passes did, and speaks to each repository
+only through its :class:`RepositoryForge`; a forge fault no worker can repair escalates to a person."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import Any
 
-from blizzard.hub.delivery.actions.base_merge import contributes_only_base_change, merge_base_of
+from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.hub.delivery.actions.base_merge import contributes_only_base_change
 from blizzard.hub.delivery.actions.land_checks import (
     BOUNCE,
     CI_WATCH_STATES,
@@ -27,11 +30,37 @@ from blizzard.hub.delivery.actions.land_checks import (
     first_parent_chain,
     inherited,
 )
-from blizzard.hub.delivery.forge_handle import ForgeUnreachable, IGitHubHandle, VisitForges
-from blizzard.hub.domain.actions.effects import EffectStatus, IEffectSink, LandingRecord, Marker, Pass
+from blizzard.hub.domain.actions.effects import (
+    ActionEscalation,
+    EffectStatus,
+    IEffectSink,
+    LandingRecord,
+    Marker,
+    Pass,
+)
 from blizzard.hub.domain.actions.visit import Visit
-from blizzard.hub.domain.config.repositories import ResolvedRepository
+from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
 from blizzard.hub.domain.graph.actions import LAND
+from blizzard.hub.forge.landing import (
+    Change,
+    ChangeListing,
+    ChangeState,
+    Check,
+    Comparison,
+    ComparisonStatus,
+    ForgeNotFound,
+    ForgeObject,
+    ForgeRateLimited,
+    ForgeRejected,
+    ForgeUnavailable,
+    Mergeability,
+    MergeMethod,
+    RepositoryForge,
+    Update,
+    UpdateOutcome,
+    VisitForges,
+)
 
 # The answers a pass gives.
 _LANDED = "landed"
@@ -49,13 +78,6 @@ _RERUN_MARKER_PREFIX = "ci-rerun/"
 
 # GitHub's PR title limit; longer titles get an ellipsis.
 _PR_TITLE_MAX = 256
-
-# Bounds the closed-pull scan a merged-PR lookup does per repo (1000 PRs against one branch).
-_CLOSED_PULLS_PAGE_MAX = 10
-
-
-class ForgeReadDegraded(Exception):
-    """A forge read got no answer (no connection, or a 5xx); another pass may."""
 
 
 class PullRequestOpenError(Exception):
@@ -83,11 +105,7 @@ class LandedRevisionUnknown(Exception):
 
 
 class MergeDidNotLand(Exception):
-    """A merge did not land and a re-read confirms the PR is still open; :attr:`result` is the refusal."""
-
-    def __init__(self, result: Any) -> None:
-        super().__init__(str(result))
-        self.result = result
+    """A merge did not land and a re-read confirms the change is still open; the message is the refusal."""
 
 
 class _Conflict(Exception):
@@ -102,6 +120,14 @@ class _LandingFenced(Exception):
     """A merge's landing record was written past the fence: the chunk moved on while it landed."""
 
 
+class _Escalation(Exception):
+    """A forge answer no worker can repair — a rejected credential, a repository the forge does not know."""
+
+    def __init__(self, escalation: ActionEscalation) -> None:
+        super().__init__(escalation.detail)
+        self.escalation = escalation
+
+
 def _rerun_marker(repo: str, name: str, head_sha: str) -> str:
     return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
 
@@ -113,12 +139,22 @@ class _Run:
     visit: Visit
     effects: IEffectSink
     log: list[str] = field(default_factory=list)
+    #: The latest moment a rate-limited forge said to come back, read by a ``pending`` answer.
+    resume_at: datetime | None = None
 
     def say(self, line: str) -> None:
         self.log.append(line)
 
+    def hold(self, exc: ForgeUnavailable) -> None:
+        """Note a forge that did not answer; a rate limit postpones this pass's next poll to when it lifts."""
+        if isinstance(exc, ForgeRateLimited) and (self.resume_at is None or exc.resume_at > self.resume_at):
+            self.resume_at = exc.resume_at
+
     def answer(self, choice: str) -> Pass:
-        return Pass(choice=choice, log=tuple(self.log))
+        return Pass(choice=choice, log=tuple(self.log), next_poll_at=self.resume_at if choice == _PENDING else None)
+
+    def escalate(self, escalation: ActionEscalation) -> Pass:
+        return Pass(choice=None, log=tuple(self.log), escalation=escalation)
 
     async def post(self, name: str, content: str) -> None:
         """Record marker ``name``, or raise :class:`_NotRecorded`."""
@@ -146,14 +182,14 @@ class _Run:
 @dataclass(frozen=True)
 class _Target:
     """One commit to land and the repository it lands in: its ``owner/repo``, its branch and submitted
-    commit, its resolved record, and the handle on its forge."""
+    commit, its resolved record, and its forge's roles."""
 
     run: _Run
     repo: str
     branch: str
     commit: str
     record: ResolvedRepository
-    forge: IGitHubHandle
+    forge: RepositoryForge
 
     @property
     def base_branch(self) -> str:
@@ -162,53 +198,60 @@ class _Target:
     def marker(self) -> str:
         return f"{_MARKER_PREFIX}{self.repo}"
 
-    async def compare(self, base: str, head: str) -> dict[str, Any] | None:
-        """The forge's ``base...head`` comparison; ``None`` when answered unusably, and a read with no answer
-        (unreachable, a 5xx) raises :class:`ForgeReadDegraded`."""
+    async def ask[T](self, call: Awaitable[T]) -> T:
+        """``call``'s answer; a rejected credential or a repository the forge does not know raises
+        :class:`_Escalation`, since no worker can repair either."""
+        where = f"{self.repo} on {self.record.forge_api_url}"
         try:
-            reply = await self.forge.compare(self.repo, base, head)
-        except ForgeUnreachable as exc:
-            raise ForgeReadDegraded(f"could not read {self.repo}'s compare {base}...{head}: {exc}") from exc
-        if reply.status >= 500:
-            raise ForgeReadDegraded(f"could not read {self.repo}'s compare {base}...{head} (HTTP {reply.status})")
-        if reply.status != 200 or not isinstance(reply.payload, dict):
+            return await call
+        except ForgeRejected as exc:
+            if exc.reason != ForgeRejected.AUTH:
+                raise
+            detail = f"{where}: the forge rejected the repository's credential ({exc})"
+            raise _Escalation(ActionEscalation(EscalationCause.FORGE_AUTH, detail)) from exc
+        except ForgeNotFound as exc:
+            if exc.what is not ForgeObject.REPOSITORY:
+                raise
+            detail = (
+                f"{where}: the forge does not know the repository — it does not exist, or cannot be seen with "
+                f"this credential ({exc})"
+            )
+            raise _Escalation(ActionEscalation(EscalationCause.FORGE_CONFIG, detail)) from exc
+
+    async def compare(self, base: str, head: str) -> Comparison | None:
+        """The forge's ``base...head`` comparison; ``None`` when the forge refused it or does not know a
+        revision."""
+        try:
+            return await self.ask(self.forge.refs.compare(base, head))
+        except (ForgeRejected, ForgeNotFound):
             return None
-        return reply.payload
 
     async def base_holds(self, ref: str) -> bool:
-        """Whether the base branch already holds every commit on ``ref``; a degraded read raises."""
-        payload = await self.compare(self.base_branch, ref)
-        return payload is not None and payload.get("status") in {"identical", "behind"}
-
-    async def contains(self, ref: str) -> bool:
-        """Whether the base branch already holds every commit on ``ref``, read from the forge's own
-        comparison; any unreadable answer is ``False`` — never "there was nothing to land"."""
-        try:
-            return await self.base_holds(ref)
-        except ForgeReadDegraded:
-            return False
+        """Whether the base branch already holds every commit on ``ref``; a comparison the forge refused is
+        ``False`` — never "there was nothing to land"."""
+        comparison = await self.compare(self.base_branch, ref)
+        return comparison is not None and comparison.status in {ComparisonStatus.IDENTICAL, ComparisonStatus.BEHIND}
 
     async def base_tip(self) -> str:
         """The base branch's live tip; any unreadable answer raises :class:`LandedRevisionUnknown`."""
         where = f"{self.repo}:{self.base_branch}"
         try:
-            reply = await self.forge.branch(self.repo, self.base_branch)
-        except ForgeUnreachable as exc:
+            tip = await self.ask(self.forge.refs.branch_tip(self.base_branch))
+        except ForgeRejected as exc:
             raise LandedRevisionUnknown(f"could not read {where}'s live tip: {exc}") from exc
-        if reply.status != 200 or not isinstance(reply.payload, dict):
-            raise LandedRevisionUnknown(f"could not read {where}'s live tip (HTTP {reply.status})")
-        tip = (reply.payload.get("object") or {}).get("sha")
-        if not isinstance(tip, str) or not tip:
-            raise LandedRevisionUnknown(f"{where}'s live tip read came back without a sha")
+        if tip is None:
+            raise LandedRevisionUnknown(f"{where} does not exist, so it has no live tip")
         return tip
 
     async def verdict(self, ref: str) -> Verdict:
-        """``ref``'s check runs, degrading to ``None`` on any read failure."""
+        """``ref``'s checks, degrading to ``None`` on any read the forge refused or did not answer."""
         try:
-            reply = await self.forge.check_runs(self.repo, ref)
-        except ForgeUnreachable:
+            return Verdict(await self.ask(self.forge.checks.checks(ref)))
+        except (ForgeRejected, ForgeNotFound):
             return Verdict(None)
-        return Verdict.of(reply.status, reply.payload)
+        except ForgeUnavailable as exc:
+            self.run.hold(exc)
+            return Verdict(None)
 
     def pr_title(self) -> str:
         """The visit's feature title, or the branch when none resolved, truncated to :data:`_PR_TITLE_MAX`."""
@@ -238,39 +281,45 @@ class _Target:
 
 @dataclass(frozen=True)
 class _PullRequest:
-    """One repository's PR for the chunk's branch, and the sole owner of the forge's ``pulls`` calls.
-    :attr:`body` is the PR as of the last read."""
+    """One repository's change for the chunk's branch, and the sole owner of the forge's change calls.
+    :attr:`change` is the change as of the last read."""
 
     target: _Target
-    number: int
-    body: dict[str, Any]
+    change: Change
 
     @classmethod
     async def of(cls, target: _Target) -> _PullRequest:
-        """The PR for the target's branch: an already-merged one first, so a re-visit recovers a merge even
-        when its record was interrupted — then the open one, opening one first when neither exists, then
+        """The change for the target's branch: an already-merged one first, so a re-visit recovers a merge
+        even when its record was interrupted — then the open one, opening one first when neither exists, then
         read live. Raises :class:`PullRequestOpenError` or :class:`PullRequestLookupError` on a hiccup."""
         merged = await cls._merged_for_branch(target)
         if merged is not None:
-            return await cls._record(await cls(target, int(merged["number"]), {}).reread())
-        listed = (await target.forge.open_pulls(target.repo)).payload
-        existing = next(
-            (p for p in (listed if isinstance(listed, list) else []) if p.get("head", {}).get("ref") == target.branch),
-            None,
-        )
+            return await cls._record(await cls(target, merged).reread())
+        existing = await cls._open_for_branch(target)
         if existing is None:
-            reply = await target.forge.open_pull(
-                target.repo, title=target.pr_title(), head=target.branch, base=target.base_branch, body=target.pr_body()
-            )
-            if reply.status != 201:
-                if await target.contains(target.branch):
-                    raise NothingToLand(
-                        f"{target.repo}:{target.branch} adds no commit {target.base_branch} does not already have",
-                        await target.base_tip(),
+            try:
+                existing = await target.ask(
+                    target.forge.changes.open_change(
+                        target.branch, target.base_branch, target.pr_title(), target.pr_body()
                     )
-                raise PullRequestOpenError(f"could not open a PR for {target.repo}:{target.branch}: {reply.payload}")
-            existing = reply.payload
-        return await cls._record(await cls(target, int(existing["number"]), {}).reread())
+                )
+            except (ForgeRejected, ForgeNotFound) as exc:
+                existing = await cls._after_refused_open(target, exc)
+        return await cls._record(await cls(target, existing).reread())
+
+    @classmethod
+    async def _after_refused_open(cls, target: _Target, refusal: Exception) -> Change:
+        """What a refused open leaves: nothing to land when the base holds the branch, else an open change
+        someone else opened meanwhile, else :class:`PullRequestOpenError`."""
+        if await target.base_holds(target.branch):
+            raise NothingToLand(
+                f"{target.repo}:{target.branch} adds no commit {target.base_branch} does not already have",
+                await target.base_tip(),
+            )
+        adopted = await cls._open_for_branch(target)
+        if adopted is None:
+            raise PullRequestOpenError(f"could not open a PR for {target.repo}:{target.branch}: {refusal}")
+        return adopted
 
     @classmethod
     async def _record(cls, pull: _PullRequest) -> _PullRequest:
@@ -282,130 +331,127 @@ class _PullRequest:
         return pull
 
     @staticmethod
-    async def _merged_for_branch(target: _Target) -> dict[str, Any] | None:
-        """The already-merged PR that landed the submitted commit — else the branch's live tip — into the
-        target's own base, or ``None`` when the read confirms there is none: never a same-name PR merged into
-        a different base, and never a degraded read, which raises :class:`PullRequestLookupError`."""
-        repo, branch, base = target.repo, target.branch, target.base_branch
-        candidates: list[dict[str, Any]] = []
-        for page in range(1, _CLOSED_PULLS_PAGE_MAX + 1):
-            reply = await target.forge.closed_pulls(repo, base=base, page=page)
-            listed = reply.payload
-            if reply.status != 200 or not isinstance(listed, list):
-                raise PullRequestLookupError(f"could not read {repo}'s closed pull list (HTTP {reply.status})")
-            candidates.extend(
-                p
-                for p in listed
-                if p.get("head", {}).get("ref") == branch
-                and p.get("base", {}).get("ref") == base
-                and p.get("merged_at") is not None
-            )
-            if len(listed) < 100:
-                break
+    async def _listed(target: _Target, listing: ChangeListing) -> tuple[Change, ...]:
+        try:
+            return await target.ask(target.forge.changes.changes(listing, target.base_branch, target.branch))
+        except ForgeRejected as exc:
+            raise PullRequestLookupError(f"could not read {target.repo}'s {listing} changes: {exc}") from exc
+
+    @classmethod
+    async def _open_for_branch(cls, target: _Target) -> Change | None:
+        listed = await cls._listed(target, ChangeListing.OPEN)
+        return listed[0] if listed else None
+
+    @classmethod
+    async def _merged_for_branch(cls, target: _Target) -> Change | None:
+        """The already-merged change that landed the submitted commit — else the branch's live tip — into the
+        target's own base, or ``None`` when the read confirms there is none: never a same-name change merged
+        into a different base, and never a refused read, which raises :class:`PullRequestLookupError`."""
+        candidates = [c for c in await cls._listed(target, ChangeListing.CLOSED) if c.state is ChangeState.MERGED]
         if not candidates:
             return None
-        recorded = next((p for p in candidates if p.get("head", {}).get("sha") == target.commit), None)
+        recorded = next((c for c in candidates if c.head_revision == target.commit), None)
         if recorded is not None:
             return recorded
-        reply = await target.forge.branch(repo, branch)
-        if reply.status == 404:
+        try:
+            live = await target.ask(target.forge.refs.branch_tip(target.branch))
+        except ForgeRejected as exc:
+            raise PullRequestLookupError(f"could not read {target.repo}:{target.branch}'s live tip: {exc}") from exc
+        if live is None:
             return None  # the forge deleted the head branch on merge: the ref is gone, not unreadable
-        if reply.status != 200 or not isinstance(reply.payload, dict):
-            raise PullRequestLookupError(f"could not read {repo}:{branch}'s live tip (HTTP {reply.status})")
-        live_sha = (reply.payload.get("object") or {}).get("sha")
-        if not isinstance(live_sha, str) or not live_sha:
-            raise PullRequestLookupError(f"{repo}:{branch}'s live tip read came back without a sha")
-        return next((p for p in candidates if p.get("head", {}).get("sha") == live_sha), None)
+        return next((c for c in candidates if c.head_revision == live), None)
 
     def __str__(self) -> str:
         return f"{self.target.repo}#{self.number}"
 
     @property
-    def merged(self) -> bool:
-        return bool(self.body.get("merged"))
+    def number(self) -> int:
+        return self.change.number
 
     @property
-    def mergeable_state(self) -> str | None:
-        return self.body.get("mergeable_state")
+    def merged(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        return self.change.state is ChangeState.MERGED
 
     @property
-    def head_sha(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
-        return (self.body.get("head") or {}).get("sha")
+    def mergeability(self) -> Mergeability:
+        return self.change.mergeability
 
     @property
-    def url(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        return self.body.get("html_url") or ""
+    def head_sha(self) -> str:
+        return self.change.head_revision
+
+    @property
+    def url(self) -> str:
+        return self.change.web_url
 
     def record(self, decision: str, **fields: Any) -> dict[str, Any]:
         """A findings record for this PR."""
         return {"repo": self.target.repo, "number": self.number, "url": self.url, "decision": decision, **fields}
 
     async def reread(self) -> _PullRequest:
-        reply = await self.target.forge.pull(self.target.repo, self.number)
-        return replace(self, body=reply.payload if isinstance(reply.payload, dict) else {})
+        """The change read live; a read the forge refused raises :class:`PullRequestLookupError`."""
+        try:
+            return replace(self, change=await self.target.ask(self.target.forge.changes.change(self.number)))
+        except (ForgeRejected, ForgeNotFound) as exc:
+            raise PullRequestLookupError(f"could not read {self}: {exc}") from exc
 
-    async def update_branch(self, expected_head_sha: str) -> tuple[int, str]:
-        """Ask the forge to merge the base branch in — guarded on ``expected_head_sha``, so updates never
-        stack."""
-        reply = await self.target.forge.update_branch(
-            self.target.repo, self.number, expected_head_sha=expected_head_sha
-        )
-        payload = reply.payload
-        return reply.status, (payload.get("message", "") if isinstance(payload, dict) else "")
+    async def update_from_base(self, expected_head: str) -> Update | None:
+        """Ask the forge to bring the change up to its base — guarded on ``expected_head``, so updates never
+        stack; ``None`` when the forge no longer knows the change."""
+        try:
+            return await self.target.ask(self.target.forge.changes.update_from_base(self.number, expected_head))
+        except ForgeNotFound:
+            return None
 
-    async def merge(self, sha: str) -> str:
-        """Merge at ``sha`` with a merge commit and return the landed commit, from the response or a reread.
-        Already-merged PRs are not remerged; an unconfirmed merge raises :class:`MergeDidNotLand`, an unknown
-        landed revision :class:`LandedRevisionUnknown`."""
-        reply = await self.target.forge.merge(
-            self.target.repo, self.number, sha=sha, commit_message=self.target.merge_message(), method="merge"
-        )
-        result = reply.payload
-        if reply.status == 200 and isinstance(result, dict) and result.get("merged") and result.get("sha"):
-            return result["sha"]
+    async def merge(self, revision: str) -> str:
+        """Merge at ``revision`` with a merge commit and return the landed commit. A refused merge re-reads the
+        change: one already merged is not remerged, one still open raises :class:`MergeDidNotLand`, and one
+        merged at an unknown revision :class:`LandedRevisionUnknown`."""
+        try:
+            return await self.target.ask(
+                self.target.forge.changes.merge(self.number, revision, MergeMethod.MERGE, self.target.merge_message())
+            )
+        except (ForgeRejected, ForgeNotFound) as exc:
+            refusal = str(exc)
         landed = await self.reread()
         if not landed.merged:
-            raise MergeDidNotLand(result)
-        merge_commit = landed.body.get("merge_commit_sha")
-        if not merge_commit:
-            raise LandedRevisionUnknown(f"{self} merged but neither read carries its landed commit")
-        return merge_commit
+            raise MergeDidNotLand(refusal)
+        if landed.change.merged_revision is None:
+            raise LandedRevisionUnknown(f"{self} merged but no read carries its landed commit")
+        return landed.change.merged_revision
 
 
 async def gate_head(target: _Target, head: str) -> HeadGate:
     """Whether ``head`` is the target's submitted commit or descends from it through base merges alone. An
-    answer it cannot prove refuses; a read that got none raises :class:`ForgeReadDegraded`."""
+    answer it cannot prove refuses; a forge that did not answer raises :class:`ForgeUnavailable`."""
     submitted = target.commit
     if head == submitted:
         return HeadGate(())
     ahead = await target.compare(submitted, head)
     if ahead is None:
         return HeadGate((f"the forge would not compare {submitted}...{head}",))
-    if ahead.get("status") == "identical":
+    if ahead.status is ComparisonStatus.IDENTICAL:
         return HeadGate(())
-    if ahead.get("status") != "ahead":
+    if ahead.status is not ComparisonStatus.AHEAD:
         return HeadGate((f"{head} does not descend from the submitted commit {submitted} (it was rewritten or reset)",))
-    commits = ahead.get("commits")
-    total = ahead.get("total_commits", ahead.get("ahead_by"))
-    if not isinstance(commits, list) or not isinstance(total, int) or len(commits) != total:
-        return HeadGate((f"the commit list between {submitted} and {head} is truncated or unreadable",))
-    chain, unreachable = first_parent_chain(commits, head, submitted)
+    if ahead.commits_truncated:
+        return HeadGate((f"the commit list between {submitted} and {head} is truncated",))
+    chain, unreachable = first_parent_chain(ahead.commits, head, submitted)
     if unreachable is not None:
         return HeadGate((unreachable,))
     offenders: list[str] = []
     for commit in chain:
-        sha = commit["sha"]
-        parents = [p["sha"] for p in commit["parents"] if isinstance(p, dict) and isinstance(p.get("sha"), str)]
-        if len(parents) != 2 or len(commit["parents"]) != 2:
+        sha = commit.revision
+        if len(commit.parents) != 2:
             offenders.append(f"{sha} (not a merge of the base branch)")
             continue
-        first, second = parents
+        first, second = commit.parents
         if not await target.base_holds(second):
             offenders.append(f"{sha} (merges {second}, which the base branch does not hold)")
             continue
         merged = await target.compare(first, sha)
         base_side = await target.compare(first, second)
-        merge_base = merge_base_of(base_side) if base_side is not None else None
+        merge_base = base_side.merge_base if base_side is not None else None
         if merged is None or base_side is None or merge_base is None:
             offenders.append(f"{sha} (its content could not be compared with the base branch's change)")
             continue
@@ -417,25 +463,26 @@ async def gate_head(target: _Target, head: str) -> HeadGate:
     return HeadGate(tuple(offenders))
 
 
-async def _rerequest_once(pull: _PullRequest, check: dict[str, Any], head_sha: str) -> None:
-    """Fire the check-run rerequest once for ``check``, then record its signature marker — side effect
-    first: a pass ending before the marker is durable just re-fires the rerequest next pass, which is
-    harmless to repeat. Neither is fatal; the marker is written only when the forge answers 2xx, so a
-    refusal never reads as a re-run."""
-    check_id = check.get("id")
-    if check_id is None:
-        return
+async def _rerun_once(pull: _PullRequest, check: Check, head_sha: str) -> bool | None:
+    """Ask the forge once to re-run ``check``, then record its signature marker — side effect first: a pass
+    ending before the marker is durable just re-runs it next pass, which is harmless to repeat. Whether the
+    forge accepted; ``None`` when it did not answer, so the next pass asks again. A marker is written only for
+    an accepted re-run, so a refusal never reads as one, and a marker write that fails is not fatal."""
     target = pull.target
     try:
-        reply = await target.forge.rerequest_check_run(target.repo, check_id)
-    except ForgeUnreachable:
-        return
-    if not 200 <= reply.status < 300:
-        return
+        accepted = await target.ask(target.forge.checks.rerun_check(check.id))
+    except (ForgeRejected, ForgeNotFound):
+        return False
+    except ForgeUnavailable as exc:
+        target.run.hold(exc)
+        return None
+    if not accepted:
+        return False
     try:
-        await target.run.post(_rerun_marker(target.repo, check.get("name", ""), head_sha), head_sha)
+        await target.run.post(_rerun_marker(target.repo, check.name, head_sha), head_sha)
     except _NotRecorded as exc:
         target.run.say(f"re-run signature marker write failed (non-fatal): {exc}")
+    return True
 
 
 @dataclass(frozen=True)
@@ -459,6 +506,13 @@ class Land:
         except _LandingFenced as exc:
             run.say(f"the chunk moved on while it landed: {exc}; no other repository is touched")
             return run.answer(_FAILURE)
+        except _Escalation as exc:
+            run.say(f"escalated to a person: {exc}")
+            return run.escalate(exc.escalation)
+        except ForgeUnavailable as exc:
+            run.hold(exc)
+            run.say(f"the forge did not answer: {exc}; re-polling")
+            return run.answer(_PENDING)
 
     @staticmethod
     def _targets(run: _Run, forges: VisitForges) -> list[_Target]:
@@ -471,7 +525,7 @@ class Land:
                 branch=row.data.partition(":")[0],
                 commit=row.data.partition(":")[2],
                 record=resolution.targets[index],
-                forge=forges[resolution.targets[index].record],
+                forge=forges[RepositoryId(resolution.targets[index].record)],
             )
             for index, row in enumerate(rows)
         ]
@@ -507,20 +561,25 @@ class Land:
                 run.say(str(exc))
                 wait = True
                 continue
-            if pull.head_sha:
-                # A merged PR is gated too: one recovered by the live-tip fallback may carry foreign content.
-                try:
-                    gate = await gate_head(target, pull.head_sha)
-                except ForgeReadDegraded as exc:
-                    run.say(f"{pull}: {exc}; re-polling")
-                    wait = True
-                    continue
-                if not gate.admitted():
-                    run.say(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges")
-                    foreign.append(
-                        pull.record(FOREIGN, submitted=target.commit, head=pull.head_sha, offenders=gate.offenders)
-                    )
-                    continue
+            except ForgeUnavailable as exc:
+                run.hold(exc)
+                run.say(f"{target.repo}: the forge did not answer: {exc}; re-polling")
+                wait = True
+                continue
+            # A merged PR is gated too: one recovered by the live-tip fallback may carry foreign content.
+            try:
+                gate = await gate_head(target, pull.head_sha)
+            except ForgeUnavailable as exc:
+                run.hold(exc)
+                run.say(f"{pull}: the forge did not answer: {exc}; re-polling")
+                wait = True
+                continue
+            if not gate.admitted():
+                run.say(f"{pull}'s head {pull.head_sha} is not the submitted commit plus base merges")
+                foreign.append(
+                    pull.record(FOREIGN, submitted=target.commit, head=pull.head_sha, offenders=gate.offenders)
+                )
+                continue
             resolved.append(pull)
 
         if foreign:
@@ -538,8 +597,8 @@ class Land:
         wait_records: list[dict[str, Any]] = []
         try:
             for pull in resolved:
-                head_sha = pull.head_sha or pull.target.commit
-                state = pull.mergeable_state
+                head_sha = pull.head_sha
+                state = pull.mergeability
                 # A verdict is only worth reading for the states merge eligibility turns on — read once.
                 verdict = await pull.target.verdict(head_sha) if state in CI_WATCH_STATES else None
                 decision = Route(state, merged=pull.merged, verdict=verdict).decision
@@ -547,10 +606,17 @@ class Land:
                     raise _Conflict(f"{pull} is dirty (a real merge conflict)")
                 if decision == UPDATE:
                     # Any refusal other than a named conflict waits — the next poll's state is authoritative.
-                    ustatus, message = await pull.update_branch(head_sha)
-                    if ustatus == 422 and "conflict" in message.lower():
-                        raise _Conflict(f"{pull} update-branch reported a conflict: {message}")
-                    run.say(f"{pull} behind — update-branch requested (HTTP {ustatus}); re-polling")
+                    try:
+                        update = await pull.update_from_base(head_sha)
+                    except ForgeUnavailable as exc:
+                        run.hold(exc)
+                        run.say(f"{pull} behind — the forge did not answer its update: {exc}; re-polling")
+                        wait = True
+                        continue
+                    if update is not None and update.outcome is UpdateOutcome.CONFLICT:
+                        raise _Conflict(f"{pull} could not be updated from its base without a conflict")
+                    answered = update.outcome if update is not None else "the change was not found"
+                    run.say(f"{pull} behind — update from its base requested ({answered}); re-polling")
                     wait = True
                     continue
                 if decision == WAIT:
@@ -565,17 +631,23 @@ class Land:
                                 failures.append(pull.record(FAILED, checks=checks))
                                 run.say(f"{pull} has a terminal CI check failure — will not re-poll")
                                 continue
-                            # Every failing check is inherited from the base: re-run each once before
-                            # charging a repair; one already re-run at this head and still red is confirmed.
+                            # Every failing check is inherited from the base: re-run each once (a forge that
+                            # cannot re-run counts as re-run) before charging a repair.
                             repo = pull.target.repo
+                            rerunnable = Capability.CHECKS_RERUN in pull.target.forge.offered
                             unsigned = [
                                 check
                                 for check in verdict.failing
-                                if _rerun_marker(repo, check.get("name", ""), head_sha) not in already
+                                if rerunnable and _rerun_marker(repo, check.name, head_sha) not in already
                             ]
                             if unsigned:
-                                for check in unsigned:
-                                    await _rerequest_once(pull, check, head_sha)
+                                accepted = [await _rerun_once(pull, check, head_sha) for check in unsigned]
+                                if False in accepted:
+                                    # The forge will not re-run a check for this credential: no re-run is
+                                    # coming, so the failure routes as an owned one would.
+                                    failures.append(pull.record(FAILED, checks=checks))
+                                    run.say(f"{pull}'s failing checks could not be re-run — will not re-poll")
+                                    continue
                                 run.say(
                                     f"{pull}'s failing checks are inherited from the base — re-requested once; "
                                     "re-polling"
@@ -588,10 +660,10 @@ class Land:
                                     base_branch=pull.target.base_branch,
                                     checks=[
                                         {
-                                            "name": check.get("name"),
-                                            "conclusion": check.get("conclusion"),
-                                            "details_url": check.get("details_url"),
-                                            "signature": _rerun_marker(repo, check.get("name", ""), head_sha),
+                                            "name": check.name,
+                                            "conclusion": check.detail,
+                                            "details_url": check.details_url,
+                                            "signature": _rerun_marker(repo, check.name, head_sha),
                                         }
                                         for check in verdict.failing
                                     ],
@@ -607,7 +679,7 @@ class Land:
                     run.say(f"{pull} is {state} — not cleanly mergeable yet; re-polling")
                     wait = True
                     continue
-                # Already merged, or a green verdict at a clean/blocked/unstable head — eligible.
+                # Already merged, or a green verdict at a mergeable or blocked head — eligible.
                 ready.append(_Ready(pull, head_sha))
         except _Conflict as exc:
             run.say(f"conflict: {exc}")
@@ -639,9 +711,9 @@ class Land:
                 landed_sha = await item.pull.merge(item.head_sha)
             except MergeDidNotLand as exc:
                 # Not an already-merged earlier pass (`merge` absorbs that) — a race worth re-polling.
-                run.say(f"merge of {item.pull} did not land ({exc.result}); will re-poll")
+                run.say(f"merge of {item.pull} did not land ({exc}); will re-poll")
                 return run.answer(_PENDING)
-            except LandedRevisionUnknown as exc:
+            except (LandedRevisionUnknown, PullRequestLookupError) as exc:
                 # Merged, but no read named its commit — the next poll recovers it as already merged.
                 run.say(f"{exc}; will re-poll")
                 return run.answer(_PENDING)

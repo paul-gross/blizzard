@@ -16,7 +16,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.delivery.forge_handle import ForgeReply
+from blizzard.hub.forge.landing import Change, ChangeListing
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.hub.outbound import COMPLETION_KIND
@@ -112,16 +112,21 @@ def _completion(node_id: str, *, epoch: int) -> dict:
 def _slow_land_hub(
     tmp_path: Path, entered: threading.Event, release: threading.Event
 ) -> tuple[HubHarness, GitHubDouble]:
-    """A hub whose ``land`` pass, once it reads the forge's open PRs, holds until ``release`` is set."""
+    """A hub whose ``land`` pass, once it reads the forge's changes, holds until ``release`` is set."""
     double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
 
-    def held() -> ForgeReply:
+    def held(**_: object) -> tuple[Change, ...]:
         entered.set()
         release.wait(timeout=5)
-        return ForgeReply(200, [])
+        return ()
 
-    double.repo("acme/widget").replies["open_pulls"] = [held]
-    return build_hub(tmp_path, forge_handles=double.handle), double
+    double.repo("acme/widget").replies["changes"] = [held]
+    return build_hub(tmp_path, forges=double.forges), double
+
+
+def _passes_started(double: GitHubDouble) -> int:
+    """How many ``land`` passes began — each first reads the closed changes, once."""
+    return sum(1 for _, args in double.named("changes") if args["state"] is ChangeListing.CLOSED)
 
 
 def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
@@ -160,7 +165,7 @@ def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
 def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     """A re-submitted completion (lost-ack replay) lands once — one transition, one merge."""
     double = forge_holding("acme/widget", branch="b", commit=_COMMIT)
-    hub = build_hub(tmp_path, forge_handles=double.handle)
+    hub = build_hub(tmp_path, forges=double.forges)
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
@@ -275,7 +280,7 @@ def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_p
     assert replay.json()["outcome"] == "hub_node_taken"
     advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert advance.json()["ran"] is False
-    assert len(double.named("open_pulls")) == 1
+    assert _passes_started(double) == 1
 
     release.set()
     thread.join(timeout=5)
@@ -287,7 +292,7 @@ def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_p
 
     late = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert late.json()["outcome"] == "hub_node_taken"
-    assert len(double.named("open_pulls")) == 1
+    assert _passes_started(double) == 1
 
 
 def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flushes_the_facts_behind_it(
@@ -346,7 +351,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
     OutboundDrain(ctx).run()
 
     assert ctx.stores.outbound.pending_outbound() == []
-    assert len(double.named("open_pulls")) == 1
+    assert _passes_started(double) == 1
 
     release.set()
     thread.join(timeout=5)

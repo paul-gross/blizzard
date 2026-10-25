@@ -1,58 +1,172 @@
-"""An in-memory GitHub forge standing behind ``IGitHubHandle``, for ``land``'s component tests.
+"""An in-memory forge behind the landing seam's three roles, for ``land``'s component tests.
 
-One :class:`GitHubDouble` is one forge holding any number of repositories (:class:`DoubleRepo`), each a
-small model of the pull-request lifecycle ``land`` drives: a pushed branch opens a PR, a PR reports its
-repository's ``mergeable_state``, a merge closes it with a merge commit. Every answer can be overridden
-per call through :attr:`DoubleRepo.replies`, and :attr:`GitHubDouble.calls` logs every call made."""
+One :class:`GitHubDouble` holds any number of repositories (:class:`DoubleRepo`), each a small model of the change
+lifecycle ``land`` drives. Every answer can be overridden per call through :attr:`DoubleRepo.replies`, and
+:attr:`GitHubDouble.calls` logs every call; a hub under test builds adapters on it through :meth:`GitHubDouble.forges`."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from blizzard.hub.delivery.forge_handle import ForgeReply, ForgeUnreachable, IGitHubHandle
-from blizzard.hub.domain.config.repositories import ResolvedRepository
+from blizzard.hub.composition import ForgeRegistryFactory, LiveConfig, TenantStores
+from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.forge.landing import (
+    Change,
+    ChangeListing,
+    ChangeState,
+    Check,
+    CheckOutcome,
+    CommitPresence,
+    CommitSummary,
+    Comparison,
+    ComparisonStatus,
+    FileChange,
+    ForgeNotFound,
+    ForgeObject,
+    ForgeRejected,
+    ForgeUnavailable,
+    Mergeability,
+    MergeMethod,
+    RepositoryForge,
+    Update,
+    UpdateMethod,
+    UpdateOutcome,
+)
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
 
-GREEN = [{"id": 1, "name": "build", "status": "completed", "conclusion": "success"}]
 
-#: A per-call override: a fixed reply, an exception to raise, or a function of the call's arguments.
-type Override = ForgeReply | Exception | Callable[..., ForgeReply]
+def check(
+    name: str = "build",
+    outcome: CheckOutcome = CheckOutcome.PASSED,
+    detail: str = "success",
+    *,
+    id: str = "1",
+    details_url: str | None = None,
+) -> Check:
+    return Check(id=id, name=name, outcome=outcome, detail=detail, details_url=details_url)
+
+
+GREEN = (check(),)
+#: A failed check the base does not share — what turns a head red so ``land`` answers ``failure``.
+RED = (check(outcome=CheckOutcome.FAILED, detail="failure", details_url="https://ci/1"),)
+
+
+def change(
+    repo: str,
+    number: int,
+    *,
+    branch: str,
+    sha: str,
+    base: str,
+    state: ChangeState = ChangeState.OPEN,
+    mergeability: Mergeability = Mergeability.PENDING,
+    merged_revision: str | None = None,
+) -> Change:
+    return Change(
+        number=number,
+        head=branch,
+        head_revision=sha,
+        base=base,
+        base_revision="",
+        state=state,
+        mergeability=mergeability,
+        web_url=f"https://github.example/{repo}/pull/{number}",
+        merged_revision=merged_revision,
+    )
+
+
+def comparison(
+    status: ComparisonStatus = ComparisonStatus.AHEAD,
+    *,
+    commits: tuple[CommitSummary, ...] = (),
+    files: tuple[FileChange, ...] = (),
+    merge_base: str | None = None,
+    commits_truncated: bool = False,
+    files_truncated: bool = False,
+) -> Comparison:
+    return Comparison(
+        status=status,
+        ahead=len(commits),
+        behind=0,
+        merge_base=merge_base,
+        commits=commits,
+        commits_truncated=commits_truncated,
+        files=files,
+        files_truncated=files_truncated,
+    )
+
+
+#: A per-call override: a fixed answer, an exception to raise, or a function of the call's arguments.
+type Override = Any
 
 
 @dataclass
 class DoubleRepo:
-    """One repository on the double: its base branch and tip, its pushed branches, its pulls, and what its
-    check runs, compares and update-branch answer."""
+    """One repository on the double: its base branch and tip, its pushed branches, its changes, and what its
+    checks, comparisons and updates answer."""
 
     base_branch: str = "main"
-    base_tip: str = "base-tip"
+    #: ``None`` reads as a base branch that does not exist.
+    base_tip: str | None = "base-tip"
     heads: dict[str, str] = field(default_factory=dict)
-    pulls: dict[int, dict[str, Any]] = field(default_factory=dict)
-    mergeable_state: str = "clean"
-    #: Each ref's check runs; a ref not named here is green, and ``None`` answers a 500.
-    checks: dict[str, list[dict[str, Any]] | None] = field(default_factory=dict)
-    #: Each ``(base, head)`` comparison; one not named here answers a 404.
-    compares: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
-    update_reply: ForgeReply = field(default_factory=lambda: ForgeReply(202, {"message": "Updating"}))
-    #: Overrides by call name (``merge``, ``open_pull``, …), each consumed in order; the last one stays.
+    changes: dict[int, Change] = field(default_factory=dict)
+    mergeability: Mergeability = Mergeability.MERGEABLE
+    #: Each ref's checks; a ref not named here is green, and ``None`` is a forge that does not answer.
+    checks: dict[str, tuple[Check, ...] | None] = field(default_factory=dict)
+    #: Each ``(base, head)`` comparison; one not named here is a revision the forge does not know.
+    compares: dict[tuple[str, str], Comparison] = field(default_factory=dict)
+    update: Update = field(default_factory=lambda: Update(UpdateOutcome.ACCEPTED, UpdateMethod.MERGE))
+    #: Overrides by call name (``merge``, ``open_change``, …), each consumed in order; the last one stays.
     replies: dict[str, list[Override]] = field(default_factory=dict)
-    #: Called with the PR number as a merge lands, before it answers.
+    #: Called with the change number as a merge lands, before it answers.
     on_merge: Callable[[int], None] | None = None
+
+
+_WRITES = frozenset({"open_change", "update_from_base", "merge", "rerun_check"})
 
 
 class GitHubDouble:
     def __init__(self, repos: dict[str, DoubleRepo] | None = None) -> None:
         self.repos: dict[str, DoubleRepo] = repos or {}
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
-        self.opened = 0
-        self.closed = 0
+        #: Each ``owner/repo`` an adapter was built for, and the credential it was built with.
         self.tokens: dict[str, str] = {}
+        self.closed = 0
 
-    def handle(self, target: ResolvedRepository, token: str) -> IGitHubHandle:
-        """The ``ForgeHandleFactory`` a hub under test builds each repository's handle with."""
-        self.tokens[target.record] = token
-        return _Handle(self)
+    def adapter(self, binding: ForgeBinding) -> IForgeAdapter:
+        """The registry's build callable: one repository's adapter, every call landing on this double."""
+        repo = f"{binding.owner}/{binding.repo}"
+        self.tokens[repo] = binding.token
+        return _Adapter(self, repo)
+
+    def forges(self, stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+        """The :data:`ForgeRegistryFactory` a hub under test builds each tenant's registry with."""
+        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live)
+
+    def forges_offering(self, capabilities: Mapping[str, frozenset[Capability]]) -> ForgeRegistryFactory:
+        """A registry factory whose forges offer only ``capabilities``, by kind."""
+
+        def build(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+            return ForgeRegistry(
+                records=stores.repository_records,
+                objects=live.objects,
+                secrets=live.secrets,
+                build=self.adapter,
+                capabilities=capabilities,
+            )
+
+        return build
+
+    def forge(
+        self, repository: str, repo: str, offered: frozenset[Capability] = frozenset(Capability)
+    ) -> RepositoryForge:
+        """``repo``'s roles bundled as a visit hands them to ``land``, with no registry between."""
+        adapter = _Adapter(self, repo)
+        return RepositoryForge(RepositoryId(repository), adapter, adapter, adapter, offered)
 
     def repo(self, name: str) -> DoubleRepo:
         return self.repos.setdefault(name, DoubleRepo())
@@ -63,148 +177,133 @@ class GitHubDouble:
 
     def writes(self) -> list[str]:
         """The names of every forge write made."""
-        return [name for name, _, _ in self.calls if name in {"open_pull", "update_branch", "merge", "rerequest"}]
+        return [name for name, _, _ in self.calls if name in _WRITES]
 
-    def answer(self, call: str, repo: str, default: Callable[[], ForgeReply], **args: Any) -> ForgeReply:
+    def answer(self, call: str, repo: str, default: Callable[[], Any], **args: Any) -> Any:
         self.calls.append((call, repo, args))
         queued = self.repo(repo).replies.get(call)
         if not queued:
             return default()
         override = queued.pop(0) if len(queued) > 1 else queued[0]
-        if isinstance(override, Exception):
+        if isinstance(override, BaseException):
             raise override
-        if isinstance(override, ForgeReply):
-            return override
-        return override(**args)
+        if callable(override):
+            return override(**args)
+        return override
 
 
-def pull_body(repo: str, number: int, *, branch: str, sha: str, base: str, **extra: Any) -> dict[str, Any]:
-    return {
-        "number": number,
-        "html_url": f"https://github.example/{repo}/pull/{number}",
-        "head": {"ref": branch, "sha": sha},
-        "base": {"ref": base},
-        "merged": False,
-        "merged_at": None,
-        **extra,
-    }
+class _Adapter:
+    """One repository's adapter: every call lands on the shared double."""
 
-
-class _Handle:
-    """One repository record's handle: every call lands on the shared double."""
-
-    def __init__(self, double: GitHubDouble) -> None:
+    def __init__(self, double: GitHubDouble, repo: str) -> None:
         self._double = double
+        self._repo = repo
 
-    async def open(self) -> None:
-        self._double.opened += 1
-
-    async def close(self) -> None:
+    def close(self) -> None:
         self._double.closed += 1
 
-    def _repo(self, repo: str) -> DoubleRepo:
-        return self._double.repo(repo)
+    @property
+    def _state(self) -> DoubleRepo:
+        return self._double.repo(self._repo)
 
-    async def closed_pulls(self, repo: str, *, base: str, page: int) -> ForgeReply:
-        def default() -> ForgeReply:
-            closed = [p for p in self._repo(repo).pulls.values() if p.get("merged_at") is not None and page == 1]
-            return ForgeReply(200, [p for p in closed if p["base"]["ref"] == base])
-
-        return self._double.answer("closed_pulls", repo, default, base=base, page=page)
-
-    async def open_pulls(self, repo: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            return ForgeReply(200, [p for p in self._repo(repo).pulls.values() if p.get("merged_at") is None])
-
-        return self._double.answer("open_pulls", repo, default)
-
-    async def open_pull(self, repo: str, *, title: str, head: str, base: str, body: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            state = self._repo(repo)
-            if head not in state.heads:
-                return ForgeReply(422, {"message": "Validation Failed"})
-            number = len(state.pulls) + 1
-            state.pulls[number] = pull_body(repo, number, branch=head, sha=state.heads[head], base=base)
-            return ForgeReply(201, state.pulls[number])
-
-        return self._double.answer("open_pull", repo, default, title=title, head=head, base=base, body=body)
-
-    async def pull(self, repo: str, number: int) -> ForgeReply:
-        def default() -> ForgeReply:
-            state = self._repo(repo)
-            pull = state.pulls.get(number)
-            if pull is None:
-                return ForgeReply(404, {"message": "Not Found"})
-            live = dict(pull)
-            if not live["merged"]:
-                live["mergeable_state"] = state.mergeable_state
-                if (sha := state.heads.get(live["head"]["ref"])) is not None:
-                    live["head"] = {**live["head"], "sha": sha}
-            return ForgeReply(200, live)
-
-        return self._double.answer("pull", repo, default, number=number)
-
-    async def update_branch(self, repo: str, number: int, *, expected_head_sha: str) -> ForgeReply:
-        return self._double.answer(
-            "update_branch",
-            repo,
-            lambda: self._repo(repo).update_reply,
-            number=number,
-            expected_head_sha=expected_head_sha,
+    def _live(self, found: Change) -> Change:
+        """An open change as the forge reads it now: its repository's mergeability, its branch's tip."""
+        if found.state is not ChangeState.OPEN:
+            return found
+        state = self._state
+        return replace(
+            found, mergeability=state.mergeability, head_revision=state.heads.get(found.head, found.head_revision)
         )
 
-    async def merge(self, repo: str, number: int, *, sha: str, commit_message: str, method: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            state = self._repo(repo)
-            pull = state.pulls[number]
-            merge_commit = f"merge-{repo}-{number}"
-            pull.update(merged=True, merged_at="2026-10-23T00:00:00Z", merge_commit_sha=merge_commit)
-            pull["head"] = {**pull["head"], "sha": sha}
+    async def branch_tip(self, branch: str) -> str | None:
+        def default() -> str | None:
+            state = self._state
+            return state.base_tip if branch == state.base_branch else state.heads.get(branch)
+
+        return self._double.answer("branch_tip", self._repo, default, branch=branch)
+
+    async def compare(self, base: str, head: str) -> Comparison:
+        def default() -> Comparison:
+            found = self._state.compares.get((base, head))
+            if found is None:
+                raise ForgeNotFound(ForgeObject.REVISION)
+            return found
+
+        return self._double.answer("compare", self._repo, default, base=base, head=head)
+
+    async def commit_exists(self, revision: str) -> CommitPresence:
+        return self._double.answer("commit_exists", self._repo, lambda: CommitPresence(True), revision=revision)
+
+    async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
+        def default() -> tuple[Change, ...]:
+            wanted = {ChangeState.OPEN} if state is ChangeListing.OPEN else {ChangeState.MERGED, ChangeState.CLOSED}
+            return tuple(
+                self._live(c)
+                for c in sorted(self._state.changes.values(), key=lambda c: -c.number)
+                if c.state in wanted and c.base == base and (head is None or c.head == head)
+            )
+
+        return self._double.answer("changes", self._repo, default, state=state, base=base, head=head)
+
+    async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
+        def default() -> Change:
+            state = self._state
+            if head not in state.heads:
+                raise ForgeRejected("Validation Failed")
+            number = len(state.changes) + 1
+            state.changes[number] = change(self._repo, number, branch=head, sha=state.heads[head], base=base)
+            return state.changes[number]
+
+        return self._double.answer("open_change", self._repo, default, head=head, base=base, title=title, body=body)
+
+    async def change(self, number: int) -> Change:
+        def default() -> Change:
+            found = self._state.changes.get(number)
+            if found is None:
+                raise ForgeNotFound(ForgeObject.CHANGE)
+            return self._live(found)
+
+        return self._double.answer("change", self._repo, default, number=number)
+
+    async def update_from_base(self, number: int, expected_head: str) -> Update:
+        return self._double.answer(
+            "update_from_base", self._repo, lambda: self._state.update, number=number, expected_head=expected_head
+        )
+
+    async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
+        def default() -> str:
+            state = self._state
+            merge_commit = f"merge-{self._repo}-{number}"
+            state.changes[number] = replace(
+                state.changes[number],
+                state=ChangeState.MERGED,
+                merged_revision=merge_commit,
+                head_revision=expected_head,
+            )
             state.base_tip = merge_commit
             if state.on_merge is not None:
                 state.on_merge(number)
-            return ForgeReply(200, {"merged": True, "sha": merge_commit})
+            return merge_commit
 
         return self._double.answer(
-            "merge", repo, default, number=number, sha=sha, commit_message=commit_message, method=method
+            "merge", self._repo, default, number=number, expected_head=expected_head, method=method, message=message
         )
 
-    async def check_runs(self, repo: str, ref: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            runs = self._repo(repo).checks.get(ref, GREEN)
-            if runs is None:
-                return ForgeReply(500, {"message": "Server Error"})
-            return ForgeReply(200, {"check_runs": runs})
+    async def checks(self, ref: str) -> tuple[Check, ...]:
+        def default() -> tuple[Check, ...]:
+            found = self._state.checks.get(ref, GREEN)
+            if found is None:
+                raise ForgeUnavailable("server error")
+            return found
 
-        return self._double.answer("check_runs", repo, default, ref=ref)
+        return self._double.answer("checks", self._repo, default, ref=ref)
 
-    async def rerequest_check_run(self, repo: str, check_id: object) -> ForgeReply:
-        return self._double.answer("rerequest", repo, lambda: ForgeReply(201, {}), check_id=check_id)
-
-    async def compare(self, repo: str, base: str, head: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            found = self._repo(repo).compares.get((base, head))
-            return ForgeReply(200, found) if found is not None else ForgeReply(404, {"message": "Not Found"})
-
-        return self._double.answer("compare", repo, default, base=base, head=head)
-
-    async def branch(self, repo: str, branch: str) -> ForgeReply:
-        def default() -> ForgeReply:
-            state = self._repo(repo)
-            sha = state.base_tip if branch == state.base_branch else state.heads.get(branch)
-            if sha is None:
-                return ForgeReply(404, {"message": "Not Found"})
-            return ForgeReply(200, {"object": {"sha": sha}})
-
-        return self._double.answer("branch", repo, default, branch=branch)
+    async def rerun_check(self, id: str) -> bool:
+        return self._double.answer("rerun_check", self._repo, lambda: True, id=id)
 
 
-def unreachable() -> ForgeUnreachable:
-    return ForgeUnreachable("connection refused")
-
-
-#: A completed check run the base does not share — what turns a head red so ``land`` answers ``failure``.
-RED = [{"id": 1, "name": "build", "status": "completed", "conclusion": "failure", "details_url": "https://ci/1"}]
+def _conforms(x: _Adapter) -> IForgeAdapter:
+    return x
 
 
 def forge_holding(*repos: str, branch: str, commit: str, **state: Any) -> GitHubDouble:

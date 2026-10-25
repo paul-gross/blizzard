@@ -3,10 +3,10 @@ its catalogue only behind both test fences (``src/blizzard/hub/delivery/action_r
 
 from __future__ import annotations
 
-from blizzard.hub.delivery.forge_handle import VisitForges
 from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.graph.actions import TEST_ANSWER, TEST_SEQUENCE
+from blizzard.hub.forge.landing import VisitForges
 
 _SEQUENCE_MARKER_PREFIX = "test-sequence/"
 

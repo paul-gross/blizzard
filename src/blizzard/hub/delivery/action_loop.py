@@ -2,8 +2,8 @@
 
 Keeping passes off the API's event loop keeps a pass's waits on a forge from slowing a request or the
 board's event stream. One loop serves every pass in the process; because an action touches nothing
-shared, nothing on it needs a lock, and the only thing that crosses between it and the rest of the hub
-is each pass's effect queue."""
+shared, nothing on it needs a lock but the one each forge credential's writes go out under, and the only
+things that cross between it and the rest of the hub are each pass's effect queue and a forge client's close."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ import concurrent.futures
 import threading
 from collections.abc import Coroutine
 from typing import Any
+
+#: How long stopping waits for what was already scheduled — a forge client closing among it — to finish.
+STOP_SETTLE_SECONDS = 2.0
 
 
 class ActionLoop:
@@ -43,6 +46,11 @@ class ActionLoop:
             self._loop = self._thread = None
         if loop is None or thread is None:
             return
+        settled = asyncio.run_coroutine_threadsafe(_settle(), loop)
+        try:
+            settled.result(timeout=STOP_SETTLE_SECONDS + 1)
+        except TimeoutError:
+            settled.cancel()
         loop.call_soon_threadsafe(loop.stop)
         thread.join()
         loop.close()
@@ -50,3 +58,10 @@ class ActionLoop:
     def submit[T](self, coroutine: Coroutine[Any, Any, T]) -> concurrent.futures.Future[T]:
         """Run ``coroutine`` on the loop; cancelling the returned future cancels its task there."""
         return asyncio.run_coroutine_threadsafe(coroutine, self.start())
+
+
+async def _settle() -> None:
+    """Wait, briefly, for every other task on the loop."""
+    pending = asyncio.all_tasks() - {asyncio.current_task()}
+    if pending:
+        await asyncio.wait(pending, timeout=STOP_SETTLE_SECONDS)

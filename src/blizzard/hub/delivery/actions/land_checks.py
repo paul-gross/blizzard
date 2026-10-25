@@ -1,5 +1,5 @@
 """What ``land`` decides from what the forge said, with no forge call of its own: where one repository's
-pull request routes, how its check runs classify, whether its head is still the submitted work, and the
+change routes, how its checks classify, whether its head is still the submitted work, and the
 ``delivery-findings`` a resolve worker reads."""
 
 from __future__ import annotations
@@ -9,57 +9,35 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.forge.landing import Check, CheckOutcome, CommitSummary, Mergeability
 
-# Pure routing decisions (what to do with one repo after reading its live PR).
-PUSH = "push"  # clean (or already merged) — eligible for the merge stage
-WAIT = "wait"  # unknown / required-checks-not-green / … — re-poll, no side effect
-UPDATE = "update"  # behind — fire update-branch, then re-poll
-BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
-FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
-FOREIGN = "foreign-head"  # the PR head carries something beyond the submitted commit and base merges
+# Pure routing decisions (what to do with one repo after reading its live change).
+PUSH = "push"  # mergeable (or already merged) — eligible for the merge stage
+WAIT = "wait"  # pending / draft / required-checks-not-green / … — re-poll, no side effect
+UPDATE = "update"  # behind — bring it up to its base, then re-poll
+BOUNCE = "bounce"  # conflicting — a real content conflict, kick back to build
+FAILED = "failed"  # a check completed with a failing outcome — never re-poll
+FOREIGN = "foreign-head"  # the change's head carries something beyond the submitted commit and base merges
 # A findings record's decision when every failing check is inherited — the answer's own name.
 INHERITED_FAILURE = "inherited-failure"
 
-#: Conclusions no re-poll turns green. Not `cancelled`: a concurrency-group cancellation is no failed job.
-_TERMINAL_CONCLUSIONS = {"failure", "timed_out", "action_required"}
+_GREEN_OUTCOMES = {CheckOutcome.PASSED, CheckOutcome.NEUTRAL}
 
-# The conclusions a green check run may carry — required or unrequired alike.
-_GREEN_CONCLUSIONS = {"success", "neutral", "skipped"}
-
-#: States whose merge eligibility needs a live check-run verdict, not just `mergeable_state`.
-CI_WATCH_STATES = {"clean", "blocked", "unstable"}
+#: Mergeabilities whose merge eligibility needs a live check verdict, not the mergeability alone.
+CI_WATCH_STATES = {Mergeability.MERGEABLE, Mergeability.BLOCKED}
 
 
 @domain_model
 @dataclass(frozen=True)
 class Verdict:
-    """One ref's live check runs, classified. ``None`` is a degraded read — it waits, exactly like a
-    still-running one, and every malformed shape does too."""
+    """One ref's live checks, classified. ``None`` is a degraded read — it waits, exactly like a still-running
+    one."""
 
-    check_runs: list[dict[str, Any]] | None
-
-    @classmethod
-    def of(cls, status: int, payload: Any) -> Verdict:
-        """A check-runs read's verdict; a non-200 or a malformed body degrades to ``None``."""
-        if status != 200 or not isinstance(payload, dict):
-            return cls(None)
-        check_runs = payload.get("check_runs")
-        return cls(check_runs if isinstance(check_runs, list) else None)
-
-    @staticmethod
-    def terminal(run: Any) -> bool:
-        """Whether one run has completed in a conclusion no re-poll will turn green — required or not, as
-        the forge would have it."""
-        return (
-            isinstance(run, dict)
-            and run.get("status") == "completed"
-            and run.get("conclusion") in _TERMINAL_CONCLUSIONS
-        )
+    checks: tuple[Check, ...] | None
 
     @property
-    def failing(self) -> list[dict[str, Any]]:  # ast-grep-ignore: bzh:property-delegates
-        runs = self.check_runs if isinstance(self.check_runs, list) else []
-        return [run for run in runs if self.terminal(run)]
+    def failing(self) -> list[Check]:  # ast-grep-ignore: bzh:property-delegates
+        return [check for check in self.checks or () if check.outcome is CheckOutcome.FAILED]
 
     @property
     def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -68,57 +46,47 @@ class Verdict:
     @property
     def substantive(self) -> bool:
         """Whether this read says anything: a zero-check read is not worth findings."""
-        return bool(self.check_runs)
+        return bool(self.checks)
 
     @property
     def green(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
-        """The merge-eligibility bar: at least one check run, and every one of them completed with a
-        conclusion in `_GREEN_CONCLUSIONS` — a degraded or empty read is never green."""
-        runs = self.check_runs if isinstance(self.check_runs, list) else []
-        if not runs:
-            return False
-        return all(
-            isinstance(run, dict) and run.get("status") == "completed" and run.get("conclusion") in _GREEN_CONCLUSIONS
-            for run in runs
-        )
+        """The merge-eligibility bar: at least one check, and every one of them passed or neutral — a degraded
+        or empty read is never green."""
+        return bool(self.checks) and all(check.outcome in _GREEN_OUTCOMES for check in self.checks or ())
 
     def red(self, name: str) -> bool | None:
-        """Whether this ref's own latest run named ``name`` is itself terminal — ``None`` on a degraded
-        read, ``False`` when read but carrying no terminal run of that name."""
-        if self.check_runs is None:
+        """Whether this ref's own check named ``name`` failed — ``None`` on a degraded read, ``False`` when read
+        but carrying no failed check of that name."""
+        if self.checks is None:
             return None
-        for run in self.check_runs:
-            if isinstance(run, dict) and run.get("name") == name:
-                return self.terminal(run)
+        for check in self.checks:
+            if check.name == name:
+                return check.outcome is CheckOutcome.FAILED
         return False
 
     def failure_rows(self, base: Verdict) -> list[dict[str, Any]]:
         return [
             {
-                "name": check.get("name"),
-                "conclusion": check.get("conclusion"),
-                "details_url": check.get("details_url"),
-                "base_red": base.red(check.get("name", "")),
+                "name": check.name,
+                "conclusion": check.detail,
+                "details_url": check.details_url,
+                "base_red": base.red(check.name),
             }
             for check in self.failing
         ]
 
     def running_rows(self) -> list[dict[str, Any]]:
-        return [
-            {"name": check.get("name"), "status": check.get("status")}
-            for check in (self.check_runs or [])
-            if isinstance(check, dict)
-        ]
+        return [{"name": check.name, "status": check.detail} for check in self.checks or ()]
 
 
 @domain_model
 @dataclass(frozen=True)
 class Route:
-    """Where one repo goes, from its PR's live ``(merged, mergeable_state, verdict)``. Already-merged and
-    ``dirty``/``behind`` never need a verdict; a ``clean``/``blocked``/``unstable`` head pushes only on a
-    green one, else waits."""
+    """Where one repo goes, from its change's live ``(merged, mergeability, verdict)``. Already-merged and
+    conflicting/behind never need a verdict; a mergeable or blocked head pushes only on a green one, else
+    waits."""
 
-    mergeable_state: str | None
+    mergeability: Mergeability
     merged: bool = False
     verdict: Verdict | None = None
 
@@ -126,11 +94,11 @@ class Route:
     def decision(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         if self.merged:
             return PUSH
-        if self.mergeable_state == "dirty":
+        if self.mergeability is Mergeability.CONFLICTING:
             return BOUNCE
-        if self.mergeable_state == "behind":
+        if self.mergeability is Mergeability.BEHIND:
             return UPDATE
-        if self.mergeable_state in CI_WATCH_STATES:
+        if self.mergeability in CI_WATCH_STATES:
             return PUSH if self.verdict is not None and self.verdict.green else WAIT
         return WAIT
 
@@ -145,7 +113,7 @@ def inherited(base_red: bool | None) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class HeadGate:
-    """Whether a live PR head is still the submitted work; ``offenders`` names what broke it."""
+    """Whether a live change head is still the submitted work; ``offenders`` names what broke it."""
 
     offenders: tuple[str, ...]
 
@@ -153,21 +121,21 @@ class HeadGate:
         return not self.offenders
 
 
-def first_parent_chain(commits: list[Any], head: str, submitted: str) -> tuple[list[dict[str, Any]], str | None]:
+def first_parent_chain(
+    commits: tuple[CommitSummary, ...], head: str, submitted: str
+) -> tuple[list[CommitSummary], str | None]:
     """``head``'s first-parent commits back to ``submitted``, and why the walk failed, if it did."""
-    by_sha = {c["sha"]: c for c in commits if isinstance(c, dict) and isinstance(c.get("sha"), str)}
-    chain: list[dict[str, Any]] = []
+    by_revision = {c.revision: c for c in commits}
+    chain: list[CommitSummary] = []
     current = head
     while current != submitted:
-        commit = by_sha.get(current)
-        parents = commit.get("parents") if commit else None
-        if commit is None or not isinstance(parents, list) or not parents:
+        commit = by_revision.get(current)
+        if commit is None or not commit.parents:
             return chain, f"{current} is not reachable from {submitted} within the listed commits"
         chain.append(commit)
-        first = parents[0].get("sha") if isinstance(parents[0], dict) else None
-        if not isinstance(first, str) or len(chain) > len(by_sha):
+        if len(chain) > len(by_revision):
             return chain, f"{current} has no readable first parent"
-        current = first
+        current = commit.parents[0]
     return chain, None
 
 

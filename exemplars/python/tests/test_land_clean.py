@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Any
 
 import pytest
 
@@ -16,9 +15,15 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
+from blizzard.hub.domain.config.repositories import (
+    RepositoryId,
+    RepositoryOutcome,
+    RepositoryResolution,
+    ResolvedRepository,
+)
+from blizzard.hub.forge.landing import Mergeability
 from exemplar.hub.delivery.actions.land_clean import LandClean
-from tests.github_double import DoubleRepo, GitHubDouble, pull_body
+from tests.github_double import DoubleRepo, GitHubDouble, change
 
 pytestmark = pytest.mark.component
 
@@ -93,22 +98,23 @@ def _visit(*repos: str, landed: tuple[str, ...] = ()) -> Visit:
     )
 
 
-def _forge(*repos: str, **states: str) -> GitHubDouble:
-    """Each of ``repos`` with one open pull request for ``feat/x``, reading the state ``states`` names (clean else)."""
+def _forge(*repos: str, **states: Mergeability) -> GitHubDouble:
+    """Each of ``repos`` with one open change for ``feat/x``, reading the mergeability ``states`` names (mergeable
+    else)."""
     double = GitHubDouble()
     for number, repo in enumerate(repos, start=1):
-        state: dict[str, Any] = {"mergeable_state": states.get(repo.partition("/")[2], "clean")}
         double.repos[repo] = DoubleRepo(
             heads={"feat/x": _SUBMITTED},
-            pulls={number: pull_body(repo, number, branch="feat/x", sha=_SUBMITTED, base="main")},
-            **state,
+            changes={number: change(repo, number, branch="feat/x", sha=_SUBMITTED, base="main")},
+            mergeability=states.get(repo.partition("/")[2], Mergeability.MERGEABLE),
         )
     return double
 
 
 def _land(double: GitHubDouble, visit: Visit, sink: _Sink | None = None) -> tuple[Pass, _Sink]:
     sink = sink or _Sink()
-    forges = MappingProxyType({t.record: double.handle(t, "tok") for t in visit.resolution.targets})
+    repos = dict(zip(visit.resolution.records, visit.resolution.qualified, strict=True))
+    forges = MappingProxyType({RepositoryId(r): double.forge(r, repo) for r, repo in repos.items()})
     return asyncio.run(LandClean().take(visit, forges, sink)), sink
 
 
@@ -122,8 +128,8 @@ def test_every_clean_repository_merges_and_hands_over_one_landing_each() -> None
     ]
 
 
-def test_one_dirty_repository_answers_conflict_and_merges_nothing() -> None:
-    double = _forge(_WIDGET, _GADGET, gadget="dirty")
+def test_one_conflicting_repository_answers_conflict_and_merges_nothing() -> None:
+    double = _forge(_WIDGET, _GADGET, gadget=Mergeability.CONFLICTING)
 
     answer, sink = _land(double, _visit(_WIDGET, _GADGET))
 
@@ -133,7 +139,7 @@ def test_one_dirty_repository_answers_conflict_and_merges_nothing() -> None:
 
 
 def test_an_unsettled_repository_answers_pending_and_merges_nothing() -> None:
-    double = _forge(_WIDGET, widget="unknown")
+    double = _forge(_WIDGET, widget=Mergeability.PENDING)
 
     answer, _ = _land(double, _visit(_WIDGET))
 

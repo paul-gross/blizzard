@@ -1,5 +1,5 @@
 """Whether a merge commit adds exactly the base branch's change — the proof behind ``land``'s head gate,
-worked from forge compare payloads alone. A file both sides changed
+worked from the forge's comparisons alone. A file both sides changed
 is admitted only when the merge's change blocks equal the base's blocks translated into the
 feature side's line coordinates; unprovable is refused
 (``blizzard-context:/domain/artifacts/model.md``)."""
@@ -11,9 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from blizzard.foundation.roles import domain_model
-
-# GitHub's compare truncates its file list at this many entries; a list this long may be partial.
-COMPARE_FILES_MAX = 300
+from blizzard.hub.forge.landing import Comparison, FileChange
 
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
@@ -31,29 +29,19 @@ class Block:
     lines: tuple[str, ...]
 
 
-def files_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
-    """A compare's files by name, or ``None`` when the list may be truncated or malformed."""
-    files = payload.get("files")
-    if not isinstance(files, list) or len(files) >= COMPARE_FILES_MAX:
+def files_by_name(comparison: Comparison) -> dict[str, FileChange] | None:
+    """A comparison's files by path, or ``None`` when the forge cut the list short."""
+    if comparison.files_truncated:
         return None
-    if not all(isinstance(f, dict) and isinstance(f.get("filename"), str) for f in files):
-        return None
-    return {f["filename"]: f for f in files}
+    return {f.path: f for f in comparison.files}
 
 
-def merge_base_of(payload: dict[str, Any]) -> str | None:
-    """The merge base sha a compare names, or ``None`` when missing or malformed."""
-    base = payload.get("merge_base_commit")
-    sha = base.get("sha") if isinstance(base, dict) else None
-    return sha if isinstance(sha, str) and sha else None
-
-
-def parse_blocks(file: dict[str, Any]) -> list[Block] | None:
-    """A file entry's change blocks, or ``None`` when its patch cannot be trusted complete: no
+def parse_blocks(file: FileChange) -> list[Block] | None:
+    """A file's change blocks, or ``None`` when its patch cannot be trusted complete: no
     patch, a hunk whose header counts disagree with its body, or ``+``/``-`` totals that
-    disagree with the entry's ``additions``/``deletions``."""
-    patch, adds, dels = file.get("patch"), file.get("additions"), file.get("deletions")
-    if not isinstance(patch, str) or not _is_count(adds) or not _is_count(dels):
+    disagree with the file's ``additions``/``deletions``."""
+    patch, adds, dels = file.patch, file.additions, file.deletions
+    if patch is None or not _is_count(adds) or not _is_count(dels):
         return None
     lines = patch.split("\n")
     if lines and lines[-1] == "":
@@ -133,17 +121,12 @@ def _translate(base_blocks: list[Block], feature_blocks: list[Block]) -> list[Bl
     return moved
 
 
-def _same_blob(merged: dict[str, Any], base_side: dict[str, Any]) -> bool:
-    sha = merged.get("sha")
-    return (
-        sha is not None
-        and sha == base_side.get("sha")
-        and merged.get("previous_filename") == base_side.get("previous_filename")
-    )
+def _same_blob(merged: FileChange, base_side: FileChange) -> bool:
+    return merged.blob is not None and merged.blob == base_side.blob and merged.previous_path == base_side.previous_path
 
 
-def _same_changes(merged: dict[str, Any], base_side: dict[str, Any], feature_side: dict[str, Any]) -> bool:
-    if any(f.get("previous_filename") is not None for f in (merged, base_side, feature_side)):
+def _same_changes(merged: FileChange, base_side: FileChange, feature_side: FileChange) -> bool:
+    if any(f.previous_path is not None for f in (merged, base_side, feature_side)):
         return False
     got, want, feature = parse_blocks(merged), parse_blocks(base_side), parse_blocks(feature_side)
     if got is None or want is None or feature is None:
@@ -152,21 +135,17 @@ def _same_changes(merged: dict[str, Any], base_side: dict[str, Any], feature_sid
     return moved is not None and moved == got
 
 
-def contributes_only_base_change(
-    merged: dict[str, Any], base_side: dict[str, Any], feature_side: dict[str, Any]
-) -> bool:
+def contributes_only_base_change(merged: Comparison, base_side: Comparison, feature_side: Comparison) -> bool:
     """Whether the merge adds exactly the base side's change, given three compares:
     ``merged`` (``first...M``), ``base_side`` (``first...second``, so merge base → ``second``),
     and ``feature_side`` (merge base → ``first``). Unprovable is ``False``."""
     got, want, feature = files_by_name(merged), files_by_name(base_side), files_by_name(feature_side)
     if got is None or want is None or feature is None or got.keys() != want.keys():
         return False
-    touched = set(feature) | {
-        f["previous_filename"] for f in feature.values() if isinstance(f.get("previous_filename"), str)
-    }
+    touched = set(feature) | {f.previous_path for f in feature.values() if f.previous_path is not None}
     for name, file in got.items():
         other = want[name]
-        renamed_from = {f.get("previous_filename") for f in (file, other)}
+        renamed_from = {f.previous_path for f in (file, other)}
         if name in touched or renamed_from & feature.keys():
             if name not in feature or not _same_changes(file, other, feature[name]):
                 return False

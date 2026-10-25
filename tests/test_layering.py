@@ -2413,7 +2413,8 @@ _ACTION_BLIZZARD = frozenset(
         "blizzard.hub.domain.actions",
         "blizzard.hub.domain.graph.actions",
         "blizzard.hub.domain.config.repositories",
-        "blizzard.hub.delivery.forge_handle",
+        "blizzard.hub.domain.config.capabilities",
+        "blizzard.hub.forge.landing",
         "blizzard.hub.delivery.actions",
     }
 )

@@ -18,6 +18,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.hub.delivery.action_registry import ENV_TEST_ACTIONS, SHIPPED_ACTIONS, TEST_ACTIONS
+from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
@@ -39,6 +40,10 @@ def test_the_shipped_catalogue_and_its_implementations_name_the_same_set() -> No
     assert {a.spec.name for a in TEST_ACTIONS} == {spec.name for spec in TEST_ACTION_SPECS}
     for name, action in SHIPPED_ACTIONS.implementations.items():
         assert action.spec == SHIPPED_CATALOGUE.specs[name]
+
+
+def test_every_admitted_action_declares_its_forge_requirements() -> None:
+    assert set(ACTION_REQUIREMENTS) == SHIPPED_CATALOGUE.names | {spec.name for spec in TEST_ACTION_SPECS}
 
 
 def _served_names(env: dict[str, str]) -> set[str]:

@@ -89,7 +89,7 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     `deliver`'s authored `failure` edge and records the reason as an artifact, rather than
     letting the error escape and re-crash the tick on every poll."""
     double = GitHubDouble()
-    hub = build_hub(tmp_path, forge_handles=double.handle)
+    hub = build_hub(tmp_path, forges=double.forges)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_two_branches_for_one_repo(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
