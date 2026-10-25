@@ -8,7 +8,7 @@ from pathlib import Path
 
 from blizzard.foundation.roles import domain_model
 from blizzard.tools.change_notes.anchors import anchor_titles
-from blizzard.tools.change_notes.breaks import BreakEntry, cross_check
+from blizzard.tools.change_notes.breaks import BreakEntry, cross_check, unnamed_lines
 from blizzard.tools.change_notes.flags import working_registry
 from blizzard.tools.change_notes.schedule import cut_refusals
 from blizzard.tools.change_notes.tree import CHANGES_DIR, UNRELEASED, VERSION_DIR, read_tree
@@ -60,17 +60,7 @@ def cut(root: Path, version: str, breaks: Callable[[], Sequence[BreakEntry]] | N
         prospective = [n for n in notes if n.directory == version] + moving
         check = cross_check(recorded, prospective)
         if check.unnamed:
-            raise CutRefused(
-                "\n".join(
-                    [
-                        *(
-                            f"no breaking note names {entry}: list its surface in surfaces and its where in breaks"
-                            for entry in check.unnamed
-                        ),
-                        f"{len(check.unnamed)} compat break(s) unnamed",
-                    ]
-                )
-            )
+            raise CutRefused(unnamed_lines(check, ": list its surface in surfaces and its where in breaks"))
         unrecorded = check.unrecorded
     guides = sorted({g for n in moving if isinstance(g := n.fields.get("upgrade-guide"), str)})
     doc = root / UPGRADE_DOC

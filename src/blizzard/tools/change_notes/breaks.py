@@ -95,3 +95,13 @@ def cross_check(entries: Sequence[BreakEntry], notes: Sequence[Note]) -> BreaksC
     recorded = {(e.surface, e.where) for e in entries}
     unrecorded = sorted({pair for pairs in declared.values() for pair in pairs} - recorded)
     return BreaksCheck(tuple(named), tuple(unnamed), tuple(unrecorded))
+
+
+def unnamed_lines(check: BreaksCheck, hint: str = "") -> str:
+    """The refusal text for a check's unnamed entries: one line each, then the count; ``hint`` ends each line."""
+    return "\n".join(
+        [
+            *(f"no breaking note names {entry}{hint}" for entry in check.unnamed),
+            f"{len(check.unnamed)} compat break(s) unnamed",
+        ]
+    )

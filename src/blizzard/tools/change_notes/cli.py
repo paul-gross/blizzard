@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from blizzard.tools.change_notes import owed as owed_rules
-from blizzard.tools.change_notes.breaks import BreaksFileInvalid, compat_breaks, cross_check, read_breaks
+from blizzard.tools.change_notes.breaks import BreaksFileInvalid, compat_breaks, cross_check, read_breaks, unnamed_lines
 from blizzard.tools.change_notes.contract import Failure, Note
 from blizzard.tools.change_notes.cut import CutRefused, cut
 from blizzard.tools.change_notes.flags import turned_on, working_registry
@@ -158,14 +158,7 @@ def render_command(tag: str, breaks_path: Path | None) -> None:
                 raise ReleasedNoteInvalid(f"{breaks_path} judged {recorded_tag}, not {tag}")
             check = cross_check(entries, notes)
             if check.unnamed:
-                raise ReleasedNoteInvalid(
-                    "\n".join(
-                        [
-                            *(f"no breaking note names {entry}" for entry in check.unnamed),
-                            f"{len(check.unnamed)} compat break(s) unnamed",
-                        ]
-                    )
-                )
+                raise ReleasedNoteInvalid(unnamed_lines(check))
             named = check.named
             for surface, where in check.unrecorded:
                 click.echo(f"declared break {surface} {where} is recorded by no compat break", err=True)
