@@ -11226,12 +11226,6 @@
    "over_cap": 0,
    "total": 170
   },
-  "service/test_tenant_teardown_service.py": {
-   "comments": 2,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 41
-  },
   "service/test_transcript_segments_service.py": {
    "comments": 3,
    "docstrings": 7,
@@ -16489,10 +16483,10 @@
    "total": 332
   },
   "test_tenant_teardown.py": {
-   "comments": 1,
-   "docstrings": 11,
+   "comments": 3,
+   "docstrings": 12,
    "over_cap": 0,
-   "total": 501
+   "total": 524
   },
   "test_tick_subprocess_timeouts.py": {
    "comments": 0,
