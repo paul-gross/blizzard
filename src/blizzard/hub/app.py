@@ -584,16 +584,13 @@ def build_hosted_app(
     # `none` deployment never touches disk for a keypair it will never mint or publish.
     signing_keys_dir = config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
     oauth_client = oauth_http_client or httpx2.Client(timeout=15.0)
-    forge_client = httpx2.Client(timeout=10.0)
-    for client in (oauth_client, forge_client):
-        platform_tracing.instrument_client(client)
+    platform_tracing.instrument_client(oauth_client)
 
     services = build_services(
         core,
         work_sources=work_source_registry,
         forges=forge_registry,
         public_url=config.public_url,
-        forge_http_client=forge_client,
         oauth_providers=oauth_providers,
         oauth_http_client=oauth_client,
         signing_keys_dir=signing_keys_dir,

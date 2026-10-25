@@ -188,10 +188,9 @@ from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
-from blizzard.hub.forge.internal.commit_resolver import GitHubCommitResolver
+from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
-from blizzard.hub.forge.repository_commits import ICommitForge, RepositoryCommitResolver
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
@@ -903,7 +902,7 @@ class TenantServiceParts:
     work_sources: WorkSourceRegistryFactory
     forges: ForgeRegistryFactory
     system_artifacts: PackagedSystemArtifacts
-    commit_forge: ICommitForge
+    action_loop: ActionLoop
     public_url: str | None
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
@@ -999,11 +998,11 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_formats = GardenFormats()
     # Bound as `.for_project` (a project to a plain `delivery.validation.CommitResolver` callable),
     # not the bare instance, so the garden delivery carries no dependency on the concrete class.
-    commit_resolver_for = RepositoryCommitResolver(
+    commit_resolver_for = SeamCommitResolver(
         repositories=stores.repository_records,
-        secrets=live.secrets,
-        forge=parts.commit_forge,
         links=stores.project_links,
+        forges=forges,
+        loop=parts.action_loop,
     ).for_project
     # Built before the executor, which writes a delivering action's record through them.
     garden_delivery = GardenDeliveryRecorder(
@@ -1292,7 +1291,6 @@ def build_services(
     secret_keys: IHubKeyProvider,
     brokers: TenantBrokers | None = None,
     public_url: str | None = None,
-    forge_http_client: httpx2.Client | None = None,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
     oauth_http_client: httpx2.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
@@ -1338,9 +1336,7 @@ def build_services(
         work_sources=work_sources,
         forges=forges,
         system_artifacts=system_artifacts,
-        # Bound as `.for_project` per tenant (a project to a plain `delivery.validation.CommitResolver`
-        # callable), so `TenantServices.commit_resolver_for` carries no dependency on the concrete class.
-        commit_forge=GitHubCommitResolver(forge_http_client or httpx2.Client(timeout=10.0)),
+        action_loop=action_loop,
         public_url=public_url,
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
