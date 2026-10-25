@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from blizzard.auth_core import Role
 from blizzard.hub.auth.models import ProviderIdentity, User
 from blizzard.hub.auth.oauth.provider import OAuthExchangeError
+from blizzard.hub.config import LoginThrottleConfig
 from blizzard.hub.store import schema
 from tests.support import HubHarness, build_hub, hub_scoped, seed_user
 
@@ -382,3 +383,36 @@ def test_authorize_throttles_after_repeated_requests_from_one_ip(tmp_path: Path)
 
     statuses = [hub.client.get("/api/auth/github/authorize", follow_redirects=False).status_code for _ in range(15)]
     assert 429 in statuses
+
+
+def _throttled_statuses(hub: HubHarness, calls: int) -> list[int]:
+    return [hub.client.get("/api/auth/github/authorize", follow_redirects=False).status_code for _ in range(calls)]
+
+
+def test_disabled_login_throttle_admits_every_call_and_warns_once_at_boot(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    github = FakeOAuthProvider(name="github")
+    hub = build_hub(
+        tmp_path,
+        auth_mode="oauth",
+        oauth_providers={"github": github},
+        login_throttle=LoginThrottleConfig(enabled=False),
+    )
+
+    assert 429 not in _throttled_statuses(hub, 40)
+    assert hub.hub_services.auth_throttle is None
+    captured = capsys.readouterr()
+    assert (captured.out + captured.err).count("sign-ins are unthrottled") == 1
+
+
+def test_login_throttle_capacity_is_configurable(tmp_path: Path) -> None:
+    github = FakeOAuthProvider(name="github")
+    hub = build_hub(
+        tmp_path,
+        auth_mode="oauth",
+        oauth_providers={"github": github},
+        login_throttle=LoginThrottleConfig(capacity=2),
+    )
+
+    assert _throttled_statuses(hub, 3)[2] == 429

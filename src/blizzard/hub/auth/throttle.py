@@ -13,8 +13,10 @@ from blizzard.foundation.roles import domain_model
 
 #: Requests a single IP may make before it starts being throttled.
 DEFAULT_CAPACITY = 10
+#: Seconds of clock time that refill one token.
+DEFAULT_REFILL_SECONDS = 6
 #: Tokens replenished per second of elapsed clock time.
-DEFAULT_REFILL_PER_SECOND = 10 / 60  # one token every 6 seconds
+DEFAULT_REFILL_PER_SECOND = 1 / DEFAULT_REFILL_SECONDS
 
 
 @domain_model

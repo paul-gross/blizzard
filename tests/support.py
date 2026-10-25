@@ -66,7 +66,7 @@ from blizzard.hub.composition import (
     build_services,
     default_forge_registry,
 )
-from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig
+from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, HubConfig, LoginThrottleConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
@@ -1248,6 +1248,7 @@ def build_hub(
     follow_latest: bool = False,
     auth_mode: str = AUTH_MODE_NONE,
     superuser: str | None = None,
+    login_throttle: LoginThrottleConfig = LoginThrottleConfig(),
     oauth_providers: dict[str, IOAuthProvider] | None = None,
     trusted_proxies: Sequence[str] = (),
     transcript_caps: TranscriptCaps | None = None,
@@ -1280,7 +1281,7 @@ def build_hub(
         route_token_mode=route_token_mode,
         produces_mode=produces_mode,
         follow_latest=follow_latest,
-        auth=AuthConfig(mode=auth_mode, superuser=superuser),
+        auth=AuthConfig(mode=auth_mode, superuser=superuser, login_throttle=login_throttle),
         trusted_proxies=tuple(trusted_proxies),
         tracing=tracing or TracingConfig(),
         egress=egress or EgressConfig(),
@@ -1342,6 +1343,7 @@ def build_hub(
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
         secret_keys=secret_keys,
         trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
+        login_throttle=login_throttle,
         transcript_caps=transcript_caps,
         system_artifacts=system_artifacts,
         trace_exporter=trace_exporter,
