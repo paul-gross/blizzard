@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type QuestionView, compactRef, runnerDisplayName, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
+import { type QuestionView, compactRef, runnerBoardParts, runnerTitle, type RunnerBoardParts, KitAsyncState, type KitAsyncStateValue, KitPanel, KitSelectRow } from 'fleet';
 
 /**
  * The open-questions rail's presentational half — the ask list
@@ -36,8 +36,13 @@ export class QuestionsPanelView {
     return compactRef(chunkId);
   }
 
-  /** The asking runner's display name. */
-  protected runnerName(question: QuestionView): string {
-    return runnerDisplayName(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
+  /** The asking runner's host and name, held apart so each clips on its own, as the board's do. */
+  protected runner(question: QuestionView): RunnerBoardParts {
+    return runnerBoardParts(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
+  }
+
+  /** The asking runner's tooltip — its full display name, then its id. */
+  protected runnerTooltip(question: QuestionView): string {
+    return runnerTitle(question.runner_id, question.runner_name, this.runnerHosts().get(question.runner_id));
   }
 }

@@ -26,7 +26,13 @@
         >
           <span class="h">
             <span class="cid" data-testid="rail-question-chunk">{{ shortId(q.chunk_id) }}</span>
-            <span class="rid" data-testid="rail-question-runner" [attr.title]="q.runner_id">{{ runnerName(q) }}</span>
+            @let who = runner(q);
+            <span class="rid" data-testid="rail-question-runner" [attr.title]="runnerTooltip(q)">
+              @if (who.host; as host) {
+                <span class="r-host">{{ host }}</span><span class="r-sep">/</span>
+              }
+              <span class="r-name">{{ who.name }}</span>
+            </span>
           </span>
           <span class="qt" data-testid="rail-question-text">{{ q.question }}</span>
           @if (q.options && q.options.length > 0) {

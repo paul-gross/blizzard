@@ -30,14 +30,35 @@ fleet-kit-panel.fill {
   align-items: baseline;
   gap: 6px;
 }
+/* The chunk id never gives way; the runner beside it is what clips. */
 .cid {
+  flex: none;
   color: var(--amber-hi);
   font-size: var(--fs-sm);
 }
 .rid {
+  display: flex;
+  min-width: 0;
   color: var(--label-dim);
   font-size: var(--fs-label);
+}
+/* A runner's host and name clip apart, each to its own ellipsis: the host gives way first,
+   the separator never — as the board's runner names do. */
+.r-host,
+.r-name {
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-host {
+  flex: 0 1000 auto;
+}
+.r-name {
+  flex: 0 1 auto;
+}
+.r-sep {
+  flex: none;
 }
 /* Same as the detail dock's ask (chunk-awaiting-human .ask-q): the question is
    authored prose, so its newlines are preserved rather than collapsed into one

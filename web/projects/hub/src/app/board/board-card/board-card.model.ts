@@ -4,11 +4,11 @@ import { type ChunkStatus, compactRef, type WorkItemsView, type WorkRefView } fr
 const UNFOLDED_TITLES = 3;
 const FOLDED_TITLES = 2;
 
-/** The statuses a lane's own heading already names, so a card leaves them unsaid:
- * RUNNING, READY, BACKLOG, and NEEDS YOU each hold one of these as their namesake. The
- * rest — paused beside waiting_on_human, delivering beside running — say more than their
- * lane does, as does any status added later until it is named here. */
-const LANE_NAMESAKES: ReadonlySet<ChunkStatus> = new Set(['running', 'ready', 'not_ready', 'needs_human']);
+/** The statuses a card leaves unsaid: RUNNING, READY, BACKLOG, and NEEDS YOU each hold one as
+ * their lane's namesake, and `delivering` is already said by the hub node the card's step names.
+ * The rest — paused beside waiting_on_human — say more than their lane does, as does any status
+ * added later until it is named here. */
+const UNSAID_STATUSES: ReadonlySet<ChunkStatus> = new Set(['running', 'ready', 'not_ready', 'needs_human', 'delivering']);
 
 /** One work item as a card names it: its work-ref label over its title. Either may be absent —
  * a pointer naming no configured source has no label, and the title is `null` until read. */
@@ -54,7 +54,7 @@ export function foldTitles<T>(titles: readonly T[], expanded: boolean): { shown:
 
 /** Whether a card names its status — only where it says more than the lane does. */
 export function cardShowsStatus(status: ChunkStatus): boolean {
-  return !LANE_NAMESAKES.has(status);
+  return !UNSAID_STATUSES.has(status);
 }
 
 /** The word a finished chunk is named by — `Stopped` for a stopped chunk, `Completed` for any

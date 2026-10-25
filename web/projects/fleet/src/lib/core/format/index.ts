@@ -7,7 +7,7 @@
 
 export { compactRef } from '../compact-ref';
 export { shortCommitHash } from '../commit-hash';
-export { RUNNER_HOST_NAMES, injectRunnerHostNames, runnerDisplayName, runnerTitle } from '../runner-display-name';
+export { RUNNER_HOST_NAMES, injectRunnerHostNames, runnerBoardParts, type RunnerBoardParts, runnerDisplayName, runnerTitle } from '../runner-display-name';
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';

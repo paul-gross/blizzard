@@ -766,14 +766,14 @@ describe('BoardPage', () => {
       expect(stub.forRoute(`/api/chunks/${OLD_DONE}`, 'GET').length).toBeGreaterThan(0);
     });
 
-    it('sends board_window=true on every list page and shows all-time column counts', async () => {
+    it('sends board_window=true on every list page and counts DONE by its window, its all-time total in the head\'s title', async () => {
       const { el } = await open();
 
       const listReads = stub.forRoute('/api/chunks', 'GET');
       expect(listReads.length).toBeGreaterThan(0);
       expect(JSON.stringify(listReads)).toContain('board_window');
-      const doneCount = el.querySelector('[data-col="done"] .n')?.textContent?.trim();
-      expect(doneCount).toBe('40');
+      expect(el.querySelector('[data-col="done"] .n')?.textContent?.trim()).toBe(String(el.querySelectorAll('[data-col="done"] [data-testid="chunk-card"]').length));
+      expect(el.querySelector('[data-col="done"] .b-col-head')?.getAttribute('title')).toContain('40 all time');
     });
 
     it('back and forward walk the selection history', async () => {
