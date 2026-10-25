@@ -7,8 +7,10 @@ sees only :class:`~blizzard.hub.auth.models.Session`.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import delete, insert, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -66,7 +68,7 @@ class SessionRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _session(row) -> Session:
+    def _session(row: Row[Any]) -> Session:
         return Session(
             id_hash=row.id_hash,
             user_id=row.user_id,

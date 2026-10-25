@@ -6,7 +6,10 @@ sees only :class:`~blizzard.hub.auth.models.AuthFact`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import insert, select
+from sqlalchemy.engine import Row
 
 from blizzard.hub.auth.facts import IWriteAuthFactsRepository
 from blizzard.hub.auth.models import AuthFact
@@ -38,7 +41,7 @@ class AuthFactsRepository:
             )
 
     @staticmethod
-    def _fact(row) -> AuthFact:
+    def _fact(row: Row[Any]) -> AuthFact:
         return AuthFact(
             kind=row.kind, actor=row.actor, subject=row.subject, detail=row.detail, recorded_at=row.recorded_at
         )

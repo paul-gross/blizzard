@@ -6,8 +6,11 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the do
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlalchemy as sa
 from sqlalchemy import Select, insert, select
+from sqlalchemy.engine import Row
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import IWriteMembershipRepository, Membership, MembershipFact
@@ -83,7 +86,7 @@ class MembershipRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _membership(row) -> Membership:
+    def _membership(row: Row[Any]) -> Membership:
         return Membership(tenant_id=TenantId(row.tenant_id), user_id=row.user_id, role=Role(row.role))
 
 
