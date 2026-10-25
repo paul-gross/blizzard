@@ -13,8 +13,8 @@ import os
 import random
 import time
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
-from dataclasses import dataclass, field
-from typing import Protocol
+from dataclasses import dataclass
+from functools import partial
 
 import httpx2
 from fastapi import Depends, FastAPI, Request, status
@@ -33,8 +33,7 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
-from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
@@ -124,6 +123,8 @@ from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.domain.sweeps.locks import SweepInProgress
+from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.layout import SIGNING_KEYS_PARTS
@@ -150,135 +151,104 @@ TENANT_TEARDOWN_INTERVAL_SECONDS = 30
 PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
 
 
-class _Sweepable(Protocol):
-    """The one capability :class:`Sweep` needs — structural, so any reconciler
-    stands in with no inheritance."""
-
-    def sweep(self) -> None: ...
-
-
+@collaborator
 @dataclass(frozen=True)
 class Sweep:
-    """One reconciler stepped once per interval until shutdown (``bzh:steppable-loop``).
-    The first pass runs immediately, unjittered; ``jitter_seconds`` offsets only the
-    second pass, so sibling sweeps synchronize once at boot then decorrelate for good.
-    ``timer`` is the injectable monotonic clock ``run`` measures each pass's elapsed time with;
-    ``tracer`` opens each pass's ``sweep <name>`` root."""
+    """One sweep's timed passes, stepped once per interval until shutdown (``bzh:steppable-loop``).
+    ``reconciler`` is the roster's locked pass over every tenant for ``config_name``. The first pass runs
+    immediately, unjittered; ``jitter_seconds`` offsets only the second pass, so sibling sweeps synchronize
+    once at boot then decorrelate for good. ``timer`` is the injectable monotonic clock ``run`` measures
+    each pass's elapsed time with."""
 
-    reconciler: _Sweepable
+    config_name: SweepName
+    reconciler: Callable[[], object]
     interval_seconds: int
     shutdown: asyncio.Event
-    logger_name: str
     jitter_seconds: float | None = None
     timer: Callable[[], float] = time.monotonic
-    tracer: IPlatformTracer = field(default_factory=NoopPlatformTracer)
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
-        """The forge-status sweep, plus the always-on
-        event-derivation, close-drain and tenant-teardown sweeps, plus the trace-export
-        sweep when tracing is enabled, plus the fact-egress sweep when a directory is configured — none on the
-        store-free app. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
-        here so their recurring cadence decorrelates from its second pass
-        on."""
+        """One timed sweep per sweep the hub built — forge status, event derivation, close drain and tenant
+        teardown always, trace export when tracing is enabled, fact egress when a directory is configured —
+        none for a ``stepped`` one, and none on the store-free app. Each pass opens its ``sweep <name>`` root
+        on the app's platform tracer. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
+        here so their recurring cadence decorrelates from its second pass on."""
         services: HubServices | None = app.state.services
         if services is None:
             return
-        interval = app.state.config.annotation_interval_seconds
+        config: HubConfig = app.state.config
         tracer = app.state.platform_tracing.tracer
-        if services.annotation is not None:
+        for name in services.sweeps.names():
+            if config.sweeps.of(name) is SweepMode.STEPPED:
+                continue
+            interval = _sweep_interval(name, config)
             yield cls(
-                services.annotation,
+                name,
+                partial(services.sweeps.pass_every_tenant, name, tracer),
                 interval,
                 app.state.shutdown,
-                "blizzard.hub.forge_status",
                 jitter_seconds=random.uniform(0, interval),
-                tracer=tracer,
-            )
-        yield cls(
-            services.event_derivation,
-            EVENT_DERIVATION_INTERVAL_SECONDS,
-            app.state.shutdown,
-            "blizzard.hub.transcript_events",
-            jitter_seconds=random.uniform(0, EVENT_DERIVATION_INTERVAL_SECONDS),
-            tracer=tracer,
-        )
-        yield cls(
-            services.close_drain,
-            CLOSE_DRAIN_INTERVAL_SECONDS,
-            app.state.shutdown,
-            "blizzard.hub.work_closure",
-            jitter_seconds=random.uniform(0, CLOSE_DRAIN_INTERVAL_SECONDS),
-            tracer=tracer,
-        )
-        yield cls(
-            services.tenant_teardown_sweep,
-            TENANT_TEARDOWN_INTERVAL_SECONDS,
-            app.state.shutdown,
-            "blizzard.hub.tenant_teardown",
-            jitter_seconds=random.uniform(0, TENANT_TEARDOWN_INTERVAL_SECONDS),
-            tracer=tracer,
-        )
-        if services.trace_export is not None:
-            every = app.state.config.tracing.sweep_seconds
-            yield cls(
-                services.trace_export,
-                every,
-                app.state.shutdown,
-                "blizzard.hub.trace_export",
-                jitter_seconds=random.uniform(0, every),
-                tracer=tracer,
             )
 
-        if services.egress_export is not None:
-            every = app.state.config.egress.sweep_seconds
-            yield cls(
-                services.egress_export,
-                every,
-                app.state.shutdown,
-                "blizzard.hub.egress",
-                jitter_seconds=random.uniform(0, every),
-                tracer=tracer,
-            )
+    @property
+    def logger_name(self) -> str:
+        return self.config_name.logger_name
 
     @property
     def name(self) -> str:
         """The sweep's own name — the last segment of its logger name."""
-        return self.logger_name.rsplit(".", 1)[-1]
+        return self.config_name.logger_segment
 
     async def _wait(self, timeout: float) -> None:
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self.shutdown.wait(), timeout=timeout)
 
     async def run(self) -> None:
-        """Call ``sweep()`` immediately, then after ``jitter_seconds`` (default: plain
-        ``interval_seconds``), then every ``interval_seconds`` after that, until shutdown.
-        Every wait races ``shutdown``. A sweep that raises is logged and swallowed — a bad
-        tick skips a cycle, never kills the loop. Every pass logs its elapsed time; an
+        """Run a pass immediately, then after ``jitter_seconds`` (default: plain ``interval_seconds``),
+        then every ``interval_seconds`` after that, until shutdown. Every wait races ``shutdown``. A pass
+        that finds its sweep's lock held is skipped for the interval. Every pass logs its elapsed time; an
         overrun logs a warning naming this sweep."""
         log = get_logger(self.logger_name)
         first = True
         while not self.shutdown.is_set():
             started = self.timer()
             try:
-                with self.tracer.root(f"sweep {self.name}"):
-                    await asyncio.to_thread(self.reconciler.sweep)
-            except Exception:
-                log.exception("sweep failed")
-            elapsed = self.timer() - started
-            log.info("sweep pass completed", elapsed_seconds=elapsed)
-            if elapsed > self.interval_seconds:
-                log.warning(
-                    "sweep pass exceeded its own interval",
-                    sweep=self.logger_name,
-                    elapsed_seconds=elapsed,
-                    interval_seconds=self.interval_seconds,
-                )
+                await asyncio.to_thread(self.reconciler)
+            except SweepInProgress:
+                log.info("sweep pass skipped", reason="in progress")
+            else:
+                elapsed = self.timer() - started
+                log.info("sweep pass completed", elapsed_seconds=elapsed)
+                if elapsed > self.interval_seconds:
+                    log.warning(
+                        "sweep pass exceeded its own interval",
+                        sweep=self.logger_name,
+                        elapsed_seconds=elapsed,
+                        interval_seconds=self.interval_seconds,
+                    )
             if first and self.jitter_seconds is not None:
                 await self._wait(self.jitter_seconds)
             else:
                 await self._wait(self.interval_seconds)
             first = False
+
+
+def _sweep_interval(name: SweepName, config: HubConfig) -> int:
+    """``name``'s timer interval in seconds."""
+    match name:
+        case SweepName.FORGE_STATUS:
+            return config.annotation_interval_seconds
+        case SweepName.EVENT_DERIVATION:
+            return EVENT_DERIVATION_INTERVAL_SECONDS
+        case SweepName.CLOSE_DRAIN:
+            return CLOSE_DRAIN_INTERVAL_SECONDS
+        case SweepName.TENANT_TEARDOWN:
+            return TENANT_TEARDOWN_INTERVAL_SECONDS
+        case SweepName.TRACE_EXPORT:
+            return config.tracing.sweep_seconds
+        case SweepName.EGRESS:
+            return config.egress.sweep_seconds
 
 
 def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:

@@ -17,6 +17,7 @@ from blizzard.foundation.config_keys import (
 from blizzard.hub import config as hub_config
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
+from blizzard.hub.domain.sweeps.names import SweepName
 from tests.config_inputs import load_hub_config
 from tests.test_host_config_keys import _document_carrying_every_key  # pyright: ignore[reportPrivateUsage]
 
@@ -36,6 +37,7 @@ _SAMPLES: dict[str, object] = {
     "trusted_proxies": ["127.0.0.1"],
     "tracing.platform_sample_ratio": 0.5,
     "tracing.worker_programs": False,
+    **{f"sweeps.{name}.mode": "stepped" for name in SweepName},
 }
 
 

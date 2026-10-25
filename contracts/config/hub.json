@@ -344,6 +344,110 @@
     {
       "default": null,
       "deprecated": false,
+      "path": "sweeps",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.close_drain",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.close_drain.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.egress",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.egress.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.event_derivation",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.event_derivation.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.forge_status",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.forge_status.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.tenant_teardown",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.tenant_teardown.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "sweeps.trace_export",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": "timed",
+      "deprecated": false,
+      "path": "sweeps.trace_export.mode",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
+      "deprecated": false,
       "path": "tracing",
       "replaced_by": null,
       "required": false,

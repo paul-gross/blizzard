@@ -1071,7 +1071,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     hub.clock.advance(timedelta(hours=1))
     with capture_statements(hub.engine) as statements:
         for name in passes:
-            sweeps[name].sweep()
+            sweeps[name]()
 
     for t in (first, second):
         assert _rows(hub, schema.transcript_event_derivations, t.harness.tenant) == 1, t.label
@@ -1084,7 +1084,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     assert closed.harness.tenant.encode() not in written
     assert not [sql for sql, params in statements if closed.harness.tenant in repr(params)]
 
-    sweeps["tenant_teardown"].sweep()
+    sweeps["tenant_teardown"]()
 
     tenant_owned = [table for table in schema.metadata.sorted_tables if table.name not in schema.GLOBAL_TABLES]
     held = {table.name: _rows(hub, table, closed.harness.tenant) for table in tenant_owned}

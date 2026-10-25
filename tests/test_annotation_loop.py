@@ -1,20 +1,24 @@
-"""Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by the
-forge-status annotation loop and the close-intent drain loop,
+"""Unit tests for the hub's sweep-loop background driver (``Sweep``), shared by every timed sweep,
 and for ``_lifespan``'s task-starting conditions.
 """
 
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.platform_tracing.handle import DisabledPlatformTracing
 from blizzard.hub.app import Sweep, _lifespan
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_loop import ActionLoop
+from blizzard.hub.domain.sweeps.locks import SweepLocks
+from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
+from blizzard.hub.domain.sweeps.roster import ISweepsEveryTenant, SweepRoster
 
 pytestmark = pytest.mark.unit
 
@@ -42,7 +46,9 @@ async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> Non
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(Sweep(reconciler, 0, shutdown, "test").run(), _stop_once_three_sweeps_land()),
+        asyncio.gather(
+            Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 0, shutdown).run(), _stop_once_three_sweeps_land()
+        ),
         timeout=2.0,
     )
 
@@ -50,9 +56,10 @@ async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> Non
 
 
 async def test_loop_survives_a_sweep_that_raises() -> None:
-    """A bad tick is logged and swallowed — it must not kill the loop."""
+    """A bad tick is logged and swallowed by the roster's pass — it must not kill the loop."""
     reconciler = _CountingReconciler(fail_on={1})
     shutdown = asyncio.Event()
+    roster = _roster({SweepName.CLOSE_DRAIN: reconciler})
 
     async def _stop_once_two_sweeps_land() -> None:
         while reconciler.calls < 2:
@@ -60,7 +67,10 @@ async def test_loop_survives_a_sweep_that_raises() -> None:
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(Sweep(reconciler, 0, shutdown, "test").run(), _stop_once_two_sweeps_land()),
+        asyncio.gather(
+            Sweep(SweepName.CLOSE_DRAIN, lambda: roster.pass_every_tenant(SweepName.CLOSE_DRAIN), 0, shutdown).run(),
+            _stop_once_two_sweeps_land(),
+        ),
         timeout=2.0,
     )
 
@@ -73,7 +83,7 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test").run())
+    task = asyncio.ensure_future(Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 3600, shutdown).run())
     await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
     assert reconciler.calls == 1
 
@@ -83,6 +93,12 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
 
 # --------------------------------------------------------------------------- #
 # _lifespan's task-starting conditions
+
+
+def _roster(every_tenant: dict[SweepName, ISweepsEveryTenant]) -> SweepRoster:
+    return SweepRoster(
+        every_tenant=every_tenant, one_tenant={}, locks=SweepLocks(), clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
+    )
 
 
 class _FakeWorkSources:
@@ -98,11 +114,9 @@ class _FakeWorkSources:
 
 class _FakeServices:
     """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
-    reads: ``annotation`` (the forge-status sweep, ``None`` when no source opts in), ``close_drain``
-    (started unconditionally, no source gate), ``event_derivation``
-    (started unconditionally too), ``tenant_teardown_sweep`` (likewise), ``trace_export`` (``None`` — tracing is off),
-    ``egress_export`` (``None`` — no directory), ``action_loop`` (started and stopped around the sweeps), and
-    ``close_tenant_objects`` (run before the loop stops)."""
+    reads: ``sweeps`` (the roster over ``annotation``, when given, ``close_drain``, ``event_derivation`` and
+    ``tenant_teardown_sweep``, with no trace or egress export), ``action_loop`` (started and stopped around the
+    sweeps), and ``close_tenant_objects`` (run before the loop stops)."""
 
     def __init__(
         self,
@@ -117,10 +131,19 @@ class _FakeServices:
         self.event_derivation = event_derivation or _CountingReconciler()
         self.tenant_teardown_sweep = _CountingReconciler()
         self.annotation = annotation
-        self.trace_export = None
-        self.egress_export = None
         self.action_loop = ActionLoop()
         self.close_tenant_objects = lambda: None
+
+    @property
+    def sweeps(self) -> SweepRoster:
+        built: dict[SweepName, ISweepsEveryTenant] = {
+            SweepName.EVENT_DERIVATION: self.event_derivation,
+            SweepName.CLOSE_DRAIN: self.close_drain,
+            SweepName.TENANT_TEARDOWN: self.tenant_teardown_sweep,
+        }
+        if self.annotation is not None:
+            built[SweepName.FORGE_STATUS] = self.annotation
+        return _roster(built)
 
 
 class _FakeState:
@@ -177,7 +200,8 @@ async def test_the_sweep_set_carries_the_injected_annotator_when_one_is_present(
     sweeps = list(Sweep.all(app))  # type: ignore[arg-type]
 
     [sweep] = [sweep for sweep in sweeps if sweep.logger_name == "blizzard.hub.forge_status"]
-    assert sweep.reconciler is annotator
+    sweep.reconciler()
+    assert annotator.calls == 1
     assert sweep.interval_seconds == app.state.config.annotation_interval_seconds
     assert sweep.shutdown is app.state.shutdown
     assert sweep.jitter_seconds is not None
@@ -204,7 +228,9 @@ async def test_the_first_pass_runs_immediately_even_with_a_large_jitter() -> Non
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
+    task = asyncio.ensure_future(
+        Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 3600, shutdown, jitter_seconds=3600).run()
+    )
     await asyncio.sleep(0.05)
     assert reconciler.calls == 1  # the first pass never waits out the jitter
 
@@ -217,7 +243,9 @@ async def test_shutdown_during_the_post_first_pass_jitter_returns_promptly() -> 
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(Sweep(reconciler, 3600, shutdown, "test", jitter_seconds=3600).run())
+    task = asyncio.ensure_future(
+        Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 3600, shutdown, jitter_seconds=3600).run()
+    )
     await asyncio.sleep(0.05)  # let the immediate first pass land
     shutdown.set()
 
@@ -237,7 +265,7 @@ async def test_elapsed_time_is_logged_every_pass() -> None:
     with capture_logs() as logs:
         await asyncio.wait_for(
             asyncio.gather(
-                Sweep(reconciler, 0, shutdown, "test", timer=lambda: next(ticks)).run(),
+                Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 0, shutdown, timer=lambda: next(ticks)).run(),
                 _stop_once_two_sweeps_land(),
             ),
             timeout=2.0,
@@ -261,7 +289,7 @@ async def test_a_pass_exceeding_its_interval_logs_a_warning_naming_the_sweep() -
     with capture_logs() as logs:
         await asyncio.wait_for(
             asyncio.gather(
-                Sweep(reconciler, 1, shutdown, "sweep-under-test", timer=lambda: next(ticks)).run(),
+                Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 1, shutdown, timer=lambda: next(ticks)).run(),
                 _stop_once_one_sweep_lands(),
             ),
             timeout=2.0,
@@ -270,7 +298,7 @@ async def test_a_pass_exceeding_its_interval_logs_a_warning_naming_the_sweep() -
     warnings = [entry for entry in logs if entry["log_level"] == "warning"]
     assert len(warnings) == 1
     assert warnings[0]["event"] == "sweep pass exceeded its own interval"
-    assert warnings[0]["sweep"] == "sweep-under-test"
+    assert warnings[0]["sweep"] == "blizzard.hub.work_closure"
 
 
 async def test_a_pass_within_its_interval_logs_no_overrun_warning() -> None:
@@ -286,10 +314,66 @@ async def test_a_pass_within_its_interval_logs_no_overrun_warning() -> None:
     with capture_logs() as logs:
         await asyncio.wait_for(
             asyncio.gather(
-                Sweep(reconciler, 60, shutdown, "test", timer=lambda: next(ticks)).run(),
+                Sweep(SweepName.CLOSE_DRAIN, reconciler.sweep, 60, shutdown, timer=lambda: next(ticks)).run(),
                 _stop_once_one_sweep_lands(),
             ),
             timeout=2.0,
         )
 
     assert not [entry for entry in logs if entry["log_level"] == "warning"]
+
+
+# --------------------------------------------------------------------------- #
+# modes and locks
+
+
+async def test_the_sweep_set_has_no_sweep_for_a_stepped_one(tmp_path: Path) -> None:
+    services = _FakeServices(work_sources=_FakeWorkSources())
+    config = HubConfig(
+        root=tmp_path,
+        db_url="sqlite:///:memory:",
+        sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED, SweepName.EVENT_DERIVATION: SweepMode.TIMED}),
+    )
+
+    names = [sweep.config_name for sweep in Sweep.all(_FakeApp(services, config))]  # type: ignore[arg-type]
+
+    assert names == [SweepName.EVENT_DERIVATION, SweepName.TENANT_TEARDOWN]
+
+
+async def test_a_stepped_sweep_runs_no_pass_at_boot_and_a_timed_one_runs_as_today(tmp_path: Path) -> None:
+    close_drain, event_derivation = _CountingReconciler(), _CountingReconciler()
+    services = _FakeServices(
+        work_sources=_FakeWorkSources(), close_drain=close_drain, event_derivation=event_derivation
+    )
+    config = HubConfig(
+        root=tmp_path, db_url="sqlite:///:memory:", sweeps=SweepModes({SweepName.CLOSE_DRAIN: SweepMode.STEPPED})
+    )
+
+    async with _lifespan(_FakeApp(services, config)):  # type: ignore[arg-type]
+        await asyncio.sleep(0.05)
+
+    assert close_drain.calls == 0
+    assert event_derivation.calls == 1
+
+
+async def test_a_timed_pass_that_meets_a_held_lock_skips_its_interval() -> None:
+    reconciler = _CountingReconciler()
+    locks = SweepLocks()
+    roster = SweepRoster(
+        every_tenant={SweepName.CLOSE_DRAIN: reconciler},
+        one_tenant={},
+        locks=locks,
+        clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    shutdown = asyncio.Event()
+
+    with capture_logs() as logs, locks.hold(SweepName.CLOSE_DRAIN):
+        task = asyncio.ensure_future(
+            Sweep(SweepName.CLOSE_DRAIN, lambda: roster.pass_every_tenant(SweepName.CLOSE_DRAIN), 3600, shutdown).run()
+        )
+        await asyncio.sleep(0.05)
+        shutdown.set()
+        await asyncio.wait_for(task, timeout=1.0)
+
+    assert reconciler.calls == 0
+    assert [(entry["event"], entry.get("reason")) for entry in logs] == [("sweep pass skipped", "in progress")]
