@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { RUNNER_HOST_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, runnerDisplayName, runnerTitle } from './runner-display-name';
+import { RUNNER_HOST_NAMES, RUNNER_NAME_SEPARATOR, injectRunnerHostNames, runnerBoardParts, runnerDisplayName, runnerTitle } from './runner-display-name';
 
 describe('runnerDisplayName', () => {
   it('joins the compact id to the name with the separator', () => {
@@ -25,6 +25,22 @@ describe('runnerDisplayName', () => {
     expect(runnerDisplayName('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', null, 'atlas')).toBe('atlas/R-ABF3');
     expect(runnerDisplayName('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude', null)).toBe('R-ABF3.r-claude');
     expect(runnerDisplayName('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude', '')).toBe('R-ABF3.r-claude');
+  });
+});
+
+describe('runnerBoardParts', () => {
+  it('names a named runner by its host and name apart, leaving the compact id out', () => {
+    expect(runnerBoardParts('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude', 'atlas')).toEqual({ host: 'atlas', name: 'r-claude' });
+  });
+
+  it('holds no host where it is unknown', () => {
+    expect(runnerBoardParts('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude')).toEqual({ host: null, name: 'r-claude' });
+    expect(runnerBoardParts('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', 'r-claude', '')).toEqual({ host: null, name: 'r-claude' });
+  });
+
+  it('falls back to the display name, compact id and all, for a runner with no name', () => {
+    expect(runnerBoardParts('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', null)).toEqual({ host: null, name: 'R-ABF3' });
+    expect(runnerBoardParts('rn_01KXKVVF1J3D6H6VYZ3XYNABF3', null, 'atlas')).toEqual({ host: null, name: 'atlas/R-ABF3' });
   });
 });
 

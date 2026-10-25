@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { formatCost, hasCostFigure, projectTint, runnerDisplayName, runnerTitle, shortCommitHash, FleetWhen, KitBadge, KitSelectRow, KitSkeleton, STATUS_TONE, toneColor } from 'fleet';
+import { formatCost, hasCostFigure, projectTint, runnerBoardParts, runnerTitle, shortCommitHash, FleetWhen, KitBadge, KitSelectRow, KitSkeleton, STATUS_TONE, toneColor } from 'fleet';
 import { LaneIcon } from '../lane-icon/lane-icon';
 import type { BoardCard } from '../board-card/board-card';
 import { blockedLabel, finishedWord, foldTitles, stepLabel } from '../board-card/board-card.model';
@@ -48,7 +48,7 @@ export class BoardListRow {
   /** The runner holding the chunk, by its display name and its tooltip, or `null` when none holds it. */
   protected readonly holder = computed(() => {
     const { runnerId, runnerName, hostName } = this.card();
-    return runnerId ? { name: runnerDisplayName(runnerId, runnerName, hostName), title: runnerTitle(runnerId, runnerName, hostName) } : null;
+    return runnerId ? { ...runnerBoardParts(runnerId, runnerName, hostName), title: runnerTitle(runnerId, runnerName, hostName) } : null;
   });
 
   protected readonly step = computed(() => stepLabel(this.card().status, this.card().node));

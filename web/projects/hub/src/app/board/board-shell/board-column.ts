@@ -86,6 +86,9 @@ export class BoardColumn {
    * window truncates. */
   readonly count = input<number | null>(null);
 
+  /** The head's hover text, or `null` for none. */
+  readonly headTitle = input<string | null>(null);
+
   /** The chunk whose detail fills the dock, or null — its card carries the highlight. */
   readonly selectedChunkId = input<string | null>(null);
 

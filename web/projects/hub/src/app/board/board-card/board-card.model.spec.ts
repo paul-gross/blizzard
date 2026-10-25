@@ -61,14 +61,14 @@ describe('foldTitles', () => {
 });
 
 describe('cardShowsStatus', () => {
-  it("leaves a lane's namesake status unsaid", () => {
-    for (const status of ['running', 'ready', 'not_ready', 'needs_human'] as const) {
+  it("leaves a lane's namesake status unsaid, and delivering, which the hub's own step already names", () => {
+    for (const status of ['running', 'ready', 'not_ready', 'needs_human', 'delivering'] as const) {
       expect(cardShowsStatus(status)).toBe(false);
     }
   });
 
   it('names a status that says more than its lane', () => {
-    for (const status of ['paused', 'waiting_on_human', 'delivering'] as const) {
+    for (const status of ['paused', 'waiting_on_human'] as const) {
       expect(cardShowsStatus(status)).toBe(true);
     }
   });

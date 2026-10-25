@@ -182,7 +182,7 @@ describe('BoardShell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const heads = [...el.querySelectorAll('[data-col] .col-lbl')].map((n) => n.textContent?.trim());
-    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'DONE']);
+    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'DONE MAX(48H, 10)']);
   });
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {

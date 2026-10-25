@@ -196,7 +196,7 @@ describe('BoardList', () => {
       const el = await render(running(card('a', { runnerId: RUNNER_ID, runnerName: 'r-claude', openPrs: [{ repo: 'blizzard', number: 7, url: 'https://example.test/pr/7' }] })));
 
       const holder = el.querySelector('.holder')!;
-      expect(holder.firstElementChild?.textContent?.trim()).toBe('R-E4AX.r-claude');
+      expect(holder.firstElementChild?.textContent?.trim()).toBe('r-claude');
       expect(holder.querySelector('.step')).not.toBeNull();
       expect(holder.querySelector('.prs a')?.textContent?.trim()).toBe('#7');
     });
@@ -204,7 +204,9 @@ describe('BoardList', () => {
     it('names its runner host/runner where the host is known, and no runner where none holds it', async () => {
       const hosted = await render(running(card('a', { runnerId: RUNNER_ID, runnerName: 'r-claude', hostName: 'atlas' })));
       const runner = hosted.querySelector('[data-testid="list-row-runner"]');
-      expect(runner?.textContent?.trim()).toBe('atlas/r-claude');
+      expect(runner?.textContent?.replace(/\s+/g, '')).toBe('atlas/r-claude');
+      expect(runner?.querySelector('.r-host')?.textContent).toBe('atlas');
+      expect(runner?.querySelector('.r-name')?.textContent).toBe('r-claude');
       expect(runner?.getAttribute('title')).toBe(`atlas/r-claude · ${RUNNER_ID}`);
 
       fixture.componentRef.setInput('groups', running(card('b', { runnerId: null, runnerName: null, hostName: 'atlas' })));

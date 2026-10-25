@@ -178,9 +178,9 @@ describe('BoardCardComponent DONE-column layout (issue #215)', () => {
   });
 
   it('still names the status for a non-done-lane card', async () => {
-    const el = await render({ ...BASE, status: 'delivering', terminal: false, node: 'build', completedAt: null });
+    const el = await render({ ...BASE, status: 'paused', terminal: false, node: 'build', completedAt: null });
 
-    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('delivering');
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('paused');
     expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
   });
 });

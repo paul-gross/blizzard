@@ -57,20 +57,26 @@ describe('QuestionsPanelView', () => {
     expect(button?.getAttribute('aria-label')).toBe('Open chunk C-3YJ9 to answer its question');
   });
 
-  it("names each ask's runner by display name, a runner with no name by its compact id", async () => {
+  it("names each ask's runner by its name, its host apart where known, and a runner with no name by its compact id", async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('runnerHosts', new Map([['rn_01KXKVVF1J3D6H6VYZ3XYNH0ST', 'atlas']]));
     fixture.componentRef.setInput('questions', [
       { ...QUESTIONS[0], runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3', runner_name: 'r-claude' },
       { ...QUESTIONS[1], runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYN7Q2M' },
+      { ...QUESTIONS[0], question_id: 'qn_hosted', runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNH0ST', runner_name: 'r-chatgpt' },
     ]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const [named, nameless] = Array.from(el.querySelectorAll('[data-testid="rail-question-runner"]'));
-    expect(named.textContent?.trim()).toBe('R-ABF3.r-claude');
-    expect(named.getAttribute('title')).toBe('rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
+    const [named, nameless, hosted] = Array.from(el.querySelectorAll('[data-testid="rail-question-runner"]'));
+    expect(named.textContent?.trim()).toBe('r-claude');
+    expect(named.querySelector('.r-host')).toBeNull();
+    expect(named.getAttribute('title')).toBe('R-ABF3.r-claude · rn_01KXKVVF1J3D6H6VYZ3XYNABF3');
     expect(nameless.textContent?.trim()).toBe('R-7Q2M');
+    expect(hosted.querySelector('.r-host')?.textContent).toBe('atlas');
+    expect(hosted.querySelector('.r-name')?.textContent).toBe('r-chatgpt');
+    expect(hosted.textContent?.replace(/\s+/g, '')).toBe('atlas/r-chatgpt');
   });
 
   it('omits the options line for an ask that offers none', async () => {

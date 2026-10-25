@@ -28,6 +28,22 @@ export function runnerDisplayName(runnerId: string, runnerName?: string | null, 
   return runnerName ? `${ref}${RUNNER_NAME_SEPARATOR}${runnerName}` : ref;
 }
 
+/**
+ * A runner as a board card or row names it — `host/name`, or the name alone where the host is unknown — with
+ * the compact id only for a runner that carries no name. The two sides stay apart so a view can clip each on
+ * its own; the id stays reachable through {@link runnerTitle}.
+ */
+export interface RunnerBoardParts {
+  /** The host, or `null` where it is unknown. */
+  readonly host: string | null;
+  readonly name: string;
+}
+
+export function runnerBoardParts(runnerId: string, runnerName?: string | null, hostName?: string | null): RunnerBoardParts {
+  if (!runnerName) return { host: null, name: runnerDisplayName(runnerId, runnerName, hostName) };
+  return { host: hostName || null, name: runnerName };
+}
+
 /** A runner reference's tooltip — the display name a surface may clip, then the full id:
  * `atlas/r-claude · rn_01KXKVVF1J3D6H6VYZ3XYNABF3`. */
 export function runnerTitle(runnerId: string, runnerName?: string | null, hostName?: string | null): string {

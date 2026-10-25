@@ -63,7 +63,12 @@
        delivered — its open PRs and landed commits. -->
   <span class="cell holder">
     @if (holder(); as holder) {
-      <span class="runner" data-testid="list-row-runner" [title]="holder.title">{{ holder.name }}</span>
+      <span class="runner" data-testid="list-row-runner" [title]="holder.title">
+        @if (holder.host; as host) {
+          <span class="r-host">{{ host }}</span><span class="r-sep">/</span>
+        }
+        <span class="r-name">{{ holder.name }}</span>
+      </span>
     }
     <span class="step">
       <span class="step-name" [title]="step()">{{ step() }}</span>

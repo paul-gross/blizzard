@@ -8,6 +8,13 @@ import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-l
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
 
+/** The DONE window `listChunksApiChunksGet` keeps under `board_window`: chunks finished in the last
+ * `BOARD_DONE_WINDOW_HOURS`, plus the newest `BOARD_DONE_FLOOR` however old. */
+const BOARD_DONE_WINDOW_HOURS = 48;
+const BOARD_DONE_FLOOR = 10;
+/** The two sets the hub keeps are both newest-first, so their union is simply the larger one. */
+const DONE_WINDOW_LABEL = `DONE MAX(${BOARD_DONE_WINDOW_HOURS}H, ${BOARD_DONE_FLOOR})`;
+
 /** How the board lays out its chunks: the lane grid, or one list of full-width rows. */
 export type BoardLayout = 'board' | 'list';
 
@@ -117,7 +124,8 @@ export class BoardShell {
 
   protected readonly columns = computed(() => {
     const unknown = unknownLane(this.chunks());
-    return unknown === null ? LANES : [...LANES, unknown];
+    const lanes = LANES.map((lane) => (lane.key === DONE_LANE ? { ...lane, label: DONE_WINDOW_LABEL } : lane));
+    return unknown === null ? lanes : [...lanes, unknown];
   });
 
   protected skeletonsFor(columnKey: string): number {
@@ -226,10 +234,19 @@ export class BoardShell {
     return counts === null ? null : laneCounts(counts);
   });
 
-  /** A lane's all-time count; the unknown lane, which no count covers, counts the chunks it shows. */
+  /** A lane's all-time count. DONE and the unknown lane count the chunks they show instead: the board
+   * holds only DONE's recent window, and no count covers the unknown lane. */
   protected countFor(columnKey: string): number | null {
     if (columnKey === UNKNOWN_LANE) return this.cardsFor(columnKey).length;
+    if (columnKey === DONE_LANE) return this.state() === 'loading' ? null : this.cardsFor(columnKey).length;
     return this.laneTotals()?.get(columnKey) ?? null;
+  }
+
+  /** A column head's hover text — DONE's says what its window keeps, and its all-time total. */
+  protected headTitleFor(columnKey: string): string | null {
+    if (columnKey !== DONE_LANE) return null;
+    const total = this.laneTotals()?.get(DONE_LANE);
+    return `Whichever is more: everything finished in the last ${BOARD_DONE_WINDOW_HOURS}h, or the ${BOARD_DONE_FLOOR} most recent` + (total === undefined ? '' : ` · ${total} all time`);
   }
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {

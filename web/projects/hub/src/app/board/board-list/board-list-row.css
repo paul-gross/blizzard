@@ -21,12 +21,12 @@
   cursor: pointer;
   font-family: var(--mono);
 }
-/* A project-tinted row, as a board card does, keeps its project's hue at a fixed dark lightness per surface state,
-   rather than blending the color into the surface, which greys it. */
+/* A project-tinted row scales its project's color toward black in linear light, a fixed share per
+   surface state: every channel stays in gamut, so the hue holds exactly, rather than being clipped. */
 .row.tinted {
-  --bg-resting: oklch(from var(--project-tint) 0.22 min(calc(c * 0.42), 0.058) h);
-  --bg-hover: oklch(from var(--project-tint) 0.26 min(calc(c * 0.42), 0.058) h);
-  --bg-selected: oklch(from var(--project-tint) 0.3 min(calc(c * 0.42), 0.058) h);
+  --bg-resting: color-mix(in srgb-linear, var(--project-tint) 2%, black);
+  --bg-hover: color-mix(in srgb-linear, var(--project-tint) 3.5%, black);
+  --bg-selected: color-mix(in srgb-linear, var(--project-tint) 5%, black);
 }
 .row:hover {
   background: var(--bg-hover);
@@ -140,13 +140,23 @@
   font-size: var(--fs-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  /* One line, and only the room the gate and blocked markers leave: a long node name clips first. */
+  flex: 1 1 0;
+  max-width: max-content;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .step {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 2px 6px;
-  white-space: normal;
+  gap: 6px;
+  min-width: 0;
+}
+.step > :not(.step-name) {
+  flex: none;
 }
 .blocked {
   color: var(--amber);
@@ -157,10 +167,30 @@
   display: flex;
   flex-direction: column;
 }
+/* A runner's host and name clip apart, each to its own ellipsis: the host gives way first,
+   the separator never. */
 .runner {
+  display: flex;
+  min-width: 0;
   color: var(--text);
+}
+.r-host,
+.r-name {
+  min-width: 0;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.r-host {
+  flex: 0 1000 auto;
+  color: var(--label);
+}
+.r-name {
+  flex: 0 1 auto;
+}
+.r-sep {
+  flex: none;
+  color: var(--label-dim);
 }
 .prs {
   display: flex;
