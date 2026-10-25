@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
-from sqlalchemy import Row, and_, func, select
+from sqlalchemy import ColumnElement, Row, and_, func, select
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.logging import get_logger
@@ -58,7 +59,7 @@ def _decode_windows(payload: str | None) -> tuple[ExternalSubscriptionUsageWindo
     )
 
 
-def _attempt_summary(slug: str, row: Row) -> ExternalUsageAttemptSummary:
+def _attempt_summary(slug: str, row: Row[Any]) -> ExternalUsageAttemptSummary:
     return ExternalUsageAttemptSummary(
         slug=slug,
         sampled_at=as_utc(row.sampled_at),
@@ -67,7 +68,7 @@ def _attempt_summary(slug: str, row: Row) -> ExternalUsageAttemptSummary:
     )
 
 
-def _renewal_summary(row: Row) -> CredentialRenewalSummary:
+def _renewal_summary(row: Row[Any]) -> CredentialRenewalSummary:
     """A claim row outer-joined to its outcome: no outcome on record reads as unrecorded."""
     return CredentialRenewalSummary(
         slug=str(row.slug),
@@ -155,19 +156,19 @@ class ExternalUsageStore:
         newest = self._newest_rows_by_slug(slugs, None)
         return {slug: _attempt_summary(slug, row) for slug, row in newest.items()}
 
-    def _newest_rows_by_slug(self, slugs: Sequence[str], where: object | None) -> dict[str, Row]:
+    def _newest_rows_by_slug(self, slugs: Sequence[str], where: ColumnElement[bool] | None) -> dict[str, Row[Any]]:
         """Each slug's newest ``external_usage_samples`` row among those matching ``where`` — the
         singulars' ``(sampled_at, id)`` order, kept portable by joining each slug's ``max(sampled_at)``
         back and breaking a same-instant tie on ``id`` in the statement's own order."""
         if not slugs:
             return {}
         samples = external_usage_samples
-        newest: dict[str, Row] = {}
+        newest: dict[str, Row[Any]] = {}
         with self._store.connect() as conn:
             for batch in id_batches(slugs):
-                conditions = [samples.c.slug.in_(batch)]
+                conditions: list[ColumnElement[bool]] = [samples.c.slug.in_(batch)]
                 if where is not None:
-                    conditions.append(where)  # type: ignore[arg-type]
+                    conditions.append(where)
                 latest = (
                     select(samples.c.slug, func.max(samples.c.sampled_at).label("sampled_at"))
                     .where(*conditions)
@@ -254,7 +255,7 @@ class ExternalUsageStore:
         if not slugs:
             return {}
         claims, outcomes = credential_renewal_claims, credential_renewal_outcomes
-        newest: dict[str, Row] = {}
+        newest: dict[str, Row[Any]] = {}
         with self._store.connect() as conn:
             for batch in id_batches(slugs):
                 latest = (

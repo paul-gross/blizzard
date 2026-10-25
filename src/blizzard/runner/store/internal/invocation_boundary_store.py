@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import and_
+from sqlalchemy import Row, and_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.schema import invocation_boundaries, invocation_boundary_advances
@@ -184,7 +185,7 @@ class InvocationBoundaryStore:
         _log.info("invocation boundaries closed", lease_id=lease_id, reason=reason)
 
     @staticmethod
-    def _row_to_boundary(r) -> InvocationBoundary:
+    def _row_to_boundary(r: Row[Any]) -> InvocationBoundary:
         return InvocationBoundary(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),

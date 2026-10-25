@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
+
+from sqlalchemy import Row
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.identity import SessionReference
@@ -129,7 +132,7 @@ class AskStore:
         _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
 
     @staticmethod
-    def _row_to_ask(r) -> OpenAsk:
+    def _row_to_ask(r: Row[Any]) -> OpenAsk:
         return OpenAsk(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),

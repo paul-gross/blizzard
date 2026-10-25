@@ -19,6 +19,7 @@ Revises: 20261009_1000_runner_lease_closures_lease_id_index
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -146,7 +147,9 @@ def _backfill(bind: sa.Connection, table: str, primary_key: tuple[str, ...], run
     Each page seeks past the last key the page before it stamped instead of scanning from the start, so the work grows
     with the row count, not its square.
     """
-    stub = sa.table(table, *(sa.column(name) for name in primary_key), sa.column(_RUNNER_COLUMN, sa.String))
+    stub = sa.table(
+        table, *(cast(sa.ColumnClause[Any], sa.column(name)) for name in primary_key), sa.column(_RUNNER_COLUMN, sa.String)
+    )
     columns = [stub.c[name] for name in primary_key]
     key = sa.tuple_(*columns) if len(columns) > 1 else columns[0]
     unstamped = stub.c[_RUNNER_COLUMN].is_(None)

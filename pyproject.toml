@@ -251,6 +251,7 @@ also_copy = [
     "exemplars/python",
     "scripts/restated_invariants.py",
     "scripts/mutation.py",
+    "scripts/typecheck_strict_rows.py",
     "docs/deployment/transcripts.md",
     "docs/deployment/egress.md",
     "docs/deployment/tracing.md",

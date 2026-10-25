@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import bindparam, func, or_
+from sqlalchemy import Row, bindparam, func, or_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.repository import (
@@ -187,7 +188,7 @@ class EnvironmentStore:
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)
 
     @staticmethod
-    def _row_to_binding(r) -> EnvBinding:
+    def _row_to_binding(r: Row[Any]) -> EnvBinding:
         return EnvBinding(
             chunk_id=str(r.chunk_id),
             environment_id=str(r.environment_id),

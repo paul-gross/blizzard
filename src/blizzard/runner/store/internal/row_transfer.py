@@ -27,7 +27,7 @@ class TransferHandle:
     runner_id: str
     source: Connection
     destination: Connection
-    issued: dict[str, dict[int, int]] = field(default_factory=dict)
+    issued: dict[str, dict[int, int]] = field(default_factory=lambda: dict[str, dict[int, int]]())
 
 
 def handle_of(handle: IRunnerTransferHandle) -> TransferHandle:

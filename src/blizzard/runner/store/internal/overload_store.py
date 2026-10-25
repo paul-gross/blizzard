@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func
+from sqlalchemy import ColumnElement, Row, and_, func
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
@@ -135,7 +136,7 @@ class OverloadStore:
         _log.info("provider overload streak reset", lease_id=lease_id, epoch=epoch)
 
     @staticmethod
-    def _row_to_record(r) -> OverloadExit:
+    def _row_to_record(r: Row[Any]) -> OverloadExit:
         return OverloadExit(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),

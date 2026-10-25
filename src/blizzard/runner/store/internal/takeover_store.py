@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, and_, or_
+from sqlalchemy import ColumnElement, Row, Select, and_, or_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
@@ -127,7 +127,7 @@ class TakeoverStore:
         )
 
     @staticmethod
-    def _row_to_takeover(r) -> OpenTakeover:
+    def _row_to_takeover(r: Row[Any]) -> OpenTakeover:
         return OpenTakeover(
             takeover_id=str(r.takeover_id),
             chunk_id=str(r.chunk_id),
