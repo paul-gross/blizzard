@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Any, cast
 
 from blizzard.tools.compat.violation import Violation
 
@@ -19,6 +20,12 @@ _SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"), ("post", "/api/hosts"))
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 #: The document mark an open response position carries; compat reads documents, never the code that writes them.
 _OPEN_MARK = "x-blizzard-open"
+
+#: A parsed OpenAPI document or any object inside one: open JSON, read only at the keys the classifier names.
+type Node = dict[str, Any]
+
+#: A property's type shape: its type names, or for a union the shapes of its non-null members.
+type Signature = tuple[str | Signature, ...]
 
 #: Whether the operation at (path, method) is on the surface being diffed.
 type Selection = Callable[[str, str], bool]
@@ -32,8 +39,8 @@ def is_wire_operation(path: str, method: str) -> bool:
     )
 
 
-def _surface_operations(doc: dict, select: Selection) -> list[tuple[str, str, dict]]:
-    operations = []
+def _surface_operations(doc: Node, select: Selection) -> list[tuple[str, str, Node]]:
+    operations: list[tuple[str, str, Node]] = []
     for path, methods in doc.get("paths", {}).items():
         for method, op in methods.items():
             if method in _HTTP_METHODS and select(path, method):
@@ -46,12 +53,12 @@ def is_any_operation(path: str, method: str) -> bool:
     return True
 
 
-def _violation(where: str, reason: str, base_node: dict) -> Violation:
+def _violation(where: str, reason: str, base_node: Node) -> Violation:
     """A wire finding whose ``deprecated`` is the mark the baseline carried on ``base_node``."""
     return Violation("wire", where, reason, base_node.get("deprecated") is True)
 
 
-def _schema_components(doc: dict) -> dict:
+def _schema_components(doc: Node) -> Node:
     return doc.get("components", {}).get("schemas", {})
 
 
@@ -59,7 +66,7 @@ def _ref_name(ref: str) -> str:
     return ref.rsplit("/", 1)[-1]
 
 
-def _request_schema(op: dict) -> dict | None:
+def _request_schema(op: Node) -> Node | None:
     body = op.get("requestBody")
     if not body:
         return None
@@ -67,7 +74,7 @@ def _request_schema(op: dict) -> dict | None:
     return media.get("schema") if media else None
 
 
-def _response_schema(op: dict) -> dict | None:
+def _response_schema(op: Node) -> Node | None:
     responses = op.get("responses", {})
     for code in ("200", "201", "202"):
         resp = responses.get(code)
@@ -80,8 +87,8 @@ def _response_schema(op: dict) -> dict | None:
 
 
 def _collect_reachable(
-    doc: dict,
-    node: dict | None,
+    doc: Node,
+    node: Node | None,
     role: str,
     roles: dict[str, set[str]],
     seen: set[tuple[str, str]],
@@ -112,17 +119,17 @@ def _collect_reachable(
             _collect_reachable(doc, sub, role, roles, seen, marks)
 
 
-def _reachable_schemas(doc: dict, select: Selection) -> dict[str, set[str]]:
+def _reachable_schemas(doc: Node, select: Selection) -> dict[str, set[str]]:
     """Component schema name -> the surface roles ("request", "response") that reach it."""
     return _walk(doc, select)[0]
 
 
-def _open_components(doc: dict, select: Selection) -> set[str]:
+def _open_components(doc: Node, select: Selection) -> set[str]:
     """The components whose every response position — each ``$ref`` a response walk meets — carries the open mark."""
     return {name for name, marked in _walk(doc, select)[1].items() if all(marked)}
 
 
-def _walk(doc: dict, select: Selection) -> tuple[dict[str, set[str]], dict[str, list[bool]]]:
+def _walk(doc: Node, select: Selection) -> tuple[dict[str, set[str]], dict[str, list[bool]]]:
     """Each reached component's roles, and the open mark of each response position that references it.
 
     ``seen`` is keyed by (schema, role): a schema reached by both roles must have its
@@ -142,13 +149,14 @@ def _walk(doc: dict, select: Selection) -> tuple[dict[str, set[str]], dict[str, 
 # --- Classification ------------------------------------------------------------------
 
 
-def _type_signature(schema: dict) -> tuple | None:
+def _type_signature(schema: Node) -> Signature | None:
     if "$ref" in schema:
         return ("$ref", schema["$ref"])
     t = schema.get("type")
     if t is not None:
         if isinstance(t, list):
-            return tuple(sorted(x for x in t if x != "null"))
+            names: list[str] = cast(list[str], t)
+            return tuple(sorted(x for x in names if x != "null"))
         return (t,)
     # pydantic's `X | None` compiles to `anyOf: [...X, {type: null}]` with no top-level `type`
     # key — resolve the signature through the non-null member(s) to match a typed nullable's.
@@ -160,7 +168,7 @@ def _type_signature(schema: dict) -> tuple | None:
     return signatures[0] if len(signatures) == 1 else signatures
 
 
-def _is_nullable(schema: dict) -> bool:
+def _is_nullable(schema: Node) -> bool:
     t = schema.get("type")
     if isinstance(t, list) and "null" in t:
         return True
@@ -169,7 +177,7 @@ def _is_nullable(schema: dict) -> bool:
     return any(member.get("type") == "null" for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])))
 
 
-def _union_ref_names(schema: dict) -> set[str] | None:
+def _union_ref_names(schema: Node) -> set[str] | None:
     members = schema.get("anyOf")
     if members is None:
         members = schema.get("oneOf")
@@ -178,7 +186,7 @@ def _union_ref_names(schema: dict) -> set[str] | None:
     return {_ref_name(m["$ref"]) for m in members if "$ref" in m}
 
 
-def _inline_enum(schema: dict) -> dict | None:
+def _inline_enum(schema: Node) -> Node | None:
     """The node carrying the inline ``enum`` of a property: itself, or its non-null ``anyOf``/``oneOf`` member."""
     if "enum" in schema:
         return schema
@@ -188,13 +196,13 @@ def _inline_enum(schema: dict) -> dict | None:
     return None
 
 
-def _string_enum_target(base: dict, head: dict, head_schemas: dict) -> dict | None:
+def _string_enum_target(base: Node, head: Node, head_schemas: Node) -> Node | None:
     """The string-enum component a ``string`` property is retyped onto, or None when the retype
     is anything else. An inline-enum base (a ``Literal``) qualifies too; its values are diffed."""
     if _type_signature(base) != ("string",):
         return None
     head_sig = _type_signature(head)
-    if head_sig is None or head_sig[0] != "$ref":
+    if head_sig is None or head_sig[0] != "$ref" or not isinstance(head_sig[1], str):
         return None
     target = head_schemas.get(_ref_name(head_sig[1]), {})
     return target if target.get("type") == "string" and target.get("enum") else None
@@ -202,8 +210,8 @@ def _string_enum_target(base: dict, head: dict, head_schemas: dict) -> dict | No
 
 def _diff_enum_and_union(
     label: str,
-    base: dict,
-    head: dict,
+    base: Node,
+    head: Node,
     is_request: bool,
     is_response: bool,
     violations: list[Violation],
@@ -227,27 +235,27 @@ def _diff_enum_and_union(
             violations.append(_violation(label, f"response union gained member(s) {sorted(gained_members)}", base))
 
 
-def _nested_schema(schema: dict, key: str) -> dict | None:
+def _nested_schema(schema: Node, key: str) -> Node | None:
     """The ``items`` or ``additionalProperties`` schema a property carries itself or on its
     non-null ``anyOf``/``oneOf`` member (``list[X] | None`` compiles to the latter)."""
-    nested = schema.get(key)
+    nested: Any = schema.get(key)
     if isinstance(nested, dict):
-        return nested
+        return cast(Node, nested)
     for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])):
         nested = member.get("type") != "null" and member.get(key)
         if isinstance(nested, dict):
-            return nested
+            return cast(Node, nested)
     return None
 
 
 def _diff_property(
     label: str,
-    bp: dict,
-    hp: dict,
+    bp: Node,
+    hp: Node,
     is_request: bool,
     is_response: bool,
     violations: list[Violation],
-    head_schemas: dict | None,
+    head_schemas: Node | None,
 ) -> None:
     """The property rules over one property, then over its array items and map values."""
     target = None if is_request else _string_enum_target(bp, hp, head_schemas or {})
@@ -306,18 +314,18 @@ def _diff_property(
 
 def _diff_schema(
     name: str,
-    base: dict,
-    head: dict,
+    base: Node,
+    head: Node,
     is_request: bool,
     is_response: bool,
     violations: list[Violation],
-    head_schemas: dict | None = None,
+    head_schemas: Node | None = None,
     is_open: bool = False,
 ) -> None:
     _diff_enum_and_union(name, base, head, is_request, is_response, violations, is_open=is_open)
 
-    base_props: dict = base.get("properties", {})
-    head_props: dict = head.get("properties", {})
+    base_props: Node = base.get("properties", {})
+    head_props: Node = head.get("properties", {})
     base_required = set(base.get("required", []))
     head_required = set(head.get("required", []))
     forbid = base.get("additionalProperties") is False or head.get("additionalProperties") is False
@@ -355,7 +363,7 @@ def _diff_schema(
             )
 
 
-def _diff_paths_and_methods(base: dict, head: dict, violations: list[Violation], select: Selection) -> None:
+def _diff_paths_and_methods(base: Node, head: Node, violations: list[Violation], select: Selection) -> None:
     head_paths = head.get("paths", {})
     base_ops = _surface_operations(base, select)
     removed_paths: set[str] = set()
@@ -370,10 +378,11 @@ def _diff_paths_and_methods(base: dict, head: dict, violations: list[Violation],
             violations.append(_violation(f"{method.upper()} {path}", "surface method removed", op))
 
 
-def _parameter_schema(op: dict) -> dict:
+def _parameter_schema(op: Node) -> Node:
     """An operation's parameters as one synthetic request object schema, one property per
     ``(in, name)`` — so the request rules apply to them unchanged."""
-    properties, required = {}, []
+    properties: dict[str, Node] = {}
+    required: list[str] = []
     for param in op.get("parameters", []):
         key = f"{param.get('in')} {param.get('name')}"
         properties[key] = {**param.get("schema", {}), **({"deprecated": True} if param.get("deprecated") else {})}
@@ -383,7 +392,7 @@ def _parameter_schema(op: dict) -> dict:
 
 
 def _diff_parameters(
-    base: dict, head: dict, violations: list[Violation], head_schemas: dict, select: Selection
+    base: Node, head: Node, violations: list[Violation], head_schemas: Node, select: Selection
 ) -> None:
     head_ops = {(path, method): op for path, method, op in _surface_operations(head, select)}
     for path, method, base_op in _surface_operations(base, select):
@@ -402,7 +411,7 @@ def _diff_parameters(
 
 
 def classify_spec_diff(
-    base: dict, head: dict, select: Selection = is_wire_operation, surface: str = "wire"
+    base: Node, head: Node, select: Selection = is_wire_operation, surface: str = "wire"
 ) -> list[Violation]:
     """Every breaking change (bzh:fleet-wire-additive's declared classes) from ``base`` to
     ``head`` on the operations ``select`` keeps, reported under ``surface``. An empty list

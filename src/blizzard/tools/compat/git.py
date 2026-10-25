@@ -75,7 +75,7 @@ class Repository:
         """``(sha, values of the trailer key)`` per commit of ``revision_range``, by git's own trailer parser."""
         marker = "\x1e"
         out = self._git("log", f"--format={marker}%H%n%(trailers:key={key},valueonly,unfold)", revision_range)
-        commits = []
+        commits: list[tuple[str, list[str]]] = []
         for block in out.split(marker)[1:]:
             sha, _, rest = block.partition("\n")
             commits.append((sha, [line.strip() for line in rest.splitlines() if line.strip()]))
