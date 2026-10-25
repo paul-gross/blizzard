@@ -26,6 +26,7 @@ from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOut
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
@@ -283,26 +284,17 @@ class CloseDrainSweep:
     def sweep(self) -> None:
         """One drain pass over up to ``CLOSE_DRAIN_PASS_LIMIT`` due intents; a closed tenant is skipped and a
         fault in one tenant is caught there."""
-        now = self._clock.now()
-        due: dict[TenantId, list[PendingCloseIntent]] = {}
-        for row in self._corpus.pending_close_intents():
-            if close_intent_is_due(
-                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
-            ):
-                due.setdefault(row.tenant, []).append(row.intent)
-        by_tenant = fair_share(due, CLOSE_DRAIN_PASS_LIMIT, self._rotation)
+        by_tenant = fair_share(self._due(), CLOSE_DRAIN_PASS_LIMIT, self._rotation)
         self._rotation += 1
         tally = CloseDrainTally()
         failed: list[TenantId] = []
         for tenant, intents in by_tenant.items():
             with bound_contextvars(tenant_id=tenant):
                 try:
-                    self._tenant(tenant).drain(intents, tally)
+                    if self._drain(tenant, intents, tally) is not None:
+                        failed.append(tenant)
                 except (TenantClosed, UnknownTenant):
                     _log.info("close intent drain skipped a closed tenant", intents=len(intents))
-                except Exception as exc:
-                    failed.append(tenant)
-                    _log.warning("close intent drain failed for a tenant", fault=repr(exc))
         _log.info(
             "close intent drain sweep completed",
             closed=tally.closed,
@@ -312,3 +304,45 @@ class CloseDrainSweep:
             tenants=len(by_tenant),
             tenants_failed=sorted(failed),
         )
+
+    def sweep_tenant(self, tenant: TenantId) -> TenantFault | None:
+        """:meth:`sweep` narrowed to ``tenant``: the same corpus read, up to ``CLOSE_DRAIN_PASS_LIMIT`` of
+        ``tenant``'s own due intents in intent order, and the rotation left unmoved. Its fault is returned;
+        a closed tenant's refusal propagates."""
+        with bound_contextvars(tenant_id=tenant):
+            intents = self._due().get(tenant, [])[:CLOSE_DRAIN_PASS_LIMIT]
+            tally = CloseDrainTally()
+            fault = self._drain(tenant, intents, tally) if intents else None
+            _log.info(
+                "close intent drain sweep completed",
+                closed=tally.closed,
+                gone=tally.gone,
+                failed=tally.failed,
+                skipped=tally.skipped,
+                tenant_failed=fault is not None,
+            )
+            return fault
+
+    def _due(self) -> dict[TenantId, list[PendingCloseIntent]]:
+        """Every open tenant's due intents, in the corpus's order, from one read."""
+        now = self._clock.now()
+        due: dict[TenantId, list[PendingCloseIntent]] = {}
+        for row in self._corpus.pending_close_intents():
+            if close_intent_is_due(
+                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
+            ):
+                due.setdefault(row.tenant, []).append(row.intent)
+        return due
+
+    def _drain(
+        self, tenant: TenantId, intents: Sequence[PendingCloseIntent], tally: CloseDrainTally
+    ) -> TenantFault | None:
+        """Drain ``intents`` in ``tenant``; its fault, if it met one. A closed tenant's refusal propagates."""
+        try:
+            self._tenant(tenant).drain(intents, tally)
+        except (TenantClosed, UnknownTenant):
+            raise
+        except Exception as exc:
+            _log.warning("close intent drain failed for a tenant", fault=repr(exc))
+            return TenantFault.of(exc)
+        return None

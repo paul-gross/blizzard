@@ -20,6 +20,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import TransitionFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.domain.observability.analytics.events import (
     CandidacyRead,
     DerivationSignature,
@@ -365,20 +366,13 @@ class EventDerivationReconciler:
         unconverged: list[TenantId] = []
         for tenant in due:
             with bound_contextvars(tenant_id=tenant):
-                if tenant not in reads and tenant not in stale:
-                    converged.append(tenant)
-                    continue
-                candidates = reads.get(tenant, _NOTHING_VISIBLE).candidate_segment_ids
                 try:
-                    ok = self._tenant(tenant).converge(candidates, frozenset(stale.get(tenant, ())), tally)
+                    ok = self._converge(tenant, reads.get(tenant), stale.get(tenant), tally)
                 except (TenantClosed, UnknownTenant):
                     _log.info("transcript event derivation skipped a closed tenant")
                     self._unconverged.discard(tenant)
                     continue
-                except Exception as exc:
-                    ok = False
-                    _log.warning("transcript event derivation failed for a tenant", fault=repr(exc))
-                (converged if ok else unconverged).append(tenant)
+                (converged if ok is True else unconverged).append(tenant)
 
         self._unconverged = (self._unconverged - set(due)) | set(unconverged)
         for tenant in converged:
@@ -393,6 +387,55 @@ class EventDerivationReconciler:
             tenants_skipped=len(known) - len(due),
             tenants_unconverged=unconverged,
         )
+
+    def sweep_tenant(self, tenant: TenantId) -> TenantFault | None:
+        """:meth:`sweep` narrowed to ``tenant``: the same probe and corpus reads, ``tenant``'s share alone,
+        and only ``tenant``'s entries of the convergence state touched; a tenant not due is skipped. Its
+        fault is returned; a closed tenant's refusal propagates."""
+        with bound_contextvars(tenant_id=tenant):
+            signature = self._corpus.derivation_signature().get(tenant, _GONE)
+            now = self._clock.now()
+            if not self._is_due(tenant, signature, now):
+                _log.info("transcript event derivation sweep skipped", reason="signature unchanged")
+                return None
+            read = self._corpus.candidacy(self._extractor_version).get(tenant)
+            derived = self._corpus.derived_segment_ids().get(tenant, frozenset())
+            stale = set(derived - (read.visible_segment_ids if read is not None else frozenset()))
+            tally = DerivationTally()
+            try:
+                ok = self._converge(tenant, read, stale or None, tally)
+            except (TenantClosed, UnknownTenant):
+                self._unconverged.discard(tenant)
+                raise
+            if ok is True:
+                self._unconverged.discard(tenant)
+                self._converged[tenant] = (signature, now)
+            else:
+                self._unconverged.add(tenant)
+            _log.info(
+                "transcript event derivation sweep completed",
+                derived=tally.derived,
+                dropped=tally.dropped,
+                failed=tally.failed,
+                converged=ok is True,
+            )
+            return ok if isinstance(ok, TenantFault) else None
+
+    def _converge(
+        self, tenant: TenantId, read: CandidacyRead | None, stale: set[str] | None, tally: DerivationTally
+    ) -> bool | TenantFault:
+        """Converge ``tenant`` on its candidates in ``read`` and its ``stale`` segments; a tenant holding
+        neither has converged. Its fault, or whether it converged; a closed tenant's refusal propagates."""
+        if read is None and stale is None:
+            return True
+        candidates = (read or _NOTHING_VISIBLE).candidate_segment_ids
+        try:
+            return self._tenant(tenant).converge(candidates, frozenset(stale or ()), tally)
+        except (TenantClosed, UnknownTenant):
+            raise
+        except Exception as exc:
+            _log.warning("transcript event derivation failed for a tenant", fault=repr(exc))
+            return TenantFault.of(exc)
 
     def _is_due(self, tenant: TenantId, signature: DerivationSignature, now: datetime) -> bool:
         last_signature, last_full_pass_at = self._converged.get(tenant, (None, None))
