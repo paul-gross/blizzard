@@ -25,8 +25,8 @@ from tests.service.support import (
     poll_until,
     require_mock_fleet,
     service_gate,
+    stack,
 )
-from tests.service.test_hub_service import _stack
 from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
 from tests.support import free_port
 
@@ -143,7 +143,7 @@ def _run_and_check(
 def test_a_running_hub_refuses_a_revoked_token_and_a_tokenless_call(tmp_path: Path) -> None:
     """Revocation is keyed on the revoked hash: the same token that peeked fine before its
     revocation is refused after, and a call carrying no token is refused throughout."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         runner_id, token = add_runner(hub, "r1")
         auth = {"Authorization": f"Bearer {token}"}

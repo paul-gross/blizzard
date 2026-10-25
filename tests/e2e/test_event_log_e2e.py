@@ -24,8 +24,8 @@ from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forg
 from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.runner_join import add_runner, fleet_headers
 from tests.service.support import mock_runner
-from tests.service.test_hub_service import _graph_yaml as _activity_graph_yaml
 from tests.support import free_port
+from tests.support import graph_yaml as _activity_graph_yaml
 
 # The built Angular bundle `blizzard hub host` mounts at `/`, needed for the browser
 # scenarios; absent it, they skip rather than fail against a placeholder.

@@ -13,8 +13,7 @@ import pytest
 from pydantic import BaseModel
 
 from tests.fleet_launchers import run_forge, run_hub
-from tests.service.support import service_gate
-from tests.service.test_hub_service import _stack
+from tests.service.support import service_gate, stack
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -60,7 +59,7 @@ def _held(hub: httpx2.Client, runner_id: str) -> list[dict[str, Any]]:
 
 
 def test_a_hub_shows_the_reasons_a_runner_reports_and_nothing_from_one_that_predates_the_field(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         runner_id, bearer = _add(hub, "older-runner")
 

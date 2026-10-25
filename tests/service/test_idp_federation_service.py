@@ -29,8 +29,7 @@ from tests.fleet_launchers import await_http, terminate
 from tests.host_files import load_runner_config, sampler_without_credentials, write_host_file
 from tests.runner_join import RUNNER_BIN, adopt_runner, runner_spawn_env
 from tests.service.support import add_runner, poll_until, require_stub_idp, service_gate, stub_idp
-from tests.service.test_auth_login_service import invite
-from tests.support import daemon_log_sink, free_port
+from tests.support import daemon_log_sink, free_port, invite
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -59,7 +58,7 @@ def _oauth_hub(
     hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
 ) -> Iterator[httpx2.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` — mirrors
-    ``tests/service/test_auth_login_service.py``'s own fixture of the same name."""
+    ``tests/service/support.py``'s ``oauth_hub``."""
     env = {**os.environ, _SECRET_ENV: _SECRET}
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)

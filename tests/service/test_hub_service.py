@@ -19,87 +19,26 @@ import pytest
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.fleet_launchers import REPO, await_http, run_forge, run_hub, terminate
-from tests.fleet_world import REPO_NAME, mint_world
+from tests.fleet_launchers import await_http, run_forge, run_hub, terminate
 from tests.service.support import (
+    ingest,
     mock_runner,
     poll_until,
     registered_runner_id,
-    require_mock_fleet,
     service_gate,
     sse_tap,
+    stack,
 )
-from tests.support import daemon_log_sink, free_port
+from tests.support import daemon_log_sink, free_port, graph_yaml
 
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _graph_yaml() -> str:
-    """A scripted ``default-delivery`` graph — build -> review -> deliver — named so the
-    hub's lazy ``ensure_default`` reuses it; prompts are inert, the mock runner just
-    submits the judgement choice over the wire."""
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": "# build",
-                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "review"}}},
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "review": {
-                "executor": "runner",
-                "prompt": "# review",
-                "session": "fresh",
-                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "clean", "to": "deliver"}}},
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "action": "pass",
-                "judgement": {
-                    "choices": {
-                        "success": {"description": "Delivered.", "to": "done"},
-                        "failure": {"description": "Failed to deliver.", "to": "build"},
-                    }
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
-
-
-def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
-    """File a forge issue (work-source seam) and ingest its pointer into a ready chunk."""
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post(
-        "/api/chunks",
-        json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]},
-    )
-    assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    # Ingest rests not-ready; promote so the chunk enters the ready queue.
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    return chunk_id
-
-
-def _stack(tmp_path: Path):
-    """Stand up mock forge + real hub over a minted fixture's origins. Returns a context tuple."""
-    bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = free_port(), free_port()
-    return bin_dir, origins, forge_port, hub_port
-
-
 def test_claim_and_completion_advance_the_chunk_over_the_wire(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "claim + complete")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "claim + complete")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             assert runner.post("/_drive/register").json()["status"] == 201
@@ -121,10 +60,10 @@ def test_claim_and_completion_advance_the_chunk_over_the_wire(tmp_path: Path) ->
 
 
 def test_stale_epoch_completion_is_rejected_over_the_wire(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "stale epoch")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "stale epoch")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -141,12 +80,12 @@ def test_stale_epoch_completion_is_rejected_over_the_wire(tmp_path: Path) -> Non
 
 
 def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_a = _ingest(forge, hub, "A — stays")
-        chunk_b = _ingest(forge, hub, "B — survivor")
-        chunk_c = _ingest(forge, hub, "C — merged into B")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_a = ingest(forge, hub, "A — stays")
+        chunk_b = ingest(forge, hub, "B — survivor")
+        chunk_c = ingest(forge, hub, "C — merged into B")
 
         # Group C into B: the survivor absorbs the union of work refs (plural).
         grouped = hub.post(f"/api/chunks/{chunk_b}/group", json={"merge_chunk_ids": [chunk_c]})
@@ -160,10 +99,10 @@ def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> No
 
 
 def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        _ingest(forge, hub, "an event")  # a chunk-changed event enters the broker's buffer
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        ingest(forge, hub, "an event")  # a chunk-changed event enters the broker's buffer
 
         # Read only the first chunk (the reserved comment) rather than draining to EOF —
         # an SSE stream may stay open.
@@ -263,12 +202,12 @@ def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path
     """A fresh cross-graph migration reaches a **live** SSE subscriber with ``queue-changed``,
     and its replay does not — only a real subscriber on a real socket proves
     the fan-out leg, unlike the component tier's replay-tail check."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     source_yaml, target_yaml = _migration_graphs_yaml()
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
         assert hub.post("/api/graphs", json={"definition_yaml": source_yaml}).status_code == 201
         assert hub.post("/api/graphs", json={"definition_yaml": target_yaml}).status_code == 201
-        chunk_id = _ingest(forge, hub, "migrate me")
+        chunk_id = ingest(forge, hub, "migrate me")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -297,10 +236,10 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
     """The ``pause`` wire field off a live ``GET /chunks/{id}`` response,
     present only on the detail shape, never the summary card —
     ``bzh:ci-job-local-command``."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "pause over the wire")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "pause over the wire")
 
         def _summary() -> dict:
             return next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
@@ -323,7 +262,7 @@ def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> 
 
 
 def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port),
         run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
@@ -342,7 +281,7 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
 
 
 def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string_slug(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     sampled_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     with (
         run_forge(bin_dir, origins, forge_port),
@@ -380,7 +319,7 @@ def test_external_subscription_usage_round_trips_a_slug_and_rejects_a_non_string
 def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_wire(tmp_path: Path) -> None:
     """End to end: the mock runner drives a miss over the real wire, and
     the real hub renders it as a miss-only, ``credential_lapsed`` row — no prior sample."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     missed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     with (
         run_forge(bin_dir, origins, forge_port),
@@ -417,7 +356,7 @@ def test_external_subscription_usage_miss_lands_as_a_lapsed_condition_over_the_w
 def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: Path) -> None:
     """A declared slug is a member whatever the age of its sample, including one that
     has never sampled or missed at all."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port),
         run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
@@ -443,7 +382,7 @@ def test_a_declared_roster_shows_a_never_sampled_member_over_the_wire(tmp_path: 
 
 def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire(tmp_path: Path) -> None:
     """A slug dropped from the re-declared roster is no longer a member."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port),
         run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
@@ -461,7 +400,7 @@ def test_reregistering_a_declared_roster_without_a_slug_removes_it_over_the_wire
 def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp_path: Path) -> None:
     """A registration that never declares a roster reads exactly as the rosterless
     fallback always has: a never-sampled slug is not a member at all."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port),
         run_hub(tmp_path / "hub", forge_port, hub_port) as hub,
@@ -476,13 +415,13 @@ def test_a_registration_without_a_roster_keeps_the_legacy_path_over_the_wire(tmp
 
 
 def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "route token present")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "route token present")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -495,13 +434,13 @@ def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path
 
 
 def test_route_token_stale_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "route token stale")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "route token stale")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -516,13 +455,13 @@ def test_route_token_stale_is_rejected_under_enforce_over_the_wire(tmp_path: Pat
 
 
 def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "route token omitted")
+        assert hub.post("/api/graphs", json={"definition_yaml": graph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "route token omitted")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -540,7 +479,7 @@ def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: P
 # The real hub's `produces_mode` backstop, driven by mock-runner `/_drive/complete`.
 
 
-def _produces_graph_yaml() -> str:
+def _producesgraph_yaml() -> str:
     """A ``default-delivery`` graph whose ``build`` node declares ``produces: [notes]``.
 
     Named ``default-delivery`` so POST /chunks' lazy ``ensure_default`` reuses it. The
@@ -599,10 +538,10 @@ _GIT_COMMIT_NOTES = [
 def test_fallback_only_completion_is_accepted_under_warn_over_the_wire(tmp_path: Path) -> None:
     """The default ``warn``: a build completion with no explicit ``notes`` attachment
     (only the assessment fallback) still applies over the wire — the fallback lands."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces warn")
+        assert hub.post("/api/graphs", json={"definition_yaml": _producesgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces warn")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -618,13 +557,13 @@ def test_fallback_only_completion_is_accepted_under_warn_over_the_wire(tmp_path:
 def test_fallback_only_completion_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
     """Under ``enforce`` a fallback-only completion (``attached=False`` for ``notes``) is
     fenced out and the chunk does not advance — the produces backstop over the wire."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces enforce reject")
+        assert hub.post("/api/graphs", json={"definition_yaml": _producesgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces enforce reject")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -643,13 +582,13 @@ def test_fallback_only_completion_is_rejected_under_enforce_over_the_wire(tmp_pa
 def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
     """Under ``enforce`` a completion carrying an **explicit** (``attached=True``) ``notes``
     artifact passes the backstop and advances over the wire — the accept side."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces enforce accept")
+        assert hub.post("/api/graphs", json={"definition_yaml": _producesgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces enforce accept")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -668,13 +607,13 @@ def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: P
 def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
     """Under ``enforce`` a ``produces:`` name covered by a pushed git commit (``attached=
     False``) still passes the backstop and advances."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces enforce git commit")
+        assert hub.post("/api/graphs", json={"definition_yaml": _producesgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces enforce git commit")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -690,7 +629,7 @@ def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wir
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] != entry_node
 
 
-def _git_commit_kind_graph_yaml() -> str:
+def _git_commit_kindgraph_yaml() -> str:
     """A ``default-delivery`` graph whose ``build`` node declares a **kind** expectation —
     ``produces: [{name: commit, kind: git_commit}]`` — rather than the
     name-only asset form ``_produces_graph_yaml`` above authors. The declared name
@@ -750,13 +689,13 @@ def test_git_commit_kind_expectation_is_accepted_by_kind_not_name_under_enforce_
     """A ``{kind: git_commit}`` expectation is met by **any** git-commit artifact present,
     regardless of its name — the artifact here is named ``toy-api`` (its repo), never the
     declared produces name ``commit`` — proving coverage is a kind match."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces enforce git-commit kind accept")
+        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kindgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces enforce git-commit kind accept")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -778,13 +717,13 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
     """A ``{kind: git_commit}`` expectation with **zero** git-commit artifacts in the
     submission is fenced out under ``enforce`` — the hub's presence-by-kind backstop.
     No asset artifact of any name can satisfy a kind expectation."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with (
         run_forge(bin_dir, origins, forge_port) as forge,
         run_hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
     ):
-        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "produces enforce git-commit kind reject")
+        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kindgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "produces enforce git-commit kind reject")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -801,7 +740,7 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
 # The hub's `requires_checks` backstop; no mode flag — gating applies iff declared.
 
 
-def _checks_gated_graph_yaml() -> str:
+def _checks_gatedgraph_yaml() -> str:
     """A ``default-delivery`` graph whose ``build`` node declares ``checks:`` and gates its
     ``pass`` choice on green checks; ``fail`` is ungated and routes back to build."""
     import yaml
@@ -845,10 +784,10 @@ _GREEN_CHECK = [{"command": "mise run test", "passed": True}]
 def test_checks_gate_fences_a_red_gated_pass_over_the_wire(tmp_path: Path) -> None:
     """A ``requires_checks`` pass whose reported checks are red is fenced out by the hub
     over the wire — the chunk never advances off build (AC #4, service tier)."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "checks gate red")
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gatedgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "checks gate red")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -866,10 +805,10 @@ def test_checks_gate_fences_a_red_gated_pass_over_the_wire(tmp_path: Path) -> No
 
 def test_a_green_gated_pass_applies_over_the_wire(tmp_path: Path) -> None:
     """A ``requires_checks`` pass with green checks passes the backstop and advances."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "checks gate green")
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gatedgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "checks gate green")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")
@@ -885,10 +824,10 @@ def test_a_green_gated_pass_applies_over_the_wire(tmp_path: Path) -> None:
 def test_a_red_check_through_a_non_gated_fail_applies_over_the_wire(tmp_path: Path) -> None:
     """A red check reported through the non-gated ``fail`` choice routes normally over the
     wire — a transition, not a gate rejection (AC #5, service tier)."""
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "checks gate non-gated fail")
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gatedgraph_yaml()}).status_code == 201
+        chunk_id = ingest(forge, hub, "checks gate non-gated fail")
 
         with mock_runner(bin_dir, free_port(), hub_port) as runner:
             runner.post("/_drive/register")

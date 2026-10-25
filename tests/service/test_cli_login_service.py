@@ -24,8 +24,7 @@ from blizzard.hub.config import AuthConfig, OAuthProviderConfig
 from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
-from tests.service.test_auth_login_service import invite
-from tests.support import daemon_log_sink, free_port
+from tests.support import daemon_log_sink, free_port, invite
 
 pytestmark = [pytest.mark.service, service_gate]
 

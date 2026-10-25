@@ -20,9 +20,8 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS
 from blizzard.hub.config import OAuthProviderConfig
-from tests.service.support import require_stub_idp, service_gate, stub_idp
-from tests.service.test_auth_login_service import _SECRET_ENV, _oauth_hub, invite
-from tests.support import free_port
+from tests.service.support import SECRET_ENV, oauth_hub, require_stub_idp, service_gate, stub_idp
+from tests.support import free_port, invite
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -138,12 +137,12 @@ def test_revoking_a_members_membership_ends_their_open_stream_and_no_other(tmp_p
             type="oidc",
             display_name="Stub SSO",
             client_id="cid",
-            client_secret_env=_SECRET_ENV,
+            client_secret_env=SECRET_ENV,
             issuer=f"http://127.0.0.1:{idp_port}",
             emails_authoritative=True,
         )
         with (
-            _oauth_hub(hub_dir, hub_port, providers=(provider,)),
+            oauth_hub(hub_dir, hub_port, providers=(provider,)),
             contextlib.ExitStack() as clients,
         ):
             admin = _sign_in(idp, base_url, hub_dir, subject="1", handle="ada", role=Role.ADMIN)
