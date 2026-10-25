@@ -2,5 +2,5 @@
 kind: changed
 ---
 
-The packaged `pre-push` and `resolve` nodes now run in their own session, where they re-read the whole build
-conversation before. A chunk reaching either node no longer inherits the build session's history.
+The packaged `pre-push` and `resolve` nodes now each start a fresh session. They no longer resume the build session, so
+a chunk reaching either node does not carry the build conversation's history into it.
