@@ -4,7 +4,7 @@ import { runDir } from './env';
 import { startForge } from './daemons/forge';
 import { startHub } from './daemons/hub';
 import { startIdp } from './daemons/idp';
-import { type DaemonRecord, stopDaemon } from './daemons/process';
+import { type DaemonRecord, type LiveDaemon, recordOf, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
 import type { TomlTable } from './profiles';
 
@@ -46,9 +46,15 @@ export function readProjectHubs(project: string): ProjectHubs {
   return JSON.parse(fs.readFileSync(file, 'utf8')) as ProjectHubs;
 }
 
-/** A hub, a mock forge, and a stub IdP of its own, started together. */
-export async function startHubStack(dir: string, index: number, profile: TomlTable): Promise<HubCoordinates> {
-  const started = await Promise.allSettled([startHub(dir, profile), startForge(dir), startIdp(dir)]);
+/** A started stack: its coordinates, and the hub's live handle, which a fresh hub's lifecycle holds. */
+export interface HubStack {
+  coordinates: HubCoordinates;
+  hub: LiveDaemon;
+}
+
+/** A hub, a mock forge, and a stub IdP of its own, started together; `hubEnv` reaches the hub process only. */
+export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubStack> {
+  const started = await Promise.allSettled([startHub(dir, profile, hubEnv), startForge(dir), startIdp(dir)]);
   const running = started.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
   const failure = started.find((outcome) => outcome.status === 'rejected');
   if (failure !== undefined) {
@@ -56,16 +62,24 @@ export async function startHubStack(dir: string, index: number, profile: TomlTab
     await Promise.all(running.map(stopDaemon));
     throw (failure as PromiseRejectedResult).reason;
   }
-  const [hub, forge, idp] = running as [DaemonRecord, DaemonRecord, DaemonRecord];
+  const [hub, forge, idp] = running as [LiveDaemon, DaemonRecord, DaemonRecord];
   return {
-    index,
-    url: hub.url,
-    forgeUrl: forge.url,
-    idpUrl: idp.url,
-    logPath: hub.logPath,
-    forgeLogPath: forge.logPath,
-    daemons: [hub, forge, idp],
+    hub,
+    coordinates: {
+      index,
+      url: hub.url,
+      forgeUrl: forge.url,
+      idpUrl: idp.url,
+      logPath: hub.logPath,
+      forgeLogPath: forge.logPath,
+      // Plain records: the coordinates are serialized to the run's hubs file.
+      daemons: [recordOf(hub), recordOf(forge), recordOf(idp)],
+    },
   };
+}
+
+export async function startHubStack(dir: string, index: number, profile: TomlTable): Promise<HubCoordinates> {
+  return (await startStack(dir, index, profile)).coordinates;
 }
 
 /**

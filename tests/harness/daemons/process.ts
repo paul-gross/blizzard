@@ -33,6 +33,17 @@ export interface DaemonRecord {
   logPath: string;
 }
 
+/** A daemon this process started: its record, and how it ended. `exited` never reaches a serialized record. */
+export interface LiveDaemon extends DaemonRecord {
+  /** Resolves with the exit code, or the signal that ended it, once the process is gone. */
+  exited: Promise<number | string>;
+}
+
+/** The serializable fields of a started daemon. */
+export function recordOf(daemon: DaemonRecord): DaemonRecord {
+  return { name: daemon.name, pid: daemon.pid, url: daemon.url, logPath: daemon.logPath };
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -78,8 +89,8 @@ async function answers(url: string): Promise<boolean> {
 
 class AddressInUse extends Error {}
 
-async function startOnce(spec: DaemonSpec): Promise<DaemonRecord> {
-  const port = await freePort();
+async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaemon> {
+  const port = fixedPort ?? (await freePort());
   const launch = spec.launch(port);
   fs.mkdirSync(spec.cwd, { recursive: true });
   fs.mkdirSync(path.dirname(spec.logPath), { recursive: true });
@@ -93,11 +104,15 @@ async function startOnce(spec: DaemonSpec): Promise<DaemonRecord> {
   });
   fs.closeSync(log);
   let exited: number | string | null = null;
-  child.once('exit', (code, signal) => {
-    exited = code ?? signal ?? 'unknown';
-  });
-  child.once('error', (error) => {
-    exited = error.message;
+  const ended = new Promise<number | string>((resolve) => {
+    child.once('exit', (code, signal) => {
+      exited = code ?? signal ?? 'unknown';
+      resolve(exited);
+    });
+    child.once('error', (error) => {
+      exited = error.message;
+      resolve(exited);
+    });
   });
   child.unref();
   const url = `http://127.0.0.1:${port}`;
@@ -109,7 +124,7 @@ async function startOnce(spec: DaemonSpec): Promise<DaemonRecord> {
       throw /address already in use|Errno 98/i.test(tail) ? new AddressInUse(message) : new Error(message);
     }
     if (await answers(`${url}${spec.healthPath}`)) {
-      return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath };
+      return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended };
     }
     await sleep(POLL_MS);
   }
@@ -117,14 +132,44 @@ async function startOnce(spec: DaemonSpec): Promise<DaemonRecord> {
   throw new Error(`${spec.name} did not answer ${spec.healthPath} within ${START_TIMEOUT_MS / 1000}s:\n${logTail(spec.logPath)}`);
 }
 
-/** Starts a daemon and returns once it answers its health route. An address-in-use exit is retried once on a new port. */
-export async function startDaemon(spec: DaemonSpec): Promise<DaemonRecord> {
+/**
+ * Starts a daemon and returns once it answers its health route. A free-port start retries an address-in-use exit once
+ * on a new port; a fixed `port` is never moved, since whatever holds the daemon's URL holds that port.
+ */
+export async function startDaemon(spec: DaemonSpec, port?: number): Promise<LiveDaemon> {
+  if (port !== undefined) {
+    try {
+      return await startOnce(spec, port);
+    } catch (error) {
+      if (error instanceof AddressInUse) throw new Error(`${spec.name} could not take port ${port}: ${error.message}`, { cause: error });
+      throw error;
+    }
+  }
   try {
     return await startOnce(spec);
   } catch (error) {
     if (!(error instanceof AddressInUse)) throw error;
     return startOnce(spec);
   }
+}
+
+/** `SIGTERM`, then `SIGKILL` after the grace; resolves with how the daemon exited. */
+export async function stopLive(daemon: LiveDaemon): Promise<number | string> {
+  if (!isAlive(daemon.pid)) return daemon.exited;
+  process.kill(daemon.pid, 'SIGTERM');
+  const grace = sleep(STOP_GRACE_MS).then(() => undefined);
+  if ((await Promise.race([daemon.exited, grace])) === undefined) await killLive(daemon);
+  return daemon.exited;
+}
+
+/** `SIGKILL`; resolves with how the daemon exited. */
+export async function killLive(daemon: LiveDaemon): Promise<number | string> {
+  try {
+    process.kill(daemon.pid, 'SIGKILL');
+  } catch {
+    // It exited before the signal.
+  }
+  return daemon.exited;
 }
 
 /** `SIGTERM`, then `SIGKILL` if the daemon has not exited ten seconds later. */

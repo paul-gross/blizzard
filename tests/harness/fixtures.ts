@@ -1,4 +1,6 @@
+import * as fs from 'node:fs';
 import { expect } from '@playwright/test';
+import { type CliResult, CliTimeout, runCommand } from './cli';
 import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
 import type { RunnerAddRequest } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
@@ -13,7 +15,9 @@ import {
   requireOwnTenant,
   type RunnerOptions,
 } from './factories';
+import { binDir, daemonEnv, requireBinary } from './env';
 import { type HubLog, hubLog as readHubLog } from './logs';
+import { type OtlpSink, startOtlpSink } from './otlp-sink';
 import { type Project, sharesTenant, tenancy, uniqueName } from './tenancy';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
@@ -29,6 +33,10 @@ interface Fixtures {
   forge: ForgeApi;
   events: Events;
   hubLog: HubLog;
+  /** Runs the real `blizzard` CLI against the test's hub and tenant, with a config home of its own. */
+  cli: (args: string[]) => Promise<CliResult>;
+  /** Starts a loopback OTLP/HTTP receiver, closed when the test ends. */
+  otlpSink: () => Promise<OtlpSink>;
   issue: (title: string, options?: { repository?: Repository }) => Promise<FiledIssue>;
   repository: (name?: string) => Promise<Repository>;
   mockRunner: (name: string, options?: RunnerOptions) => Promise<MockRunner>;
@@ -109,6 +117,33 @@ export const test = tenancy.extend<Fixtures>({
 
   hubLog: async ({ tenant, level, testHub }, use) => {
     await use(readHubLog({ logPath: testHub.coordinates.logPath, tenantId: tenant.id, fresh: level.served === 'fresh-hub' }));
+  },
+
+  cli: async ({ testHub, tenant }, use, testInfo) => {
+    await use(async (args) => {
+      const home = testInfo.outputPath('cli-config-home');
+      fs.mkdirSync(home, { recursive: true });
+      const env = daemonEnv({ BZ_HUB_URL: testHub.coordinates.url, BZ_HUB_TENANT: tenant.id }, home);
+      try {
+        return await runCommand(requireBinary(binDir(), 'blizzard'), args, { env });
+      } catch (error) {
+        if (error instanceof CliTimeout) {
+          await testInfo.attach('cli stdout', { body: error.stdout, contentType: 'text/plain' });
+          await testInfo.attach('cli stderr', { body: error.stderr, contentType: 'text/plain' });
+        }
+        throw error;
+      }
+    });
+  },
+
+  otlpSink: async ({}, use) => {
+    const started: OtlpSink[] = [];
+    await use(async () => {
+      const sink = await startOtlpSink();
+      started.push(sink);
+      return sink;
+    });
+    await Promise.all(started.map((sink) => sink.close()));
   },
 
   factoryContext: async ({ api, forge, project, level, testHub, ledger }, use, testInfo) => {
