@@ -7,7 +7,7 @@ import {
   hubConfigKey,
   patchRepositoryApiRepositoriesRepositoryPatch,
   retireRepositoryApiRepositoriesRepositoryRetirePost,
-  type RepositoryDocument,
+  type RepositoryCreateRequest,
   type RepositoryPatchRequest,
 } from 'fleet';
 import {
@@ -36,7 +36,7 @@ export function injectCreateRepositoryMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: createRepositoryMutationKey,
-    mutationFn: async (body: RepositoryDocument): Promise<void> => {
+    mutationFn: async (body: RepositoryCreateRequest): Promise<void> => {
       const { error } = await createRepositoryApiRepositoriesPost({
         body,
         throwOnError: false,

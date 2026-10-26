@@ -109,3 +109,25 @@ def test_retire_enable_and_the_change_log(client: TestClient) -> None:
     text = _cli("config", ["changes", "--kind", "repository"]).output
     assert "cli  repository blizzard  r1  create" in text
     assert _SENTINEL not in text + json.dumps(raw)
+
+
+def test_create_names_its_forge_by_exactly_one_flag_and_warns_on_the_old_one(client: TestClient) -> None:
+    assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
+    old = _repo(["create", "blizzard", *_COORDINATE, "--base-branch", "master", "--secret", "gh-test"])
+    assert old.exit_code == 0, old.output
+    assert "warning: forge_api_url is deprecated" in old.stderr
+    assert "forge-invalid" in old.stderr
+
+    named = ["--owner", "paul-gross", "--repo", "other", "--base-branch", "master", "--secret", "gh-test"]
+    by_forge = _repo(["create", "other", "--forge", "forge-invalid", *named])
+    assert by_forge.exit_code == 0, by_forge.output
+    assert "warning:" not in by_forge.stderr
+    assert client.get("/api/repositories/other").json()["forge_slug"] == "forge-invalid"
+    assert "forge forge-invalid" in _repo(["show", "other"]).output
+
+    both = _repo(
+        ["create", "third", "--forge", "forge-invalid", "--forge-api-url", "https://forge.invalid/api", *named]
+    )
+    neither = _repo(["create", "third", *named])
+    assert (both.exit_code, neither.exit_code) == (2, 2)
+    assert "exactly one of --forge and --forge-api-url" in neither.output

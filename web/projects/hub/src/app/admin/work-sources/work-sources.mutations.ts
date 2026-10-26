@@ -7,7 +7,7 @@ import {
   hubConfigKey,
   patchWorkSourceApiWorkSourcesSourcePatch,
   retireWorkSourceApiWorkSourcesSourceRetirePost,
-  type WorkSourceDocument,
+  type WorkSourceCreateRequest,
   type WorkSourcePatchRequest,
 } from 'fleet';
 import {
@@ -36,7 +36,7 @@ export function injectCreateWorkSourceMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: createWorkSourceMutationKey,
-    mutationFn: async (body: WorkSourceDocument): Promise<void> => {
+    mutationFn: async (body: WorkSourceCreateRequest): Promise<void> => {
       const { error } = await createWorkSourceApiWorkSourcesPost({
         body,
         throwOnError: false,

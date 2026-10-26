@@ -1,4 +1,4 @@
-import type { RepositoryDocument, RepositorySummary } from 'fleet';
+import type { RepositoryCreateRequest, RepositorySummary } from 'fleet';
 
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
@@ -7,7 +7,7 @@ import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
 
 /** The create a new repository's form sends: a name left empty is omitted, and the hub takes the slug. */
-export function repositoryCreate(body: Readonly<Record<string, string | boolean>>): RepositoryDocument {
+export function repositoryCreate(body: Readonly<Record<string, string | boolean>>): RepositoryCreateRequest {
   const text = (key: string): string => createText(body, key);
   const name = text('name');
   return {
@@ -72,7 +72,7 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
 
 /** A repository's form fields. The slug is the handle people type and may be renamed; the
  * name is its display label, and left blank on create it takes the slug. */
-export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryDocument>[] = [
+export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'forge_api_url', label: 'Forge API', kind: 'text', required: true },

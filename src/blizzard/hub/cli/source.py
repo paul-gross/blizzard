@@ -8,6 +8,7 @@ import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.forge_warnings import echo_warnings
 from blizzard.hub.cli.views import Listing
 
 _CLEARABLE = click.Choice(["api-base", "web-base", "secret"])
@@ -57,8 +58,9 @@ def source_group() -> None:
 @click.option("--provider", required=True, help="The provider the source reads items from, e.g. github.")
 @click.option("--locator", required=True, help="Where the items live; for github, owner/name.")
 @click.option("--secret", "secret", default=None, help="The stored secret holding the provider credential.")
-@click.option("--api-base", "api_base", default=None, help="Provider API origin override.")
-@click.option("--web-base", "web_base", default=None, help="Web origin override.")
+@click.option("--forge", "forge", default=None, help="The forge the source reads from, by id or slug.")
+@click.option("--api-base", "api_base", default=None, help="Deprecated — use --forge. Provider API origin override.")
+@click.option("--web-base", "web_base", default=None, help="Deprecated — use --forge. Web origin override.")
 @click.option(
     "--annotate/--no-annotate", "annotate", default=False, help="Whether the hub annotates items on the forge."
 )
@@ -69,11 +71,15 @@ def source_create(
     provider: str,
     locator: str,
     secret: str | None,
+    forge: str | None,
     api_base: str | None,
     web_base: str | None,
     annotate: bool,
 ) -> None:
-    """Add work source SLUG at revision 1, named NAME (default: SLUG).
+    """Add work source SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.
+
+    Without --forge the source names its forge the old way — --api-base, or GitHub's API when it is left out — resolved
+    to the forge holding that origin, made when none does, and warned about.
 
     Refused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and
     locator are already taken — a retired source keeps its claim — or when the secret is missing or retired. The hub
@@ -84,12 +90,12 @@ def source_create(
         "provider": provider,
         "locator": locator,
         "secret": secret,
-        "api_base": api_base,
-        "web_base": web_base,
         "annotate": annotate,
     }
+    body.update({k: v for k, v in (("forge", forge), ("api_base", api_base), ("web_base", web_base)) if v is not None})
     resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, on_status=_refusals(slug), door=True)
     out = resp.json()
+    echo_warnings(out)
     cli.show_lines(out, f"work source {out['slug']} created at revision 1 — id {out['work_source_id']}")
 
 
@@ -120,7 +126,7 @@ def source_show(cli: CliContext, source: str) -> None:
         f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
         f"id {body['work_source_id']}",
         f"provider {body['provider']}  locator {body['locator']}",
-        f"api_base {body['api_base'] or '-'}  web_base {body['web_base'] or '-'}",
+        f"forge {body['forge_slug']}  api_base {body['api_base'] or '-'}  web_base {body['web_base'] or '-'}",
         f"secret {body['secret'] or '-'}  annotate {str(body['annotate']).lower()}",
         f"created {body['created_at']} by {body['created_by']}",
     )
@@ -133,10 +139,17 @@ def source_show(cli: CliContext, source: str) -> None:
 @click.option("--provider", default=None, help="The new provider.")
 @click.option("--locator", default=None, help="The new locator.")
 @click.option("--secret", default=None, help="The new credential secret.")
-@click.option("--api-base", "api_base", default=None, help="The new API origin override.")
-@click.option("--web-base", "web_base", default=None, help="The new web origin override.")
+@click.option("--forge", "forge", default=None, help="The forge to move the source to, by id or slug.")
+@click.option("--api-base", "api_base", default=None, help="Deprecated — use --forge. The new API origin override.")
+@click.option("--web-base", "web_base", default=None, help="Deprecated — use --forge. The new web origin override.")
 @click.option("--annotate/--no-annotate", "annotate", default=None, help="Turn forge annotation on or off.")
-@click.option("--clear", "clear", multiple=True, type=_CLEARABLE, help="Clear a field back to unset; repeatable.")
+@click.option(
+    "--clear",
+    "clear",
+    multiple=True,
+    type=_CLEARABLE,
+    help="Clear a field back to unset; repeatable. Clearing api-base moves the source to GitHub's forge.",
+)
 @_IF_MATCH
 def source_edit(
     cli: CliContext,
@@ -146,6 +159,7 @@ def source_edit(
     provider: str | None,
     locator: str | None,
     secret: str | None,
+    forge: str | None,
     api_base: str | None,
     web_base: str | None,
     annotate: bool | None,
@@ -163,6 +177,7 @@ def source_edit(
         "provider": provider,
         "locator": locator,
         "secret": secret,
+        "forge": forge,
         "api_base": api_base,
         "web_base": web_base,
     }
@@ -185,6 +200,7 @@ def source_edit(
         door=True,
     )
     out = resp.json()
+    echo_warnings(out)
     cli.show_lines(out, f"work source {out['slug']} is at revision {out['revision']}")
 
 

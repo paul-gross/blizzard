@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -18,6 +18,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.forge_warnings import warned
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -321,7 +322,7 @@ def _refusal(exc: ApplyEntryRefused) -> HTTPException:
             loc.append(cause.field)
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[{"loc": loc, "msg": cause.message, "type": "value_error"}],
+            detail=[{"loc": loc, "msg": cause.message, "type": cause.code}],
         )
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc.section}[{exc.index}]: {cause}")
 
@@ -352,14 +353,28 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument:
 
 
 def _apply(
-    document: ConfigDocument, identity: ResolvedIdentity, services: TenantServices, *, dry_run: bool
+    document: ConfigDocument,
+    identity: ResolvedIdentity,
+    services: TenantServices,
+    response: Response,
+    *,
+    dry_run: bool,
 ) -> ConfigApplyResponse:
     try:
         applied = services.config_application.apply(_entries(document), actor=identity.user_id, dry_run=dry_run)
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
     return ConfigApplyResponse(
-        dry_run=dry_run, apply_id=applied.apply_id, outcomes=[_outcome(o) for o in applied.outcomes]
+        dry_run=dry_run,
+        apply_id=applied.apply_id,
+        outcomes=[_outcome(o) for o in applied.outcomes],
+        warnings=warned(
+            response,
+            services,
+            applied.warnings,
+            record=f"config apply {applied.apply_id}",
+            recorded=not dry_run,
+        ),
     )
 
 
@@ -375,6 +390,7 @@ _APPLY_BODY = {
 @router.post("/apply", response_model=ConfigApplyResponse, openapi_extra={"requestBody": _APPLY_BODY})
 async def apply_config(
     request: Request,
+    response: Response,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     services: Services,
     dry_run: bool = False,
@@ -382,9 +398,12 @@ async def apply_config(
     """Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is
     absent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`
     rolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415
-    unknown `Content-Type`; a refusal leaves the store unchanged."""
+    unknown `Content-Type`; a refusal leaves the store unchanged. An entry's address — a work source's `api_base` and
+    `web_base`, a repository's `forge_api_url` — resolves to the tenant's forge with that origin, planned in the same
+    transaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for
+    a stored record that states no address keeps its forge."""
     document = _document(await request.body(), request.headers.get("content-type"))
-    return await run_in_threadpool(_apply, document, identity, services, dry_run=dry_run)
+    return await run_in_threadpool(_apply, document, identity, services, response, dry_run=dry_run)
 
 
 @router.get("/export", response_model=ConfigDocument, dependencies=[_VIEW])

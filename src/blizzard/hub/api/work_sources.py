@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from blizzard.auth_core import Permission
 from blizzard.foundation.store.utc import iso_utc
@@ -23,6 +23,7 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import ingest_conflict_response
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.forge_warnings import warned
 from blizzard.hub.api.project_params import QueryProject, project_of_call
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
@@ -32,7 +33,7 @@ from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD, ForgeChoice
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
@@ -44,7 +45,7 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
-from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
     WithdrawnWorkItem,
@@ -54,6 +55,7 @@ from blizzard.hub.domain.work_items.editing import (
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
+from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.work_source import (
     WorkItemAuthorView,
     WorkItemCreateRequest,
@@ -61,7 +63,7 @@ from blizzard.wire.work_source import (
     WorkItemPatchRequest,
     WorkItemsListView,
     WorkItemView,
-    WorkSourceDocument,
+    WorkSourceCreateRequest,
     WorkSourcePatchRequest,
     WorkSourcesListView,
     WorkSourceSummary,
@@ -151,8 +153,11 @@ def _summary(
         edit=services.work_sources.editor(record.work_source_id) is not None,
         provider=fields.provider,
         locator=fields.locator,
+        forge_id=forge.forge_id,
+        forge_slug=forge.slug,
+        forge_name=forge.name,
         api_base=forge.fields.api_base,
-        web_base=forge.fields.web_base,
+        web_base=forge.web_origin,
         secret=fields.secret,
         revision=record.revision,
         created_at=iso_utc(record.created_at),
@@ -162,16 +167,30 @@ def _summary(
     )
 
 
-def _shown(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
-    """``record``'s summary, its addresses read from its forge."""
+def _shown(
+    record: ConfiguredWorkSource, services: TenantServices, warnings: list[OldFieldWarning] | None = None
+) -> WorkSourceSummary:
+    """``record``'s summary, its addresses read from its forge, with the ``warnings`` the write that left it
+    answers."""
     forge = services.forge_records.get(record.fields.forge_id)
     assert forge is not None
-    return _summary(record, forge, services, user_names(services, [record.created_by]))
+    summary = _summary(record, forge, services, user_names(services, [record.created_by]))
+    return summary.model_copy(update={"warnings": warnings or []})
 
 
-def _forge_choice(request: WorkSourceDocument | WorkSourcePatchRequest) -> ForgeChoice:
-    """The old address fields ``request`` states."""
-    return ForgeChoice(**{name: getattr(request, name) for name in _ADDRESSES if name in request.model_fields_set})
+def _forge_choice(request: WorkSourceCreateRequest | WorkSourcePatchRequest) -> ForgeChoice:
+    """What ``request`` states of its forge: ``forge``, which is never null, and the old address fields."""
+    present = request.model_fields_set
+    forge: str | UnsetType = UNSET
+    if FORGE_FIELD in present:
+        if request.forge is None:
+            raise ConfigFieldError(FORGE_FIELD, "must not be null")
+        forge = request.forge
+    return ForgeChoice(
+        forge=forge,
+        api_base=request.api_base if "api_base" in present else UNSET,
+        web_base=request.web_base if "web_base" in present else UNSET,
+    )
 
 
 def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
@@ -187,7 +206,7 @@ def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
+        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": exc.code}],
     )
 
 
@@ -213,26 +232,33 @@ def list_work_sources(services: Services, include_retired: bool = False) -> Work
 
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
 def create_work_source(
-    request: WorkSourceDocument,
+    request: WorkSourceCreateRequest,
+    response: Response,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     door: RequestDoor,
     services: Services,
 ) -> WorkSourceSummary:
-    """Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
-    malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or
-    retired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder."""
+    """Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. Naming
+    no `forge` is the old way — `api_base` and `web_base`, or GitHub's API when `api_base` is left out — resolved to
+    the tenant's forge with that API origin, made when none holds it, and answers a `Deprecation` header and a
+    `warnings` entry. 422 naming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's),
+    a bad provider or locator, or a missing or retired secret, with the code `forge_unavailable` for an unknown or
+    retired forge or an origin a retired forge holds, `forge_kind_mismatch` for a forge of another kind than the
+    provider, and `forge_conflict` for an address that is not the forge's; 409 for a slug some work source holds or a
+    taken `(provider, locator)`, naming the holder."""
     draft = WorkSourceDraft(
         provider=request.provider, locator=request.locator, annotate=request.annotate, secret=request.secret
     )
     try:
-        record = services.config_authoring.create_work_source_naming(
+        authored = services.config_authoring.create_work_source_naming(
             request.slug, request.name, draft, _forge_choice(request), change_context(identity, door)
-        ).record
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (WorkSourceSlugTaken, WorkSourceLocatorTaken, ForgeSlugTaken, ForgeOriginTaken) as exc:
         raise _conflict(exc) from exc
-    return _shown(record, services)
+    record = authored.record
+    return _shown(record, services, warned(response, services, authored.warnings, record=f"work source {record.slug}"))
 
 
 @router.get(
@@ -251,6 +277,7 @@ def patch_work_source(
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CONFIG_EDIT))],
     record: PathWorkSource,
     request: WorkSourcePatchRequest,
+    response: Response,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
@@ -259,13 +286,17 @@ def patch_work_source(
     `secret` (the last only where the provider needs no credential). A patch that changes
     nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,
     409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
-    `(provider, locator)`; 422 naming the field (`hub` refused as a slug)."""
+    `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create. `forge` re-points the
+    source at a forge; `api_base` does so the old way, and a cleared `api_base` re-points it at GitHub's, each with a
+    `Deprecation` header and a `warnings` entry."""
     present = request.model_fields_set
-    edit = WorkSourceEdit(**{name: getattr(request, name) for name in present if name not in _ADDRESSES})
+    edit = WorkSourceEdit(
+        **{name: getattr(request, name) for name in present if name not in (*_ADDRESSES, FORGE_FIELD)}
+    )
     try:
-        edited = services.config_authoring.edit_work_source_naming(
+        authored = services.config_authoring.edit_work_source_naming(
             record, edit, _forge_choice(request), change_context(identity, door), if_match=if_match
-        ).record
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (
@@ -276,7 +307,8 @@ def patch_work_source(
         ForgeOriginTaken,
     ) as exc:
         raise _conflict(exc) from exc
-    return _shown(edited, services)
+    edited = authored.record
+    return _shown(edited, services, warned(response, services, authored.warnings, record=f"work source {edited.slug}"))
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)

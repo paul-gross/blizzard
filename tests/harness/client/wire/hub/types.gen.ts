@@ -2035,7 +2035,8 @@ export type ConfigApplyOutcome = {
  * ConfigApplyResponse
  *
  * What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
- * ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run.
+ * ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run. ``warnings`` names each old address
+ * field an entry used and the forge it resolved to.
  */
 export type ConfigApplyResponse = {
     /**
@@ -2050,6 +2051,10 @@ export type ConfigApplyResponse = {
      * Outcomes
      */
     outcomes: Array<ConfigApplyOutcome>;
+    /**
+     * Warnings
+     */
+    warnings: Array<OldFieldWarning>;
 };
 
 /**
@@ -5409,6 +5414,31 @@ export type ObservedFindingView = {
 };
 
 /**
+ * OldFieldWarning
+ *
+ * One old address field a write used — ``forge_api_url``, ``api_base`` or ``web_base`` — and the forge it
+ * resolved to, by id and slug.
+ */
+export type OldFieldWarning = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
  * OpenDecisionsResponse
  *
  * The fleet's open (unresolved) decisions.
@@ -6120,11 +6150,11 @@ export type ReceiverStatus = {
 /**
  * RecordKind
  *
- * The kind of configured record a change row names. A project's, a repository's and a work source's
+ * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
  * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
  * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
  */
-export type RecordKind = 'work_source' | 'secret' | 'repository' | 'scope' | 'routine' | 'project' | 'project_source_link' | 'project_repository_link';
+export type RecordKind = 'work_source' | 'secret' | 'repository' | 'forge' | 'scope' | 'routine' | 'project' | 'project_source_link' | 'project_repository_link';
 
 /**
  * RecordRefView
@@ -6218,9 +6248,53 @@ export type RepositoriesListView = {
 };
 
 /**
+ * RepositoryCreateRequest
+ *
+ * The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` — a forge's id
+ * or slug — beside them. Exactly one of ``forge`` and ``forge_api_url`` names the forge; ``forge_api_url`` alone is
+ * resolved to the tenant's forge with that API origin, made when none holds it, and answered with a warning.
+ */
+export type RepositoryCreateRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Forge
+     */
+    forge?: string | null;
+    /**
+     * Forge Api Url
+     *
+     * @deprecated
+     */
+    forge_api_url?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * RepositoryDocument
  *
- * A repository as a document — the create body, and the model whose JSON Schema
+ * A repository as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
  * ``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label —
  * the slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.
  */
@@ -6304,7 +6378,8 @@ export type RepositoryLinksView = {
  * RepositoryPatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
- * ``null`` is refused on every field. A slug that changes keeps resolving to the repository until another claims
+ * ``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``
+ * does so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims
  * it.
  */
 export type RepositoryPatchRequest = {
@@ -6313,7 +6388,13 @@ export type RepositoryPatchRequest = {
      */
     base_branch?: string | null;
     /**
+     * Forge
+     */
+    forge?: string | null;
+    /**
      * Forge Api Url
+     *
+     * @deprecated
      */
     forge_api_url?: string | null;
     /**
@@ -6363,8 +6444,22 @@ export type RepositorySummary = {
     created_by_name: string | null;
     /**
      * Forge Api Url
+     *
+     * @deprecated
      */
     forge_api_url: string;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Forge Name
+     */
+    forge_name: string;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string;
     /**
      * Name
      */
@@ -6397,6 +6492,10 @@ export type RepositorySummary = {
      * Slug
      */
     slug: string;
+    /**
+     * Warnings
+     */
+    warnings: Array<OldFieldWarning>;
 };
 
 /**
@@ -9578,9 +9677,59 @@ export type WorkRefView = {
 };
 
 /**
+ * WorkSourceCreateRequest
+ *
+ * The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` — a forge's id
+ * or slug — beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with
+ * that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub.
+ */
+export type WorkSourceCreateRequest = {
+    /**
+     * Annotate
+     */
+    annotate?: boolean;
+    /**
+     * Api Base
+     *
+     * @deprecated
+     */
+    api_base?: string | null;
+    /**
+     * Forge
+     */
+    forge?: string | null;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Web Base
+     *
+     * @deprecated
+     */
+    web_base?: string | null;
+};
+
+/**
  * WorkSourceDocument
  *
- * A work source as a document — the create body, and the model whose JSON Schema
+ * A work source as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
  * ``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label — the
  * slug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.
  * ``secret`` names a stored secret.
@@ -9623,8 +9772,9 @@ export type WorkSourceDocument = {
 /**
  * WorkSourcePatchRequest
  *
- * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
- * ``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. A slug that changes keeps
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` clears
+ * ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. ``forge`` re-points the source at a forge by id
+ * or slug; ``api_base`` does so the old way, with a warning, and cleared means GitHub's. A slug that changes keeps
  * resolving to the source until another claims it.
  */
 export type WorkSourcePatchRequest = {
@@ -9634,8 +9784,14 @@ export type WorkSourcePatchRequest = {
     annotate?: boolean | null;
     /**
      * Api Base
+     *
+     * @deprecated
      */
     api_base?: string | null;
+    /**
+     * Forge
+     */
+    forge?: string | null;
     /**
      * Locator
      */
@@ -9658,6 +9814,8 @@ export type WorkSourcePatchRequest = {
     slug?: string | null;
     /**
      * Web Base
+     *
+     * @deprecated
      */
     web_base?: string | null;
 };
@@ -9679,6 +9837,8 @@ export type WorkSourceSummary = {
     annotate: boolean;
     /**
      * Api Base
+     *
+     * @deprecated
      */
     api_base: string | null;
     /**
@@ -9701,6 +9861,18 @@ export type WorkSourceSummary = {
      * Edit
      */
     edit: boolean;
+    /**
+     * Forge Id
+     */
+    forge_id: string | null;
+    /**
+     * Forge Name
+     */
+    forge_name: string | null;
+    /**
+     * Forge Slug
+     */
+    forge_slug: string | null;
     /**
      * Locator
      */
@@ -9730,7 +9902,13 @@ export type WorkSourceSummary = {
      */
     slug: string | null;
     /**
+     * Warnings
+     */
+    warnings: Array<OldFieldWarning>;
+    /**
      * Web Base
+     *
+     * @deprecated
      */
     web_base: string | null;
     /**
@@ -16189,7 +16367,7 @@ export type ListRepositoriesApiRepositoriesGetResponses = {
 export type ListRepositoriesApiRepositoriesGetResponse = ListRepositoriesApiRepositoriesGetResponses[keyof ListRepositoriesApiRepositoriesGetResponses];
 
 export type CreateRepositoryApiRepositoriesPostData = {
-    body: RepositoryDocument;
+    body: RepositoryCreateRequest;
     headers?: {
         /**
          * X-Blizzard-Door
@@ -17886,7 +18064,7 @@ export type ListWorkSourcesApiWorkSourcesGetResponses = {
 export type ListWorkSourcesApiWorkSourcesGetResponse = ListWorkSourcesApiWorkSourcesGetResponses[keyof ListWorkSourcesApiWorkSourcesGetResponses];
 
 export type CreateWorkSourceApiWorkSourcesPostData = {
-    body: WorkSourceDocument;
+    body: WorkSourceCreateRequest;
     headers?: {
         /**
          * X-Blizzard-Door

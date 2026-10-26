@@ -9,6 +9,10 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient
 import { RepositoryDetail } from './repository-detail';
 
 const CORE: RepositorySummary = {
+  forge_id: 'frg_github',
+  forge_slug: 'github',
+  forge_name: 'GitHub',
+  warnings: [],
   repository_id: 'repo_c',
   slug: 'core',
   name: 'Core',

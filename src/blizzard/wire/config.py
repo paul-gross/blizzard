@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.repository import RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
@@ -116,8 +117,11 @@ class ConfigApplyOutcome(WireModel):
 
 class ConfigApplyResponse(WireModel):
     """What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
-    ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run."""
+    ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run. ``warnings`` names each old address
+    field an entry used and the forge it resolved to."""
 
     dry_run: bool
     apply_id: str | None = None
     outcomes: list[ConfigApplyOutcome]
+    #: One entry per old address field an entry used, naming the forge it resolved to.
+    warnings: list[OldFieldWarning] = []

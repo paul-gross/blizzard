@@ -1,4 +1,4 @@
-import type { WorkSourceDocument, WorkSourceSummary } from 'fleet';
+import type { WorkSourceCreateRequest, WorkSourceSummary } from 'fleet';
 
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { factText, secretLinks } from '../config-links.model';
@@ -8,9 +8,9 @@ import type { ConfigRecordVm } from '../config-record-panel';
 
 /** The create a new work source's form sends: an optional text field left empty is omitted, and
  * `annotate` is the form's one checkbox. */
-export function workSourceCreate(body: Readonly<Record<string, string | boolean>>): WorkSourceDocument {
+export function workSourceCreate(body: Readonly<Record<string, string | boolean>>): WorkSourceCreateRequest {
   const text = (key: string): string => createText(body, key);
-  const optional = (key: 'name' | 'api_base' | 'web_base' | 'secret'): Partial<WorkSourceDocument> =>
+  const optional = (key: 'name' | 'api_base' | 'web_base' | 'secret'): Partial<WorkSourceCreateRequest> =>
     text(key) === '' ? {} : { [key]: text(key) };
   return {
     slug: text('slug'),
@@ -104,7 +104,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
 
 /** A work source's form fields. The slug is the handle people type and may be renamed; the
  * name is its display label, and left blank on create it takes the slug. */
-export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef<keyof WorkSourceDocument>[] = [
+export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef<keyof WorkSourceCreateRequest>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'provider', label: 'Provider', kind: 'text', required: true },

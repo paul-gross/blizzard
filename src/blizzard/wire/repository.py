@@ -3,9 +3,10 @@ are ``extra="forbid"``."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
 
 
 class RepositorySummary(WireModel):
@@ -15,7 +16,11 @@ class RepositorySummary(WireModel):
     repository_id: str
     slug: str
     name: str
-    forge_api_url: str
+    forge_id: str
+    forge_slug: str
+    forge_name: str
+    #: The API origin of the forge the repository names — read ``forge_id`` instead.
+    forge_api_url: str = Field(json_schema_extra=DEPRECATED_FIELD)
     owner: str
     repo: str
     base_branch: str
@@ -25,10 +30,12 @@ class RepositorySummary(WireModel):
     created_by: str
     created_by_name: str | None = None
     retired: bool = False
+    #: One entry per old address field the write that answered this used — empty on every other answer.
+    warnings: list[OldFieldWarning] = []
 
 
 class RepositoryDocument(BaseModel):
-    """A repository as a document — the create body, and the model whose JSON Schema
+    """A repository as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
     ``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label —
     the slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret."""
 
@@ -43,16 +50,35 @@ class RepositoryDocument(BaseModel):
     secret_name: str
 
 
+class RepositoryCreateRequest(BaseModel):
+    """The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` — a forge's id
+    or slug — beside them. Exactly one of ``forge`` and ``forge_api_url`` names the forge; ``forge_api_url`` alone is
+    resolved to the tenant's forge with that API origin, made when none holds it, and answered with a warning."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    forge: str | None = None
+    forge_api_url: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str
+
+
 class RepositoryPatchRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set, and an explicit
-    ``null`` is refused on every field. A slug that changes keeps resolving to the repository until another claims
+    ``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``
+    does so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims
     it."""
 
     model_config = ConfigDict(extra="forbid")
 
     slug: str | None = None
     name: str | None = None
-    forge_api_url: str | None = None
+    forge: str | None = None
+    forge_api_url: str | None = Field(default=None, json_schema_extra=DEPRECATED_FIELD)
     owner: str | None = None
     repo: str | None = None
     base_branch: str | None = None

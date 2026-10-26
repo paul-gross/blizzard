@@ -4,7 +4,10 @@ from __future__ import annotations
 
 
 class ConfigFieldError(ValueError):
-    """A write is invalid on one field, which it names."""
+    """A write is invalid on one field, which it names. ``code`` tells one refusal apart from another on the wire —
+    ``value_error`` for a malformed field, a refusal's own code otherwise."""
+
+    code: str = "value_error"
 
     def __init__(self, field: str, message: str) -> None:
         super().__init__(f"{field}: {message}")

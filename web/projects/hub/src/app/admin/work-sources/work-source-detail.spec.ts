@@ -9,6 +9,10 @@ import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient
 import { WorkSourceDetail } from './work-source-detail';
 
 const JIRA: WorkSourceSummary = {
+  forge_id: 'frg_github',
+  forge_slug: 'github',
+  forge_name: 'GitHub',
+  warnings: [],
   work_source_id: 'wsrc_j',
   slug: 'jira',
   name: 'Acme Jira',
@@ -26,7 +30,7 @@ const JIRA: WorkSourceSummary = {
   retired: false,
   web_base: null,
 };
-const HUB: WorkSourceSummary = { name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
+const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
 const HISTORY = {
   changes: [
     {

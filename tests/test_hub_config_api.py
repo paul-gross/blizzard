@@ -60,6 +60,9 @@ def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
         True,
     )
     assert body["created_by"] == "operator"
+    # The create named its forge the old way and is warned; a read answers no warning.
+    assert [w["field"] for w in body.pop("warnings")] == ["api_base"]
+    body["warnings"] = []
     assert hub.client.get("/api/work-sources/demo").json() == body
     assert hub.client.get(f"/api/work-sources/{body['work_source_id']}").json() == body
 
@@ -424,6 +427,9 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
     assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
     assert body["repository_id"].startswith("repo_")
     assert body["name"] == "blizzard"
+    # The create named its forge the old way and is warned; a read answers no warning.
+    assert [w["field"] for w in body.pop("warnings")] == ["forge_api_url"]
+    body["warnings"] = []
     assert hub.client.get("/api/repositories/blizzard").json() == body
     assert hub.client.get(f"/api/repositories/{body['repository_id']}").json() == body
     assert hub.client.get("/api/repositories").json()["repositories"] == [body]

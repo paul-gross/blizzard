@@ -241,3 +241,34 @@ def test_a_refused_apply_reports_the_hub_s_refusal(client: TestClient, tmp_path:
     result = _config(["apply", str(path)])
     assert result.exit_code != 0
     assert "secrets.0: secret gh-demo is unknown" in result.output
+
+
+def test_forge_names_the_source_s_forge_and_the_old_flags_warn(client: TestClient) -> None:
+    _seed(client)
+    moved = _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"])
+    assert moved.exit_code == 0, moved.output
+    assert "warning: api_base is deprecated; it resolved to forge ghe-example" in moved.stderr
+    assert "forge ghe-example" in _source(["show", "demo"]).output
+
+    back = _source(["edit", "demo", "--forge", "github"])
+    assert back.exit_code == 0, back.output
+    assert "warning:" not in back.stderr
+    assert json.loads(_source(["show", "demo", "--json"]).stdout)["forge_slug"] == "github"
+
+    created = _source(
+        [
+            "create",
+            "other",
+            "--provider",
+            "github",
+            "--locator",
+            "acme/o",
+            "--secret",
+            "gh-demo",
+            "--forge",
+            "ghe-example",
+        ]
+    )
+    assert created.exit_code == 0, created.output
+    assert "warning:" not in created.stderr
+    assert json.loads(_source(["show", "other", "--json"]).stdout)["api_base"] == "https://ghe.example/api/v3"
