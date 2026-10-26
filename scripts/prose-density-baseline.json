@@ -11112,12 +11112,6 @@
    "over_cap": 0,
    "total": 157
   },
-  "service/test_finding_exits_service.py": {
-   "comments": 25,
-   "docstrings": 31,
-   "over_cap": 1,
-   "total": 559
-  },
   "service/test_harness_health_service.py": {
    "comments": 4,
    "docstrings": 8,
