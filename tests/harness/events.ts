@@ -54,6 +54,10 @@ export interface Subscription {
    * fails naming each predicate still unmet and the frames seen.
    */
   waitForAll(predicates: ((frame: Frame) => boolean)[], options?: WaitOptions): Promise<Frame[]>;
+  /** Whether the hub has ended the stream. Only a subscription opened with `reconnect: false` ever reads true; the others resume. */
+  readonly ended: boolean;
+  /** Resolves once the hub has ended the stream; its timeout is a failure. Needs a subscription opened with `reconnect: false`. */
+  waitForEnd(options?: WaitOptions): Promise<void>;
   close(): void;
 }
 
@@ -72,14 +76,15 @@ export interface BarrierSubscription extends Subscription {
 export interface EventStream {
   /**
    * Subscribes before it returns, so a test opens it before the act it waits on. With `as`, the subscription carries that
-   * person's session instead of the tenant admin's.
+   * person's session instead of the tenant admin's. With `reconnect: false` a dropped stream stays dropped, so the hub
+   * ending it is observable through `ended` and `waitForEnd`; by default the reader resumes after any drop.
    */
-  open(options?: { as?: Person }): Promise<Subscription>;
+  open(options?: { as?: Person; reconnect?: boolean }): Promise<Subscription>;
   /**
    * Files and ingests a barrier chunk first, then subscribes from now at every level, so the barrier's own ingest
    * frames are never the test's.
    */
-  open(options: { barrier: true; as?: Person }): Promise<BarrierSubscription>;
+  open(options: { barrier: true; as?: Person; reconnect?: boolean }): Promise<BarrierSubscription>;
 }
 
 export interface Events extends EventStream {
@@ -104,6 +109,8 @@ interface Reader {
   admits: (frame: Frame) => boolean;
   /** Whether the first connect joins from now (`from=latest`) rather than with no cursor. A resume never does. */
   fromNow?: boolean;
+  /** Whether a dropped connection resumes. Defaults to true. */
+  reconnect?: boolean;
   barrier?: Barrier;
 }
 
@@ -118,6 +125,7 @@ class StreamReader implements BarrierSubscription {
   private readonly waiters = new Set<() => void>();
   private failure: Error | undefined;
   private connected = false;
+  private hubEnded = false;
   contentType = '';
   openingComment = '';
   /** Where in `delivered` the window the next barrier answers for begins. */
@@ -195,6 +203,11 @@ class StreamReader implements BarrierSubscription {
       // A dropped connection resumes below, unless the test closed it.
     }
     if (this.closed) return;
+    if (this.reader.reconnect === false) {
+      this.hubEnded = true;
+      this.wake();
+      return;
+    }
     if (this.reader.fromNow === true && this.lastId === 0) {
       // Rejoining from now would skip whatever the hub published while the connection was down.
       this.failure = new Error('the stream joined from now dropped before any frame arrived, so it has no cursor to resume from and the frames in the gap are unrecoverable');
@@ -267,6 +280,15 @@ class StreamReader implements BarrierSubscription {
     );
   }
 
+  get ended(): boolean {
+    return this.hubEnded;
+  }
+
+  async waitForEnd(options: WaitOptions = {}): Promise<void> {
+    if (this.reader.reconnect !== false) throw new Error('waitForEnd needs a subscription opened with `reconnect: false`; this one resumes after a drop');
+    await this.until(() => (this.hubEnded ? true : undefined), options.timeout ?? DEFAULT_WAIT_MS, () => 'the stream did not end');
+  }
+
   async barrier(): Promise<Frame[]> {
     const barrier = this.reader.barrier;
     if (barrier === undefined) throw new Error('this subscription was not opened with { barrier: true }');
@@ -310,7 +332,7 @@ export function eventStream(options: {
   barrier: { file: () => Promise<string>; edit: (chunkId: string, effort: string) => Promise<void> };
 }): Events {
   const stream = (narrow: boolean): EventStream => {
-    const open = async (openOptions?: { barrier?: true; as?: Person }): Promise<StreamReader> => {
+    const open = async (openOptions?: { barrier?: true; as?: Person; reconnect?: boolean }): Promise<StreamReader> => {
       const admits = (frame: Frame): boolean =>
         !narrow || Object.values(frame.data ?? {}).some((value) => options.ledger.holds(value));
       // The chunk is filed before the stream opens, so none of its ingest frames can reach the subscription.
@@ -325,6 +347,7 @@ export function eventStream(options: {
         headers: { 'X-Blizzard-Tenant': options.tenantId, ...(await sessionHeaders(openOptions?.as, options.superuserSession)) },
         admits,
         fromNow: barrier !== undefined || options.fromNow,
+        reconnect: openOptions?.reconnect,
         barrier,
       });
       await subscription.start();

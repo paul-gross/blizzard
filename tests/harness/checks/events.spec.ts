@@ -102,6 +102,39 @@ async function stub(serve: (response: http.ServerResponse, number: number) => vo
   };
 }
 
+plain('a stream opened without reconnecting resolves its end wait when the hub ends it, and does not resume', async () => {
+  const hub = await stub((response) => {
+    response.write(framed(1, 'queue-changed', {}));
+    setTimeout(() => response.end(), 100);
+  });
+  const subscription = await openStream({ url: hub.url, headers: {}, admits: () => true, reconnect: false });
+  try {
+    expect(subscription.ended).toBe(false);
+    await subscription.waitForEnd({ timeout: 5_000 });
+    expect(subscription.ended).toBe(true);
+    expect(subscription.frames.map((frame) => frame.id)).toEqual([1]);
+    expect(hub.requests).toHaveLength(1);
+  } finally {
+    subscription.close();
+    hub.stop();
+  }
+});
+
+plain('the end wait on an open stream fails at its bound, and a reconnecting stream refuses the wait', async () => {
+  const hub = await stub(() => undefined);
+  const open = await openStream({ url: hub.url, headers: {}, admits: () => true, reconnect: false });
+  const resuming = await openStream({ url: hub.url, headers: {}, admits: () => true });
+  try {
+    await plainExpect(open.waitForEnd({ timeout: 300 })).rejects.toThrow(/the stream did not end within 300ms/);
+    expect(open.ended).toBe(false);
+    await plainExpect(resuming.waitForEnd({ timeout: 300 })).rejects.toThrow(/needs a subscription opened with `reconnect: false`/);
+  } finally {
+    open.close();
+    resuming.close();
+    hub.stop();
+  }
+});
+
 plain('a stream joined from now connects with from=latest, and its resume carries only Last-Event-ID', async () => {
   const hub = await stub((response, number) => {
     if (number === 1) {

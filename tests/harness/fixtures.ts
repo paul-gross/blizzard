@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { expect } from '@playwright/test';
+import { type APIRequestContext, expect } from '@playwright/test';
 import { type People, type Person, peopleFactory } from './people';
 import { walk } from './auth';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
@@ -37,6 +37,8 @@ interface Fixtures {
   /** Signs people in through the stub IdP: `create` for further invited people, `signIn` for an identity the test names. */
   people: People;
   project: Project;
+  /** A client sending only `Authorization: Bearer <token>`, on a context holding no cookie, so the token alone authenticates. */
+  bearer: (token: string) => Promise<Verbs>;
   fleet: (name: string, options?: RunnerOptions) => Promise<FleetClient>;
   forge: ForgeApi;
   events: Events;
@@ -96,6 +98,16 @@ export const test = tenancy.extend<Fixtures>({
 
   user: async ({ people, userRole }, use) => {
     await use(await people.create({ role: userRole }));
+  },
+
+  bearer: async ({ testHub, ledger, playwright }, use, testInfo) => {
+    const made: APIRequestContext[] = [];
+    await use(async (token) => {
+      const context = await playwright.request.newContext({ baseURL: testHub.coordinates.url });
+      made.push(context);
+      return fleetApi({ context, testInfo, token, ledger, logContext: () => '' });
+    });
+    await Promise.all(made.map((context) => context.dispose()));
   },
 
   project: async ({ level, tenant, api }, use, testInfo) => {

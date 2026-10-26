@@ -11010,12 +11010,6 @@
    "over_cap": 0,
    "total": 85
   },
-  "service/test_cli_login_service.py": {
-   "comments": 8,
-   "docstrings": 15,
-   "over_cap": 0,
-   "total": 235
-  },
   "service/test_credential_renewal_service.py": {
    "comments": 7,
    "docstrings": 5,
@@ -11033,12 +11027,6 @@
    "docstrings": 11,
    "over_cap": 1,
    "total": 230
-  },
-  "service/test_event_stream_revocation_service.py": {
-   "comments": 5,
-   "docstrings": 11,
-   "over_cap": 0,
-   "total": 174
   },
   "service/test_finding_exits_service.py": {
    "comments": 25,
