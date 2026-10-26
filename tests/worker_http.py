@@ -170,9 +170,7 @@ def bind_transport(handler: Callable[[httpx2.Request], httpx2.Response], *, cloc
     return Bound(collaborators, _BoundRunner(collaborators), built)
 
 
-#: The read budget a local-API client gets here, in place of the verb's own hook-scale one: the daemon these tests
-#: reach runs in the test's own process, so on a loaded xdist worker a round trip can stall past that budget while
-#: nothing is wrong — and none of these tests asserts on the verb's latency.
+#: In-process daemon reads get a longer budget under loaded xdist; these tests do not assert latency.
 _IN_PROCESS_DAEMON_TIMEOUT = 60.0
 
 

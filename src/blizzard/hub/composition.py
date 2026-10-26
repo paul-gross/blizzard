@@ -957,9 +957,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     analytics_event_queries = AnalyticsEventQueryStore(tenant_connections)
     operational_analytics = AnalyticsOperationalStore(tenant_connections)
-    # Recording an event is what publishes it (``bzh:operational-event-log``) — one
-    # service, shared by every event-authoring call site below, over the same store and
-    # broker instance every other collaborator holds.
+    # One event-authoring service publishes on the shared broker as it records
+    # (``bzh:operational-event-log``).
     event_log = EventLogService(events=chunk_events, publisher=events)
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing.

@@ -1,9 +1,7 @@
-"""The upgrade an operator performs, rehearsed: a supported release's hub and runner host, seeded, upgraded hub first.
+"""Rehearse a seeded release's hub and runner upgrade, one baseline and backend per leg.
 
-Each leg is one baseline on one hub backend. The baseline hub is upgraded and its old runner keeps landing work,
-then the runner is upgraded; both stores then walk down to the baseline, where the baseline hub runs a chunk on the
-version the candidate carried onto an action, and forward again. Reproduce with
-``mise run rehearsal``; the inputs are this module's ``BLIZZARD_REHEARSAL_*`` variables."""
+Upgrade the hub while its old runner works, then upgrade the runner. Walk both stores back
+to the baseline and forward again. Run with ``mise run rehearsal`` and ``BLIZZARD_REHEARSAL_*`` inputs."""
 
 from __future__ import annotations
 
@@ -128,7 +126,6 @@ def _baselines() -> list[str | None]:
         [str(Path(sys.executable).parent / "blizzard-compat"), "releases", "--json"],
         capture_output=True, text=True, check=True, cwd=repo_root(),
     )  # fmt: skip
-    # A tag whose release run never published has no wheel to upgrade from.
     published = subprocess.run(
         ["gh", "release", "list", "--exclude-drafts", "--limit", "1000", "--json", "tagName", "--jq", ".[].tagName"],
         capture_output=True, text=True, check=True, cwd=repo_root(),

@@ -21,8 +21,7 @@ _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 #: The document mark an open response position carries; compat reads documents, never the code that writes them.
 _OPEN_MARK: Final = "x-blizzard-open"
 
-#: The parts of a parsed OpenAPI document the classifier reads; every key is optional, as a document may omit any.
-#: Content the classifier never reads (descriptions, examples, defaults) stays outside these shapes.
+#: Optional OpenAPI fields the classifier reads; descriptions, examples and defaults are excluded.
 Schema = TypedDict(
     "Schema",
     {
