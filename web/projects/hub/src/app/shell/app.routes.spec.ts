@@ -64,7 +64,18 @@ describe('the board route (route-table mobile/desktop fork)', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        // `staleTime: Infinity` works around a pending-task leak in
+        // `@tanstack/angular-query-experimental` (still present in 5.104.5,
+        // `create-base-query.mjs`): an observer's subscriber is wrapped in
+        // `notifyManager.batchCalls`, which delivers on a `setTimeout(0)`, so a
+        // `fetching` notification queued just before a shell is destroyed runs
+        // after the effect's cleanup and `pendingTasks.add()`s a task nothing
+        // will release — every later `whenStable()` then hangs. A shell swap
+        // queues one whenever the incoming shell's observer refetches a key the
+        // outgoing shell still watches, so the flip test below timed out
+        // whenever CI's scheduling put that timer after the swap. With nothing
+        // ever stale, a remount reads the cache instead of refetching.
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })),
         provideFlags(hubFlagsRead),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
