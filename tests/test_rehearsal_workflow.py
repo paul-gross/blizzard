@@ -33,22 +33,37 @@ def test_the_rehearsal_is_only_ever_called() -> None:
 
 def _matrix_filter() -> str:
     run = _step("releases", lambda s: s.get("id") == "list")["run"]
-    found = re.search(r"jq -c '([^']+)'", run)
+    found = re.search(r"jq -c --argjson published \"\$published\" '([^']+)'", run)
     assert found is not None
     return found.group(1)
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="jq is not installed")
 @pytest.mark.parametrize(
-    ("listed", "expected"),
+    ("listed", "published", "expected"),
     [
-        ('{"releases": [{"tag": "v0.2.0-rc.2"}, {"tag": "v0.1.0"}]}', '["v0.2.0-rc.2","v0.1.0"]'),
-        ('{"releases": []}', '[""]'),
+        (
+            '{"releases": [{"tag": "v0.2.0-rc.2"}, {"tag": "v0.1.0"}]}',
+            '["v0.1.0","v0.2.0-rc.2"]',
+            '["v0.2.0-rc.2","v0.1.0"]',
+        ),
+        ('{"releases": [{"tag": "v0.1.0"}, {"tag": "v0.2.0-rc.1"}]}', '["v0.1.0"]', '["v0.1.0"]'),
+        ('{"releases": [{"tag": "v0.2.0-rc.1"}]}', "[]", '[""]'),
+        ('{"releases": []}', "[]", '[""]'),
     ],
 )
-def test_the_matrix_is_never_empty(listed: str, expected: str) -> None:
-    done = subprocess.run(["jq", "-c", _matrix_filter()], input=listed, capture_output=True, text=True, check=True)
+def test_the_matrix_holds_the_published_releases_and_is_never_empty(listed: str, published: str, expected: str) -> None:
+    done = subprocess.run(
+        ["jq", "-c", "--argjson", "published", published, _matrix_filter()],
+        input=listed, capture_output=True, text=True, check=True,
+    )  # fmt: skip
     assert done.stdout.strip() == expected
+
+
+def test_the_published_releases_are_read_from_the_repository() -> None:
+    step = _step("releases", lambda s: s.get("id") == "list")
+    assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert 'gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts' in step["run"]
 
 
 def test_a_tag_run_leaves_the_tag_under_test_out() -> None:
