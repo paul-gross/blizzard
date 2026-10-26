@@ -11251,10 +11251,10 @@
    "total": 170
   },
   "service/test_transcript_segments_service.py": {
-   "comments": 3,
-   "docstrings": 7,
+   "comments": 0,
+   "docstrings": 5,
    "over_cap": 0,
-   "total": 169
+   "total": 53
   },
   "service/test_usage_service.py": {
    "comments": 29,
