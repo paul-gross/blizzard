@@ -1,7 +1,8 @@
 """The one query answering which enabled configured records name a forge (package-private).
 
-:func:`active_referrers` unions every referring kind, as ``secret_referrers.py`` does for a secret; retired derives
-from each kind's newest lifecycle fact (``bzh:facts-not-status``)."""
+:func:`active_referrers` unions every referring kind, as
+``src/blizzard/hub/store/internal/secret_referrers.py`` does for a secret; retired derives from each kind's newest
+lifecycle fact (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
