@@ -21,7 +21,8 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard import __version__
 from blizzard.foundation.flags import FlagOffError, FlagRegistry, Flags, resolve_flags
@@ -107,8 +108,9 @@ from blizzard.hub.composition import (
     build_process_core,
     build_services,
 )
-from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, read_legacy_keys
+from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
+from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
@@ -133,6 +135,7 @@ from blizzard.hub.layout import SIGNING_KEYS_PARTS
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
+from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
@@ -332,6 +335,49 @@ def import_legacy_config(
         )
     finally:
         engine.dispose()
+
+
+def check_forges(config: HubConfig) -> ForgeCheck:
+    """The offline ``check-forges`` wiring: the store opened directly and read, never written, then judged. A store
+    that is not there is refused rather than created."""
+    path = StoreUrl(config.db_url).path
+    if path is not None and not path.exists():
+        raise ConfigError(f"{config.root} holds no store at {path}; nothing to check")
+    engine = open_hub_engine(config.db_url)
+    try:
+        with engine.connect() as conn:
+            return _forge_check(conn)
+    except (UnreadableStore, SQLAlchemyError) as exc:
+        raise ConfigError(f"cannot read the store's forge addresses: {exc}") from exc
+    finally:
+        engine.dispose()
+
+
+def _forge_check(conn: Connection) -> ForgeCheck:
+    return ForgeCheck.of(read_forge_addresses(conn))
+
+
+def warn_forge_refusals(engine: Engine) -> None:
+    """Log one warning per record set the forge migration would refuse, for the operator reading the startup log. A
+    pre-flight aid only: a failure to read is itself a warning, and nothing here stops the hub starting."""
+    log = get_logger("blizzard.hub.forge_check")
+    try:
+        with engine.connect() as conn:
+            check = _forge_check(conn)
+    except Exception as exc:  # the check never stops startup
+        log.warning("forge pre-flight check could not run", error=str(exc))
+        return
+    for tenant in check.tenants:
+        for refusal in tenant.refusals:
+            log.warning(
+                "forge migration would refuse records",
+                tenant_id=tenant.tenant_id,
+                tenant=tenant.tenant_name,
+                case=refusal.case.value,
+                subject=refusal.subject,
+                slugs=list(refusal.slugs),
+                reason=refusal.reason,
+            )
 
 
 def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: TenantId | None) -> TenantId:
@@ -603,6 +649,7 @@ def build_hosted_app(
         except LegacyStartRefused as refusal:
             raise ConfigError(str(refusal)) from refusal
         OrphanedProviders.of(config, services).check()
+        warn_forge_refusals(engine)
         KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
         # Before the hub serves, in each open tenant.
         for stores in tenants:

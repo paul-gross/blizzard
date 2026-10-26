@@ -96,6 +96,37 @@ The board's Admin page lists repositories, with each record's revision, last cha
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change.
 
+## Checking forge addresses before the forge migration
+
+A later release gives each forge address one canonical form, and its migration refuses a store whose records it cannot
+carry over without one of them changing. A hub that migrates as it starts turns that refusal into a failed deploy, so
+settle the records first, on the hub you run today.
+
+`blizzard hub config check-forges` reads the store's address columns directly, changes nothing, and names every record
+the migration would refuse, by slug, with the reason. It judges every repository's `forge_api_url`, every GitHub work
+source's `api_base` (an empty one reads as `https://api.github.com`) and every explicit `web_base`, retired records
+included. It names four cases:
+
+- `not-an-origin` — an address with no `http` or `https` scheme, no host, or a malformed host or port, such as
+  `ghe.acme`. Edit the record's address to the server's origin.
+- `needs-cleaning` — an address carrying a user, password, query, or fragment. Edit the record's address to the bare
+  origin.
+- `coordinate-collision` — repositories whose addresses differ only in spelling, such as a trailing slash, and so would
+  hold one `owner/repo` coordinate. Retiring one does not settle it; edit one so the two no longer name one coordinate.
+- `web-base-disagreement` — GitHub work sources declaring different `web_base` values for one API origin. Make the
+  explicit ones agree.
+
+Run it from the build you are about to install, against the runtime directory of the hub that still serves the store,
+while that hub runs:
+
+```bash
+blizzard hub config check-forges --dir /path/to/hub
+```
+
+It exits 0 when nothing is named, or when the store is already carried over, and 1 when it names any record, so a deploy
+script can gate on it. The hub's startup log carries the same finding as one warning per refusal,
+`forge migration would refuse records`, naming the tenant, the case, and the slugs; it never stops the hub starting.
+
 ## How delivery uses a record
 
 A `deliver` step resolves each of its chunk's commit pointers to its own repository record before its action takes a

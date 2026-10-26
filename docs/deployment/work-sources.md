@@ -31,7 +31,8 @@ blizzard hub source show blizzard
 - `provider` names the adapter grammar; only `github` exists.
 - `api_base` overrides the provider's API origin (needed for a self-hosted forge such as GitHub Enterprise); `web_base`
   overrides the web origin for the item's browsable URL and derives from `api_base` when omitted, so a GHE source needs
-  only `api_base`.
+  only `api_base`. A later release stores both addresses in one canonical form;
+  [check them first](./repositories.md#checking-forge-addresses-before-the-forge-migration).
 - `secret` names the stored secret holding the forge token, revealed only when the hub calls the forge.
 
 `create <slug>` stores the source at revision 1, named `--name` (default: the slug). It is refused when another source
