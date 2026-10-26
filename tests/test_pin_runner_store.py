@@ -18,9 +18,13 @@ from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
     OUTBOX_LANE_TRANSCRIPT,
     binding_releases,
+    env_bindings,
+    leases,
     outbox_counters,
     park_facts,
+    pause_park_resumes,
     pause_parks,
+    requeues,
 )
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION
 from tests.config_inputs import init_host
@@ -54,6 +58,31 @@ def _counter(engine: sa.Engine, lane: str) -> int:
             .where(counters.c.runner_id == FIXTURE_RUNNER_ID, counters.c.lane == lane)
             .execution_options(**{RUNNER_UNSCOPED_OPTION: True})
         ).scalar_one()
+
+
+def _seqs(store: SqlAlchemyRunnerStore, table: sa.Table) -> list[int]:
+    """The ``seq`` of each of ``table``'s rows, in the order its rows were appended."""
+    with store._engine.connect() as conn:
+        return list(
+            conn.execute(
+                sa.select(table.c.seq).where(table.c.runner_id == FIXTURE_RUNNER_ID).order_by(table.c.seq)
+            ).scalars()
+        )
+
+
+def _mint(store: SqlAlchemyRunnerStore, lease_id: str, *, epoch: int = 1, at: datetime = _NOW) -> None:
+    store.record_lease(
+        NewLease(
+            lease_id=lease_id,
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=epoch,
+            retries_max=2,
+            created_at=at,
+        )
+    )
 
 
 def _delta(store: SqlAlchemyRunnerStore, segment_id: str, *, cursor: str) -> int:
@@ -97,6 +126,64 @@ def test_a_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-un
     assert store.held_environment_ids() == ["e1"]
     assert store.live_tenure_chunk_ids() == ["ch_1"]
     assert [b.environment_id for b in store.bindings_for_chunk("ch_1")] == ["e1"]
+
+
+@pytest.mark.unit
+def test_a_same_instant_rebind_after_a_release_reads_as_held(tmp_path):  # type: ignore[no-untyped-def]
+    """Bind -> release -> bind at one instant: the release closes only the bind appended before it, so the rebind is
+    held — a comparison of instants would have the release close both."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+    assert store.held_environment_ids() == []
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    assert store.held_environment_ids() == ["e1"]
+    assert store.live_tenure_chunk_ids() == ["ch_1"]
+    with store._engine.connect() as conn:
+        bound = (
+            conn.execute(
+                sa.select(env_bindings.c.seq)
+                .where(env_bindings.c.runner_id == FIXTURE_RUNNER_ID)
+                .order_by(env_bindings.c.id)
+            )
+            .scalars()
+            .all()
+        )
+        (released,) = (
+            conn.execute(sa.select(binding_releases.c.seq).where(binding_releases.c.runner_id == FIXTURE_RUNNER_ID))
+            .scalars()
+            .all()
+        )
+    assert bound[0] < released < bound[1]
+
+
+@pytest.mark.unit
+def test_a_same_instant_pause_resume_pause_leaves_the_second_park_open(tmp_path):  # type: ignore[no-untyped-def]
+    """Pause -> resume -> pause under one lease at one instant: the resume closes only the park appended before it."""
+    store = _store(tmp_path)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
+    store.record_pause_park_resume(lease_id="lease_1", resumed_at=_NOW)
+    assert store.pause_parked_lease_ids() == set()
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
+
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+    with store._engine.connect() as conn:
+        parked = (
+            conn.execute(
+                sa.select(pause_parks.c.seq)
+                .where(pause_parks.c.runner_id == FIXTURE_RUNNER_ID)
+                .order_by(pause_parks.c.id)
+            )
+            .scalars()
+            .all()
+        )
+        (resumed,) = (
+            conn.execute(sa.select(pause_park_resumes.c.seq).where(pause_park_resumes.c.runner_id == FIXTURE_RUNNER_ID))
+            .scalars()
+            .all()
+        )
+    assert parked[0] < resumed < parked[1]
 
 
 @pytest.mark.unit
@@ -201,26 +288,49 @@ def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path
 
 @pytest.mark.unit
 def test_a_same_instant_mint_consumes_its_requeue_mark(tmp_path):  # type: ignore[no-untyped-def]
-    """``>=``, not ``>``: a spawn that stamps its lease at the requeue mark's own
-    instant still consumes it — a ``>`` comparison would leave it pending forever."""
+    """A spawn that stamps its lease at the requeue mark's own instant still consumes it, as it is appended after
+    the mark — a comparison of instants that left it pending would never see the reattempt happen."""
     store = _store(tmp_path)
     store.record_requeue(chunk_id="ch_1", at=_NOW)
     assert store.pending_requeue_chunk_ids() == {"ch_1"}
 
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,  # the same instant the mark carries
-        )
-    )
+    _mint(store, "lease_1")  # the same instant the mark carries
 
     assert store.pending_requeue_chunk_ids() == set()
+    assert _seqs(store, requeues) < _seqs(store, leases)
+
+
+@pytest.mark.unit
+def test_a_same_instant_mint_appended_before_a_requeue_mark_leaves_it_pending(tmp_path):  # type: ignore[no-untyped-def]
+    """A mark appended after a mint is not that mint's to consume, whatever instant both carry: the reattempt it asks
+    for is still to come."""
+    store = _store(tmp_path)
+    _mint(store, "lease_1")
+    store.record_requeue(chunk_id="ch_1", at=_NOW)
+
+    assert store.pending_requeue_chunk_ids() == {"ch_1"}
+    assert _seqs(store, leases) < _seqs(store, requeues)
+
+    _mint(store, "lease_2", epoch=2)
+
+    assert store.pending_requeue_chunk_ids() == set()
+
+
+@pytest.mark.unit
+def test_fact_sequences_are_one_runner_wide_across_the_tables(tmp_path):  # type: ignore[no-untyped-def]
+    """One counter numbers every sequenced table's rows, so rows of different tables are ordered by it."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    _mint(store, "lease_1")
+    store.record_requeue(chunk_id="ch_1", at=_NOW)
+    store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
+
+    assert [
+        _seqs(store, env_bindings),
+        _seqs(store, leases),
+        _seqs(store, requeues),
+        _seqs(store, pause_parks),
+    ] == [[1], [2], [3], [4]]
 
 
 @pytest.mark.unit

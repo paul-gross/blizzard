@@ -869,37 +869,55 @@ def test_host_store_check_admits_its_own_doors(tmp_path: Path, rel: str, text: s
 
 _OUTBOX_TABLES = frozenset({"outbound_buffer", "transcript_outbound_buffer"})
 _INSERT_BUILDERS = frozenset({"insert", "insert_rows", "insert_from_select"})
+_FACT_TABLES = frozenset(
+    {"env_bindings", "binding_releases", "pause_parks", "pause_park_resumes", "requeues", "leases"}
+)
+_FACT_INSERT_SQL = re.compile(
+    r"insert\s+(or\s+\w+\s+)?into\s+\W*(env_bindings|binding_releases|pause_parks|pause_park_resumes|requeues|leases)\b",
+    re.IGNORECASE,
+)
 _OUTBOX_INSERT_SQL = re.compile(r"insert\s+(or\s+\w+\s+)?into\s+\W*(transcript_)?outbound_buffer\b", re.IGNORECASE)
 _OUTBOX_SEAM_FILE = Path("runner") / "store" / "internal" / "base.py"
 
 
-def _outbox_insert_breaches(src_root: Path) -> list[str]:
-    """Each place under ``src_root`` (a ``blizzard`` package root) that inserts into ``outbound_buffer`` or
-    ``transcript_outbound_buffer`` other than through the seam in ``src/blizzard/runner/store/internal/base.py``: an
-    insert builder (``insert``, ``insert_rows``, ``insert_from_select``, called on a store, on ``sqlalchemy``, or on the
-    table itself) given either table, under any name it was imported as, or raw ``INSERT INTO`` text naming one. Runner
-    migrations write the tables as they were and are not judged."""
+def _insert_breaches(
+    src_root: Path, tables: frozenset[str], raw_insert: re.Pattern[str], what: str, *, exempt: tuple[Path, ...] = ()
+) -> list[str]:
+    """Each place under ``src_root`` (a ``blizzard`` package root) that inserts into one of ``tables`` other than
+    through the seam in ``src/blizzard/runner/store/internal/base.py``: an insert builder (``insert``, ``insert_rows``,
+    ``insert_from_select``, called on a store, on ``sqlalchemy``, or on the table itself) given one, under any name it
+    was imported as, or raw ``INSERT INTO`` text matching ``raw_insert``. Runner migrations write the tables as they
+    were and are not judged, nor is anything under an ``exempt`` root."""
     breaches: list[str] = []
     for path in _production_files(src_root):
         relative = path.relative_to(src_root)
         if relative == _OUTBOX_SEAM_FILE or relative.is_relative_to(Path("runner") / "store" / "migrations"):
             continue
+        if any(relative.is_relative_to(root) for root in exempt):
+            continue
         tree = ast.parse(path.read_text(), filename=str(path))
-        names = set(_OUTBOX_TABLES)
+        names = set(tables)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                names |= {alias.asname for alias in node.names if alias.name in _OUTBOX_TABLES and alias.asname}
+                names |= {alias.asname for alias in node.names if alias.name in tables and alias.asname}
         where = path.relative_to(src_root.parent)
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and _terminal(node.func) in _INSERT_BUILDERS:
                 receiver = node.func.value if isinstance(node.func, ast.Attribute) else None
                 if any(_terminal(arg) in names for arg in (receiver, *node.args)):
-                    breaches.append(f"{where}:{node.lineno} inserts into an outbox table outside the seam")
-            elif (
-                isinstance(node, ast.Constant) and isinstance(node.value, str) and _OUTBOX_INSERT_SQL.search(node.value)
-            ):
-                breaches.append(f"{where}:{node.lineno} inserts into an outbox table outside the seam")
+                    breaches.append(f"{where}:{node.lineno} inserts into {what} outside the seam")
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str) and raw_insert.search(node.value):
+                breaches.append(f"{where}:{node.lineno} inserts into {what} outside the seam")
     return breaches
+
+
+def _outbox_insert_breaches(src_root: Path) -> list[str]:
+    return _insert_breaches(src_root, _OUTBOX_TABLES, _OUTBOX_INSERT_SQL, "an outbox table")
+
+
+def _fact_insert_breaches(src_root: Path) -> list[str]:
+    # The hub store has a ``leases`` table of its own, with no sequence.
+    return _insert_breaches(src_root, _FACT_TABLES, _FACT_INSERT_SQL, "a sequenced fact table", exempt=(Path("hub"),))
 
 
 def test_every_outbox_row_is_inserted_through_the_seam() -> None:
@@ -908,6 +926,14 @@ def test_every_outbox_row_is_inserted_through_the_seam() -> None:
     ``outbound_buffer`` or ``transcript_outbound_buffer`` any other way would mint a ``seq`` the counter never saw."""
     breaches = _outbox_insert_breaches(_SRC_DIR)
     assert not breaches, f"outbox inserts — a row written around its counter: {breaches}"
+
+
+def test_every_sequenced_fact_row_is_inserted_through_the_seam() -> None:
+    """Every ``seq`` on a bind, release, park, resume, requeue or lease comes from the runner's durable fact counter
+    (``src/blizzard/runner/store/internal/base.py``'s ``insert_fact_row``), advanced in the transaction that writes the
+    row: an adapter that inserts into one of them any other way writes a row no closure can order."""
+    breaches = _fact_insert_breaches(_SRC_DIR)
+    assert not breaches, f"fact inserts — a row written around its counter: {breaches}"
 
 
 #: Tables whose dialect-specific table option is an admitted exception in
@@ -988,6 +1014,56 @@ def test_outbox_insert_check_catches_a_bypass(tmp_path: Path, rel: str, text: st
 )
 def test_outbox_insert_check_admits_the_seam_and_other_tables(tmp_path: Path, rel: str, text: str) -> None:
     assert _plant_outbox_insert(tmp_path, rel, text) == []
+
+
+def _plant_fact_insert(tmp_path: Path, rel: str, text: str) -> list[str]:
+    src = tmp_path / "blizzard"
+    (src / rel).parent.mkdir(parents=True, exist_ok=True)
+    (src / rel).write_text(text)
+    return _fact_insert_breaches(src)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        (
+            "runner/store/internal/environment_store.py",
+            "def f(self, conn):\n    conn.execute(self._store.insert(env_bindings).values(chunk_id='c'))\n",
+        ),
+        ("runner/store/internal/requeue_store.py", "def f(conn):\n    conn.execute(requeues.insert())\n"),
+        (
+            "runner/store/internal/lease_record_store.py",
+            "from blizzard.runner.store.schema import leases as ls\ndef f(s):\n    return s.insert_rows(ls, [])\n",
+        ),
+        ("runner/store/internal/pause_store.py", "def f(c):\n    c.execute(sa.insert(schema.pause_park_resumes))\n"),
+        ("runner/store/internal/pause_store.py", "SQL = 'INSERT INTO pause_parks (lease_id) VALUES (1)'\n"),
+        ("tools/invariants.py", "def f(c):\n    c.execute(insert(binding_releases))\n"),
+    ],
+)
+def test_fact_insert_check_catches_a_bypass(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_fact_insert(tmp_path, rel, text)
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        (
+            "runner/store/internal/base.py",
+            "def f(store, conn):\n    conn.execute(store.insert(requeues).values(seq=1))\n",
+        ),
+        (
+            "runner/store/internal/requeue_store.py",
+            "def f(self, conn):\n    insert_fact_row(self._store, conn, requeues, chunk_id='c')\n",
+        ),
+        (
+            "runner/store/internal/pause_store.py",
+            "def f(self, conn):\n    conn.execute(self._store.insert(outbound_buffer))\n",
+        ),
+        ("runner/store/migrations/versions/x.py", "def upgrade(bind):\n    bind.execute(sa.insert(leases))\n"),
+    ],
+)
+def test_fact_insert_check_admits_the_seam_and_other_tables(tmp_path: Path, rel: str, text: str) -> None:
+    assert _plant_fact_insert(tmp_path, rel, text) == []
 
 
 _EVENT_LOG_SERVICE_FILE = _HUB_DIR / "domain" / "chunk" / "event_log.py"

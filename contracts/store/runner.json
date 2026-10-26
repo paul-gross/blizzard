@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261023_1000_pause_park_cause",
+  "head_revision": "20261026_1000_fact_append_sequence",
   "store": "runner",
   "tables": {
     "asks": {
@@ -176,6 +176,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         }
       },
       "deprecated": null,
@@ -489,6 +495,12 @@
           "server_default": false,
           "type": "String"
         },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
         "workdir": {
           "deprecated": null,
           "nullable": false,
@@ -588,6 +600,29 @@
       "foreign_keys": [],
       "primary_key": [
         "id"
+      ],
+      "unique": []
+    },
+    "fact_counters": {
+      "checks": [],
+      "columns": {
+        "last_seq": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [],
+      "primary_key": [
+        "runner_id"
       ],
       "unique": []
     },
@@ -1589,6 +1624,12 @@
           "server_default": false,
           "type": "String"
         },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
         "session_id": {
           "deprecated": null,
           "nullable": true,
@@ -2013,6 +2054,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         }
       },
       "deprecated": null,
@@ -2066,6 +2113,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         }
       },
       "deprecated": null,
@@ -2101,6 +2154,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "seq": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         }
       },
       "deprecated": null,

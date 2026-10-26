@@ -40,7 +40,7 @@ class RunnerAudit:
             .where(binding_releases.c[RUNNER_COLUMN] == env_bindings.c[RUNNER_COLUMN])
             .where(binding_releases.c.chunk_id == env_bindings.c.chunk_id)
             .where(binding_releases.c.environment_id == env_bindings.c.environment_id)
-            .where(binding_releases.c.released_at >= env_bindings.c.bound_at)
+            .where(binding_releases.c.seq > env_bindings.c.seq)
             .exists()
         )
         stmt = (

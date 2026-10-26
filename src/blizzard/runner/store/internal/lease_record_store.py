@@ -19,6 +19,7 @@ from blizzard.runner.store.internal.base import (
     Unclosed,
     encode_work_refs,
     enqueue_transcript_final,
+    insert_fact_row,
     insert_outbox_row,
     lease_select,
     row_to_lease,
@@ -184,13 +185,14 @@ class LeaseRecordStore:
 
     def record_lease(self, lease: NewLease) -> None:
         with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(leases).values(
-                    lease_id=lease.lease_id,
-                    chunk_id=lease.chunk_id,
-                    epoch=lease.epoch,
-                    created_at=lease.created_at,
-                )
+            insert_fact_row(
+                self._store,
+                conn,
+                leases,
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                epoch=lease.epoch,
+                created_at=lease.created_at,
             )
             conn.execute(
                 self._store.insert(lease_context).values(

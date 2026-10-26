@@ -44,6 +44,15 @@ def test_the_pool_names_every_runners_held_binding_in_it_and_every_workspace_les
     assert _held(audit, "ws2") == [("ch_other", "e3", "ws2"), ("ch_unknown", "e4", None)]
 
 
+def test_a_same_instant_rebind_after_the_runners_own_release_is_held(tmp_path: Path) -> None:
+    store_a, _store_b, audit = _two_runners(tmp_path)
+    _bind(store_a, "ch_1", "e1", _T0, "ws1")
+    store_a.record_release(chunk_id="ch_1", environment_id="e1", released_at=_T0)
+    _bind(store_a, "ch_1", "e1", _T0, "ws1")
+
+    assert _held(audit, "ws1") == [("ch_1", "e1", "ws1")]
+
+
 def test_another_runners_release_of_the_same_chunk_and_environment_does_not_free_a_binding(tmp_path: Path) -> None:
     store_a, store_b, audit = _two_runners(tmp_path)
     _bind(store_a, "ch_1", "e1", _T0, "ws1")
@@ -53,10 +62,10 @@ def test_another_runners_release_of_the_same_chunk_and_environment_does_not_free
     assert _held(audit, "ws1") == [("ch_1", "e1", "ws1")]
 
 
-def test_only_the_runners_own_release_at_or_after_the_bind_frees_it(tmp_path: Path) -> None:
+def test_only_the_runners_own_release_appended_after_the_bind_frees_it(tmp_path: Path) -> None:
     store_a, _store_b, audit = _two_runners(tmp_path)
+    store_a.record_release(chunk_id="ch_stale", environment_id="e1", released_at=_T0)
     _bind(store_a, "ch_stale", "e1", _T0, "ws1")
-    store_a.record_release(chunk_id="ch_stale", environment_id="e1", released_at=_T0 - timedelta(seconds=1))
     _bind(store_a, "ch_freed", "e2", _T0, "ws1")
     store_a.record_release(chunk_id="ch_freed", environment_id="e2", released_at=_T0)
     _bind(store_a, "ch_other_env", "e3", _T0, "ws1")

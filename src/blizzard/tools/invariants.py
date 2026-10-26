@@ -267,7 +267,7 @@ class UniqueEnvBinding(QueryCheck):
                 releases.c.chunk_id == bindings.c.chunk_id,
                 releases.c.environment_id == bindings.c.environment_id,
                 releases.c.runner_id == bindings.c.runner_id,
-                releases.c.released_at >= bindings.c.bound_at,
+                releases.c.seq > bindings.c.seq,
             )
             .exists()
         )

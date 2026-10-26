@@ -22,8 +22,8 @@ class IReadRequeueRepository(Protocol):
     def pending_requeue_chunk_ids(self) -> set[str]:
         """Every chunk id carrying a requeue mark not yet consumed by a later lease mint.
 
-        The mark is consumed by the next lease mint for the chunk, whose ``created_at``
-        lands at or after the requeue."""
+        The mark is consumed by the next lease mint for the chunk, which is appended after
+        the requeue."""
         ...
 
 

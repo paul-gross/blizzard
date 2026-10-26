@@ -60,6 +60,7 @@ leases = Table(
     Column("pgid", Integer, nullable=True),  # the current generation's owned process group
     Column("created_at", UtcDateTime, nullable=False),
     Column("runner_id", String, nullable=False),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
     info={"scope": "runner"},
 )
 Index("ix_leases_chunk_id_epoch", leases.c.chunk_id, leases.c.epoch)
@@ -77,6 +78,19 @@ env_bindings = Table(
     Column("workspace_id", String, nullable=True),  # the configured workspace the environment belongs to
     Column("project_id", String, nullable=True),  # the bound chunk's project, as the hub names it
     Column("runner_id", String, nullable=False),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
+    info={"scope": "runner"},
+)
+
+# --- Fact counters (the last append sequence each runner issued) ---
+# One row per runner, advanced in the transaction that writes a sequenced fact row. The facts a closer is judged against
+# its opener by — bind/release, park/resume, requeue/mint — are ordered by `seq`, never by comparing instants.
+
+fact_counters = Table(
+    "fact_counters",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("last_seq", Integer, nullable=False),  # the greatest seq this runner has issued
     info={"scope": "runner"},
 )
 
@@ -263,11 +277,13 @@ binding_releases = Table(
     Column("released_at", UtcDateTime, nullable=False),
     Column("lease_epoch_floor", Integer, nullable=True),  # newest local mint when this binding was released
     Column("runner_id", String, nullable=False),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
     info={"scope": "runner"},
 )
 
-# `HELD_BINDING` correlates on exactly this triple, once per `env_bindings`
-# row asked about — without it, each read builds sqlite's own ad hoc covering index.
+# `HELD_BINDING` correlates on this triple's (chunk_id, environment_id) prefix, once per `env_bindings` row asked
+# about, and orders by `seq`; the index stays whole, as dropping its trailing column would be a contraction. Without
+# it, each read builds sqlite's own ad hoc covering index.
 Index(
     "ix_binding_releases_chunk_id_environment_id_released_at",
     binding_releases.c.chunk_id,
@@ -340,6 +356,7 @@ pause_parks = Table(
     Column("runner_id", String, nullable=False),
     # Why the lease parked: ``usage-limit`` for a usage-limited generation's park, NULL for an operator pause.
     Column("cause", String, nullable=True),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
     info={"scope": "runner"},
 )
 
@@ -350,6 +367,7 @@ pause_park_resumes = Table(
     Column("lease_id", String, nullable=False),
     Column("resumed_at", UtcDateTime, nullable=False),
     Column("runner_id", String, nullable=False),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
     info={"scope": "runner"},
 )
 
@@ -521,6 +539,7 @@ requeues = Table(
     Column("chunk_id", String, nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
     Column("runner_id", String, nullable=False),
+    Column("seq", Integer, nullable=True),  # the runner's fact append sequence, from fact_counters
     info={"scope": "runner"},
 )
 

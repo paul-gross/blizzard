@@ -3,7 +3,7 @@
 The explicit hand-back after a human worked a needs_human chunk interactively. Appends the clearing fact
 only (``bzh:crash-correctness``); the route is never released and the retry budget is **carried, not
 reset**: a requeue buys exactly one more try. Legal only from :attr:`RequeueStanding.REQUEUEABLE`; a
-requeue over a pending one writes a second mark."""
+requeue over a pending one changes nothing and writes no mark."""
 
 from __future__ import annotations
 
@@ -82,12 +82,14 @@ _REFUSAL_TEXT: Mapping[RequeueStanding, str] = MappingProxyType(
 @dataclass(frozen=True)
 class RequeueScope:
     """The chunk-keyed facts :func:`requeue_mark` reads (``bzh:domain-takes-objects``): the
-    chunk's open takeover, its open escalation, and the environments held for it."""
+    chunk's open takeover, its open escalation, the environments held for it, and whether a requeue is already
+    pending."""
 
     chunk_id: str
     open_takeover: OpenTakeover | None
     open_escalation: ParkedEscalation | None
     held_environment_ids: tuple[str, ...]
+    requeue_pending: bool = False
 
     @property
     def standing(self) -> RequeueStanding:
@@ -116,13 +118,16 @@ class RequeueMark:
     at: datetime
 
 
-def requeue_mark(scope: RequeueScope, *, at: datetime) -> RequeueMark:
-    """The mark that clears ``scope``'s local needs_human hold at ``at``, or the
-    :class:`RequeueError` its :attr:`~RequeueScope.standing` raises."""
+def requeue_mark(scope: RequeueScope, *, at: datetime) -> RequeueMark | None:
+    """The mark that clears ``scope``'s local needs_human hold at ``at``; ``None`` where a requeue is already pending,
+    which a second request changes nothing about; or the :class:`RequeueError` its
+    :attr:`~RequeueScope.standing` raises, which precedes both."""
     standing = scope.standing
     refusal = REQUEUE_REFUSALS[standing]
     if refusal is not None:
         raise refusal(_REFUSAL_TEXT[standing].format(chunk_id=scope.chunk_id))
+    if scope.requeue_pending:
+        return None
     return RequeueMark(chunk_id=scope.chunk_id, at=at)
 
 
@@ -136,6 +141,8 @@ class RequeueService:
     def requeue(self, scope: RequeueScope) -> None:
         """Clear ``scope.chunk_id``'s local needs_human hold, or raise the ``409``-mapped
         refusal :func:`requeue_mark` names. ``scope`` is already resolved by the caller
-        (``bzh:domain-takes-objects``)."""
+        (``bzh:domain-takes-objects``). A requeue already pending writes nothing."""
         mark = requeue_mark(scope, at=self._clock.now())
+        if mark is None:
+            return
         self._store.record_requeue(chunk_id=mark.chunk_id, at=mark.at)

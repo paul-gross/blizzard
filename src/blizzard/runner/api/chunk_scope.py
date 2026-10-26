@@ -21,6 +21,7 @@ def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:
         open_takeover=stores.takeover.open_takeover_for_chunk(chunk_id),
         open_escalation=stores.escalations.open_escalation_for_chunk(chunk_id),
         held_environment_ids=tuple(b.environment_id for b in stores.environments.bindings_for_chunk(chunk_id)),
+        requeue_pending=chunk_id in stores.requeue.pending_requeue_chunk_ids(),
     )
 
 

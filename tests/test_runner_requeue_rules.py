@@ -41,18 +41,31 @@ def _scope(
     takeover: OpenTakeover | None = None,
     escalation: ParkedEscalation | None = _ESCALATION,
     held: tuple[str, ...] = ("e1",),
+    pending: bool = False,
 ) -> RequeueScope:
-    return RequeueScope(chunk_id="ch_1", open_takeover=takeover, open_escalation=escalation, held_environment_ids=held)
+    return RequeueScope(
+        chunk_id="ch_1",
+        open_takeover=takeover,
+        open_escalation=escalation,
+        held_environment_ids=held,
+        requeue_pending=pending,
+    )
 
 
 def test_an_escalated_chunk_holding_an_environment_gets_its_mark() -> None:
     assert requeue_mark(_scope(), at=_AT) == RequeueMark(chunk_id="ch_1", at=_AT)
 
 
-def test_a_requeue_over_one_already_pending_is_marked_again() -> None:
-    """Legal and idempotent: the scope carries no pending-requeue fact for the rule to read,
-    so a second requeue yields the same mark, and one fresh attempt consumes both."""
-    assert requeue_mark(_scope(), at=_AT) == requeue_mark(_scope(), at=_AT)
+def test_a_requeue_over_one_already_pending_yields_no_mark() -> None:
+    """Legal and idempotent: a second request while one is pending changes nothing."""
+    assert requeue_mark(_scope(pending=True), at=_AT) is None
+
+
+def test_a_pending_requeue_does_not_soften_a_refusal() -> None:
+    with pytest.raises(ChunkNotRequeueable):
+        requeue_mark(_scope(escalation=None, pending=True), at=_AT)
+    with pytest.raises(RequeueBlockedByOpenTakeover):
+        requeue_mark(_scope(takeover=_TAKEOVER, pending=True), at=_AT)
 
 
 def test_an_open_takeover_refuses() -> None:
