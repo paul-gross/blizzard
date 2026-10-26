@@ -11137,10 +11137,10 @@
    "total": 225
   },
   "service/test_platform_tracing_service.py": {
-   "comments": 5,
+   "comments": 4,
    "docstrings": 3,
    "over_cap": 0,
-   "total": 308
+   "total": 260
   },
   "service/test_release_service.py": {
    "comments": 9,
