@@ -21,6 +21,8 @@ test('test_revoking_a_members_membership_ends_their_open_stream_and_no_other', a
   const revoking = await api.delete(`/api/members/${revokedId}`);
   expect(revoking.status).toBe(204);
   await revokedStream.waitForEnd({ timeout: ENDS_WITHIN_MS });
+  // Everything the revoked stream will ever hold: it ended, so nothing published later can reach it.
+  const heldAtEnd = revokedStream.frames.map((frame) => frame.id);
 
   const after = await fleet('runner-after');
   // The kept stream's frame for the second runner is the barrier: the hub has published it by now, and the revoked stream
@@ -29,5 +31,7 @@ test('test_revoking_a_members_membership_ends_their_open_stream_and_no_other', a
 
   expect(keptStream.ended).toBe(false);
   expect(revokedStream.frames.filter((frame) => frame.event === 'runner-changed').map((frame) => frame.data.runner_id)).toEqual([before.runnerId]);
-  expect(revokedStream.frames.every((frame) => frame.id < barrier.id)).toBe(true);
+  // No frame reached the revoked stream after it ended, the barrier's own among them.
+  expect(revokedStream.frames.map((frame) => frame.id)).toEqual(heldAtEnd);
+  expect(heldAtEnd.every((id) => id < barrier.id)).toBe(true);
 });
