@@ -20,6 +20,7 @@ import httpx2
 import pytest
 import yaml
 
+from blizzard.tools.compat.releases import parse_release
 from blizzard.tools.release_install import Installation, download_release, install
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge
 from tests.fleet_world import REPO_NAME, mint_world
@@ -79,7 +80,19 @@ _BUILD = (
 )
 
 
-def _graph_yaml() -> str:
+#: The first line whose hub nodes name an ``action:``; an older hub knows only ``run:``, a newer one refuses it.
+_ACTIONS_LINE = (0, 3)
+
+
+def _deliver_step(baseline: str) -> dict[str, Any]:
+    """The deliver node's step in the baseline hub's own vocabulary."""
+    release = parse_release(baseline)
+    if release is not None and (release.major, release.minor) >= _ACTIONS_LINE:
+        return {"action": "land"}
+    return {"run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}]}
+
+
+def _graph_yaml(baseline: str) -> str:
     """Build, then deliver through a pull request that waits on the mock forge's checks."""
     return yaml.safe_dump(
         {
@@ -99,7 +112,7 @@ def _graph_yaml() -> str:
                     "executor": "hub",
                     "poll_interval": 1,
                     "poll_timeout": 3600,
-                    "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],
+                    **_deliver_step(baseline),
                     "judgement": {
                         "choices": {
                             "landed": {"description": "Merged.", "to": "done"},
@@ -310,7 +323,7 @@ class _Rehearsal:
                 raise self._fail(
                     step, f"chunk {chunk_id} landed before the walk reads back as {detail.get('status')!r}"
                 )
-        # The version the candidate carried onto `land` walks back to its `run:`, which the baseline runs again.
+        # The seeded version walks back as the baseline wrote it — from 0.2, carried onto `land` and back to its `run:`.
         carried = self._ingest(client, "the baseline hub on the walked-back version")
         pinned = client.get(f"/api/chunks/{carried}").json().get("graph_id")
         if pinned != self.graph_id:
@@ -339,7 +352,7 @@ class _Rehearsal:
         for repository in fixture_repositories([source], self.forge_api):
             assert client.post("/api/repositories", json=repository).status_code == 201
             assert client.put(f"/api/projects/{_PROJECT}/repository-links/{repository['slug']}").status_code == 200
-        minted = client.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
+        minted = client.post("/api/graphs", json={"definition_yaml": _graph_yaml(self.leg.baseline)})
         assert minted.status_code == 201, minted.text
         self.graph_id = minted.json()["graph_id"]
 
