@@ -28,6 +28,7 @@ from tests.support import (
     report_escalation,
     report_lease,
     report_question,
+    with_test_lock_wait,
 )
 
 pytestmark = pytest.mark.component
@@ -145,6 +146,7 @@ class _Chunk:
 
 
 def _held_by_a_writer(chunk: _Chunk, submit: Callable[[], object], write: Callable[[object], None]) -> object:
+    with_test_lock_wait(chunk.hub)
     answered: dict[str, object] = {}
     started = threading.Event()
 

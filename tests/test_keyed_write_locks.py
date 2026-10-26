@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, hub_scoped, ingest, pointer_token
+from tests.support import build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
 
 pytestmark = pytest.mark.component
 
@@ -31,6 +31,7 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
     """Pause the first ingest inside its locked transaction, after its guard read, and prove an
     overlapping ingest of the same pointer waits, then loses with the held-pointer 409."""
     hub = build_hub(tmp_path)
+    with_test_lock_wait(hub)
     entered = threading.Event()
     release = threading.Event()
     record: Any = hub.services.chunks.record
@@ -38,28 +39,35 @@ def test_two_overlapping_ingests_of_one_pointer_mint_once(tmp_path: Path) -> Non
 
     def _blocking_mint_locked(handle, chunk):  # type: ignore[no-untyped-def]
         entered.set()
-        assert release.wait(timeout=5), "test never released the first ingest"
+        assert release.wait(timeout=60), "test never released the first ingest"
         return real_mint_locked(handle, chunk)
 
     record.mint_locked = _blocking_mint_locked
     body = {"tokens": [pointer_token({"source": "default", "ref": "1"})]}
     results: dict[str, Any] = {}
+    errors: dict[str, BaseException] = {}
 
     def _ingest(name: str) -> None:
-        results[name] = hub.client.post("/api/chunks", json=body)
+        try:
+            results[name] = hub.client.post("/api/chunks", json=body)
+        except BaseException as error:
+            errors[name] = error
 
     first = threading.Thread(target=_ingest, args=("first",))
     first.start()
-    assert entered.wait(timeout=5), "first ingest never reached its locked mint"
+    assert entered.wait(timeout=60), "first ingest never reached its locked mint"
     second = threading.Thread(target=_ingest, args=("second",))
     second.start()
     second.join(timeout=0.3)
     assert second.is_alive(), "the second ingest completed while the first held the pointer lock"
 
     release.set()
-    first.join(timeout=5)
-    second.join(timeout=5)
+    first.join(timeout=60)
+    second.join(timeout=60)
     record.mint_locked = real_mint_locked
+    assert not first.is_alive() and not second.is_alive(), "an ingest never finished after the first was released"
+    for name, error in errors.items():
+        raise AssertionError(f"the {name} ingest raised") from error
 
     assert results["first"].status_code == 201, results["first"].text
     assert results["second"].status_code == 409, results["second"].text
@@ -85,6 +93,7 @@ def test_ingests_of_different_pointers_lock_only_their_own_keys(tmp_path: Path) 
 
 def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    with_test_lock_wait(hub)
     services = hub.services
     graph_store: Any = services.graph_mint._graphs
     entered = threading.Event()
@@ -93,30 +102,37 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
 
     def _blocking_mint_locked(handle, graph, *, definition_yaml, at):  # type: ignore[no-untyped-def]
         entered.set()
-        assert release.wait(timeout=5), "test never released the first mint"
+        assert release.wait(timeout=60), "test never released the first mint"
         return real_mint_locked(handle, graph, definition_yaml=definition_yaml, at=at)
 
     graph_store.mint_locked = _blocking_mint_locked
     ids: dict[str, str] = {}
+    errors: dict[str, BaseException] = {}
 
     def _ensure(name: str) -> None:
-        graph = services.graph_mint.ensure_default(
-            services.default_graph_doc, definition_yaml=services.default_graph_yaml
-        )
-        ids[name] = graph.graph_id
+        try:
+            graph = services.graph_mint.ensure_default(
+                services.default_graph_doc, definition_yaml=services.default_graph_yaml
+            )
+            ids[name] = graph.graph_id
+        except BaseException as error:
+            errors[name] = error
 
     first = threading.Thread(target=_ensure, args=("first",))
     first.start()
-    assert entered.wait(timeout=5), "first resolution never reached its locked mint"
+    assert entered.wait(timeout=60), "first resolution never reached its locked mint"
     second = threading.Thread(target=_ensure, args=("second",))
     second.start()
     second.join(timeout=0.3)
     assert second.is_alive(), "the second resolution completed while the first held the name lock"
 
     release.set()
-    first.join(timeout=5)
-    second.join(timeout=5)
+    first.join(timeout=60)
+    second.join(timeout=60)
     graph_store.mint_locked = real_mint_locked
+    assert not first.is_alive() and not second.is_alive(), "a resolution never finished after the first was released"
+    for name, error in errors.items():
+        raise AssertionError(f"the {name} resolution raised") from error
 
     assert ids["first"] == ids["second"]
     with hub.engine.connect() as conn:

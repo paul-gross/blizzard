@@ -1382,6 +1382,21 @@ def build_hub(
 FIXTURE_FORGE_SECRET = "fixture-forge-token"
 
 
+#: A loaded xdist worker can stall a contended writer past the store's lock wait; no test asserts on that latency.
+_TEST_SQLITE_BUSY_TIMEOUT_MS = 60000
+
+
+def with_test_lock_wait(hub: HubHarness) -> None:
+    """Give ``hub``'s SQLite connections a test-scale lock wait; registered after the store's own connect-time
+    pragmas, so it overrides their ``busy_timeout``, and the pool is disposed so every connection picks it up."""
+
+    def _set_busy_timeout(dbapi_connection: Any, connection_record: object) -> None:
+        dbapi_connection.execute(f"PRAGMA busy_timeout={_TEST_SQLITE_BUSY_TIMEOUT_MS}")
+
+    event.listen(hub.engine, "connect", _set_busy_timeout)
+    hub.engine.dispose()
+
+
 def fixture_work_source(slug: str, locator: str, api_base: str, *, annotate: bool = False) -> WorkSourceDocument:
     """A GitHub-shaped source on a fixture forge, naming :data:`FIXTURE_FORGE_SECRET`."""
     return WorkSourceDocument(
