@@ -11046,12 +11046,6 @@
    "over_cap": 1,
    "total": 688
   },
-  "service/test_forge_status_service.py": {
-   "comments": 1,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 74
-  },
   "service/test_harness_health_service.py": {
    "comments": 4,
    "docstrings": 8,
@@ -11279,12 +11273,6 @@
    "docstrings": 12,
    "over_cap": 2,
    "total": 111
-  },
-  "service/test_work_source_records_service.py": {
-   "comments": 0,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 81
   },
   "store_baseline_support.py": {
    "comments": 0,
