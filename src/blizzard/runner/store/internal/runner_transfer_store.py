@@ -126,7 +126,7 @@ class RunnerRowRemovalStore:
 
     def remove_runner_rows(self, *, keep_counters: bool) -> None:
         runner_id = self._store.bound_runner_id()
-        kept = {schema.outbox_counters} if keep_counters else set()
+        kept: set[Table] = {schema.outbox_counters} if keep_counters else set()
         deleted = 0
         with self._store.begin() as conn:
             held = set(inspect(conn).get_table_names())

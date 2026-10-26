@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -171,12 +172,14 @@ def _stored_runner_id(bind: sa.Connection) -> str | None:
 
 
 def _unstamped_stub(table: str, primary_key: tuple[str, ...]) -> sa.TableClause:
-    return sa.table(table, *(sa.column(name) for name in primary_key), sa.column(_RUNNER_COLUMN, sa.String))
+    return sa.table(
+        table, *(cast(sa.ColumnClause[Any], sa.column(name)) for name in primary_key), sa.column(_RUNNER_COLUMN, sa.String)
+    )
 
 
 def _refuse_unowned(bind: sa.Connection) -> None:
     """Refuse, ahead of any change, while rows name no runner and the store has no identity to give them."""
-    holding = []
+    holding: list[str] = []
     for table, primary_key in _KEYED:
         stub = _unstamped_stub(table, primary_key)
         unowned = sa.select(sa.literal(1)).select_from(stub).where(stub.c[_RUNNER_COLUMN].is_(None)).limit(1)

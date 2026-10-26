@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, cast
 
 import sqlalchemy as sa
-from sqlalchemy import Connection, Row, and_, func, or_
+from sqlalchemy import ColumnElement, Connection, Row, and_, func, or_
 
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import adapter_model
@@ -396,7 +396,7 @@ class LeaseTraceFactsStore:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor(trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, *where) -> LeaseTraceCheckpoint | None:
+    def _newest_cursor(self, *where: ColumnElement[bool]) -> LeaseTraceCheckpoint | None:
         c = trace_cursor.c
         with self._store.connect() as conn:
             row = conn.execute(

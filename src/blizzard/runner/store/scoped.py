@@ -11,9 +11,9 @@ changes."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy as sa
 from sqlalchemy import ColumnElement, Connection, Engine, Exists, Row, Select
@@ -62,7 +62,7 @@ class RunnerKeySupplied(ValueError):
 
 def _runner_scoped(table: TableClause) -> bool:
     info = getattr(table, "info", None)
-    return isinstance(info, Mapping) and info.get("scope") == "runner"
+    return isinstance(info, Mapping) and cast(Mapping[str, object], info).get("scope") == "runner"
 
 
 class _LikelyRunnerEquality(BinaryExpression[bool]):
@@ -76,15 +76,28 @@ class _LikelyRunnerEquality(BinaryExpression[bool]):
     inherit_cache = True
 
 
+class _TypedSQLCompiler(SQLCompiler):
+    visit_binary: Callable[..., str]
+
+
+class _TypedBinaryExpression(BinaryExpression[bool]):
+    type: sa.types.TypeEngine[bool]
+
+
 @compiles(_LikelyRunnerEquality, "sqlite")
 def _compile_likely_runner_equality(element: _LikelyRunnerEquality, compiler: SQLCompiler, **kw: Any) -> str:
-    return f"likely({compiler.visit_binary(element, **kw)})"
+    return f"likely({cast(_TypedSQLCompiler, compiler).visit_binary(element, **kw)})"
 
 
 def _runner_equality(column: ColumnElement[Any], key: Any) -> ColumnElement[bool]:
     equality = column == key
     assert isinstance(equality, BinaryExpression)
-    return _LikelyRunnerEquality(equality.left, equality.right, equality.operator, type_=equality.type)
+    return _LikelyRunnerEquality(
+        equality.left,
+        equality.right,
+        equality.operator,
+        type_=cast(_TypedBinaryExpression, equality).type,
+    )
 
 
 #: The runner store's partition of its tables by runner: keyed by ``runner_id``, every table declared

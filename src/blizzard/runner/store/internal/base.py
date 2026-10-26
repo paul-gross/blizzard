@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, Select, Table, and_, join
+from sqlalchemy import ColumnElement, Connection, Row, Select, Table, and_, join
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
@@ -180,7 +180,7 @@ def decode_work_refs(raw: str | None) -> tuple[WorkRefStamp, ...] | None:
     return tuple(WorkRefStamp(source=e["source"], ref=e["ref"], label=e.get("label")) for e in json.loads(raw))
 
 
-def row_to_lease(r) -> Lease:
+def row_to_lease(r: Row[Any]) -> Lease:
     return Lease(
         lease_id=str(r.lease_id),
         chunk_id=str(r.chunk_id),

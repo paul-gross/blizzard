@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, func
+from sqlalchemy import Connection, Row, func
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.logging import get_logger
@@ -412,7 +412,7 @@ class TranscriptLedgerStore:
     # --- shared helpers -------------------------------------------------------
 
     @staticmethod
-    def _row_to_transcript_segment(r) -> TranscriptSegmentState:
+    def _row_to_transcript_segment(r: Row[Any]) -> TranscriptSegmentState:
         return TranscriptSegmentState(
             segment_id=str(r.segment_id),
             chunk_id=str(r.chunk_id),

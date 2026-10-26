@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy import Select
+from sqlalchemy import Row, Select
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
@@ -97,7 +97,7 @@ class EscalationStore:
         ).where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
 
     @staticmethod
-    def _row_to_escalation(r) -> ParkedEscalation:
+    def _row_to_escalation(r: Row[Any]) -> ParkedEscalation:
         return ParkedEscalation(
             lease_id=str(r.lease_id),
             chunk_id=str(r.chunk_id),
