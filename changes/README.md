@@ -39,15 +39,16 @@ promise due on that line has no retiring removal in that line or in `unreleased/
 promise's current line; an unreleased postponement does not change the guide until it is cut.
 
 `blizzard-change-notes render <tag> [--breaks compat-breaks.json]`, or `mise run release-notes <tag>`, prints the notes
-a tag publishes, read from the tag's own tree: an opening release leads with **Upgrading to <line>**, followed by
-upgrade notes, flags newly on since the previous release under **Turned on** by registry summary, then breaking changes,
-deprecations, and the added, changed, fixed and security notes, then the commits since the previous tag in a collapsed
-block. The **Deprecated** section shows each promise's current line after released postponements. A note that an earlier
-release on another line also carries is marked `(also in X.Y.Z)`, for the releases `blizzard-compat releases --json`
-lists as supported at the checkout (re-render an old tag from that tag's checkout). With `--breaks`, rendering repeats
-the cut's match and fails on a recorded break no note names; **Upgrade notes** then ends with one line per recorded
-break beside the note that names it, and a declared break value that compat does not record goes to stderr without
-failing. Rendering a tag twice gives the same text.
+a tag publishes, read from the tag's own tree: an opening release (`X.0.0`, or a `0.Y.0` only when some deprecation is
+due to retire in `0.Y`) leads with **Upgrading to <line>**, followed by upgrade notes, flags newly on since the previous
+release under **Turned on** by registry summary, then breaking changes, deprecations, and the added, changed, fixed and
+security notes, then the commits since the previous tag in a collapsed block. The **Deprecated** section shows each
+promise's current line after released postponements. A note that an earlier release on another line also carries is
+marked `(also in X.Y.Z)`, for the releases `blizzard-compat releases --json` lists as supported at the checkout
+(re-render an old tag from that tag's checkout). With `--breaks`, rendering repeats the cut's match and fails on a
+recorded break no note names; **Upgrade notes** then ends with one line per recorded break beside the note that names
+it, and a declared break value that compat does not record goes to stderr without failing. Rendering a tag twice gives
+the same text.
 
 ## When a note is owed
 

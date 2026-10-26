@@ -4,12 +4,13 @@ surfaces: [http-api]
 breaking: true
 breaks:
   - HostRegistrationState
+  - IdentityState
 ---
 
 The runner API's `HostRegistrationState` and `IdentityState` responses gain the enum value `version_refused`, which a
-runner reports while the hub refuses its version. Only `HostRegistrationState` is listed as breaking: `0.2` clients of
-`IdentityState` handle the value without failing, though a `0.2` panel shows the runner's identity as "unchecked" and a
-`0.2` `runner status` prints no identity line.
+runner reports while the hub refuses its version. Both are listed as breaking, though only `HostRegistrationState`'s
+break makes a `0.2` client fail: `0.2` clients of `IdentityState` handle the value, but a `0.2` panel shows the runner's
+identity as "unchecked" and a `0.2` `runner status` prints no identity line.
 
 ## Upgrade
 
