@@ -138,11 +138,33 @@ export function checkProfile(profile: TomlTable): string[] {
   return problems;
 }
 
-/** Checks every profile in the package, not only those a run selected, and fails naming each bad key. */
+/** Every sweep the hub's config contract types a `mode` for, so a sweep the hub adds is held to the rule unedited. */
+export function sweepNames(): string[] {
+  return [...hubKeys().keys()].flatMap((keyPath) => /^sweeps\.([^.]+)\.mode$/.exec(keyPath)?.[1] ?? []);
+}
+
+/**
+ * The sweeps a profile leaves on a timer. Every harness hub runs its sweeps `stepped`, so a pass happens only when a
+ * test asks for one; a sweep left unset runs `timed`, and a clock-driven pass makes a wait on the system race it.
+ */
+export function checkStepped(profile: TomlTable): string[] {
+  const sweeps = isTable(profile.sweeps) ? profile.sweeps : {};
+  return sweepNames().flatMap((name) => {
+    const entry = sweeps[name];
+    const mode = isTable(entry) ? entry.mode : undefined;
+    if (mode === 'stepped') return [];
+    return [mode === undefined ? `sweeps.${name}.mode: unset, so the sweep runs timed; set it to "stepped"` : `sweeps.${name}.mode: ${JSON.stringify(mode)}, not "stepped"`];
+  });
+}
+
+/** Checks every profile in the package, not only those a run selected, and fails naming each bad key or timed sweep. */
 export function assertProfilesSound(profiles: ProfileFolder[] = discoverProfiles()): void {
-  const failures = profiles.flatMap((folder) =>
-    checkProfile(readProfile(folder.file)).map((problem) => `${path.relative(TESTS_ROOT, folder.file)}: ${problem}`),
-  );
+  const failures = profiles.flatMap((folder) => {
+    const profile = readProfile(folder.file);
+    return [...checkProfile(profile), ...checkStepped(profile).map((problem) => `${folder.project} ${problem}`)].map(
+      (problem) => `${path.relative(TESTS_ROOT, folder.file)}: ${problem}`,
+    );
+  });
   if (failures.length > 0) {
     throw new Error(`profile check failed:\n${failures.join('\n')}`);
   }

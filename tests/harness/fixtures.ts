@@ -55,6 +55,7 @@ export const test = tenancy.extend<Fixtures>({
         testInfo,
         tenantId: tenant.id,
         narrow: sharesTenant(level.served),
+        level: level.served,
         ledger,
         logContext: () => testHub.logTail(tenant.id),
       }),
@@ -103,14 +104,22 @@ export const test = tenancy.extend<Fixtures>({
     for (const subscription of opened) subscription.close();
   },
 
-  events: async ({ tenant, testHub, level, ledger, openedSubscriptions }, use) => {
+  events: async ({ tenant, testHub, level, ledger, openedSubscriptions, api, issue }, use) => {
     await use(
       eventStream({
         hubUrl: testHub.coordinates.url,
         tenantId: tenant.id,
         ledger,
         narrow: sharesTenant(level.served),
+        fromNow: sharesTenant(level.served),
         opened: openedSubscriptions,
+        barrier: {
+          file: async () => (await issue('barrier')).chunk.chunk_id,
+          edit: async (chunkId, effort) => {
+            const edited = await api.patch(`/api/chunks/${chunkId}`, { data: { default_effort: effort } });
+            if (edited.status !== 202) throw new Error(`editing barrier chunk ${chunkId} answered ${edited.status}: ${JSON.stringify(edited.body)}`);
+          },
+        },
       }),
     );
   },

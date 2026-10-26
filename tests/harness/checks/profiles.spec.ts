@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { checkProfile, discoverProfiles, parseProfile, readProfile } from '../profiles';
+import { ALL_SWEEPS, TENANT_SWEEPS } from '../client/clients';
+import { assertProfilesSound, checkProfile, checkStepped, discoverProfiles, sweepNames, parseProfile, readProfile } from '../profiles';
 
 const fixture = (name: string): string => path.join(__dirname, 'profiles', `${name}.toml`);
 const problemsIn = (name: string): string[] => checkProfile(readProfile(fixture(name)));
@@ -53,4 +54,22 @@ test('the default profile is the folder’s root and every subfolder holding a p
   fs.mkdirSync(path.join(root, 'plain'));
   expect(discoverProfiles(root).map((folder) => folder.project)).toEqual(['service-hub', 'service-hub-auth']);
   fs.rmSync(root, { recursive: true });
+});
+
+test('a profile fails the stepped rule naming each sweep left timed and each left unset', () => {
+  const folder = path.join(__dirname, 'profiles', 'unstepped');
+  const problems = checkStepped(readProfile(path.join(folder, 'profile.toml')));
+  expect(problems).toHaveLength(2);
+  expect(problems.join('\n')).toMatch(/sweeps\.forge_status\.mode.*timed/);
+  expect(problems.join('\n')).toMatch(/sweeps\.egress\.mode.*unset/);
+  expect(() => assertProfilesSound(discoverProfiles(folder).slice(0, 1))).toThrow(/sweeps\.forge_status\.mode[\s\S]*sweeps\.egress\.mode|sweeps\.egress\.mode[\s\S]*sweeps\.forge_status\.mode/);
+});
+
+test('every committed profile steps every sweep', () => {
+  expect(() => assertProfilesSound()).not.toThrow();
+});
+
+test('api.sweep’s sweep names are the config contract’s', () => {
+  expect([...ALL_SWEEPS].sort()).toEqual(sweepNames().sort());
+  expect(TENANT_SWEEPS.every((name) => (ALL_SWEEPS as readonly string[]).includes(name))).toBe(true);
 });

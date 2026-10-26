@@ -59,6 +59,13 @@ export function requireOwnTenant(level: Level, what: string): void {
   }
 }
 
+/** An all-tenant act refuses below `fresh-hub`: on a shared hub it would reach every other test's tenant. */
+export function requireFreshHub(level: Level, what: string): void {
+  if (level !== 'fresh-hub') {
+    throw new Error(`${what} reaches every tenant of the hub, and this test is served "${level}". Declare isolation "fresh-hub".`);
+  }
+}
+
 /**
  * At `fresh-tenant` and up, a repository on the hub's forge named from the test's id unless a name is given, then one
  * `POST /api/config/apply` declaring it as a work source of the tenant, the repository, and their links to `project`.

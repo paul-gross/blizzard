@@ -1,0 +1,18 @@
+# The default profile: every sweep steps, so a pass runs only when a test asks for one.
+[sweeps.forge_status]
+mode = "stepped"
+
+[sweeps.event_derivation]
+mode = "stepped"
+
+[sweeps.close_drain]
+mode = "stepped"
+
+[sweeps.tenant_teardown]
+mode = "stepped"
+
+[sweeps.trace_export]
+mode = "stepped"
+
+[sweeps.egress]
+mode = "stepped"
