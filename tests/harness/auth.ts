@@ -23,7 +23,9 @@ export interface Landing {
  */
 export function identityFor(email: string): { subject: string; handle: string; email: string; email_verified: boolean } {
   const lower = email.toLowerCase();
-  return { subject: crypto.createHash('sha256').update(lower).digest('hex').slice(0, 24), handle: lower, email: lower, email_verified: true };
+  // The GitHub-shaped stub serializes the subject as a numeric `id`; OIDC accepts the same decimal string.
+  const subject = BigInt(`0x${crypto.createHash('sha256').update(lower).digest('hex').slice(0, 24)}`).toString();
+  return { subject, handle: lower, email: lower, email_verified: true };
 }
 
 /**

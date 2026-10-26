@@ -3,7 +3,7 @@ import { type APIRequestContext, expect } from '@playwright/test';
 import { type People, type Person, peopleFactory } from './people';
 import { walk } from './auth';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
-import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
+import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, idpApi, mockRunnerApi, type Verbs } from './client/clients';
 import type { Role, RunnerAddRequest, RunnerDeclining } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
 import {
@@ -36,6 +36,10 @@ interface Fixtures {
   user: Person;
   /** Signs people in through the stub IdP: `create` for further invited people, `signIn` for an identity the test names. */
   people: People;
+  /** A session-free hub client; its context is independent of the signed-in admin and refused sign-in walks. */
+  anonymous: HubApi;
+  /** Stub IdP controls, available only on a hub owned by this test. */
+  idp: ReturnType<typeof idpApi>;
   project: Project;
   /** A client sending only `Authorization: Bearer <token>`, on a context holding no cookie, so the token alone authenticates. */
   bearer: (token: string) => Promise<Verbs>;
@@ -94,6 +98,19 @@ export const test = tenancy.extend<Fixtures>({
     });
     await use(people);
     await disposeAll();
+  },
+
+  anonymous: async ({ testHub, level, ledger, playwright }, use, testInfo) => {
+    const context = await playwright.request.newContext({ baseURL: testHub.coordinates.url });
+    try {
+      await use(hubApi({ context, testInfo, narrow: false, level: level.served, ledger, logContext: () => testHub.logTail() }));
+    } finally {
+      await context.dispose();
+    }
+  },
+
+  idp: async ({ testHub, level, ledger }, use, testInfo) => {
+    await use(idpApi({ context: testHub.context, testInfo, url: testHub.coordinates.idpUrl, level: level.served, ledger }));
   },
 
   user: async ({ people, userRole }, use) => {

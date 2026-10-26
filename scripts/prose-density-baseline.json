@@ -122,9 +122,9 @@
   },
   "blizzard_mock/forge/api/refs.py": {
    "comments": 4,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 138
+   "docstrings": 7,
+   "over_cap": 1,
+   "total": 140
   },
   "blizzard_mock/forge/api/repos.py": {
    "comments": 1,
@@ -8510,7 +8510,7 @@
    "comments": 4,
    "docstrings": 4,
    "over_cap": 0,
-   "total": 146
+   "total": 149
   },
   "blizzard/runner/store/internal/attachment_store.py": {
    "comments": 4,
@@ -8540,7 +8540,7 @@
    "comments": 2,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 202
+   "total": 203
   },
   "blizzard/runner/store/internal/escalation_store.py": {
    "comments": 7,
@@ -8561,10 +8561,10 @@
    "total": 43
   },
   "blizzard/runner/store/internal/host_external_usage_store.py": {
-   "comments": 17,
+   "comments": 16,
    "docstrings": 14,
    "over_cap": 0,
-   "total": 321
+   "total": 322
   },
   "blizzard/runner/store/internal/host_graph_artifact_store.py": {
    "comments": 5,
@@ -8624,7 +8624,7 @@
    "comments": 3,
    "docstrings": 2,
    "over_cap": 0,
-   "total": 204
+   "total": 205
   },
   "blizzard/runner/store/internal/lease_liveness_store.py": {
    "comments": 17,
@@ -8666,7 +8666,7 @@
    "comments": 9,
    "docstrings": 3,
    "over_cap": 2,
-   "total": 153
+   "total": 154
   },
   "blizzard/runner/store/internal/pause_store.py": {
    "comments": 5,
@@ -9350,13 +9350,13 @@
    "comments": 7,
    "docstrings": 23,
    "over_cap": 3,
-   "total": 190
+   "total": 193
   },
   "blizzard/runner/store/migrations/versions/20261013_1000_runner_scope_tighten.py": {
    "comments": 15,
    "docstrings": 72,
    "over_cap": 5,
-   "total": 486
+   "total": 489
   },
   "blizzard/runner/store/migrations/versions/20261015_1000_host_ingests.py": {
    "comments": 0,
@@ -9404,7 +9404,7 @@
    "comments": 8,
    "docstrings": 42,
    "over_cap": 5,
-   "total": 211
+   "total": 224
   },
   "blizzard/runner/stores.py": {
    "comments": 5,
@@ -10798,7 +10798,7 @@
    "comments": 24,
    "docstrings": 37,
    "over_cap": 7,
-   "total": 327
+   "total": 315
   },
   "fleet_world.py": {
    "comments": 12,
@@ -10987,10 +10987,10 @@
    "total": 105
   },
   "rehearsal/test_upgrade_rehearsal.py": {
-   "comments": 9,
-   "docstrings": 12,
+   "comments": 10,
+   "docstrings": 10,
    "over_cap": 0,
-   "total": 406
+   "total": 409
   },
   "repo_files.py": {
    "comments": 7,
@@ -11072,15 +11072,9 @@
   },
   "service/support.py": {
    "comments": 16,
-   "docstrings": 80,
-   "over_cap": 3,
-   "total": 712
-  },
-  "service/test_auth_login_service.py": {
-   "comments": 2,
-   "docstrings": 16,
+   "docstrings": 72,
    "over_cap": 2,
-   "total": 250
+   "total": 698
   },
   "service/test_budget_lever_service.py": {
    "comments": 6,
@@ -11317,10 +11311,10 @@
    "total": 250
   },
   "service/test_work_items_service.py": {
-   "comments": 11,
-   "docstrings": 12,
+   "comments": 13,
+   "docstrings": 14,
    "over_cap": 2,
-   "total": 111
+   "total": 155
   },
   "store_baseline_support.py": {
    "comments": 0,
@@ -11347,10 +11341,10 @@
    "total": 148
   },
   "support.py": {
-   "comments": 64,
-   "docstrings": 336,
+   "comments": 65,
+   "docstrings": 338,
    "over_cap": 15,
-   "total": 2356
+   "total": 2371
   },
   "support_child_launch.py": {
    "comments": 1,
@@ -12076,7 +12070,7 @@
    "comments": 0,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 44
+   "total": 45
   },
   "test_clock_injection.py": {
    "comments": 12,
@@ -13948,7 +13942,7 @@
    "comments": 4,
    "docstrings": 11,
    "over_cap": 1,
-   "total": 156
+   "total": 172
   },
   "test_land_action.py": {
    "comments": 10,
@@ -14545,10 +14539,10 @@
    "total": 370
   },
   "test_rehearsal_workflow.py": {
-   "comments": 0,
+   "comments": 1,
    "docstrings": 1,
    "over_cap": 0,
-   "total": 81
+   "total": 96
   },
   "test_rekey_detach_race.py": {
    "comments": 0,
@@ -16000,7 +15994,7 @@
    "comments": 20,
    "docstrings": 23,
    "over_cap": 0,
-   "total": 382
+   "total": 383
   },
   "test_runner_takeover_closure.py": {
    "comments": 9,
@@ -16836,6 +16830,12 @@
    "over_cap": 0,
    "total": 305
   },
+  "test_typecheck_strict_rows.py": {
+   "comments": 0,
+   "docstrings": 1,
+   "over_cap": 0,
+   "total": 66
+  },
   "test_upper_tiers_workflow.py": {
    "comments": 0,
    "docstrings": 1,
@@ -17068,7 +17068,7 @@
    "comments": 11,
    "docstrings": 6,
    "over_cap": 0,
-   "total": 521
+   "total": 523
   },
   "test_write_verb_read_reduction.py": {
    "comments": 2,

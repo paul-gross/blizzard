@@ -214,6 +214,19 @@ export function mockRunnerApi(options: { context: APIRequestContext; testInfo: T
   };
 }
 
+/** Controls the test's own stub IdP; a lever would affect other tests on a shared hub. */
+export function idpApi(options: { context: APIRequestContext; testInfo: TestInfo; url: string; level: Level; ledger: Ledger }): {
+  refuseCallback: (refuse: boolean) => Promise<ApiResponse>;
+} {
+  return {
+    refuseCallback: (refuse) => {
+      requireFreshHub(options.level, 'idp.refuseCallback()');
+      return send({ context: options.context, testInfo: options.testInfo, headers: {}, ledger: options.ledger, logContext: () => '' },
+        'PUT', `${options.url}/_levers/refuse_callback`, { data: { refuse } }, false);
+    },
+  };
+}
+
 export interface ForgeApi {
   readonly url: string;
   createRepository(owner: string, name: string): Promise<MockRepositoryCreated>;
