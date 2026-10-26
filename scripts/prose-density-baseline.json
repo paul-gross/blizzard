@@ -11148,12 +11148,6 @@
    "over_cap": 0,
    "total": 308
   },
-  "service/test_projects_ingest_delivery_service.py": {
-   "comments": 1,
-   "docstrings": 12,
-   "over_cap": 1,
-   "total": 189
-  },
   "service/test_release_service.py": {
    "comments": 9,
    "docstrings": 7,
