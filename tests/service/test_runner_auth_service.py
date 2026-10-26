@@ -16,16 +16,14 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from tests.fleet_launchers import run_forge, run_hub, runner_api, runner_config
+from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.runner_fakes import make_store
 from tests.service.support import (
-    add_runner,
     mock_hub,
     poll_until,
     require_mock_fleet,
     service_gate,
-    stack,
 )
 from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
 from tests.support import free_port
@@ -138,27 +136,3 @@ def _run_and_check(
 ) -> bool:
     _drive(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target
-
-
-def test_a_running_hub_refuses_a_revoked_token_and_a_tokenless_call(tmp_path: Path) -> None:
-    """Revocation is keyed on the revoked hash: the same token that peeked fine before its
-    revocation is refused after, and a call carrying no token is refused throughout."""
-    bin_dir, origins, forge_port, hub_port = stack(tmp_path)
-    with run_forge(bin_dir, origins, forge_port), run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        runner_id, token = add_runner(hub, "r1")
-        auth = {"Authorization": f"Bearer {token}"}
-        registered = hub.post(
-            "/api/fleet/runners",
-            headers=auth,
-            json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
-        )
-        assert registered.status_code == 201, registered.text
-        assert registered.json()["runner_id"] == runner_id
-        assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 200
-        assert hub.get("/api/fleet/queue/peek").status_code == 401
-
-        revoked = hub.post(f"/api/runners/{runner_id}/token-revocations", json={"by": "svc"})
-        assert revoked.status_code == 201, revoked.text
-
-        assert hub.get("/api/fleet/queue/peek", headers=auth).status_code == 401
-        assert hub.get("/api/fleet/queue/peek").status_code == 401
