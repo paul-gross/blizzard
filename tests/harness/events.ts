@@ -1,5 +1,7 @@
 import { TextDecoder } from 'node:util';
+import { SESSION_COOKIE, sessionOf } from './auth';
 import type { Ledger } from './client/ledger';
+import type { Person } from './people';
 import type { Json } from './client/clients';
 
 /** One frame of the stream, as `contracts/sse/` defines them: an `id`, an `event` kind, and a JSON payload. */
@@ -64,13 +66,16 @@ export interface BarrierSubscription extends Subscription {
 }
 
 export interface EventStream {
-  /** Subscribes before it returns, so a test opens it before the act it waits on. */
-  open(): Promise<Subscription>;
+  /**
+   * Subscribes before it returns, so a test opens it before the act it waits on. With `as`, the subscription carries that
+   * person's session instead of the tenant admin's.
+   */
+  open(options?: { as?: Person }): Promise<Subscription>;
   /**
    * Files and ingests a barrier chunk first, then subscribes from now at every level, so the barrier's own ingest
    * frames are never the test's.
    */
-  open(options: { barrier: true }): Promise<BarrierSubscription>;
+  open(options: { barrier: true; as?: Person }): Promise<BarrierSubscription>;
 }
 
 export interface Events extends EventStream {
@@ -286,11 +291,13 @@ export function eventStream(options: {
   /** Whether a subscription without a barrier joins from now. */
   fromNow: boolean;
   opened: Subscription[];
+  /** The superuser's `bz_session` on a hub with authentication on: what a subscription carries unless it is opened `as` a person. */
+  superuserSession: () => Promise<string | undefined>;
   /** Files the barrier chunk, and edits it with the value given. Reached only by `open({ barrier: true })`. */
   barrier: { file: () => Promise<string>; edit: (chunkId: string, effort: string) => Promise<void> };
 }): Events {
   const stream = (narrow: boolean): EventStream => {
-    const open = async (openOptions?: { barrier: true }): Promise<StreamReader> => {
+    const open = async (openOptions?: { barrier?: true; as?: Person }): Promise<StreamReader> => {
       const admits = (frame: Frame): boolean =>
         !narrow || Object.values(frame.data ?? {}).some((value) => options.ledger.holds(value));
       // The chunk is filed before the stream opens, so none of its ingest frames can reach the subscription.
@@ -302,7 +309,7 @@ export function eventStream(options: {
       }
       const subscription = new StreamReader({
         url: `${options.hubUrl}/api/events/stream`,
-        headers: { 'X-Blizzard-Tenant': options.tenantId },
+        headers: { 'X-Blizzard-Tenant': options.tenantId, ...(await sessionHeaders(openOptions?.as, options.superuserSession)) },
         admits,
         fromNow: barrier !== undefined || options.fromNow,
         barrier,
@@ -314,6 +321,16 @@ export function eventStream(options: {
     return { open: open as EventStream['open'] };
   };
   return { ...stream(options.narrow), unfiltered: stream(false) };
+}
+
+/** The cookie header a subscription carries: the person's session, else the superuser's; none on a hub with authentication off. */
+async function sessionHeaders(person: Person | undefined, superuser: () => Promise<string | undefined>): Promise<Record<string, string>> {
+  const session = person === undefined ? await superuser() : await sessionOf(person.context);
+  if (session === undefined) {
+    if (person !== undefined) throw new Error(`${person.email} holds no session to subscribe with`);
+    return {};
+  }
+  return { cookie: `${SESSION_COOKIE}=${session}` };
 }
 
 /** A reader over any stream URL; the harness's own proof points it at a stub. */

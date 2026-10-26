@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import { expect } from '@playwright/test';
 import { type People, type Person, peopleFactory } from './people';
-import { type CliResult, CliTimeout, runCommand } from './cli';
+import { walk } from './auth';
+import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
 import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
 import type { Role, RunnerAddRequest } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
@@ -40,8 +41,11 @@ interface Fixtures {
   forge: ForgeApi;
   events: Events;
   hubLog: HubLog;
-  /** Runs the real `blizzard` CLI against the test's hub and tenant, with a config home of its own. */
-  cli: (args: string[]) => Promise<CliResult>;
+  /**
+   * Runs the real `blizzard` CLI against the test's hub and tenant, with a config home of its own. With `as`, the CLI
+   * acts as that person: the first call for a person logs them in (`hub login --paste`) in a config home of theirs.
+   */
+  cli: (args: string[], options?: { as?: Person }) => Promise<CliResult>;
   /** Starts a loopback OTLP/HTTP receiver, closed when the test ends. */
   otlpSink: () => Promise<OtlpSink>;
   issue: (title: string, options?: { repository?: Repository }) => Promise<FiledIssue>;
@@ -140,6 +144,7 @@ export const test = tenancy.extend<Fixtures>({
         narrow: sharesTenant(level.served),
         fromNow: sharesTenant(level.served),
         opened: openedSubscriptions,
+        superuserSession: async () => (await testHub.superuser())?.session,
         barrier: {
           file: async () => (await issue('barrier')).chunk.chunk_id,
           edit: async (chunkId, effort) => {
@@ -156,12 +161,9 @@ export const test = tenancy.extend<Fixtures>({
   },
 
   cli: async ({ testHub, tenant }, use, testInfo) => {
-    await use(async (args) => {
-      const home = testInfo.outputPath('cli-config-home');
-      fs.mkdirSync(home, { recursive: true });
-      const env = daemonEnv({ BZ_HUB_URL: testHub.coordinates.url, BZ_HUB_TENANT: tenant.id }, home);
+    const run = async (args: string[], env: NodeJS.ProcessEnv, prompt?: Prompt): Promise<CliResult> => {
       try {
-        return await runCommand(requireBinary(binDir(), 'blizzard'), args, { env });
+        return await runCommand(requireBinary(binDir(), 'blizzard'), args, { env, prompt });
       } catch (error) {
         if (error instanceof CliTimeout) {
           await testInfo.attach('cli stdout', { body: error.stdout, contentType: 'text/plain' });
@@ -169,6 +171,40 @@ export const test = tenancy.extend<Fixtures>({
         }
         throw error;
       }
+    };
+    const envFor = (home: string): NodeJS.ProcessEnv => {
+      fs.mkdirSync(home, { recursive: true });
+      // Unbuffered, so the login URL reaches the harness before the command waits on the code.
+      return daemonEnv({ BZ_HUB_URL: testHub.coordinates.url, BZ_HUB_TENANT: tenant.id, PYTHONUNBUFFERED: '1' }, home);
+    };
+    // One login per person per test, in the config home that person's later commands read.
+    const logins = new Map<string, Promise<void>>();
+    const login = (person: Person, env: NodeJS.ProcessEnv): Promise<void> => {
+      let done = logins.get(person.userId);
+      if (done === undefined) {
+        done = (async () => {
+          const result = await run(['hub', 'login', '--paste'], env, {
+            until: /open this URL to log in, then paste the code it shows: (\S+)/,
+            reply: async (match) => {
+              const landing = await walk({ context: person.context, hub: testHub.coordinates, email: person.email, startUrl: match[1] as string });
+              const code = /<pre[^>]*>([^<]+)<\/pre>/.exec(landing.body)?.[1];
+              if (landing.status !== 200 || code === undefined) {
+                throw new Error(`the login URL for ${person.email} landed at ${landing.status} ${landing.location ?? ''} with no code: ${landing.body.slice(0, 300)}`);
+              }
+              return code.trim();
+            },
+          });
+          if (result.code !== 0) throw new Error(`\`blizzard hub login --paste\` for ${person.email} exited ${result.code}: ${result.stdout}${result.stderr}`);
+        })();
+        logins.set(person.userId, done);
+      }
+      return done;
+    };
+    await use(async (args, options = {}) => {
+      const person = options.as;
+      const env = envFor(testInfo.outputPath(person === undefined ? 'cli-config-home' : `cli-config-home-${person.username}`));
+      if (person !== undefined) await login(person, env);
+      return run(args, env);
     });
   },
 
