@@ -11076,12 +11076,6 @@
    "over_cap": 3,
    "total": 712
   },
-  "service/test_auth_login_service.py": {
-   "comments": 2,
-   "docstrings": 16,
-   "over_cap": 2,
-   "total": 250
-  },
   "service/test_budget_lever_service.py": {
    "comments": 6,
    "docstrings": 8,
