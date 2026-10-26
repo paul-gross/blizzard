@@ -118,7 +118,7 @@ def _graph_yaml() -> str:
 
 
 def _baselines() -> list[str | None]:
-    """The tags to rehearse from: the one the caller names, else every supported release; ``None`` when none is."""
+    """The tags to rehearse from: the one the caller names, else every published supported release; ``None`` when none is."""
     named = os.environ.get(_BASELINE)
     if named:
         return [named]
@@ -128,7 +128,13 @@ def _baselines() -> list[str | None]:
         [str(Path(sys.executable).parent / "blizzard-compat"), "releases", "--json"],
         capture_output=True, text=True, check=True, cwd=repo_root(),
     )  # fmt: skip
-    return [release["tag"] for release in json.loads(listed.stdout)["releases"]] or [None]
+    # A tag whose release run never published has no wheel to upgrade from.
+    published = subprocess.run(
+        ["gh", "release", "list", "--exclude-drafts", "--limit", "1000", "--json", "tagName", "--jq", ".[].tagName"],
+        capture_output=True, text=True, check=True, cwd=repo_root(),
+    ).stdout.split()  # fmt: skip
+    tags = [release["tag"] for release in json.loads(listed.stdout)["releases"]]
+    return [tag for tag in tags if tag in published] or [None]
 
 
 @pytest.fixture(scope="module")
