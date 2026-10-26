@@ -1,10 +1,12 @@
 """Tenant deletion driven through the hub's wired teardown: a close records the deletion fact and drops what the hub
 holds for the tenant at once — its people answer 404, its runners' tokens 401, its writes are refused — the drain
 removes every row of the tenant children first in bounded batches and nothing of another tenant, the completion
-removes the tenant itself and records the count, and the ``tenant_teardown`` sweep finishes a drain a budget cut off."""
+removes the tenant itself and records the count, and the ``tenant_teardown`` sweep finishes a drain a budget cut off.
+A tenant holding what a service test creates deletes in well under a second, measured here."""
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,6 +42,7 @@ from tests.support import (
     default_tenant,
     hub_level_connections,
     hub_scoped,
+    ingest,
     scoped_connections,
     seed_hub_admin,
     seed_membership,
@@ -49,6 +52,12 @@ from tests.support import (
 )
 
 pytestmark = pytest.mark.component
+
+#: Chunks the measured tenant holds — the handful a service test ingests.
+_CHUNKS = 8
+
+#: A bound only a pathological drain exceeds; the measurement itself is reported.
+_LOOSE_BOUND_SECONDS = 5.0
 
 
 @pytest.fixture
@@ -499,3 +508,20 @@ def test_a_deletion_never_touches_a_written_export_file(hub: HubHarness, tmp_pat
     assert written.read_text() == f'{{"tenant_id": "{tenant}"}}\n'
     [fact] = _deletions(hub)
     assert fact.tenant_id == tenant
+
+
+def test_a_service_sized_tenant_tears_down_well_under_a_second(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    measured = default_tenant(hub.engine)
+    for n in range(_CHUNKS):
+        ingest(hub, [{"source": "default", "ref": str(n)}])
+    hub.hub_services.tenant_admin.create("survivor", admin_user_id=None, by="usr_creator")
+
+    started = time.perf_counter()
+    progress = hub.hub_services.tenant_teardown.delete(measured, by="usr_closer")
+    elapsed = time.perf_counter() - started
+
+    print(f"\ntenant teardown: {progress.rows_removed} rows in {elapsed * 1000:.1f} ms")
+    assert progress.state is TenantDeletionState.DELETED
+    assert progress.rows_removed is not None and progress.rows_removed > _CHUNKS
+    assert elapsed < _LOOSE_BOUND_SECONDS
