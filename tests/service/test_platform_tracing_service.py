@@ -1,10 +1,9 @@
-"""Platform spans from real daemons (service tier) — each host exports to an OTLP sink the test serves."""
+"""Platform spans from a real runner host (service tier) — it exports to an OTLP sink the test serves."""
 
 from __future__ import annotations
 
 import dataclasses
 import json
-import os
 import signal
 import subprocess
 import sys
@@ -20,7 +19,6 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from tests import claude_code_telemetry
-from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import await_http, runner_config
 from tests.fleet_world import mint_world
 from tests.host_files import write_host_file
@@ -56,52 +54,6 @@ def _stop(proc: subprocess.Popen[str]) -> None:
     """SIGTERM and wait — a graceful stop flushes what the daemon still buffers."""
     proc.send_signal(signal.SIGTERM)
     proc.wait(timeout=30.0)
-
-
-def _hub(hub_dir: Path, port: int, env: dict[str, str], *, platform: bool) -> subprocess.Popen[str]:
-    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
-    subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    config = load_hub_config(hub_dir)
-    tracing = RunnerTracingConfig(platform=platform, platform_sample_ratio=1.0)
-    config = dataclasses.replace(config, tracing=tracing)
-    config.config_path.write_text(config.to_toml())
-    return subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
-        env=env,
-        stdout=daemon_log_sink(hub_dir / "daemon.log"),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-
-def _drive_hub(tmp_path: Path, *, platform: bool) -> list[tuple[dict[str, str], object]]:
-    port = free_port()
-    hub_dir = tmp_path / "hub"
-    with otlp_sink() as sink:
-        env = {**os.environ, "OTEL_EXPORTER_OTLP_ENDPOINT": sink.url}
-        proc = _hub(hub_dir, port, env, platform=platform)
-        client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
-        try:
-            await_http(proc, client, "/api/health", log=hub_dir / "daemon.log")
-            client.get("/api/chunks/ch_service?token=planted-secret")
-        finally:
-            client.close()
-            _stop(proc)
-        assert "planted-secret" not in repr(sink.requests)
-        return _platform_spans(sink)
-
-
-def test_a_hub_with_platform_on_delivers_request_and_query_spans(tmp_path: Path) -> None:
-    spans = _drive_hub(tmp_path, platform=True)
-    assert spans, "no platform span reached the sink"
-    assert {resource["service.name"] for resource, _ in spans} == {"blizzard-hub"}
-    names = {span.name for _, span in spans}  # type: ignore[attr-defined]
-    assert "GET /api/chunks/{chunk_id}" in names
-    assert any(not name.startswith(("GET ", "POST ", "sweep ")) for name in names), "no query span"
-
-
-def test_a_hub_with_platform_unset_delivers_no_platform_span(tmp_path: Path) -> None:
-    assert _drive_hub(tmp_path, platform=False) == []
 
 
 def test_a_runner_host_delivers_server_spans_over_tcp_and_the_socket_and_tick_spans(tmp_path: Path) -> None:

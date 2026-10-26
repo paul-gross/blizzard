@@ -239,6 +239,7 @@ export const test = tenancy.extend<Fixtures>({
 });
 
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
+export type { OtlpSink, ReceivedSpan } from './otlp-sink';
 export { expect };
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
 export type { RunnerDeclining };
