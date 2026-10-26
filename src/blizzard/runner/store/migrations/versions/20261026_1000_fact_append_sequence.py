@@ -67,7 +67,9 @@ def _backfill(bind: sa.Connection) -> None:
     unnumbered = {
         runner_id
         for table in _TABLES
-        for runner_id in bind.execute(sa.text(f"SELECT DISTINCT runner_id FROM {table} WHERE {_COLUMN} IS NULL")).scalars()
+        for runner_id in bind.execute(
+            sa.text(f"SELECT DISTINCT runner_id FROM {table} WHERE {_COLUMN} IS NULL")
+        ).scalars()
     }
     for runner_id in sorted(unnumbered):
         facts: list[tuple[Any, int, str, Any]] = []
