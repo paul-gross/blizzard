@@ -24,8 +24,8 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
-    RepositoryFields,
     RepositoryId,
     RepositoryOutcome,
     RepositoryResolution,
@@ -55,6 +55,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
 from tests.support import (
     HubHarness,
+    RepositorySeed,
     build_hub,
     emitted_events,
     hub_scoped,
@@ -114,6 +115,18 @@ def _row(
     )
 
 
+_EXAMPLE_FORGE = ConfiguredForge(
+    forge_id=ForgeId("frg_example"),
+    slug="example",
+    name="example",
+    kind="github",
+    fields=ForgeFields("https://api.github.example", None),
+    revision=1,
+    created_at=datetime(2026, 10, 1, tzinfo=UTC),
+    created_by="op",
+)
+
+
 def _visit(
     repos: tuple[str, ...] = (_WIDGET,),
     *,
@@ -130,7 +143,7 @@ def _visit(
     marker_rows = tuple(_row(ArtifactKind.ASSET, name, "x") for name in markers)
     targets = tuple(
         ResolvedRepository(
-            forge_api_url="https://api.github.example",
+            forge_id=_EXAMPLE_FORGE.forge_id,
             owner="acme",
             base_branch="main",
             secret_name="s",
@@ -156,6 +169,7 @@ def _visit(
             targets=targets,
             qualified=repos,
             records=tuple(t.record for t in targets),
+            forges=(_EXAMPLE_FORGE,),
         ),
         work_items=tuple(MappingProxyType(item) for item in work_items),
         feature_title=feature_title,
@@ -752,7 +766,7 @@ nodes:
 """
 
 _REPOSITORIES = tuple(
-    RepositoryFields(
+    RepositorySeed(
         forge_api_url=f"http://forge.{host}",
         owner="acme",
         repo=name,
@@ -763,9 +777,7 @@ _REPOSITORIES = tuple(
 )
 
 
-def _hub(
-    tmp_path: Path, double: GitHubDouble, repositories: tuple[RepositoryFields, ...] = _REPOSITORIES
-) -> HubHarness:
+def _hub(tmp_path: Path, double: GitHubDouble, repositories: tuple[RepositorySeed, ...] = _REPOSITORIES) -> HubHarness:
     return build_hub(tmp_path, repositories=repositories, forges=double.forges)
 
 
@@ -874,14 +886,14 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
 
 def test_one_owner_repo_held_for_two_records_fails_before_the_pass(tmp_path: Path) -> None:
     twins = (
-        RepositoryFields(
+        RepositorySeed(
             forge_api_url="http://forge.one",
             owner="acme",
             repo="widget",
             base_branch="main",
             secret_name="fixture-forge-token",
         ),
-        RepositoryFields(
+        RepositorySeed(
             forge_api_url="http://forge.two",
             owner="acme",
             repo="widget",
@@ -935,14 +947,16 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     assert chunk is not None and node is not None
     target = hub.services.hub_node._repositories.list_all(include_retired=True)[0]
     resolved = ResolvedRepository(
-        forge_api_url=target.fields.forge_api_url,
+        forge_id=target.fields.forge_id,
         owner=target.fields.owner,
         base_branch=target.fields.base_branch,
         secret_name=target.fields.secret_name,
         record=str(target.repository_id),
     )
+    forge = hub.services.forge_records.get(target.fields.forge_id)
+    assert forge is not None
     raced = hub.services.hub_node._escalate_capability_missing(
-        chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, epoch=1
+        chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, forge=forge, epoch=1
     )
     assert "already escalated" in raced.detail
     assert _event_kinds(hub).count("forge-capability-missing") == 1

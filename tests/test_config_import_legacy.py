@@ -156,7 +156,8 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
     ids = {str(r["slug"]): str(r["repository_id"]) for r in rows["repositories"]}
     source_ids = {str(r["slug"]): str(r["work_source_id"]) for r in rows["work_sources"]}
     changes = rows["config_changes"]
-    assert len(changes) == 10
+    assert len(changes) == 11
+    assert [r["op"] for r in changes if r["record_kind"] == "forge"] == ["create"]
     assert {(r["actor"], r["door"], r["op"]) for r in changes} == {("migration", "migration", "create")}
     links = sorted((str(r["record_kind"]), str(r["record_key"])) for r in changes if r["project_id"] is not None)
     assert links == sorted(

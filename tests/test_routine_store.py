@@ -15,7 +15,7 @@ from sqlalchemy import Engine, select
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
 from blizzard.hub.store import schema as s

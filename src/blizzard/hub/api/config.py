@@ -25,8 +25,11 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
-from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields, RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceFields, WorkSourceId
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositoryId
+from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit, WorkSourceId
 from blizzard.hub.domain.config_apply.entries import (
     DeclaredRepository,
     DeclaredRoutine,
@@ -36,6 +39,7 @@ from blizzard.hub.domain.config_apply.entries import (
 )
 from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
+from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.declarations import EntryProjectRequired, ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.wire.config import (
@@ -78,23 +82,31 @@ _SCHEMAS = {
 }
 
 
-#: The kinds whose ``record_key`` is a repository's id, those whose is a work source's, and the kind whose is a
-#: project's.
+#: The kinds whose ``record_key`` is a repository's id, those whose is a work source's, and the kinds whose is a
+#: forge's and a project's.
 _REPOSITORY_KEYED = (RecordKind.REPOSITORY, RecordKind.PROJECT_REPOSITORY_LINK)
 _WORK_SOURCE_KEYED = (RecordKind.WORK_SOURCE, RecordKind.PROJECT_SOURCE_LINK)
+_FORGE_KEYED = (RecordKind.FORGE,)
+
+#: The old address fields of each document entry, read into what the entry says of its forge.
+_REPOSITORY_ADDRESS = "forge_api_url"
+_WORK_SOURCE_ADDRESSES = ("api_base", "web_base")
 
 
 def _labels(changes: list[ConfigChange], services: TenantServices) -> dict[tuple[RecordKind, str], str]:
     """The current slug of each slugged record a page of changes names: one read each of the repositories, the work
-    sources and the projects it keys (``bzh:bulk-reconstitution``)."""
+    sources, the forges and the projects it keys (``bzh:bulk-reconstitution``)."""
     repository_ids = list({RepositoryId(c.record_key) for c in changes if c.record_kind in _REPOSITORY_KEYED})
     source_ids = list({WorkSourceId(c.record_key) for c in changes if c.record_kind in _WORK_SOURCE_KEYED})
+    forge_ids = list({ForgeId(c.record_key) for c in changes if c.record_kind in _FORGE_KEYED})
     project_ids = list({ProjectId(c.record_key) for c in changes if c.record_kind is RecordKind.PROJECT})
     labels: dict[tuple[RecordKind, str], str] = {}
     for repository_id, repository in services.repository_records.get_many(repository_ids).items():
         labels.update({(kind, repository_id): repository.slug for kind in _REPOSITORY_KEYED})
     for source_id, source in services.work_source_records.get_many(source_ids).items():
         labels.update({(kind, source_id): source.slug for kind in _WORK_SOURCE_KEYED})
+    for forge_id, forge in services.forge_records.get_many(forge_ids).items():
+        labels.update({(kind, forge_id): forge.slug for kind in _FORGE_KEYED})
     for project_id, project in services.projects.get_many(project_ids).items():
         labels[(RecordKind.PROJECT, project_id)] = project.slug
     return labels
@@ -167,7 +179,7 @@ def list_changes(
 
 
 def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) -> str | None:
-    """The stored key a change-log filter names: the id of the project, repository or work source an id or slug
+    """The stored key a change-log filter names: the id of the project, repository, work source or forge an id or slug
     resolves to; the
     value as given when it resolves to none (so the page is empty) or the kind is keyed by its name."""
     if key is None:
@@ -181,45 +193,43 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
     if kind in _WORK_SOURCE_KEYED:
         source = services.work_source_records.resolve(key)
         return key if source is None else source.work_source_id
+    if kind in _FORGE_KEYED:
+        forge = services.forge_records.resolve(key)
+        return key if forge is None else forge.forge_id
     return key
 
 
 def _entries(document: ConfigDocument) -> DocumentEntries:
-    """The domain's entries from a validated document: each entry's create fields, and a sparse edit of only the
-    fields the entry states (``model_fields_set``)."""
+    """The domain's entries from a validated document: each entry's create fields, a sparse edit of only the
+    fields the entry states (``model_fields_set``), and what it says of its forge — the old address fields it states."""
     sources = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "slug"}
+        addresses = {name: stated.pop(name) for name in _WORK_SOURCE_ADDRESSES if name in stated}
         sources.append(
             DeclaredWorkSource(
                 slug=entry.slug,
                 name=entry.name,
-                fields=WorkSourceFields(
-                    provider=entry.provider,
-                    locator=entry.locator,
-                    api_base=entry.api_base,
-                    web_base=entry.web_base,
-                    annotate=entry.annotate,
-                    secret=entry.secret,
+                draft=WorkSourceDraft(
+                    provider=entry.provider, locator=entry.locator, annotate=entry.annotate, secret=entry.secret
                 ),
                 edit=WorkSourceEdit(**stated),
+                forge=ForgeChoice(**addresses),
             )
         )
     repositories = []
     for repo in document.repositories:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
+        address = stated.pop(_REPOSITORY_ADDRESS, UNSET)
         repositories.append(
             DeclaredRepository(
                 slug=repo.slug,
                 name=repo.name,
-                fields=RepositoryFields(
-                    forge_api_url=repo.forge_api_url,
-                    owner=repo.owner,
-                    repo=repo.repo,
-                    base_branch=repo.base_branch,
-                    secret_name=repo.secret_name,
+                draft=RepositoryDraft(
+                    owner=repo.owner, repo=repo.repo, base_branch=repo.base_branch, secret_name=repo.secret_name
                 ),
                 edit=RepositoryEdit(**stated),
+                forge=ForgeChoice(api_base=address),
             )
         )
     scopes = [
@@ -392,6 +402,9 @@ def export_config(services: Services) -> ConfigDocument:
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
+    forges = services.forge_records.get_many(
+        list({r.fields.forge_id for r in sources} | {r.fields.forge_id for r in repositories})
+    )
     repository_slugs = {r.repository_id: r.slug for r in services.repository_records.list_all(include_retired=True)}
     source_slugs = {r.work_source_id: r.slug for r in services.work_source_records.list_all(include_retired=True)}
     project_ids = [project.project_id for project in projects]
@@ -413,8 +426,31 @@ def export_config(services: Services) -> ConfigDocument:
             for project in projects
         ],
         secrets=[s.name for s in services.secret_catalog.list_all() if s.name not in retired],
-        work_sources=[WorkSourceDocument(slug=r.slug, name=r.name, **vars(r.fields)) for r in sources],
-        repositories=[RepositoryDocument(slug=r.slug, name=r.name, **vars(r.fields)) for r in repositories],
+        work_sources=[
+            WorkSourceDocument(
+                slug=r.slug,
+                name=r.name,
+                provider=r.fields.provider,
+                locator=r.fields.locator,
+                api_base=forges[r.fields.forge_id].fields.api_base,
+                web_base=forges[r.fields.forge_id].fields.web_base,
+                annotate=r.fields.annotate,
+                secret=r.fields.secret,
+            )
+            for r in sources
+        ],
+        repositories=[
+            RepositoryDocument(
+                slug=r.slug,
+                name=r.name,
+                forge_api_url=forges[r.fields.forge_id].fields.api_base,
+                owner=r.fields.owner,
+                repo=r.fields.repo,
+                base_branch=r.fields.base_branch,
+                secret_name=r.fields.secret_name,
+            )
+            for r in repositories
+        ],
         scopes=[
             ScopeEntry(slug=s.slug, description=s.description, project=slug_of[s.project_id])
             for s in sorted(services.scopes.list_all(), key=lambda s: (slug_of[s.project_id], s.slug))

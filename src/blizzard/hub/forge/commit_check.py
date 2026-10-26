@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     IReadRepositoryRecordRepository,
@@ -30,7 +31,7 @@ COMMIT_CHECK_SECONDS = 10.0
 class IForgeRefsSource(Protocol):
     """The part of the forge registry the commit check reads."""
 
-    def offered(self, forge: str, repository: RepositoryId | None = None) -> frozenset[Capability]: ...
+    def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]: ...
 
     def refs(self, repository: RepositoryId) -> IForgeRefs: ...
 
@@ -40,12 +41,14 @@ class SeamCommitResolver:
         self,
         *,
         repositories: IReadRepositoryRecordRepository,
+        forge_records: IReadForgeRepository,
         links: IReadProjectLinks,
         forges: IForgeRefsSource,
         loop: ActionLoop,
         timeout: float = COMMIT_CHECK_SECONDS,
     ) -> None:
         self._repositories = repositories
+        self._forge_records = forge_records
         self._links = links
         self._forges = forges
         self._loop = loop
@@ -58,14 +61,16 @@ class SeamCommitResolver:
     def _resolve(self, project_id: ProjectId, repo: str, commit: str) -> CommitResolution | None:
         """Never raises (``CommitResolver``'s own contract)."""
         try:
+            forges = {forge.forge_id: forge for forge in self._forge_records.list_all(include_retired=True)}
             row = resolve_repository(
                 CommitOrigin.of(None, repo),
                 self._repositories.list_all(include_retired=False),
+                forges.values(),
                 linked=frozenset(link.repository_id for link in self._links.repositories_of(project_id)),
             )
             if row is None:
                 return None
-            if Capability.COMMITS_READ not in self._forges.offered(row.fields.forge_api_url, row.repository_id):
+            if Capability.COMMITS_READ not in self._forges.offered(forges[row.fields.forge_id], row.repository_id):
                 return None
             refs = self._forges.refs(row.repository_id)
             future = self._loop.submit(refs.commit_exists(commit))

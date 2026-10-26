@@ -11,7 +11,7 @@ import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretReader
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
@@ -33,15 +33,17 @@ def build_forge_adapter(
 def build_forge_registry(
     *,
     records: IReadRepositoryRecordRepository,
+    forges: IReadForgeRepository,
     objects: ConfigObjectCache,
     secrets: ISecretReader,
     clock: IClock,
     capabilities: Mapping[str, frozenset[Capability]] = FORGE_KIND_CAPABILITIES,
     instrument: Callable[[httpx2.AsyncClient], None] | None = None,
 ) -> ForgeRegistry:
-    """A tenant's registry over its repository records, cache, and secret reader."""
+    """A tenant's registry over its repository and forge records, cache, and secret reader."""
     return ForgeRegistry(
         records=records,
+        forges=forges,
         objects=objects,
         secrets=secrets,
         build=lambda binding: build_forge_adapter(binding, clock=clock, instrument=instrument),

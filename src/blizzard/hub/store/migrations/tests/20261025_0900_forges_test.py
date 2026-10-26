@@ -31,15 +31,20 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.forges import OriginRefused, canonical_origin
+from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_chunk_repositories
 from blizzard.hub.domain.kernel.slugs import derive_slug
 from blizzard.hub.forge.web import web_origin
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.forge_check_reads import read_forge_addresses
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.tenancy import TenantId
 from blizzard.tools.invariants import HubInvariants
 from tests.migration_support_project_columns_migration import _NOW, _insert, _query, _run_step
 from tests.migration_support_store_migrations import _schema_snapshot
 from tests.repo_files import repo_root
+from tests.support import scoped_connections
 
 pytestmark = [pytest.mark.component]
 
@@ -309,6 +314,31 @@ def test_a_carried_over_store_holds_every_forge_invariant(tmp_path: Path) -> Non
         runner.upgrade(_FORGES)
 
         assert [v for v in HubInvariants(engine).run() if v.invariant in _FORGE_INVARIANTS] == []
+
+
+def test_a_chunks_commits_resolve_to_the_same_repositories_after_carry_over(tmp_path: Path) -> None:
+    # Each origin a delivered commit names, and the repository the host-of-its-own-address rule resolved it to below
+    # the revision.
+    commits = {
+        "https://github.com/acme/app.git": "app",
+        "http://127.0.0.1:8123/acme/local.git": "local",
+        "https://ghe.acme.internal/acme/ghe-app.git": "ghe-app",
+    }
+    with _before(tmp_path) as (runner, engine, tenant):
+        runner.upgrade(_FORGES)
+        connections = scoped_connections(engine, TenantId(tenant))
+        records = RepositoryRecordStore(connections).list_all(include_retired=True)
+        forges = ForgeRecordStore(connections).list_all(include_retired=True)
+
+        resolution = resolve_chunk_repositories(
+            [CommitOrigin.of(origin, slug) for origin, slug in commits.items()],
+            records,
+            forges,
+            minted_at=_T0 + timedelta(days=1),
+            linked=None,
+        )
+
+        assert [target.slug for target in resolution.targets] == list(commits.values())
 
 
 def test_the_records_whose_web_links_move_are_logged(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

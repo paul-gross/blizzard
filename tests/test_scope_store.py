@@ -16,7 +16,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.scope_store import ScopeStore

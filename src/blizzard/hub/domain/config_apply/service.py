@@ -4,24 +4,36 @@ the instant they write under, plans the ``projects`` section, and hands the whol
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.apply import (
+    REPOSITORIES_SECTION,
     ROUTINES_SECTION,
     SCOPES_SECTION,
+    WORK_SOURCES_SECTION,
+    ApplyEntryRefused,
     ConfigDeclaration,
     DeclarableRecord,
     DeclaredReferences,
     EntryOutcome,
+    PlannedForge,
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
 )
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forge_resolution import (
+    REPOSITORY_FORGE_RULES,
+    WORK_SOURCE_FORGE_RULES,
+    ForgePlanner,
+    OldFieldUsed,
+)
+from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IReadRepositoryRecordRepository,
@@ -36,12 +48,14 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
     WorkSourceRef,
     WorkSourceSlug,
+    require_known_provider,
 )
 from blizzard.hub.domain.config_apply.entries import DocumentEntries
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, Routine
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.declarations import (
     PlannedRepositories,
@@ -57,11 +71,12 @@ from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, 
 @domain_model
 @dataclass(frozen=True)
 class ApplyResult:
-    """What an apply decided: the id its changes share — ``None`` on a dry run, which commits nothing — and an
-    outcome row per named record."""
+    """What an apply decided: the id its changes share — ``None`` on a dry run, which commits nothing — an outcome row
+    per named record, and a warning per old address field an entry used."""
 
     apply_id: str | None
     outcomes: tuple[EntryOutcome, ...]
+    warnings: tuple[OldFieldUsed, ...] = ()
 
 
 @domain_model
@@ -115,6 +130,7 @@ class ConfigApplication:
         authoring: ConfigAuthoring,
         repositories: IReadRepositoryRecordRepository,
         work_sources: IReadWorkSourceRepository,
+        forges: IReadForgeRepository,
         projects: IReadProjectRepository,
         links: IReadProjectLinks,
         scopes: IReadScopeRepository,
@@ -128,6 +144,7 @@ class ConfigApplication:
         self._authoring = authoring
         self._repositories = repositories
         self._work_sources = work_sources
+        self._forges = forges
         self._projects = projects
         self._links = links
         self._scopes = scopes
@@ -146,11 +163,14 @@ class ConfigApplication:
         repositories = self._held_repositories(entries)
         sources = self._held_work_sources(entries)
         projects = self._plan_projects(entries, ctx, repositories, sources)
-        declaration = self._declaration(entries, projects, repositories, sources)
+        planner = ForgePlanner(
+            self._forges.list_all(include_retired=True), ctx, at=self._clock.now(), resolve=self._forges.resolve
+        )
+        declaration, warnings = self._declaration(entries, projects, repositories, sources, planner)
         outcomes = self._authoring.apply(
             declaration, self._stored(declaration, repositories, sources), ctx, dry_run=dry_run
         )
-        return ApplyResult(apply_id, tuple(outcomes))
+        return ApplyResult(apply_id, tuple(outcomes), warnings)
 
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
         stored = {r.slug: r for r in self._repositories.list_all(include_retired=True)}
@@ -262,32 +282,78 @@ class ConfigApplication:
 
     @staticmethod
     def _declaration(
-        entries: DocumentEntries, projects: ProjectsPlan, held: _Repositories, sources_held: _WorkSources
-    ) -> ConfigDeclaration:
-        """The domain's declarations from the entries: each record under the id it takes, and each scope and routine
-        within the project it names, as the apply leaves the projects."""
-        return ConfigDeclaration(
-            secrets=entries.secrets,
-            work_sources=tuple(
+        entries: DocumentEntries,
+        projects: ProjectsPlan,
+        held: _Repositories,
+        sources_held: _WorkSources,
+        planner: ForgePlanner,
+    ) -> tuple[ConfigDeclaration, tuple[OldFieldUsed, ...]]:
+        """The domain's declarations from the entries: each record under the id it takes and on the forge it names —
+        the forges no origin's forge holds yet planned beside them — and each scope and routine within the project it
+        names, as the apply leaves the projects; with a warning per old address field an entry used. An entry's
+        :class:`ConfigFieldError` on its forge is refused at the entry."""
+        warnings: list[OldFieldUsed] = []
+        work_sources: list[WorkSourceDeclaration] = []
+        for index, entry in enumerate(entries.work_sources):
+            stored = sources_held.stored.get(entry.slug)
+            if not isinstance(entry.edit.provider, UnsetType):
+                provider = entry.edit.provider
+            else:
+                provider = entry.draft.provider if stored is None else stored.fields.provider
+            current = None if stored is None else stored.fields.forge_id
+            try:
+                require_known_provider(provider)
+                resolved = planner.decide(
+                    entry.forge, WORK_SOURCE_FORGE_RULES, provider=provider, current=current, index=index
+                )
+            except ConfigFieldError as exc:
+                raise ApplyEntryRefused(WORK_SOURCES_SECTION, index, exc) from exc
+            forge_id = current if resolved is None else resolved.forge.forge_id
+            assert forge_id is not None
+            warnings.extend(() if resolved is None else resolved.warnings)
+            work_sources.append(
                 WorkSourceDeclaration(
                     slug=entry.slug,
                     name=entry.name,
                     work_source_id=sources_held.ids[entry.slug],
-                    fields=entry.fields,
-                    edit=entry.edit,
+                    fields=entry.draft.on(forge_id),
+                    edit=entry.edit if resolved is None else replace(entry.edit, forge_id=forge_id),
                 )
-                for entry in entries.work_sources
-            ),
-            repositories=tuple(
+            )
+        planned_sources = len(planner.planned)
+        repositories: list[RepositoryDeclaration] = []
+        for index, repo in enumerate(entries.repositories):
+            stored_repo = held.stored.get(repo.slug)
+            current = None if stored_repo is None else stored_repo.fields.forge_id
+            try:
+                resolved = planner.decide(
+                    repo.forge, REPOSITORY_FORGE_RULES, provider=None, current=current, index=index
+                )
+            except ConfigFieldError as exc:
+                raise ApplyEntryRefused(REPOSITORIES_SECTION, index, exc) from exc
+            forge_id = current if resolved is None else resolved.forge.forge_id
+            assert forge_id is not None
+            warnings.extend(() if resolved is None else resolved.warnings)
+            repositories.append(
                 RepositoryDeclaration(
-                    slug=entry.slug,
-                    name=entry.name,
-                    repository_id=held.ids[entry.slug],
-                    fields=entry.fields,
-                    edit=entry.edit,
+                    slug=repo.slug,
+                    name=repo.name,
+                    repository_id=held.ids[repo.slug],
+                    fields=repo.draft.on(forge_id),
+                    edit=repo.edit if resolved is None else replace(repo.edit, forge_id=forge_id),
                 )
-                for entry in entries.repositories
-            ),
+            )
+        forges = tuple(
+            PlannedForge(
+                WORK_SOURCES_SECTION if position < planned_sources else REPOSITORIES_SECTION, index, forge, change
+            )
+            for position, (forge, change, index) in enumerate(planner.planned)
+        )
+        return ConfigDeclaration(
+            secrets=entries.secrets,
+            forges=forges,
+            work_sources=tuple(work_sources),
+            repositories=tuple(repositories),
             projects=projects.section,
             scopes=tuple(
                 ScopeDeclaration(
@@ -312,7 +378,7 @@ class ConfigApplication:
                 )
                 for index, routine in enumerate(entries.routines)
             ),
-        )
+        ), tuple(warnings)
 
     def _stored(self, declaration: ConfigDeclaration, held: _Repositories, sources_held: _WorkSources) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))

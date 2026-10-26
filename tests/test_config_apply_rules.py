@@ -22,14 +22,10 @@ from blizzard.hub.domain.config.apply import (
     reconcile,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
-from blizzard.hub.domain.config.work_sources import (
-    ConfigFieldError,
-    ConfiguredWorkSource,
-    WorkSourceEdit,
-    WorkSourceFields,
-    WorkSourceId,
-)
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import Routine, RoutineEdit
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit
@@ -41,10 +37,10 @@ _PROJECT = "proj_test"
 _AT = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="alice", door=Door.APPLY, apply_id="apl_X")
 _SOURCE = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=True, secret="gh"
+    provider="github", locator="acme/demo", forge_id=ForgeId("frg_github"), annotate=True, secret="gh"
 )
 _REPO = RepositoryFields(
-    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
+    forge_id=ForgeId("frg_github"), owner="acme", repo="demo", base_branch="master", secret_name="gh"
 )
 _ACTIVE_GH = {"gh": RecordState.ACTIVE}
 

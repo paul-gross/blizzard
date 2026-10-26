@@ -8,6 +8,7 @@ rendering, and the ``parse``/registry ``resolve`` that give it its production ca
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from blizzard.hub.composition import TenantStores, build_hub_core, build_live_co
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace, TraceLanding
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
@@ -37,22 +39,34 @@ from tests.support import (
     forge_state,
     github_double,
     migrate_to,
+    seed_forge,
 )
 
 pytestmark = pytest.mark.component
 
 
-def _github(
-    locator: str, *, secret: str = "gh", api_base: str | None = None, annotate: bool = False
-) -> WorkSourceFields:
-    return WorkSourceFields(
-        provider="github", locator=locator, api_base=api_base, web_base=None, annotate=annotate, secret=secret
-    )
+@dataclass(frozen=True)
+class _Source:
+    """A GitHub work source to configure, on the forge holding ``api_base``."""
+
+    locator: str
+    secret: str
+    api_base: str
+    annotate: bool
+
+    def fields(self, forge_id: ForgeId) -> WorkSourceFields:
+        return WorkSourceFields(
+            provider="github", locator=self.locator, forge_id=forge_id, annotate=self.annotate, secret=self.secret
+        )
+
+
+def _github(locator: str, *, secret: str = "gh", api_base: str = GITHUB_API_BASE, annotate: bool = False) -> _Source:
+    return _Source(locator, secret, api_base, annotate)
 
 
 def _registry_world(
     tmp_path: Path,
-    *sources: tuple[str, WorkSourceFields],
+    *sources: tuple[str, _Source],
     tokens: dict[str, str] | None = None,
     close_forge_writes_enabled: bool = True,
 ) -> tuple[IWorkSourceRegistry, ConfigAuthoring, TenantStores, dict[str, WorkSourceId]]:
@@ -66,10 +80,16 @@ def _registry_world(
     authoring = config_authoring(engine, keys=keys, clock=clock)
     for secret, value in (tokens or {"gh": "token"}).items():
         authoring.create_secret(SecretName.parse(secret), value, OP)
-    ids = {slug: authoring.create_work_source(slug, None, fields, OP).work_source_id for slug, fields in sources}
+    ids = {
+        slug: authoring.create_work_source(
+            slug, None, source.fields(seed_forge(engine, source.api_base)), OP
+        ).work_source_id
+        for slug, source in sources
+    }
     live = build_live_config(stores, cipher=secret_cipher(keys))
     registry = WorkSourceEntry.registry(
         records=stores.work_source_records,
+        forges=stores.forge_records,
         objects=live.objects,
         secrets=live.secrets,
         users=core.users,
@@ -83,7 +103,7 @@ def _registry_world(
 
 def _registry(
     tmp_path: Path,
-    *sources: tuple[str, WorkSourceFields],
+    *sources: tuple[str, _Source],
     tokens: dict[str, str] | None = None,
     close_forge_writes_enabled: bool = True,
 ) -> tuple[IWorkSourceRegistry, dict[str, WorkSourceId]]:
@@ -252,8 +272,8 @@ def test_factory_derives_web_base_by_stripping_the_api_host_prefix(tmp_path: Pat
 
 def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(tmp_path: Path) -> None:
     """A GHE install: ``git.corp.internal/api/v3`` -> ``git.corp.internal`` (strip ``/api/v3``)."""
-    fields = _github("acme/internal-tool", api_base="https://git.corp.internal/api/v3")
-    registry, ids = _registry(tmp_path, ("internal", fields))
+    source = _github("acme/internal-tool", api_base="https://git.corp.internal/api/v3")
+    registry, ids = _registry(tmp_path, ("internal", source))
     source = registry.get(ids["internal"])
     assert source is not None
     pointer = WorkRef(source=ids["internal"], ref="2")

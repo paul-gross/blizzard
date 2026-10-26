@@ -24,6 +24,7 @@ from blizzard.hub.composition import TenantStores, build_config_authoring, build
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import (
     IResealSecretRepository,
     Reseal,
@@ -31,7 +32,7 @@ from blizzard.hub.domain.config.secrets import (
     SecretName,
     SecretRotationConflict,
 )
-from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceSecretUnavailable
+from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceSecretUnavailable
 from blizzard.hub.secrets import (
     ENV_SECRET_KEY,
     ENV_SECRET_KEY_PREVIOUS,
@@ -66,9 +67,7 @@ repo = "acme/blizzard"
 token_env = "BZ_SHARED_TOKEN"
 """
 _ENVIRON = {"BZ_SHARED_TOKEN": "shared-tok"}
-_SOURCE = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
-)
+_SOURCE = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
 
 
 @pytest.fixture(autouse=True)
@@ -296,7 +295,7 @@ def test_a_work_source_cannot_name_a_secret_only_another_tenant_holds(hub: _Hub)
     hub.authoring(hub.first).create_secret(SecretName.parse("gh"), "tok-first", OP)
 
     with pytest.raises(WorkSourceSecretUnavailable):
-        hub.authoring(hub.second).create_work_source("demo", None, _SOURCE, OP)
+        hub.authoring(hub.second).create_work_source_naming("demo", None, _SOURCE, ForgeChoice(), OP)
 
     assert hub.stores(hub.second).work_source_records.list_all(include_retired=True) == []
 

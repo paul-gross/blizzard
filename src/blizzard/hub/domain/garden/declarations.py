@@ -14,7 +14,7 @@ from datetime import datetime
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.apply import DeclarableRecord, DeclaredReferences
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
-from blizzard.hub.domain.config.work_sources import ConfigFieldError
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.routines import (
     SCOPES_FIELD,
     Routine,

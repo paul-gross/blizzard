@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
@@ -18,12 +20,11 @@ from blizzard.hub.domain.config.repositories import (
     merge,
     validate_fields,
 )
-from blizzard.hub.domain.config.work_sources import ConfigFieldError
 
 pytestmark = pytest.mark.unit
 
 _FIELDS = RepositoryFields(
-    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
+    forge_id=ForgeId("frg_github"), owner="acme", repo="demo", base_branch="master", secret_name="gh"
 )
 
 
@@ -104,10 +105,7 @@ def test_an_explicit_none_is_refused_on_the_slug_and_the_name(field: str) -> Non
 @pytest.mark.parametrize(
     ("changes", "field"),
     [
-        ({"forge_api_url": ""}, "forge_api_url"),
-        ({"forge_api_url": "api.github.com"}, "forge_api_url"),
-        ({"forge_api_url": "ftp://forge.example"}, "forge_api_url"),
-        ({"forge_api_url": "https://"}, "forge_api_url"),
+        ({"forge_id": ""}, "forge"),
         ({"owner": " "}, "owner"),
         ({"repo": ""}, "repo"),
         ({"base_branch": ""}, "base_branch"),
@@ -118,11 +116,6 @@ def test_invalid_fields_name_the_offender(changes: dict[str, object], field: str
     with pytest.raises(ConfigFieldError) as caught:
         validate_fields(replace(_FIELDS, **changes))  # type: ignore[arg-type]
     assert caught.value.field == field
-
-
-@pytest.mark.parametrize("url", ["https://api.github.com", "http://localhost:8080/api/v3"])
-def test_an_absolute_http_url_is_accepted(url: str) -> None:
-    validate_fields(replace(_FIELDS, forge_api_url=url))
 
 
 def test_an_unset_edit_changes_nothing() -> None:
@@ -137,18 +130,27 @@ def test_a_set_field_is_applied_and_the_rest_are_left() -> None:
     assert diff(record, replace(record, fields=merged)) == (FieldChange("base_branch", "master", "main"),)
 
 
-@pytest.mark.parametrize("field", ["forge_api_url", "owner", "repo", "base_branch", "secret_name"])
-def test_an_explicit_none_is_refused_on_every_field(field: str) -> None:
+@pytest.mark.parametrize(
+    ("field", "named"),
+    [
+        ("forge_id", "forge"),
+        ("owner", "owner"),
+        ("repo", "repo"),
+        ("base_branch", "base_branch"),
+        ("secret_name", "secret_name"),
+    ],
+)
+def test_an_explicit_none_is_refused_on_every_field(field: str, named: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
         merge(_FIELDS, RepositoryEdit(**{field: None}))  # type: ignore[arg-type]
-    assert caught.value.field == field
+    assert caught.value.field == named
 
 
 def test_a_create_diff_lists_every_field_against_none() -> None:
     assert diff(None, _record()) == (
         FieldChange("slug", None, "demo"),
         FieldChange("name", None, "demo"),
-        FieldChange("forge_api_url", None, "https://api.github.com"),
+        FieldChange("forge", None, "frg_github"),
         FieldChange("owner", None, "acme"),
         FieldChange("repo", None, "demo"),
         FieldChange("base_branch", None, "master"),

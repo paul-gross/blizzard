@@ -82,7 +82,9 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.repositories import RepositoryFields
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId, canonical_origin, forge_for_origin
+from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
@@ -119,6 +121,7 @@ from blizzard.hub.store.internal.chunk_rows import work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
@@ -434,6 +437,7 @@ def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) ->
     return ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
+        forges=ForgeRecordStore(store),
         secrets=SecretStore(store),
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
@@ -1165,11 +1169,42 @@ def checkpoint_sqlite(db_url: str) -> None:
         engine.dispose()
 
 
+@dataclass(frozen=True)
+class RepositorySeed:
+    """A repository a test seeds as an operator names one by its old address field: the forge holding
+    ``forge_api_url`` is the one it lives on, made when no forge holds it."""
+
+    forge_api_url: str
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str
+
+    def draft(self) -> RepositoryDraft:
+        return RepositoryDraft(self.owner, self.repo, self.base_branch, self.secret_name)
+
+
+#: The address every fixture forge record serves.
+FIXTURE_FORGE_URL = "http://forge.fixture"
+
+
+def seed_forge(engine: Engine, api_base: str = FIXTURE_FORGE_URL) -> ForgeId:
+    """The id of the forge holding ``api_base`` — made, as an old-field write makes one, when none does."""
+    forges = ForgeRecordStore(hub_store_connections(engine))
+    origin = canonical_origin(api_base)
+    held = forges.get_by_api_base(origin)
+    if held is not None:
+        return held.forge_id
+    taken = {forge.slug for forge in forges.list_all(include_retired=True)}
+    record, change = forge_for_origin(origin, None, taken, OP, at=datetime(2026, 7, 12, tzinfo=UTC))
+    return forges.find_or_create(record, change=change).forge_id
+
+
 #: The repository every hub built without an explicit ``repositories`` carries — the ``acme/widget``
 #: the component tier's commits name — so a deliver node resolves them.
 DEFAULT_FIXTURE_REPOSITORIES = (
-    RepositoryFields(
-        forge_api_url="http://forge.fixture",
+    RepositorySeed(
+        forge_api_url=FIXTURE_FORGE_URL,
         owner="acme",
         repo="widget",
         base_branch="main",
@@ -1179,7 +1214,7 @@ DEFAULT_FIXTURE_REPOSITORIES = (
 
 
 def seed_repositories(
-    engine: Engine, repositories: Sequence[RepositoryFields], *, tmp_path: Path, link: bool = True
+    engine: Engine, repositories: Sequence[RepositorySeed], *, tmp_path: Path, link: bool = True
 ) -> None:
     """Write ``repositories`` and the secret they name straight into the store, as an operator's
     ``blizzard hub repo create`` would, and link each to the tenant's only project unless ``link`` is false —
@@ -1189,10 +1224,12 @@ def seed_repositories(
     authoring = config_authoring(
         engine, keys=hub_key_provider({}, data_dir=tmp_path), clock=FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
     )
+    forges = ForgeRecordStore(hub_store_connections(engine))
     for fields in repositories:
         name = f"{fields.owner}-{fields.repo}"
         existing = RepositoryRecordStore(hub_store_connections(engine)).resolve(name)
-        if existing is not None and existing.fields.forge_api_url == fields.forge_api_url:
+        held = None if existing is None else forges.get(existing.fields.forge_id)
+        if held is not None and held.fields.api_base == canonical_origin(fields.forge_api_url):
             continue
         if existing is not None:  # the same owner/repo on another forge is a record of its own
             name = f"{name}-{re.sub('[^a-z0-9]+', '-', urlparse(fields.forge_api_url).netloc.lower()).strip('-')}"
@@ -1200,7 +1237,7 @@ def seed_repositories(
                 continue
         with contextlib.suppress(SecretAlreadyExists):
             authoring.create_secret(SecretName.parse(fields.secret_name), "fixture-token", OP)
-        authoring.create_repository(name, None, fields, OP)
+        authoring.create_repository_naming(name, None, fields.draft(), ForgeChoice(api_base=fields.forge_api_url), OP)
         if link:
             link_project(engine, repository=name)
 
@@ -1225,8 +1262,7 @@ def seed_fake_work_sources(engine: Engine, names: Iterable[str], *, tmp_path: Pa
         fields = WorkSourceFields(
             provider="github",
             locator=f"fixture/{name}",
-            api_base="http://forge.fixture",
-            web_base=None,
+            forge_id=seed_forge(engine),
             annotate=False,
             secret=FIXTURE_FORGE_SECRET,
         )
@@ -1241,7 +1277,7 @@ def build_hub(
     *,
     work_sources: dict[str, FakeWorkSource] | None = None,
     link: bool = True,
-    repositories: Sequence[RepositoryFields] | None = None,
+    repositories: Sequence[RepositorySeed] | None = None,
     public_url: str | None = None,
     route_token_mode: str = ROUTE_TOKEN_WARN,
     produces_mode: str = PRODUCES_WARN,
@@ -2272,6 +2308,7 @@ def _conforms_in_memory_egress_writer(x: InMemoryEgressWriter) -> IEgressWriter:
 
 
 _DRAINABLE_SOURCE = "wsrc_github"
+_DRAINABLE_FORGE = "frg_drainable_github"
 
 
 def seed_drainable_history(
@@ -2282,15 +2319,30 @@ def seed_drainable_history(
     owns), migrated by that runner's landing — which released the route — restarted at a hub-owned epoch, and completed
     with one work ref whose close was enqueued and retired; chunk ``ch_open`` holds ``open_refs`` work refs and nothing
     else. Both chunks pin ``graph_id``, the tenant's own, whose ``node_id`` a runner executes, and name the source
-    the work source ``github`` (id ``wsrc_github``), which the tenant's only project linked at ``at``.
+    the work source ``github`` (id ``wsrc_github``) on the forge ``github``, which the tenant's only project linked at ``at``.
     Partway through a drain the epoch owners, route facts and close intents are gone while the restart, the migration,
     the completion and some work refs are not. Chunk ids are global: one store holds one such history."""
     later = at + timedelta(seconds=1)
     rows: list[tuple[sa.Table, dict[str, Any]]] = [
         (
+            schema.forges,
+            {
+                "forge_id": _DRAINABLE_FORGE,
+                "slug": "github",
+                "name": "GitHub",
+                "kind": "github",
+                "api_base": GITHUB_API_BASE,
+                "revision": 1,
+                "created_at": at,
+                "created_by": "seed",
+            },
+        ),
+        (
             schema.work_sources,
             {
                 "work_source_id": _DRAINABLE_SOURCE,
+                "forge_id": _DRAINABLE_FORGE,
+                "api_base": GITHUB_API_BASE,
                 "slug": "github",
                 "name": "github",
                 "provider": "github",

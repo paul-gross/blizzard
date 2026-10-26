@@ -23,13 +23,9 @@ from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.work_source_params import path_work_source, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
-from blizzard.hub.domain.config.work_sources import (
-    ConfigFieldError,
-    ConfigRevisionConflict,
-    ConfiguredWorkSource,
-    is_built_in,
-)
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, is_built_in
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink

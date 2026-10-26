@@ -15,6 +15,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     RepositoryOutcome,
@@ -62,12 +63,24 @@ def _row(kind: ArtifactKind, name: str, data: str, *, repo: str | None = None) -
     )
 
 
+_FORGE = ConfiguredForge(
+    forge_id=ForgeId("frg_example"),
+    slug="example",
+    name="example",
+    kind="github",
+    fields=ForgeFields("https://api.github.example", None),
+    revision=1,
+    created_at=datetime(2026, 10, 1, tzinfo=UTC),
+    created_by="op",
+)
+
+
 def _visit(*repos: str, landed: tuple[str, ...] = ()) -> Visit:
     commits = [_row(ArtifactKind.GIT_COMMIT, f"w{i}", f"feat/x:{_SUBMITTED}", repo=r) for i, r in enumerate(repos)]
     markers = tuple(_row(ArtifactKind.ASSET, f"merged/{repo}", "landed-sha") for repo in landed)
     targets = tuple(
         ResolvedRepository(
-            forge_api_url="https://api.github.example",
+            forge_id=_FORGE.forge_id,
             owner="acme",
             base_branch="main",
             secret_name="s",
@@ -89,7 +102,11 @@ def _visit(*repos: str, landed: tuple[str, ...] = ()) -> Visit:
         markers=markers,
         git_commits=GitCommits.of(commits),
         resolution=RepositoryResolution(
-            RepositoryOutcome.RESOLVED, targets=targets, qualified=repos, records=tuple(t.record for t in targets)
+            RepositoryOutcome.RESOLVED,
+            targets=targets,
+            qualified=repos,
+            records=tuple(t.record for t in targets),
+            forges=(_FORGE,),
         ),
         work_items=(),
         feature_title=None,

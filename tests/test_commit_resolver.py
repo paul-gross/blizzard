@@ -15,7 +15,13 @@ import pytest
 
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.config.forges import (
+    FORGE_KIND_CAPABILITIES,
+    GITHUB_API_BASE,
+    ConfiguredForge,
+    ForgeFields,
+    ForgeId,
+)
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryFields,
@@ -41,6 +47,16 @@ _SHA = "deadbeef"
 _PROJECT = ProjectId("widgets")
 _AUTHORED = datetime(2026, 9, 1, 8, 30, tzinfo=UTC)
 _EVERY = FORGE_KIND_CAPABILITIES["github"]
+_GITHUB = ConfiguredForge(
+    forge_id=ForgeId("frg_github"),
+    slug="github",
+    name="GitHub",
+    kind="github",
+    fields=ForgeFields(GITHUB_API_BASE, None),
+    revision=1,
+    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    created_by="op",
+)
 
 
 def _row(name: str) -> ConfiguredRepository:
@@ -49,7 +65,7 @@ def _row(name: str) -> ConfiguredRepository:
         slug=name,
         name=name,
         fields=RepositoryFields(
-            forge_api_url="https://api.github.com", owner="acme", repo=name, base_branch="master", secret_name="tok"
+            forge_id=_GITHUB.forge_id, owner="acme", repo=name, base_branch="master", secret_name="tok"
         ),
         revision=1,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -63,6 +79,11 @@ class _Records:
 
     def list_all(self, *, include_retired: bool) -> list[ConfiguredRepository]:
         return self.rows
+
+
+class _ForgeRecords:
+    def list_all(self, *, include_retired: bool) -> list[ConfiguredForge]:
+        return [_GITHUB]
 
 
 class _Links:
@@ -110,7 +131,7 @@ class _Forges:
         self._offered = offered
         self.built: list[RepositoryId] = []
 
-    def offered(self, forge: str, repository: RepositoryId | None = None) -> frozenset[Capability]:
+    def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
         return self._offered
 
     def refs(self, repository: RepositoryId) -> IForgeRefs:
@@ -132,6 +153,7 @@ def _resolver(
 ) -> CommitResolver:
     return SeamCommitResolver(
         repositories=_Records([_row("widget")]),  # type: ignore[arg-type]
+        forge_records=_ForgeRecords(),  # type: ignore[arg-type]
         links=_Links({"widget"} if linked is None else linked),  # type: ignore[arg-type]
         forges=forges,
         loop=loop,

@@ -33,7 +33,7 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (

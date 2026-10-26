@@ -7,15 +7,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import Column, Select, Table
+from sqlalchemy import Column, Select, Table, literal
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRevisions
-from blizzard.hub.store.schema import repositories, secrets, work_sources
+from blizzard.hub.store.schema import forges, repositories, secrets, work_sources
 from blizzard.hub.store.scoped import ScopedConnections
 
-#: Each referring kind's table and the column keying it: its id.
+#: Each referring kind's table and the column keying it: its id. Each names a secret and a forge.
 _REFERRING: dict[RecordKind, tuple[Table, str]] = {
     RecordKind.WORK_SOURCE: (work_sources, "work_source_id"),
     RecordKind.REPOSITORY: (repositories, "repository_id"),
@@ -38,7 +38,10 @@ class ConfigRevisionsStore:
             for batch in id_batches(list(dict.fromkeys(keys))):
                 for row in conn.execute(query.where(key_column.in_(batch))).all():
                     found[row.key] = ConfigRevisions(
-                        revision=row.revision, secret_name=row.secret_name, secret_revision=row.sr
+                        revision=row.revision,
+                        secret_name=row.secret_name,
+                        secret_revision=row.sr,
+                        forge_revision=row.fr,
                     )
         return found
 
@@ -51,20 +54,23 @@ class ConfigRevisionsStore:
                 secrets.c.revision,
                 secrets.c.name.label("secret_name"),
                 secrets.c.revision.label("sr"),
+                literal(None).label("fr"),
             )
             return query, secrets.c.name
         table, key_column = _REFERRING[kind]
+        with_secret = self._store.scope_join(
+            table,
+            secrets,
+            (secrets.c.tenant_id == table.c.tenant_id) & (secrets.c.name == table.c.secret_name),
+            isouter=True,
+        )
         query = self._store.select(
-            self._store.scope_join(
-                table,
-                secrets,
-                (secrets.c.tenant_id == table.c.tenant_id) & (secrets.c.name == table.c.secret_name),
-                isouter=True,
-            ),
+            self._store.scope_join(with_secret, forges, forges.c.forge_id == table.c.forge_id, isouter=True),
             table.c[key_column].label("key"),
             table.c.revision,
             table.c.secret_name,
             secrets.c.revision.label("sr"),
+            forges.c.revision.label("fr"),
         )
         return query, table.c[key_column]
 

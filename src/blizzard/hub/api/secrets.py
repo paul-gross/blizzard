@@ -62,8 +62,12 @@ def secret_view(
         created_at=iso_utc(record.created_at),
         retired=retired,
         retirable=retirable(referrers, retired=retired),
-        references=[RecordRefView(kind=r.kind.value, key=r.key, label=r.label) for r in referrers],
+        references=[_ref_view(r) for r in referrers],
     )
+
+
+def _ref_view(ref: RecordRef) -> RecordRefView:
+    return RecordRefView(kind=ref.kind.value, key=ref.key, label=ref.label)
 
 
 def sanitized_validation_response(request: Request, exc: RequestValidationError) -> JSONResponse | None:
@@ -177,7 +181,12 @@ def retire_secret(
     try:
         services.config_authoring.retire_secret(record, change_context(identity, door))
     except SecretReferenced as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        detail = {
+            "code": "secret_in_use",
+            "message": str(exc),
+            "referrers": [_ref_view(r).model_dump() for r in exc.referrers],
+        }
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
     return secret_view(
         record,
         user_names(services, [record.replaced_by]),

@@ -15,8 +15,9 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import SecretName
-from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceFields
+from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.tenancy import StoreScope
 from tests.support import OP, config_authoring, default_tenant, migrated_hub_at
@@ -24,9 +25,7 @@ from tests.support import OP, config_authoring, default_tenant, migrated_hub_at
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
-_FIELDS = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
-)
+_FIELDS = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
 
 
 @dataclass
@@ -51,7 +50,9 @@ class _World:
         self.stores = self.core.open(StoreScope(default_tenant(self.engine)))
         self.authoring = config_authoring(self.engine, keys=self.keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-a", OP)
-        self.source_id = self.authoring.create_work_source("demo", None, _FIELDS, OP).work_source_id
+        self.source_id = self.authoring.create_work_source_naming(
+            "demo", None, _FIELDS, ForgeChoice(), OP
+        ).record.work_source_id
         self.live = self.second_process()
         self.builds = 0
 

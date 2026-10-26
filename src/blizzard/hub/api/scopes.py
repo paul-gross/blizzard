@@ -27,7 +27,7 @@ from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.projects.model import Project
 from blizzard.wire.scope import ScopeCreateRequest, ScopeEditRequest, ScopeLifecycleRequest, ScopeView

@@ -31,12 +31,13 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkItemAuthorKind, WorkRef
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.work_sources import (
-    ConfigFieldError,
-    ConfigRevisionConflict,
     ConfiguredWorkSource,
+    WorkSourceDraft,
     WorkSourceEdit,
-    WorkSourceFields,
     WorkSourceLocatorTaken,
     WorkSourceSlugTaken,
     is_built_in,
@@ -134,7 +135,13 @@ def _view(
     )
 
 
-def _summary(record: ConfiguredWorkSource, services: TenantServices, names: Mapping[str, str]) -> WorkSourceSummary:
+#: The old address fields a work source names its forge by.
+_ADDRESSES = ("api_base", "web_base")
+
+
+def _summary(
+    record: ConfiguredWorkSource, forge: ConfiguredForge, services: TenantServices, names: Mapping[str, str]
+) -> WorkSourceSummary:
     fields = record.fields
     return WorkSourceSummary(
         work_source_id=record.work_source_id,
@@ -144,8 +151,8 @@ def _summary(record: ConfiguredWorkSource, services: TenantServices, names: Mapp
         edit=services.work_sources.editor(record.work_source_id) is not None,
         provider=fields.provider,
         locator=fields.locator,
-        api_base=fields.api_base,
-        web_base=fields.web_base,
+        api_base=forge.fields.api_base,
+        web_base=forge.fields.web_base,
         secret=fields.secret,
         revision=record.revision,
         created_at=iso_utc(record.created_at),
@@ -153,6 +160,18 @@ def _summary(record: ConfiguredWorkSource, services: TenantServices, names: Mapp
         created_by_name=names.get(record.created_by),
         retired=record.retired,
     )
+
+
+def _shown(record: ConfiguredWorkSource, services: TenantServices) -> WorkSourceSummary:
+    """``record``'s summary, its addresses read from its forge."""
+    forge = services.forge_records.get(record.fields.forge_id)
+    assert forge is not None
+    return _summary(record, forge, services, user_names(services, [record.created_by]))
+
+
+def _forge_choice(request: WorkSourceDocument | WorkSourcePatchRequest) -> ForgeChoice:
+    """The old address fields ``request`` states."""
+    return ForgeChoice(**{name: getattr(request, name) for name in _ADDRESSES if name in request.model_fields_set})
 
 
 def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
@@ -183,7 +202,13 @@ def list_work_sources(services: Services, include_retired: bool = False) -> Work
     sources gate their items."""
     records = services.work_source_records.list_all(include_retired=include_retired)
     names = user_names(services, (r.created_by for r in records))
-    return WorkSourcesListView(sources=[_built_in_summary(services), *(_summary(r, services, names) for r in records)])
+    forges = services.forge_records.get_many(list({r.fields.forge_id for r in records}))
+    return WorkSourcesListView(
+        sources=[
+            _built_in_summary(services),
+            *(_summary(r, forges[r.fields.forge_id], services, names) for r in records),
+        ]
+    )
 
 
 @router.post("/work-sources", response_model=WorkSourceSummary, status_code=status.HTTP_201_CREATED)
@@ -196,23 +221,18 @@ def create_work_source(
     """Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
     malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or
     retired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder."""
-    fields = WorkSourceFields(
-        provider=request.provider,
-        locator=request.locator,
-        api_base=request.api_base,
-        web_base=request.web_base,
-        annotate=request.annotate,
-        secret=request.secret,
+    draft = WorkSourceDraft(
+        provider=request.provider, locator=request.locator, annotate=request.annotate, secret=request.secret
     )
     try:
-        record = services.config_authoring.create_work_source(
-            request.slug, request.name, fields, change_context(identity, door)
-        )
+        record = services.config_authoring.create_work_source_naming(
+            request.slug, request.name, draft, _forge_choice(request), change_context(identity, door)
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (WorkSourceSlugTaken, WorkSourceLocatorTaken) as exc:
+    except (WorkSourceSlugTaken, WorkSourceLocatorTaken, ForgeSlugTaken, ForgeOriginTaken) as exc:
         raise _conflict(exc) from exc
-    return _summary(record, services, user_names(services, [record.created_by]))
+    return _shown(record, services)
 
 
 @router.get(
@@ -223,8 +243,7 @@ def get_work_source(source: str, services: Services) -> WorkSourceSummary:
     `built_in`. 404 on an unknown source."""
     if is_built_in(source):
         return _built_in_summary(services)
-    resolved = resolved_work_source(source, services)
-    return _summary(resolved, services, user_names(services, [resolved.created_by]))
+    return _shown(resolved_work_source(source, services), services)
 
 
 @router.patch("/work-sources/{source}", response_model=WorkSourceSummary)
@@ -242,16 +261,22 @@ def patch_work_source(
     409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
     `(provider, locator)`; 422 naming the field (`hub` refused as a slug)."""
     present = request.model_fields_set
-    edit = WorkSourceEdit(**{name: getattr(request, name) for name in present})
+    edit = WorkSourceEdit(**{name: getattr(request, name) for name in present if name not in _ADDRESSES})
     try:
-        edited = services.config_authoring.edit_work_source(
-            record, edit, change_context(identity, door), if_match=if_match
-        )
+        edited = services.config_authoring.edit_work_source_naming(
+            record, edit, _forge_choice(request), change_context(identity, door), if_match=if_match
+        ).record
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    except (ConfigRevisionConflict, WorkSourceLocatorTaken, WorkSourceSlugTaken) as exc:
+    except (
+        ConfigRevisionConflict,
+        WorkSourceLocatorTaken,
+        WorkSourceSlugTaken,
+        ForgeSlugTaken,
+        ForgeOriginTaken,
+    ) as exc:
         raise _conflict(exc) from exc
-    return _summary(edited, services, user_names(services, [edited.created_by]))
+    return _shown(edited, services)
 
 
 @router.post("/work-sources/{source}/retire", response_model=WorkSourceSummary)
@@ -270,7 +295,7 @@ def retire_work_source(
         )
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(retired, services, user_names(services, [retired.created_by]))
+    return _shown(retired, services)
 
 
 @router.post("/work-sources/{source}/enable", response_model=WorkSourceSummary)
@@ -291,7 +316,7 @@ def enable_work_source(
         raise _unprocessable(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
-    return _summary(enabled, services, user_names(services, [enabled.created_by]))
+    return _shown(enabled, services)
 
 
 @router.get(

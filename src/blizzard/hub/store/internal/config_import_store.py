@@ -24,16 +24,11 @@ from blizzard.hub.domain.config.carry_over import (
     LegacyImportRefused,
 )
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.repositories import (
-    RepositoryCoordinateTaken,
-    RepositorySecretUnavailable,
-    RepositorySlugTaken,
-)
-from blizzard.hub.domain.config.work_sources import (
-    WorkSourceLocatorTaken,
-    WorkSourceSecretUnavailable,
-    WorkSourceSlugTaken,
-)
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
+from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
+from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.store.internal import forge_record_store as forge_writes
 from blizzard.hub.store.internal import project_link_store as link_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
@@ -43,12 +38,13 @@ from blizzard.hub.store.scoped import ScopedConnections
 
 #: What a create body's in-transaction checks raise when a concurrent write took its claim first.
 _REFUSALS = (
+    ConfigFieldError,
+    ForgeSlugTaken,
+    ForgeOriginTaken,
     WorkSourceSlugTaken,
     WorkSourceLocatorTaken,
-    WorkSourceSecretUnavailable,
     RepositorySlugTaken,
     RepositoryCoordinateTaken,
-    RepositorySecretUnavailable,
 )
 
 
@@ -108,6 +104,8 @@ class ConfigImportStore:
                     except IntegrityError as exc:  # a concurrent create won the race
                         raise LegacyImportRefused(f"secret {secret.name} was created while importing") from exc
                 try:
+                    for forge, change in imported.forges:
+                        forge_writes.insert_forge(conn, forge, change)
                     for source, change in imported.work_sources:
                         work_source_writes.insert_record(conn, source, change)
                     for repository, change in imported.repositories:

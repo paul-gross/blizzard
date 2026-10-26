@@ -520,10 +520,10 @@ class ChunkView:
     def _branch_links(self, rows: list[StoredArtifact]) -> Callable[[StoredArtifact, GitCommitArtifact], str | None]:
         """Each git-commit artifact's branch link: the forge ``tree`` address on the repository
         record its repository resolves to by delivery's rules — among the records the chunk's
-        project links, standing at the chunk's mint time. ``None`` for a repository resolving
-        to no one record (unknown, ambiguous, or not linked); a chunk with no project links
-        none. One read of the links and one of the records serve every commit of the view,
-        and none at all when the view carries no commit."""
+        project links, standing at the chunk's mint time, on its forge's web origin. ``None`` for a repository
+        resolving to no one record (unknown, ambiguous, or not linked); a chunk with no project links
+        none. One read of the links, one of the records and one of the linked records' forges serve every commit of
+        the view, and none at all when the view carries no commit."""
         if not any(isinstance(row.artifact, GitCommitArtifact) for row in rows):
             return lambda _row, _commit: None
         project_id = self.chunk.project_id
@@ -533,12 +533,17 @@ class ChunkView:
             else frozenset[str]()
         )
         records = self.services.repository_records.list_all(include_retired=True) if linked else []
+        forges = self.services.forge_records.get_many(
+            list({record.fields.forge_id for record in records if record.repository_id in linked})
+        )
         minted_at = self.chunk.minted_at
 
         def link(row: StoredArtifact, commit: GitCommitArtifact) -> str | None:
             origin = CommitOrigin.of(commit.forge or None, commit.repo or row.name)
-            record = resolve_origin_record(origin, records, minted_at=minted_at, linked=linked)
-            return forge_branch_url(record.fields, commit.branch_name) if record is not None else None
+            record = resolve_origin_record(origin, records, forges.values(), minted_at=minted_at, linked=linked)
+            if record is None:
+                return None
+            return forge_branch_url(forges[record.fields.forge_id], record.fields, commit.branch_name)
 
         return link
 

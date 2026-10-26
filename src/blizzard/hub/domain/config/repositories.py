@@ -6,7 +6,7 @@ so an edit carrying ``None`` on any field is refused naming it."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
@@ -27,7 +27,8 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
@@ -35,10 +36,13 @@ from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 RepositoryId = NewType("RepositoryId", str)
 
-#: The mutable forge fields, in the order a diff lists them.
-_FIELDS = ("forge_api_url", "owner", "repo", "base_branch", "secret_name")
-#: Every field a diff lists: the record's own handle and label, then the forge fields.
-_DIFF_FIELDS = ("slug", "name", *_FIELDS)
+#: The mutable fields, in the order a diff lists them.
+_FIELDS = ("forge_id", "owner", "repo", "base_branch", "secret_name")
+#: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
+#: recorded by its id under ``forge``, as every reference is held.
+_DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:])
+#: The wire name a field's change is listed under, where it differs from the field's own.
+_DIFF_NAMES = {"forge": "forge_id"}
 
 
 class RepositorySlugTaken(Exception):
@@ -48,10 +52,11 @@ class RepositorySlugTaken(Exception):
 
 
 class RepositoryCoordinateTaken(Exception):
-    """``(forge_api_url, owner, repo)`` already belongs to ``holder`` — retired holders keep their claim."""
+    """``(forge, owner, repo)`` already belongs to ``holder`` — retired holders keep their claim. ``forge`` is how the
+    forge is named: its slug and API origin."""
 
-    def __init__(self, forge_api_url: str, owner: str, repo: str, *, holder: str) -> None:
-        super().__init__(f"{forge_api_url} {owner}/{repo} already belongs to repository {holder}; enable it instead")
+    def __init__(self, forge: str, owner: str, repo: str, *, holder: str) -> None:
+        super().__init__(f"{forge} {owner}/{repo} already belongs to repository {holder}; enable it instead")
         self.holder = holder
 
 
@@ -105,13 +110,28 @@ type IRepositoryLookup = IIdOrSlugLookup[RepositoryId, RepositorySlug, Configure
 @domain_model
 @dataclass(frozen=True)
 class RepositoryFields:
-    """The mutable fields of a repository, by wire name."""
+    """The mutable fields of a repository: the forge it lives on, by id, and its coordinate and credential there."""
 
-    forge_api_url: str
+    forge_id: ForgeId
     owner: str
     repo: str
     base_branch: str
     secret_name: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class RepositoryDraft:
+    """A repository's fields before its forge is resolved — every field but the forge."""
+
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str
+
+    def on(self, forge_id: ForgeId) -> RepositoryFields:
+        """The fields of a repository on the forge ``forge_id``."""
+        return RepositoryFields(forge_id, self.owner, self.repo, self.base_branch, self.secret_name)
 
 
 @domain_model
@@ -222,7 +242,7 @@ class RepositoryEdit:
 
     slug: str | None | UnsetType = UNSET
     name: str | None | UnsetType = UNSET
-    forge_api_url: str | None | UnsetType = UNSET
+    forge_id: ForgeId | None | UnsetType = UNSET
     owner: str | None | UnsetType = UNSET
     repo: str | None | UnsetType = UNSET
     base_branch: str | None | UnsetType = UNSET
@@ -232,20 +252,15 @@ class RepositoryEdit:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedRepository:
-    """The repository record one commit pointer resolved to — its forge, owner, base branch and
+    """The repository record one commit pointer resolved to — its forge's id, owner, base branch and
     secret, and the record's own id and current slug."""
 
-    forge_api_url: str
+    forge_id: ForgeId
     owner: str
     base_branch: str
     secret_name: str
     record: str = ""
     slug: str = ""
-
-    @property
-    def target(self) -> tuple[str, str, str, str]:
-        """What a chunk's records must share for one target to stand for all of them."""
-        return (self.forge_api_url, self.owner, self.base_branch, self.secret_name)
 
 
 @domain_model
@@ -281,36 +296,49 @@ class RepositoryResolution:
     """The outcome of resolving a chunk's commit pointers. ``targets`` holds one resolved record per
     pointer, in origin order, exactly when ``outcome`` is :attr:`RepositoryOutcome.RESOLVED`;
     ``qualified`` maps each origin's index to the ``owner/repo`` it resolved to, and ``records`` to
-    its repository record's id."""
+    its repository record's id; ``forges`` holds each forge a target names, once."""
 
     outcome: RepositoryOutcome
     targets: tuple[ResolvedRepository, ...] = ()
     qualified: tuple[str, ...] = ()
     records: tuple[str, ...] = ()
     detail: str = ""
+    forges: tuple[ConfiguredForge, ...] = ()
 
-    def agreed(self) -> ResolvedRepository | None:
-        """The one target every pointer shares — forge, owner, base branch and secret alike — or
-        ``None`` when they differ or there is nothing resolved."""
-        if not self.targets or any(t.target != self.targets[0].target for t in self.targets):
-            return None
-        return self.targets[0]
+    def forge_of(self, target: ResolvedRepository) -> ConfiguredForge:
+        """The forge ``target`` lives on."""
+        return next(forge for forge in self.forges if forge.forge_id == target.forge_id)
 
 
-def _forge_host(forge_api_url: str) -> str:
-    """The host the forge's API fronts — GitHub's ``api.`` prefix is not part of its web host."""
-    host = urlparse(forge_api_url).netloc.rpartition("@")[2].lower()
-    return host.removeprefix("api.")
+def _host(origin: str) -> str:
+    """An address's host, with its port when it has one — GitHub's ``api.`` prefix is not part of its web host."""
+    return urlparse(origin).netloc.rpartition("@")[2].lower().removeprefix("api.")
 
 
-def _candidates(origin: CommitOrigin, rows: list[ConfiguredRepository]) -> list[ConfiguredRepository]:
+def _forge_hosts(forge: ConfiguredForge | None) -> frozenset[str]:
+    """The hosts a commit origin on ``forge`` may name: its web host and its API host."""
+    if forge is None:
+        return frozenset()
+    return frozenset({_host(forge.web_origin), _host(forge.fields.api_base)})
+
+
+type ForgesById = Mapping[str, ConfiguredForge]
+
+
+def forges_by_id(forges: Iterable[ConfiguredForge]) -> dict[str, ConfiguredForge]:
+    """``forges`` keyed by id, as resolution reads them."""
+    return {forge.forge_id: forge for forge in forges}
+
+
+def _candidates(
+    origin: CommitOrigin, rows: list[ConfiguredRepository], forges: ForgesById
+) -> list[ConfiguredRepository]:
     found = [row for row in rows if row.fields.repo == origin.name]
     if origin.owner:
         found = [row for row in found if row.fields.owner.lower() == origin.owner.lower()]
     if origin.host:
-        found = [
-            row for row in found if _forge_host(row.fields.forge_api_url) == origin.host.lower().removeprefix("api.")
-        ]
+        host = origin.host.lower().removeprefix("api.")
+        found = [row for row in found if host in _forge_hosts(forges.get(row.fields.forge_id))]
     return found
 
 
@@ -332,6 +360,7 @@ def _refusal(
     origin: CommitOrigin,
     found: list[ConfiguredRepository],
     standing: list[ConfiguredRepository],
+    forges: ForgesById,
     *,
     linked: frozenset[str] | None,
     project: str,
@@ -345,7 +374,7 @@ def _refusal(
         return RepositoryResolution(
             RepositoryOutcome.UNRESOLVED, detail=f"{label} is ambiguous between repository records {slugs}"
         )
-    tenant_wide = [] if linked is None else _candidates(origin, standing)
+    tenant_wide = [] if linked is None else _candidates(origin, standing, forges)
     if len(tenant_wide) == 1:
         return RepositoryResolution(
             RepositoryOutcome.NOT_LINKED,
@@ -363,6 +392,7 @@ def _refusal(
 def resolve_chunk_repositories(
     origins: list[CommitOrigin],
     rows: list[ConfiguredRepository],
+    forges: Iterable[ConfiguredForge],
     *,
     minted_at: datetime,
     linked: frozenset[str] | None,
@@ -371,26 +401,28 @@ def resolve_chunk_repositories(
     """Resolve each commit pointer to its own repository record.
 
     A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
-    when it encodes them. Only records standing for the chunk count: an enabled one, or one
-    retired after the chunk was minted — and of those, only the ones ``linked`` names, the
-    chunk's project's links; ``None`` narrows nothing. Each pointer narrows on its own, so a name
-    ambiguous across the tenant resolves when its project links one of them. ``project`` is the
+    when it encodes them — the web or API host of the record's forge, among ``forges``, retired ones
+    included. Only records standing for the chunk count: an enabled one, or one retired after the
+    chunk was minted — and of those, only the ones ``linked`` names, the chunk's project's links;
+    ``None`` narrows nothing. Each pointer narrows on its own, so a name ambiguous across the tenant
+    resolves when its project links one of them. ``project`` is the
     label a not-linked refusal names. No pointers is not a refusal — there is nothing to land."""
     if not origins:
         return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
+    by_id = forges_by_id(forges)
     standing = _standing(rows, minted_at)
     candidates = _linked(standing, linked)
     picked: list[ConfiguredRepository] = []
     for origin in origins:
-        found = _candidates(origin, candidates)
+        found = _candidates(origin, candidates, by_id)
         if len(found) != 1:
-            return _refusal(origin, found, standing, linked=linked, project=project)
+            return _refusal(origin, found, standing, by_id, linked=linked, project=project)
         picked.append(found[0])
     return RepositoryResolution(
         RepositoryOutcome.RESOLVED,
         targets=tuple(
             ResolvedRepository(
-                row.fields.forge_api_url,
+                row.fields.forge_id,
                 row.fields.owner,
                 row.fields.base_branch,
                 row.fields.secret_name,
@@ -401,26 +433,36 @@ def resolve_chunk_repositories(
         ),
         qualified=tuple(f"{row.fields.owner}/{row.fields.repo}" for row in picked),
         records=tuple(row.repository_id for row in picked),
+        forges=tuple({row.fields.forge_id: by_id[row.fields.forge_id] for row in picked}.values()),
     )
 
 
 def resolve_origin_record(
-    origin: CommitOrigin, rows: list[ConfiguredRepository], *, minted_at: datetime, linked: frozenset[str] | None
+    origin: CommitOrigin,
+    rows: list[ConfiguredRepository],
+    forges: Iterable[ConfiguredForge],
+    *,
+    minted_at: datetime,
+    linked: frozenset[str] | None,
 ) -> ConfiguredRepository | None:
     """The one record ``origin`` resolves to by :func:`resolve_chunk_repositories`'s rules for a
     chunk minted at ``minted_at`` whose project links ``linked``, or ``None`` — unmatched,
     ambiguous, or not linked."""
-    found = _candidates(origin, _linked(_standing(rows, minted_at), linked))
+    found = _candidates(origin, _linked(_standing(rows, minted_at), linked), forges_by_id(forges))
     return found[0] if len(found) == 1 else None
 
 
 def resolve_repository(
-    origin: CommitOrigin, rows: list[ConfiguredRepository], *, linked: frozenset[str] | None
+    origin: CommitOrigin,
+    rows: list[ConfiguredRepository],
+    forges: Iterable[ConfiguredForge],
+    *,
+    linked: frozenset[str] | None,
 ) -> ConfiguredRepository | None:
     """The single enabled record ``origin`` names among those ``linked`` names (every record
     when ``None``), or ``None`` — unmatched or ambiguous. A point-in-time lookup with no chunk
     to date it by, so retired records never match."""
-    found = _candidates(origin, _linked([row for row in rows if row.retired_at is None], linked))
+    found = _candidates(origin, _linked([row for row in rows if row.retired_at is None], linked), forges_by_id(forges))
     return found[0] if len(found) == 1 else None
 
 
@@ -428,10 +470,7 @@ def validate_fields(fields: RepositoryFields) -> None:
     for name in _FIELDS:
         value = getattr(fields, name)
         if not value or not value.strip():
-            raise ConfigFieldError(name, "must not be blank")
-    parsed = urlparse(fields.forge_api_url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ConfigFieldError("forge_api_url", f"must be an absolute http(s) URL, got {fields.forge_api_url!r}")
+            raise ConfigFieldError("forge" if name == "forge_id" else name, "must not be blank")
 
 
 def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
@@ -442,7 +481,7 @@ def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
         if value is UNSET:
             continue
         if value is None:
-            raise ConfigFieldError(name, "must not be null")
+            raise ConfigFieldError("forge" if name == "forge_id" else name, "must not be null")
         changes[name] = value
     return replace(current, **changes)  # type: ignore[arg-type]
 
@@ -479,7 +518,7 @@ def diff(old: ConfiguredRepository | None, new: ConfiguredRepository) -> tuple[F
 
 
 def _field(record: ConfiguredRepository, name: str) -> str:
-    return getattr(record if name in ("slug", "name") else record.fields, name)
+    return getattr(record if name in ("slug", "name") else record.fields, _DIFF_NAMES.get(name, name))
 
 
 class IReadRepositoryRecordRepository(Protocol):

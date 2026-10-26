@@ -29,6 +29,9 @@ from blizzard.hub.domain.config.changes import (
     RecordRef,
     RecordState,
 )
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -40,8 +43,8 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.config.secrets import SecretName, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
-    ConfigRevisionConflict,
     ConfiguredWorkSource,
+    WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceId,
@@ -51,6 +54,7 @@ from blizzard.hub.domain.config.work_sources import (
 )
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
@@ -61,13 +65,15 @@ from tests.support import OP, config_authoring, hub_store_connections, migrated_
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
-_FIELDS = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
-)
-_REPO = RepositoryFields(
-    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
-)
+#: The forge every record below names, stored by the world before any of them.
+_FORGE_ID = ForgeId("frg_01KX9FORGEAUTHORING00000000")
+_FIELDS = WorkSourceFields(provider="github", locator="acme/demo", forge_id=_FORGE_ID, annotate=False, secret="gh")
+_REPO = RepositoryFields(forge_id=_FORGE_ID, owner="acme", repo="demo", base_branch="master", secret_name="gh")
 _CLI = ChangeContext(actor="alice", door=Door.CLI)
+
+
+#: The kinds whose change rows the world writes before any test acts.
+_SETUP_KINDS = (RecordKind.PROJECT, RecordKind.FORGE)
 
 
 class _World:
@@ -79,24 +85,30 @@ class _World:
         self.secrets = SecretStore(connections)
         self.sources = WorkSourceRecordStore(connections)
         self.repos = RepositoryRecordStore(connections)
+        self.forges = ForgeRecordStore(connections)
         self.referrers = SecretReferrersStore(connections)
         self.log = ConfigChangeStore(connections)
         keys = hub_key_provider({}, data_dir=tmp_path / "data")
         self.authoring: ConfigAuthoring = config_authoring(self.engine, keys=keys, clock=FixedClock(_NOW))
+        forge, change = ConfiguredForge.new(
+            "github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), OP, at=_NOW, forge_id=_FORGE_ID
+        )
+        ForgeRecordStore(connections).create(forge, change=change)
         self.authoring.create_secret(SecretName.parse("gh"), "tok-planted", OP)
 
     def changes(self) -> list:  # type: ignore[type-arg]
-        """The change log past the store's default project, whose ``create`` row the migration wrote."""
+        """The change log past the store's default project, whose ``create`` row the migration wrote, and the forge
+        the world stores first."""
         page = self.log.page(before=None, limit=100, record_kind=None, record_key=None)
-        return [change for change in reversed(page) if change.record_kind is not RecordKind.PROJECT]
+        return [change for change in reversed(page) if change.record_kind not in _SETUP_KINDS]
 
     def count(self) -> int:
-        """How many change rows the log holds past the store's default project's."""
+        """How many change rows the log holds past the store's default project's and the world's forge's."""
         with self.engine.connect() as conn:
             return conn.execute(
                 hub_store_connections(self.engine)
                 .select(config_changes, func.count())
-                .where(config_changes.c.record_kind != RecordKind.PROJECT.value)
+                .where(config_changes.c.record_kind.not_in([kind.value for kind in _SETUP_KINDS]))
             ).scalar_one()
 
     def source(self, name: str = "demo") -> ConfiguredWorkSource:
@@ -175,6 +187,7 @@ def test_a_work_source_create_records_the_diff_and_revision_one(world: _World) -
         "name": (None, "demo"),
         "provider": (None, "github"),
         "locator": (None, "acme/demo"),
+        "forge": (None, _FORGE_ID),
         "annotate": (None, False),
         "secret": (None, "gh"),
     }
@@ -215,19 +228,25 @@ def test_a_stale_revision_conflicts_and_writes_nothing(world: _World) -> None:
     before = world.count()
 
     with pytest.raises(ConfigRevisionConflict) as caught:
-        world.authoring.edit_work_source(record, WorkSourceEdit(annotate=False, web_base="https://x"), OP)
+        world.authoring.edit_work_source(record, WorkSourceEdit(annotate=False, locator="acme/x"), OP)
     assert caught.value.current == 2
     with pytest.raises(ConfigRevisionConflict):
         world.authoring.retire_work_source(record, OP, if_match=1)
     assert world.count() == before
 
 
-def test_a_cleared_field_reads_back_null(world: _World) -> None:
-    fields = WorkSourceFields("github", "acme/demo", "https://api.x", "https://web.x", False, "gh")
-    record = world.authoring.create_work_source("demo", None, fields, OP)
-    world.authoring.edit_work_source(record, WorkSourceEdit(api_base=None), OP)
-    assert world.source().fields.api_base is None
-    assert world.source().fields.web_base == "https://web.x"
+def test_a_cleared_address_moves_the_source_to_github_and_its_own_web_origin_with_it(world: _World) -> None:
+    record = world.authoring.create_work_source_naming(
+        "demo",
+        None,
+        WorkSourceDraft("github", "acme/demo", False, "gh"),
+        ForgeChoice(api_base="https://api.x", web_base="https://web.x"),
+        OP,
+    ).record
+    ghe = world.forges.get(record.fields.forge_id)
+    assert ghe is not None and ghe.fields == ForgeFields("https://api.x", "https://web.x")
+    world.authoring.edit_work_source_naming(record, WorkSourceEdit(), ForgeChoice(api_base=None), OP)
+    assert world.source().fields.forge_id == _FORGE_ID
 
 
 def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) -> None:
@@ -255,7 +274,7 @@ def test_a_missing_or_retired_secret_is_refused_and_nothing_is_written(world: _W
     before = world.count()
     with pytest.raises(WorkSourceSecretUnavailable, match="unknown"):
         world.authoring.create_work_source(
-            "demo", None, WorkSourceFields("github", "a/b", None, None, False, "nope"), OP
+            "demo", None, WorkSourceFields("github", "a/b", _FORGE_ID, False, "nope"), OP
         )
     secret = world.secrets.get("gh")
     assert secret is not None
@@ -316,7 +335,7 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     everything = world.log.page(before=None, limit=100, record_kind=None, record_key=None)
     ids = [c.id for c in everything if c.id is not None]
     assert ids == sorted(ids, reverse=True)
-    assert len(everything) == 3 + 1  # and the store's default project's, which the migration wrote
+    assert len(everything) == 3 + 2  # and the store's default project's, which the migration wrote, and the forge's
     older = world.log.page(before=ids[0], limit=1, record_kind=None, record_key=None)
     assert [c.id for c in older] == [ids[1]]
     only = world.log.page(
@@ -344,7 +363,7 @@ def test_a_repository_create_records_the_diff_and_revision_one(world: _World) ->
     assert {d.field: (d.old, d.new) for d in row.diff} == {
         "slug": (None, "demo"),
         "name": (None, "demo"),
-        "forge_api_url": (None, "https://api.github.com"),
+        "forge": (None, _FORGE_ID),
         "owner": (None, "acme"),
         "repo": (None, "demo"),
         "base_branch": (None, "master"),

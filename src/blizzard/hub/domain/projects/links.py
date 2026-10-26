@@ -23,8 +23,9 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, WorkSourceId, require_configurable
+from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.

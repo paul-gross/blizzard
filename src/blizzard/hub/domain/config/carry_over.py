@@ -4,7 +4,11 @@ The planner decides from loaded data alone: the parsed :class:`LegacyKeys`, the 
 names, the commit coordinates the hub has delivered to, and the records the store already holds. The store
 wins over the file: a record that already exists, active or retired, is skipped, never overwritten. Each work source
 and repository the import creates is linked to the project it lands in, which the importing layer decides. The
-writer commits the plan, its links and the ``config_import`` fact as one transaction, so a refusal writes nothing."""
+writer commits the plan, its links and the ``config_import`` fact as one transaction, so a refusal writes nothing.
+
+Each address the keys name resolves to the tenant's forge holding its canonical origin, or to a forge the import makes
+for it exactly as the forges revision made one, recorded under :data:`MIGRATION_CONTEXT` like every other row it
+writes — so a ``BZ_FORGE_URL`` spelled differently from a stored forge's origin resolves to that forge."""
 
 from __future__ import annotations
 
@@ -19,6 +23,14 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import LinkRecord
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forge_resolution import (
+    REPOSITORY_FORGE_RULES,
+    WORK_SOURCE_FORGE_RULES,
+    ForgeChoice,
+    ForgePlanner,
+)
+from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.legacy_keys import (
     ENV_FORGE_BASE_BRANCH,
     ENV_FORGE_OWNER,
@@ -29,18 +41,12 @@ from blizzard.hub.domain.config.legacy_keys import (
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     ConfiguredRepository,
-    RepositoryFields,
+    RepositoryDraft,
     RepositoryId,
     RepositoryName,
 )
 from blizzard.hub.domain.config.secrets import SealedValue, SecretName, SecretNameError
-from blizzard.hub.domain.config.work_sources import (
-    ConfigFieldError,
-    ConfiguredWorkSource,
-    WorkSourceFields,
-    WorkSourceId,
-    WorkSourceName,
-)
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceDraft, WorkSourceId, WorkSourceName
 from blizzard.hub.domain.kernel.slugs import derive_slug
 
 #: Every row the import writes is attributed to this actor, through this door.
@@ -81,6 +87,7 @@ class ExistingConfig:
     secrets: frozenset[str]
     work_sources: tuple[ConfiguredWorkSource, ...]
     repositories: tuple[ConfiguredRepository, ...]
+    forges: tuple[ConfiguredForge, ...] = ()
 
 
 @domain_model
@@ -125,6 +132,7 @@ class ImportOutcome:
 @dataclass(frozen=True)
 class ImportPlan:
     secrets: tuple[PlannedSecret, ...]
+    forges: tuple[tuple[ConfiguredForge, ConfigChange], ...]
     work_sources: tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
@@ -142,10 +150,11 @@ class SealedSecretWrite:
 @domain_model
 @dataclass(frozen=True)
 class LegacyImport:
-    """Every write of one import, in commit order: secrets, then the records naming them, then their links — each a
-    link record with its change — then the fact."""
+    """Every write of one import, in commit order: secrets and forges, then the records naming them, then their links —
+    each a link record with its change — then the fact."""
 
     secrets: tuple[SealedSecretWrite, ...]
+    forges: tuple[tuple[ConfiguredForge, ConfigChange], ...]
     work_sources: tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]
     repositories: tuple[tuple[ConfiguredRepository, ConfigChange], ...]
     fact: ConfigImportFact
@@ -205,7 +214,12 @@ def _value(values: Mapping[str, str], variable: str) -> str:
 
 
 def _work_sources(
-    legacy: LegacyKeys, existing: ExistingConfig, ctx: ChangeContext, at: datetime, outcomes: list[ImportOutcome]
+    legacy: LegacyKeys,
+    existing: ExistingConfig,
+    forges: ForgePlanner,
+    ctx: ChangeContext,
+    at: datetime,
+    outcomes: list[ImportOutcome],
 ) -> tuple[tuple[ConfiguredWorkSource, ConfigChange], ...]:
     slugs = {record.slug for record in existing.work_sources}
     locators = {(record.fields.provider, record.fields.locator) for record in existing.work_sources}
@@ -216,15 +230,17 @@ def _work_sources(
         if slug in slugs or (source.provider, source.repo) in locators:
             outcomes.append(ImportOutcome(RecordKind.WORK_SOURCE, slug, created=False))
             continue
-        fields = WorkSourceFields(
+        draft = WorkSourceDraft(
             provider=source.provider,
             locator=source.repo,
-            api_base=source.api_base,
-            web_base=source.web_base,
             annotate=source.annotate,
             secret=secret_name_of(source.token_env),
         )
+        choice = ForgeChoice(api_base=source.api_base, web_base=source.web_base)
         try:
+            resolved = forges.decide(choice, WORK_SOURCE_FORGE_RULES, provider=source.provider, current=None, index=0)
+            assert resolved is not None
+            fields = draft.on(resolved.forge.forge_id)
             planned.append(
                 ConfiguredWorkSource.new(
                     slug, source.name if WorkSourceName.of(source.name) else None, fields, ctx, at=at
@@ -252,6 +268,7 @@ def _repositories(
     commits: Sequence[CommitCoordinate],
     values: Mapping[str, str],
     existing: ExistingConfig,
+    forges: ForgePlanner,
     ctx: ChangeContext,
     at: datetime,
     outcomes: list[ImportOutcome],
@@ -271,24 +288,27 @@ def _repositories(
         outcomes.extend(ImportOutcome(RecordKind.REPOSITORY, held_pairs[pair], created=False) for pair in pairs)
         return ()
     base_branch = values.get(ENV_FORGE_BASE_BRANCH, "").strip() or DEFAULT_BASE_BRANCH
-    derived = [
-        RepositoryFields(
-            forge_api_url=forge_api_url,
-            owner=owner,
-            repo=repo,
-            base_branch=base_branch,
-            secret_name=secret_name_of(ENV_FORGE_TOKEN),
+    try:
+        resolved = forges.decide(
+            ForgeChoice(api_base=forge_api_url), REPOSITORY_FORGE_RULES, provider=None, current=None, index=0
         )
+    except ConfigFieldError as exc:
+        raise LegacyImportRefused(f"{ENV_FORGE_URL}: {exc.message}") from exc
+    assert resolved is not None
+    derived = [
+        RepositoryDraft(
+            owner=owner, repo=repo, base_branch=base_branch, secret_name=secret_name_of(ENV_FORGE_TOKEN)
+        ).on(resolved.forge.forge_id)
         for owner, repo in pairs
     ]
-    held = {(r.fields.forge_api_url, r.fields.owner, r.fields.repo): r.slug for r in existing.repositories}
+    held = {(r.fields.forge_id, r.fields.owner, r.fields.repo): r.slug for r in existing.repositories}
     taken = {record.slug for record in existing.repositories}
     bare_counts: dict[str, int] = {}
     for fields in derived:
         bare_counts[fields.repo] = bare_counts.get(fields.repo, 0) + 1
     planned: list[tuple[ConfiguredRepository, ConfigChange]] = []
     for fields in derived:
-        holder = held.get((fields.forge_api_url, fields.owner, fields.repo))
+        holder = held.get((fields.forge_id, fields.owner, fields.repo))
         if holder is not None:
             outcomes.append(ImportOutcome(RecordKind.REPOSITORY, holder, created=False))
             continue
@@ -350,8 +370,9 @@ def plan_import(
     """The writes that carry ``legacy`` into records, skipping what the store already holds.
     :class:`LegacyImportRefused` names the first variable or block the import cannot carry."""
     record_outcomes: list[ImportOutcome] = []
-    work_sources = _work_sources(legacy, existing, ctx, at, record_outcomes)
-    repositories = _repositories(commits, values, existing, ctx, at, record_outcomes)
+    forges = ForgePlanner(existing.forges, ctx, at=at, resolve=lambda _: None)
+    work_sources = _work_sources(legacy, existing, forges, ctx, at, record_outcomes)
+    repositories = _repositories(commits, values, existing, forges, ctx, at, record_outcomes)
     forge_token = bool(repositories) or ENV_FORGE_TOKEN in values
     secrets, secret_outcomes = _secrets(legacy, values, existing, forge_token=forge_token, ctx=ctx, at=at)
     fact = ConfigImportFact(
@@ -365,6 +386,7 @@ def plan_import(
     )
     return ImportPlan(
         secrets=secrets,
+        forges=tuple((forge, change) for forge, change, _ in forges.planned),
         work_sources=work_sources,
         repositories=repositories,
         fact=fact,

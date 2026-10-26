@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.apply import ApplyEntryRefused
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
-from blizzard.hub.domain.config.work_sources import ConfigFieldError
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.projects.color import least_used, parse_color
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration, StoredProjects, plan_projects
 from blizzard.hub.domain.projects.model import Project, ProjectEdit

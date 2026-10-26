@@ -34,13 +34,14 @@ class Door(StrEnum):
 
 
 class RecordKind(StrEnum):
-    """The kind of configured record a change row names. A project's, a repository's and a work source's
+    """The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
     ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
     unlinking and re-linking are ``create``, ``retire`` and ``enable``."""
 
     WORK_SOURCE = "work_source"
     SECRET = "secret"
     REPOSITORY = "repository"
+    FORGE = "forge"
     SCOPE = "scope"
     ROUTINE = "routine"
     PROJECT = "project"
@@ -79,7 +80,8 @@ class Verdict(StrEnum):
     REFUSED = "refused"
 
 
-#: Which lifecycle verbs are legal from which state for a work source or repository; editing a retired one is legal.
+#: Which lifecycle verbs are legal from which state for a forge, a work source or a repository; editing a retired one
+#: is legal.
 FIELDED_RECORD_TRANSITIONS: Mapping[RecordState, Mapping[ChangeOp, Verdict]] = MappingProxyType(
     {
         RecordState.ACTIVE: MappingProxyType(

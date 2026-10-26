@@ -22,6 +22,7 @@ from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.projects.model import ProjectId
@@ -106,12 +107,24 @@ def _artifact(kind: ArtifactKind, name: str, data: str, *, repo: str | None = No
     )
 
 
+_FORGE = ConfiguredForge(
+    forge_id=ForgeId("frg_example"),
+    slug="example",
+    name="example",
+    kind="github",
+    fields=ForgeFields("https://api.github.com", None),
+    revision=1,
+    created_at=datetime(2026, 10, 1, tzinfo=UTC),
+    created_by="op",
+)
+
+
 def _visit(**overrides: object) -> Visit:
     """A visit exercising every field."""
     commit = _artifact(ArtifactKind.GIT_COMMIT, "w", f"feat/x:{'a' * 40}", repo="acme/widget")
     marker = _artifact(ArtifactKind.ASSET, "ci-rerun/1", "done")
     target = ResolvedRepository(
-        forge_api_url="https://api.github.com", owner="acme", base_branch="main", secret_name="s", record="re_1"
+        forge_id=_FORGE.forge_id, owner="acme", base_branch="main", secret_name="s", record="re_1"
     )
     fields: dict[str, object] = {
         "chunk": VisitChunk(
@@ -132,7 +145,11 @@ def _visit(**overrides: object) -> Visit:
         "markers": (marker,),
         "git_commits": GitCommits.of([commit]),
         "resolution": RepositoryResolution(
-            RepositoryOutcome.RESOLVED, targets=(target,), qualified=("acme/widget",), records=("re_1",)
+            RepositoryOutcome.RESOLVED,
+            targets=(target,),
+            qualified=("acme/widget",),
+            records=("re_1",),
+            forges=(_FORGE,),
         ),
         "work_items": (MappingProxyType({"label": "default:7", "reference": None}),),
         "feature_title": "A feature",

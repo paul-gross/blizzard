@@ -15,10 +15,10 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkVerb, verb_legal_from
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.config.repositories import RepositoryFields
 from tests.support import (
     FakeWorkSource,
     HubHarness,
+    RepositorySeed,
     build_hub,
     create_repositories,
     fixture_repository,
@@ -168,7 +168,7 @@ def test_a_tracker_sourced_chunk_links_its_branch_through_the_repository_its_com
         tmp_path,
         work_sources={"tracker": FakeWorkSource(name="tracker", repo="corp/tracker")},
         repositories=[
-            RepositoryFields(
+            RepositorySeed(
                 forge_api_url="https://ghe.example/api/v3",
                 owner="acme",
                 repo="widget",
