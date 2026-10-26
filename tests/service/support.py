@@ -1,13 +1,7 @@
-"""Shared scaffolding for the service tier — the mock-fleet launchers and gate.
-
-A running hub or runner's HTTP API exercised from outside, or an out-of-process
-external-tool binding driven against a mock-fleet binary — seams bound to the mock fleet
-either way: the runner against the mock hub, the hub against the mock runner + forge, and
-a real harness integration's own external-tool CLI against the mock fleet's emitted
-CLI-surface artifact (``bzh:external-cli-fake-is-service-tier`` —
-see ``tests/service/test_opencode_compatibility_service.py``). Skipped unless
-``BLIZZARD_SERVICE=1`` and the sibling ``blizzard-mock`` worktree is provisioned — see
-``verification/blizzard.md`` for the test tiers."""
+"""Service-tier mock-fleet launchers and gate for out-of-process daemon and CLI tests.
+The runner uses the mock hub; the hub uses the mock runner and forge. External-tool tests
+use the emitted CLI surface (``bzh:external-cli-fake-is-service-tier``). Requires
+``BLIZZARD_SERVICE=1`` and a provisioned sibling ``blizzard-mock`` worktree."""
 
 from __future__ import annotations
 

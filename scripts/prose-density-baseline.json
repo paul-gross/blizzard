@@ -11112,12 +11112,6 @@
    "over_cap": 0,
    "total": 157
   },
-  "service/test_event_stream_revocation_service.py": {
-   "comments": 5,
-   "docstrings": 11,
-   "over_cap": 0,
-   "total": 173
-  },
   "service/test_finding_exits_service.py": {
    "comments": 25,
    "docstrings": 31,
