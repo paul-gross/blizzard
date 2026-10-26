@@ -29,6 +29,7 @@ from blizzard.runner.process.child_processes import ShellCommand
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from tests.runner_fakes import SqlAlchemyRunnerStore
 from tests.test_runner_status_cli import _TWO_RUNNERS, _host_of, _init_runner, _registered_store, _serve_local_api
+from tests.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -121,7 +122,7 @@ def test_takeover_hands_the_resumed_session_a_worker_verb_that_reaches_the_runne
     _foreground(monkeypatch, fake_call)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert reached["attachments"].status_code == 200, reached["attachments"].text
@@ -153,7 +154,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
     monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     # The composed command reasserts the daemon's permission mode — so
@@ -186,7 +187,7 @@ def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: py
     _foreground(monkeypatch, lambda command, **_: 7)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 7
     assert store.open_takeover_for_chunk("ch_1") is None  # still marked ended despite the nonzero exit
@@ -211,7 +212,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     with _serve_local_api(root):
         # click's own `main()` converts an uncaught KeyboardInterrupt into `Abort` —
         # assert the exit code, not the exception; the end-PATCH must fire before that.
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 1
     assert store.open_takeover_for_chunk("ch_1") is None  # ended despite the interrupt — no stranded hold
@@ -246,7 +247,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "live worker attempt" in result.output
@@ -336,8 +337,8 @@ def test_takeover_end_closes_a_stranded_takeover_without_starting_a_session(
     _foreground(monkeypatch, lambda command, **_: calls.append(command) or 0)
 
     with _serve_local_api(root):
-        first = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
-        again = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+        first = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+        again = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
 
     assert first.exit_code == 0, first.output
     assert "ended takeover tko_1" in first.output
@@ -367,7 +368,7 @@ def test_takeover_end_reports_a_takeover_ended_elsewhere(tmp_path: Path, monkeyp
     monkeypatch.setattr(RunnerDaemon, "get", stale_list)
 
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["takeover", "ch_1", "--end", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "already ended elsewhere" in result.output

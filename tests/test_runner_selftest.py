@@ -20,7 +20,6 @@ from pathlib import Path
 import httpx2
 import pytest
 import uvicorn
-from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import SystemClock
@@ -53,6 +52,7 @@ from tests.runner_client import runner_client
 from tests.runner_fakes import NO_TRACING
 from tests.runner_init_fakes import init_runner
 from tests.support_child_launch import CHILDREN, tool_env, version_probe
+from tests.worker_http import bind_local_only
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.
@@ -761,7 +761,7 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
 def test_cli_selftest_prints_every_check_and_exits_zero_on_success(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin"))
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["selftest", "claude_code", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["selftest", "claude_code", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
     assert "[PASS] spawn_session_id" in result.output
@@ -778,7 +778,7 @@ def test_cli_selftest_prints_every_check_and_exits_zero_on_success(tmp_path: Pat
 def test_cli_selftest_exits_non_zero_and_prints_the_failure_on_a_drifted_harness(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin", source=_BROKEN_HARNESS))
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["selftest", "claude_code", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["selftest", "claude_code", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "[FAIL] end_to_end_edit_commit" in result.output
@@ -790,7 +790,7 @@ def test_cli_selftest_exits_non_zero_and_prints_the_failure_on_a_drifted_harness
 def test_cli_selftest_rejects_an_unknown_harness(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin"))
     with _serve_local_api(root):
-        result = CliRunner().invoke(runner_group, ["selftest", "codex", "--dir", str(root)])
+        result = bind_local_only().runner.invoke(runner_group, ["selftest", "codex", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "codex" in result.output

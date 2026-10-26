@@ -6,19 +6,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from tests.host_files import load_runner_config
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
+from tests.worker_http import bind_local_only
 
 pytestmark = pytest.mark.component
 
 
 def _run(*args: str) -> Result:
-    return CliRunner().invoke(blizzard, ["runner", "prompt", *args])
+    return bind_local_only().runner.invoke(blizzard, ["runner", "prompt", *args])
 
 
 def test_clear_drops_the_override_through_the_daemon(tmp_path: Path) -> None:
