@@ -41,6 +41,8 @@ export function runCommand(
     const child = spawn(command, args, { env: options.env, cwd: options.cwd, stdio: 'pipe', detached: true });
     // Without a prompt the command reads end-of-input at once, as it would from a closed stdin.
     if (options.prompt === undefined) child.stdin.end();
+    // A command that exits before it is answered closes the pipe; the exit is the result, not a write error.
+    child.stdin.on('error', () => {});
     let stdout = '';
     let stderr = '';
     let asked = false;
