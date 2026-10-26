@@ -4,7 +4,7 @@ import { type People, type Person, peopleFactory } from './people';
 import { walk } from './auth';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
 import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
-import type { Role, RunnerAddRequest } from './client/wire/hub/types.gen';
+import type { Role, RunnerAddRequest, RunnerDeclining } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
 import {
   type FactoryContext,
@@ -239,3 +239,5 @@ export const test = tenancy.extend<Fixtures>({
 });
 
 export { expect };
+/** The wire shape of one reported decline reason, for a spec to type its literals against. */
+export type { RunnerDeclining };

@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.domain.runners.registration import RunnerDeclining
@@ -19,6 +21,25 @@ _RUNNER = "runner-a"
 _RESET = datetime(2026, 10, 22, 14, tzinfo=UTC)
 _FLOOR = RunnerDeclining("floor", "exhausted", "anthropic", _RESET)
 _PACE = RunnerDeclining("pace", "7d 86% spent, 71% elapsed")
+_CAPABILITIES = [{"harness_id": "claude", "default": True}]
+_WIRE_FLOOR = {"lever": "floor", "detail": "exhausted", "subscription": "anthropic", "until": "2026-10-22T14:00:00Z"}
+
+
+class _PreFieldRegistration(BaseModel):
+    """The registration body as a hub built before ``declining`` reads it — frozen here, field for field, so a change
+    to the live model cannot hide a break in what an older hub parses. Pydantic's default ``extra`` ignores a key it
+    does not name."""
+
+    name: str | None = None
+    workspace_id: str
+    env_capacity: int | None = None
+    url: str | None = None
+    redirect_uris: list[str] = []
+    capabilities: list[dict[str, Any]] = []
+    subscriptions: list[dict[str, Any]] | None = None
+    gates: list[str] = []
+    projects: list[str] | None = None
+    version: str | None = None
 
 
 def _register(hub: HubHarness, declining: tuple[RunnerDeclining, ...] | None) -> None:
@@ -101,3 +122,12 @@ def test_both_views_serve_the_reasons(tmp_path: Path) -> None:
         ("floor", "exhausted", "anthropic", "2026-10-22T14:00:00+00:00"),
         ("pace", "7d 86% spent, 71% elapsed", None, None),
     ]
+
+
+def test_a_hub_that_predates_the_field_parses_a_registration_carrying_it() -> None:
+    body = {"workspace_id": "w1", "capabilities": _CAPABILITIES, "declining": [_WIRE_FLOOR]}
+
+    parsed = _PreFieldRegistration.model_validate(body)
+
+    assert parsed.workspace_id == "w1"
+    assert not hasattr(parsed, "declining")
