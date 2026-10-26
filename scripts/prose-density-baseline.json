@@ -11239,10 +11239,10 @@
    "total": 53
   },
   "service/test_usage_service.py": {
-   "comments": 29,
-   "docstrings": 18,
-   "over_cap": 1,
-   "total": 351
+   "comments": 10,
+   "docstrings": 12,
+   "over_cap": 0,
+   "total": 145
   },
   "service/test_utilization_lever_service.py": {
    "comments": 3,
