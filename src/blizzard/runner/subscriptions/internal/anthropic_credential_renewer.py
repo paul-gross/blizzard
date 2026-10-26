@@ -1,14 +1,9 @@
-"""The Anthropic (Claude subscription) credential-renewer binding (``bzh:pluggable-seams``): asks the Claude
-Code CLI to refresh its own OAuth token by running a minimal headless haiku one-shot, and reports ``renewed``
-only once the credential file's ``claudeAiOauth.expiresAt`` has moved forward. Claude Code refreshes the
-token before it sends the request, so the exit code does not matter: a throttled call (429) exits non-zero
-after the refresh already landed, and is still ``renewed``. ``--bare`` is never used — it ignores OAuth and
-the credential file.
+"""Refresh Claude subscription OAuth through a headless haiku one-shot, never ``--bare``.
 
-Lead window, measured against Claude Code 2.1.310: its ``isOAuthTokenExpired`` check is
-``now + 300000 >= expiresAt`` — a token is refreshed once it is within 5 minutes of expiry (found by reading
-the installed bundle, not by forcing a refresh, which would rotate the live credential's refresh token). The
-lead sits inside that threshold, so a due check never spends a call the CLI would decline to refresh on."""
+Report ``renewed`` only when ``claudeAiOauth.expiresAt`` advances, even if the CLI then exits
+nonzero (for example, a 429). The lead sits inside Claude Code 2.1.310's five-minute
+``isOAuthTokenExpired`` threshold (``now + 300000 >= expiresAt``), so a due check is eligible
+for refresh without forcing rotation of the live credential's refresh token."""
 
 from __future__ import annotations
 
@@ -33,8 +28,7 @@ _log = get_logger("blizzard.runner.subscriptions")
 
 DEFAULT_CLAUDE_BINARY = "claude"
 
-# Inside Claude Code's own 5-minute refresh threshold (see the module docstring), and well above the
-# sampler's 5s request budget.
+# Inside Claude Code's five-minute refresh threshold, above the sampler's 5s budget.
 _RENEWAL_LEAD_WINDOW = timedelta(minutes=4)
 
 _ONE_SHOT_TIMEOUT_SECONDS = 60.0

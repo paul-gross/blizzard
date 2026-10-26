@@ -119,10 +119,8 @@ def _federated_runner(
     client = httpx2.Client(base_url=public_url, timeout=15.0)
     try:
         await_http(proc, client, "/api/health", log=log)
-        # Sign-in names the runner's hub-minted id as the authorize client, so it waits for the
-        # daemon's first registration — the one that declares this federation identity. The hub
-        # records that registration before the daemon has read the answer, so readiness is the
-        # daemon's own: its sign-in stops answering 503 once it holds the id.
+        # Sign-in uses the hub-minted id; the daemon is ready once its own login route stops
+        # answering 503, not merely once the hub records its first registration.
         assert poll_until(
             lambda: (
                 client.get("/api/auth/login?return_to=/", follow_redirects=False).status_code
