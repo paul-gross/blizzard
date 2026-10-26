@@ -84,7 +84,8 @@ class GithubProvider:
         if subject is None:
             raise OAuthExchangeError(f"github /user response for provider {self.name!r} carries no 'id'")
         handle = user.get("login") or str(subject)
-        primary = next((entry for entry in emails if entry.get("primary")), {})
+        no_email: dict[str, object] = {}
+        primary = next((entry for entry in emails if entry.get("primary")), no_email)
         primary_email = primary.get("email")
         return ProviderIdentity(
             subject=str(subject),

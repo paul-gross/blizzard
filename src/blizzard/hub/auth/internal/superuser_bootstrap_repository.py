@@ -6,7 +6,10 @@ row at rest: :meth:`upsert` deletes-then-inserts in one transaction (``bzh:sql-p
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import delete, insert, select
+from sqlalchemy.engine import Row
 
 from blizzard.hub.auth.models import SuperuserBootstrap
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
@@ -47,7 +50,7 @@ class SuperuserBootstrapRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _bootstrap(row) -> SuperuserBootstrap:
+    def _bootstrap(row: Row[Any]) -> SuperuserBootstrap:
         return SuperuserBootstrap(email=row.email, claimed_user_id=row.claimed_user_id, updated_at=row.updated_at)
 
 

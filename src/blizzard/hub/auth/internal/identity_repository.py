@@ -7,8 +7,10 @@ sees only :class:`~blizzard.hub.auth.models.Identity`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import insert, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
@@ -96,7 +98,7 @@ class IdentityRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _identity(row) -> Identity:
+    def _identity(row: Row[Any]) -> Identity:
         return Identity(
             provider_name=row.provider_name,
             subject=row.subject,

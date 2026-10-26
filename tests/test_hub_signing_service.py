@@ -10,6 +10,8 @@ from typing import cast
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.hub.auth.signing import SigningKeyService
@@ -108,3 +110,18 @@ def test_keys_dir_and_files_are_owner_only(tmp_path: Path) -> None:
     assert stat.S_IMODE(pem_files[0].stat().st_mode) == 0o600
     meta_mode = stat.S_IMODE((keys_dir / "meta.json").stat().st_mode)
     assert meta_mode == 0o600
+
+
+def test_a_non_rsa_key_file_fails_loudly_instead_of_publishing(tmp_path: Path) -> None:
+    keys_dir = tmp_path / "signing-keys"
+    service = SigningKeyService(keys_dir)
+    (pem_path,) = keys_dir.glob("*.pem")
+    pem_path.write_bytes(
+        ec.generate_private_key(ec.SECP256R1()).private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    with pytest.raises(TypeError):
+        service.public_jwks()

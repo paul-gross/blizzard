@@ -7,8 +7,10 @@ sees only :class:`~blizzard.hub.auth.models.User`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import func, insert, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
@@ -96,7 +98,7 @@ class UserRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _user(row) -> User:
+    def _user(row: Row[Any]) -> User:
         return User(
             user_id=row.id,
             username=row.username,

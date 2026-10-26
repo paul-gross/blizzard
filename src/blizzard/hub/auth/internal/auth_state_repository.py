@@ -6,7 +6,10 @@ sees only :class:`~blizzard.hub.auth.models.AuthStateEntry`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import delete, insert, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
@@ -65,7 +68,7 @@ class AuthStateRepository:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _entry(row) -> AuthStateEntry:
+    def _entry(row: Row[Any]) -> AuthStateEntry:
         return AuthStateEntry(
             state=row.state,
             kind=row.kind,

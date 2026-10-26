@@ -7,10 +7,12 @@ and cached for the conformer's lifetime — it does not change under a running h
 
 from __future__ import annotations
 
+from typing import cast
 from urllib.parse import urlencode
 
 import httpx2
 import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
 from blizzard.foundation.logging import get_logger
@@ -126,9 +128,11 @@ class OidcProvider:
                 continue
             algorithms = self._trusted_algorithms(jwk)
             public_key = RSAAlgorithm.from_jwk(jwk)
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                raise OAuthExchangeError(f"JWKS key for provider {self.name!r} is not an RSA public key")
             return jwt.decode(
                 id_token,
-                key=public_key,  # type: ignore[arg-type]
+                key=public_key,
                 algorithms=algorithms,
                 audience=self._client_id,
                 issuer=self._issuer,
@@ -143,5 +147,5 @@ class OidcProvider:
             return [str(jwk_alg)]
         supported = self._discover().get("id_token_signing_alg_values_supported")
         if isinstance(supported, list) and supported:
-            return [str(alg) for alg in supported]
+            return [str(alg) for alg in cast(list[object], supported)]
         return ["RS256"]

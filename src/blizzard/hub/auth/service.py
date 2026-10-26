@@ -607,7 +607,7 @@ def _vouched_emails(identity: ProviderIdentity) -> frozenset[str]:
     if not identity.emails_authoritative:
         return frozenset()
     primary = _vouched_email(identity)
-    return frozenset(identity.verified_emails) | ({primary} if primary is not None else set())
+    return frozenset(identity.verified_emails) | ({primary} if primary is not None else frozenset[str]())
 
 
 def _claimable(bootstrap: SuperuserBootstrap | None, emails: frozenset[str]) -> bool:
