@@ -19,7 +19,7 @@ gh release view v0.2.0 --repo paul-gross/blizzard
 
 [`docs/versioning.md`](./versioning.md) owns what counts as breaking and the floor a runner may lag its hub down to.
 
-## Upgrading to the next release
+## Upgrading to 0.3.0
 
 ### Usage-limit brake carry-over
 
@@ -73,6 +73,8 @@ routed escalates the chunk with cause `unroutable-outcome`, naming the choice. A
 
 To go back to an older release, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)). The
 older hub then runs each node's untouched `run:` again. A chunk escalated meanwhile stays escalated.
+
+## Upgrading to the next release
 
 ## Upgrading to 0.2.0
 
