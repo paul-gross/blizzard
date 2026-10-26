@@ -133,7 +133,8 @@ the hub and then the runner are upgraded to a candidate wheel the caller names, 
 release and forward again. `push.yml` calls it on every `master` push with the dev-build wheel, and `release.yml` on
 every `-rc.` tag with the wheel it is about to release; `pr.yml` calls it on a release cut's pull request, with a wheel
 built from the pull request's head. A leading `releases` job lists the supported set with
-`blizzard-compat releases --json`, leaving a tag run's own tag out with `--tag`, and each release runs as two legs,
+`blizzard-compat releases --json`, leaving a tag run's own tag out with `--tag` and any tag with no published GitHub
+Release — a candidate whose release run went red has no wheel to upgrade from — and each release runs as two legs,
 SQLite and Postgres, against a `postgres:16` service. With no supported release, one leg reports that there is nothing
 to rehearse and passes. Each leg checks the mock out at the release's own tag where the mock carries one, else at
 `master`, through `resolve-mock-ref`'s `baseline` input. A failed leg uploads its daemons' logs as

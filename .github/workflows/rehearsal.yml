@@ -6,8 +6,9 @@
 # published wheel, seeds it, and upgrades it to the caller's candidate wheel on one store
 # backend. What a leg asserts is owned by the tier itself, `tests/rehearsal/`.
 #
-# The matrix is never empty: with no supported release, `releases` emits one leg with an
-# empty baseline, which reports that there is nothing to rehearse and passes, so a
+# A supported release is rehearsed only once it has a published GitHub Release: a tag whose
+# release run went red never published a wheel. The matrix is never empty: with no supported
+# release, `releases` emits one leg with an empty baseline, which reports that there is nothing to rehearse and passes, so a
 # caller's `needs` always sees a real result.
 name: rehearsal
 
@@ -50,11 +51,15 @@ jobs:
         id: list
         env:
           TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           args=(releases --json)
           [ -z "$TAG" ] || args+=(--tag "${TAG#v}")
-          baselines="$(uv run blizzard-compat "${args[@]}" | jq -c '[.releases[].tag] | if . == [] then [""] else . end')"
+          listed="$(uv run blizzard-compat "${args[@]}")"
+          # A tag whose release run never published has no wheel to upgrade from, so it is no baseline.
+          published="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1000 --json tagName --jq '[.[].tagName]')"
+          baselines="$(jq -c --argjson published "$published" '[.releases[].tag | select(IN($published[]))] | if . == [] then [""] else . end' <<<"$listed")"
           echo "baselines=$baselines" >> "$GITHUB_OUTPUT"
           echo "Rehearsing from: $baselines"
 
