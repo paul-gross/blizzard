@@ -303,6 +303,10 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
         const open = (await admin.listTenants()).filter((candidate) => candidate.state === 'open');
         const [seeded] = open;
         if (open.length !== 1 || seeded === undefined) throw new Error(`a fresh hub should hold one open tenant, not ${open.length}`);
+        // Tenant creation mints the packaged graphs into a tenant at every level below; the seeded tenant has them only
+        // once `graph sync` runs, as it does after every deploy.
+        const synced = await admin.syncGraphs();
+        if (!synced.ok) throw new Error(`graph sync failed on the fresh hub: ${JSON.stringify(synced.tenants)}`);
         tenant = { id: seeded.tenant_id, name: seeded.name };
       }
       touched.tenantId = tenant.id;

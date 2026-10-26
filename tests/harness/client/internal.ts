@@ -1,5 +1,5 @@
 import { type CallRecorder, timed } from './latency';
-import type { ApplyResponse, TenantView } from './wire/hub/types.gen';
+import type { AdminGraphSyncResponse, ApplyResponse, TenantView } from './wire/hub/types.gen';
 
 /**
  * The internal client: hub-level calls the harness's own fixtures make (tenant creation, furnishing), which no spec can
@@ -39,6 +39,11 @@ export class HubInternal {
 
   listTenants(): Promise<TenantView[]> {
     return this.call<TenantView[]>('GET', '/api/admin/tenants');
+  }
+
+  /** `graph sync`: the packaged graphs reconciled into every open tenant, as a deployment runs it after each deploy. */
+  syncGraphs(): Promise<AdminGraphSyncResponse> {
+    return this.call<AdminGraphSyncResponse>('POST', '/api/admin/graphs/sync');
   }
 
   /** A raw answer, for the checks that assert on a refusal rather than a success. */
