@@ -5,11 +5,12 @@ import { WORKERS_PER_HUB } from '../playwright.config';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, LATENCY_ATTACHMENT, recorderFor, recordsOf } from './client/latency';
 import { Ledger } from './client/ledger';
-import { stopDaemon } from './daemons/process';
-import { runDir } from './env';
-import { type HubCoordinates, readProjectHubs, startHubStack } from './hubs';
+import { hostHub } from './daemons/hub';
+import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
+import { readContract, runDir } from './env';
+import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
-import { discoverProfiles, readProfile } from './profiles';
+import { checkProfile, discoverProfiles, mergeProfile, readProfile, type TomlTable } from './profiles';
 
 export const LEVELS = ['common', 'fresh-project', 'fresh-tenant', 'fresh-hub'] as const;
 export type Level = (typeof LEVELS)[number];
@@ -29,6 +30,23 @@ export function resolveLevel(declared: Level | undefined, raise: boolean): Level
   }
   const above = LEVELS[Math.min(LEVELS.indexOf(declared) + 1, LEVELS.length - 1)] as Level;
   return { declared, served: raise ? above : declared };
+}
+
+/**
+ * What a test may hand a hub of its own, and only at `fresh-hub`: `hubConfig` and `hubEnv` are refused anywhere else, a
+ * misspelled `hubConfig` key and a `hubEnv` name the environment contract sets are refused everywhere. Throws before
+ * any hub starts.
+ */
+export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: Record<string, string>, contractSet: string[] = Object.keys(readContract().set)): void {
+  const named = [...(Object.keys(hubConfig).length > 0 ? ['hubConfig'] : []), ...(Object.keys(hubEnv).length > 0 ? ['hubEnv'] : [])];
+  if (named.length > 0 && served !== 'fresh-hub') {
+    throw new Error(`${named.join(' and ')} reach a hub of the test's own, and this test is served "${served}". Declare isolation "fresh-hub".`);
+  }
+  const problems = checkProfile(hubConfig).map((problem) => `hubConfig ${problem}`);
+  for (const name of Object.keys(hubEnv)) {
+    if (contractSet.includes(name)) problems.push(`hubEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`);
+  }
+  if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
 }
 
 /** The service project whose setup a project runs on: the `harness` project rides the default profile's. */
@@ -61,12 +79,31 @@ export interface SharedHub {
   context(): Promise<APIRequestContext>;
 }
 
+/** A fresh hub's process, stopped, killed, and started again under the URL it first held. */
+export interface FreshHub {
+  /** The pid of the hub process now running, or last run. */
+  readonly pid: number;
+  /** `SIGTERM`, then `SIGKILL` after the grace; resolves with the exit code, or the signal that ended it. */
+  stop(): Promise<number | string>;
+  /** `SIGKILL`; resolves once the process is gone. */
+  kill(): Promise<void>;
+  /** Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. */
+  start(): Promise<HubCoordinates>;
+}
+
+/** A fresh hub's lifecycle, and the one place that knows which process is the hub's now. */
+interface FreshHubControl extends FreshHub {
+  current(): LiveDaemon;
+}
+
 /** The hub a test reaches. */
 export interface TestHub {
   coordinates: HubCoordinates;
   context: APIRequestContext;
   /** Whether the hub was started for this test alone. */
   fresh: boolean;
+  /** A fresh hub's lifecycle; absent on a shared hub. */
+  lifecycle?: FreshHub;
   /** The hub's log as attached to a failing test: the tenant's lines on a shared hub, the whole log on a fresh one. */
   logTail(tenantId?: string): string;
 }
@@ -93,7 +130,12 @@ export interface WorkerFixtures {
 
 export interface TestFixtures {
   isolation: Level | undefined;
+  /** TOML for the fresh hub's `blizzard-hub.toml`, in parsed-profile shape (integers as `bigint`); `fresh-hub` only. */
+  hubConfig: TomlTable;
+  /** Environment for the fresh hub's process; `fresh-hub` only. */
+  hubEnv: Record<string, string>;
   level: LevelInfo;
+  freshHub: FreshHub;
   testHub: TestHub;
   tenant: Tenant;
   ledger: Ledger;
@@ -145,14 +187,18 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   isolation: [undefined, { option: true }],
 
-  level: async ({ isolation }, use, testInfo) => {
+  hubConfig: [{}, { option: true }],
+  hubEnv: [{}, { option: true }],
+
+  level: async ({ isolation, hubConfig, hubEnv }, use, testInfo) => {
     const level = resolveLevel(isolation, process.env.BLIZZARD_ISOLATION_RAISE === '1');
+    requireHubOptions(level.served, hubConfig, hubEnv);
     // The cross-check names a test by the level it declared, which the report carries only through this.
     testInfo.annotations.push({ type: 'isolation-level', description: level.declared });
     await use(level);
   },
 
-  testHub: async ({ level, hub, playwright }, use, testInfo) => {
+  testHub: async ({ level, hub, playwright, hubConfig, hubEnv }, use, testInfo) => {
     if (level.served !== 'fresh-hub') {
       const coordinates = hub.coordinates();
       await use({
@@ -163,25 +209,53 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       });
       return;
     }
-    // A hub for this test alone, under the profile of the folder the test lives in.
+    // A hub for this test alone, under the profile of the folder the test lives in, the test's `hubConfig` over it.
     const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
     const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
-    const coordinates = await startHubStack(dir, 0, folder === undefined ? {} : readProfile(folder.file));
+    const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
+    const stack = await startStack(dir, 0, profile, hubEnv);
+    const { coordinates } = stack;
+    let hubProcess = stack.hub;
+    const control: FreshHubControl = {
+      current: () => hubProcess,
+      get pid() {
+        return hubProcess.pid;
+      },
+      stop: () => stopLive(hubProcess),
+      kill: async () => {
+        await killLive(hubProcess);
+      },
+      start: async () => {
+        if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
+        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        return coordinates;
+      },
+    };
     const context = await playwright.request.newContext({ baseURL: coordinates.url });
     try {
       await use({
         coordinates,
         context,
         fresh: true,
+        lifecycle: control,
         logTail: () => hubLog({ logPath: coordinates.logPath, tenantId: '', fresh: true }).tail(),
       });
     } finally {
       await context.dispose();
-      await Promise.all(coordinates.daemons.map(stopDaemon));
+      // The hub's process now, not the one the stack started: a `start()` replaced it.
+      await stopDaemon(control.current());
+      await Promise.all(coordinates.daemons.slice(1).map(stopDaemon));
     }
     // A fresh hub's whole log is read for refusals the moment its test stops it.
     const refusals = scanLog(coordinates.logPath).map((line) => line.raw);
     if (refusals.length > 0) throw new Error(`a statement guard refused outside any request:\n${refusals.join('\n')}`);
+  },
+
+  freshHub: async ({ level, testHub }, use) => {
+    if (testHub.lifecycle === undefined) {
+      throw new Error(`freshHub is the lifecycle of a hub of the test's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
+    }
+    await use(testHub.lifecycle);
   },
 
   tenant: async ({ level, testHub, adminClient, touched }, use, testInfo) => {

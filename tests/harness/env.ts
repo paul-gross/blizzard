@@ -60,9 +60,9 @@ export function runDir(): string {
 /**
  * A daemon's environment: the runner's own, less every `unset` name and every variable under an `unsetPrefixes`
  * prefix, plus `set`, plus `XDG_CONFIG_HOME` at the run's empty config home, plus what the daemon's start needs of its
- * own. Nothing `extra` carries can remove a `set` variable.
+ * own. Nothing `extra` carries can remove a `set` variable. `configHome` replaces the run's shared config home.
  */
-export function daemonEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+export function daemonEnv(extra: Record<string, string> = {}, configHome?: string): NodeJS.ProcessEnv {
   const contract = readContract();
   const env: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -72,7 +72,7 @@ export function daemonEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv
   }
   Object.assign(env, extra);
   if (contract.isolatedConfigHome) {
-    const home = path.join(runDir(), 'config-home');
+    const home = configHome ?? path.join(runDir(), 'config-home');
     fs.mkdirSync(home, { recursive: true });
     env.XDG_CONFIG_HOME = home;
   }
