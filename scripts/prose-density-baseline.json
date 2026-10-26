@@ -11022,11 +11022,11 @@
    "over_cap": 0,
    "total": 157
   },
-  "service/test_event_log_service.py": {
-   "comments": 23,
+  "service/test_event_stream_revocation_service.py": {
+   "comments": 5,
    "docstrings": 11,
-   "over_cap": 1,
-   "total": 230
+   "over_cap": 0,
+   "total": 174
   },
   "service/test_finding_exits_service.py": {
    "comments": 25,
