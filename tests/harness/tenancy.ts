@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { type APIRequestContext, test as base, type TestInfo } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../playwright.config';
+import { signInSuperuser, type Superuser } from './auth';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, LATENCY_ATTACHMENT, recorderFor, recordsOf } from './client/latency';
 import { Ledger } from './client/ledger';
@@ -49,9 +50,11 @@ export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: R
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
 }
 
-/** The service project whose setup a project runs on: the `harness` project rides the default profile's. */
+/** The service project whose setup a project runs on: `harness` rides the default profile's, `harness-auth` the `auth` profile's. */
 export function profileProject(projectName: string): string {
-  return projectName === 'harness' ? 'service-hub' : projectName;
+  if (projectName === 'harness') return 'service-hub';
+  if (projectName === 'harness-auth') return 'service-hub-auth';
+  return projectName;
 }
 
 /** Whether a level shares its tenant with other tests, so reads are narrowed to what the test made. */
@@ -75,7 +78,10 @@ export function hubFor(project: string, parallelIndex: number): HubCoordinates {
 /** The worker's shared hub, resolved only when asked: a `fresh-hub` test never asks. */
 export interface SharedHub {
   coordinates(): HubCoordinates;
-  /** The worker's one request context for this hub, created with the hub's URL and disposed when the worker ends. */
+  /**
+   * The worker's one request context for this hub, created with the hub's URL and disposed when the worker ends. On a
+   * hub with authentication on it carries the superuser's session.
+   */
   context(): Promise<APIRequestContext>;
 }
 
@@ -99,7 +105,13 @@ interface FreshHubControl extends FreshHub {
 /** The hub a test reaches. */
 export interface TestHub {
   coordinates: HubCoordinates;
+  /** On a hub with authentication on, the context carries the superuser's session once `superuser()` has resolved. */
   context: APIRequestContext;
+  /**
+   * The superuser credential of a hub with authentication on, `undefined` on one without. A shared hub's is the session
+   * the setup project recorded; a fresh hub's is a walk made on first demand, in `context`, and remembered.
+   */
+  superuser(): Promise<Superuser | undefined>;
   /** Whether the hub was started for this test alone. */
   fresh: boolean;
   /** A fresh hub's lifecycle; absent on a shared hub. */
@@ -137,6 +149,8 @@ export interface TestFixtures {
   level: LevelInfo;
   freshHub: FreshHub;
   testHub: TestHub;
+  /** The test's tenant, resolved on first call: a test that never asks never forces the superuser's sign-in. */
+  tenantOf: () => Promise<Tenant>;
   tenant: Tenant;
   ledger: Ledger;
   touched: Touched;
@@ -167,7 +181,10 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
           const hub = coordinates();
           let context = contexts.get(hub.index);
           if (context === undefined) {
-            context = await playwright.request.newContext({ baseURL: hub.url });
+            context = await playwright.request.newContext({
+              baseURL: hub.url,
+              extraHTTPHeaders: hub.auth?.session === undefined ? {} : { cookie: `bz_session=${hub.auth.session}` },
+            });
             contexts.set(hub.index, context);
           }
           return context;
@@ -180,7 +197,10 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   adminClient: [
     async ({ hub }, use) => {
-      await use((record) => new HubInternal(hub.coordinates().url, record));
+      await use((record) => {
+        const coordinates = hub.coordinates();
+        return new HubInternal(coordinates.url, record, coordinates.auth?.session);
+      });
     },
     { scope: 'worker' },
   ],
@@ -204,6 +224,13 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       await use({
         coordinates,
         context: await hub.context(),
+        superuser: async () => {
+          if (coordinates.auth === undefined) return undefined;
+          if (coordinates.auth.session === undefined || coordinates.auth.userId === undefined) {
+            throw new Error('the hubs file records no superuser session for this hub; the setup project signs it in');
+          }
+          return { session: coordinates.auth.session, userId: coordinates.auth.userId };
+        },
         fresh: false,
         logTail: (tenantId) => hubLog({ logPath: coordinates.logPath, tenantId: tenantId ?? '', fresh: false }).tail(),
       });
@@ -232,10 +259,12 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       },
     };
     const context = await playwright.request.newContext({ baseURL: coordinates.url });
+    let superuser: Promise<Superuser | undefined> | undefined;
     try {
       await use({
         coordinates,
         context,
+        superuser: () => (superuser ??= coordinates.auth === undefined ? Promise.resolve(undefined) : signInSuperuser(coordinates, context)),
         fresh: true,
         lifecycle: control,
         logTail: () => hubLog({ logPath: coordinates.logPath, tenantId: '', fresh: true }).tail(),
@@ -258,24 +287,33 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     await use(testHub.lifecycle);
   },
 
-  tenant: async ({ level, testHub, adminClient, touched }, use, testInfo) => {
-    let tenant: Tenant;
-    if (level.served === 'common' || level.served === 'fresh-project') {
-      const id = testHub.coordinates.commonTenantId;
-      if (id === undefined) throw new Error('the shared hub has no common tenant');
-      tenant = { id, name: 'common' };
-    } else if (level.served === 'fresh-tenant') {
-      const created = await adminClient(recorderFor(testInfo)).createTenant(uniqueName(testInfo));
-      tenant = { id: created.tenant_id, name: created.name };
-    } else {
-      // The fresh hub's seeded tenant, the only one open.
-      const open = (await new HubInternal(testHub.coordinates.url).listTenants()).filter((candidate) => candidate.state === 'open');
-      const [seeded] = open;
-      if (open.length !== 1 || seeded === undefined) throw new Error(`a fresh hub should hold one open tenant, not ${open.length}`);
-      tenant = { id: seeded.tenant_id, name: seeded.name };
-    }
-    touched.tenantId = tenant.id;
-    await use(tenant);
+  tenantOf: async ({ level, testHub, adminClient, touched }, use, testInfo) => {
+    const resolve = async (): Promise<Tenant> => {
+      let tenant: Tenant;
+      if (level.served === 'common' || level.served === 'fresh-project') {
+        const id = testHub.coordinates.commonTenantId;
+        if (id === undefined) throw new Error('the shared hub has no common tenant');
+        tenant = { id, name: 'common' };
+      } else if (level.served === 'fresh-tenant') {
+        const created = await adminClient(recorderFor(testInfo)).createTenant(uniqueName(testInfo), (await testHub.superuser())?.userId);
+        tenant = { id: created.tenant_id, name: created.name };
+      } else {
+        // The fresh hub's seeded tenant, the only one open.
+        const admin = new HubInternal(testHub.coordinates.url, undefined, (await testHub.superuser())?.session);
+        const open = (await admin.listTenants()).filter((candidate) => candidate.state === 'open');
+        const [seeded] = open;
+        if (open.length !== 1 || seeded === undefined) throw new Error(`a fresh hub should hold one open tenant, not ${open.length}`);
+        tenant = { id: seeded.tenant_id, name: seeded.name };
+      }
+      touched.tenantId = tenant.id;
+      return tenant;
+    };
+    let resolved: Promise<Tenant> | undefined;
+    await use(() => (resolved ??= resolve()));
+  },
+
+  tenant: async ({ tenantOf }, use) => {
+    await use(await tenantOf());
   },
 
   ledger: async ({}, use) => {

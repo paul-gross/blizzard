@@ -28,9 +28,13 @@ export async function initHub(dir: string, profile: TomlTable): Promise<string> 
   return hubDir;
 }
 
+/** The value of `BLIZZARD_TEST_IDP_SECRET`, which an `auth` profile's provider names; the stub IdP ignores it, the hub refuses to boot without it. */
+export const IDP_SECRET = 'blizzard-tests-idp-secret';
+
 /**
  * `host` against a hub directory `init` already wrote, its log appended to `<dir>/hub.log`. `env` reaches this process
- * only, after the contract's unset filter; a `port` pins the hub to a URL it held before.
+ * only, after the contract's unset filter, and every hub carries `BLIZZARD_TEST_IDP_SECRET` beside it, a restarted one
+ * included; a `port` pins the hub to a URL it held before.
  */
 export function hostHub(dir: string, options: { env?: Record<string, string>; port?: number } = {}): Promise<LiveDaemon> {
   const binary = requireBinary(binDir(), 'blizzard-hub');
@@ -44,7 +48,7 @@ export function hostHub(dir: string, options: { env?: Record<string, string>; po
       launch: (port) => ({
         command: binary,
         args: ['host', '--dir', hubDir, '--host', '127.0.0.1', '--port', String(port)],
-        env: daemonEnv(options.env ?? {}),
+        env: daemonEnv({ BLIZZARD_TEST_IDP_SECRET: IDP_SECRET, ...options.env }),
       }),
     },
     options.port,

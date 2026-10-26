@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { ALL_SWEEPS, TENANT_SWEEPS } from '../client/clients';
-import { assertProfilesSound, checkProfile, checkStepped, discoverProfiles, sweepNames, parseProfile, readProfile } from '../profiles';
+import { assertProfilesSound, checkProfile, checkStepped, discoverProfiles, expandProfile, sweepNames, parseProfile, readProfile } from '../profiles';
 
 const fixture = (name: string): string => path.join(__dirname, 'profiles', `${name}.toml`);
 const problemsIn = (name: string): string[] => checkProfile(readProfile(fixture(name)));
@@ -72,4 +72,26 @@ test('every committed profile steps every sweep', () => {
 test('api.sweep’s sweep names are the config contract’s', () => {
   expect([...ALL_SWEEPS].sort()).toEqual(sweepNames().sort());
   expect(TENANT_SWEEPS.every((name) => (ALL_SWEEPS as readonly string[]).includes(name))).toBe(true);
+});
+
+test('a placeholder other than ${idp} and ${forge} fails, naming its key, wherever the string sits', () => {
+  expect(checkProfile(parseProfile('[auth]\nsuperuser = "${nope}"'))).toEqual([expect.stringContaining('auth.superuser')]);
+  expect(checkProfile(parseProfile('[[work_source]]\napi_base = "${nope}/x"'))).toEqual([expect.stringContaining('work_source[0].api_base')]);
+  expect(checkProfile(parseProfile('[flags]\nanything = ["${nope}"]'))).toEqual([expect.stringContaining('flags.anything[0]')]);
+});
+
+test('${idp} and ${forge} pass the check and expand in every string value', () => {
+  const profile = parseProfile('[auth]\nsuperuser = "${idp}/a-${forge}"\n[[work_source]]\napi_base = "${forge}"\nrepo = "o/n"');
+  expect(checkProfile(profile)).toEqual([]);
+  const expanded = expandProfile(profile, { idp: 'http://127.0.0.1:1', forge: 'http://127.0.0.1:2' });
+  expect(expanded).toEqual({
+    auth: { superuser: 'http://127.0.0.1:1/a-http://127.0.0.1:2' },
+    work_source: [{ api_base: 'http://127.0.0.1:2', repo: 'o/n' }],
+  });
+  expect(JSON.stringify(profile)).toContain('${idp}');
+});
+
+test('a profile without placeholders expands to itself', () => {
+  const profile = readProfile(path.join(__dirname, '..', '..', 'service', 'hub', 'profile.toml'));
+  expect(expandProfile(profile, { idp: 'http://127.0.0.1:1', forge: 'http://127.0.0.1:2' })).toEqual(profile);
 });

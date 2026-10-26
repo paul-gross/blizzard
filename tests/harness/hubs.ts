@@ -6,7 +6,7 @@ import { startHub } from './daemons/hub';
 import { startIdp } from './daemons/idp';
 import { type DaemonRecord, type LiveDaemon, recordOf, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
-import type { TomlTable } from './profiles';
+import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
 export const FIXTURE_SECRET = 'fixture-forge-token';
@@ -14,6 +14,30 @@ export const COMMON_OWNER = 'blizzard';
 export const COMMON_REPOSITORY = 'common';
 /** The work-source slug whose token prefix an ingest names, `<slug>:<number>`. */
 export const COMMON_SOURCE = 'common';
+
+/**
+ * What a hub's configuration says about authentication, when it is on: the superuser the hub bootstraps, the providers
+ * it declares, and, once the superuser has signed in, the session and the user id every admin-acting client carries.
+ */
+export interface HubAuth {
+  /** `auth.superuser`; absent when the profile names none. */
+  superuser?: string;
+  providers: string[];
+  /** The superuser's `bz_session` value. Written by the setup project on a shared hub; a fresh hub signs in on demand. */
+  session?: string;
+  userId?: string;
+}
+
+/** The auth record of a profile as the hub reads it, or `undefined` when authentication is off (`auth.mode` unset or `none`). */
+export function authOf(profile: TomlTable): HubAuth | undefined {
+  const auth = profile.auth;
+  if (typeof auth !== 'object' || auth === null || Array.isArray(auth)) return undefined;
+  const { mode, superuser, oauth } = auth as { mode?: unknown; superuser?: unknown; oauth?: unknown };
+  if (typeof mode !== 'string' || mode === 'none') return undefined;
+  const declared = typeof oauth === 'object' && oauth !== null ? (oauth as { provider?: unknown }).provider : undefined;
+  const providers = Array.isArray(declared) ? declared.flatMap((entry) => (typeof (entry as TomlTable).name === 'string' ? [(entry as TomlTable).name as string] : [])) : [];
+  return { superuser: typeof superuser === 'string' ? superuser : undefined, providers };
+}
 
 /** One hub with the mock forge and stub IdP beside it, and the tenant a shared hub's tests act in. */
 export interface HubCoordinates {
@@ -23,6 +47,8 @@ export interface HubCoordinates {
   idpUrl: string;
   /** The common tenant's id; absent on a fresh hub, whose seeded tenant is its only one. */
   commonTenantId?: string;
+  /** Present only when the hub's configuration turns authentication on; the one way to ask whether it is. */
+  auth?: HubAuth;
   logPath: string;
   forgeLogPath: string;
   daemons: DaemonRecord[];
@@ -52,17 +78,28 @@ export interface HubStack {
   hub: LiveDaemon;
 }
 
-/** A hub, a mock forge, and a stub IdP of its own, started together; `hubEnv` reaches the hub process only. */
+/**
+ * A hub, a mock forge, and a stub IdP of its own. The forge and IdP start first, so the profile's `${forge}` and
+ * `${idp}` expand to their URLs before the hub's file is written; `hubEnv` reaches the hub process only.
+ */
 export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubStack> {
-  const started = await Promise.allSettled([startHub(dir, profile, hubEnv), startForge(dir), startIdp(dir)]);
-  const running = started.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
-  const failure = started.find((outcome) => outcome.status === 'rejected');
+  const beside = await Promise.allSettled([startForge(dir), startIdp(dir)]);
+  const running = beside.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
+  const failure = beside.find((outcome) => outcome.status === 'rejected');
   if (failure !== undefined) {
     // A start that failed stops the daemons beside it, so none is left running with nothing to stop it.
     await Promise.all(running.map(stopDaemon));
     throw (failure as PromiseRejectedResult).reason;
   }
-  const [hub, forge, idp] = running as [LiveDaemon, DaemonRecord, DaemonRecord];
+  const [forge, idp] = running as [DaemonRecord, DaemonRecord];
+  let hub: LiveDaemon;
+  const expanded = expandProfile(profile, { idp: idp.url, forge: forge.url });
+  try {
+    hub = await startHub(dir, expanded, hubEnv);
+  } catch (error) {
+    await Promise.all(running.map(stopDaemon));
+    throw error;
+  }
   return {
     hub,
     coordinates: {
@@ -70,6 +107,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
       url: hub.url,
       forgeUrl: forge.url,
       idpUrl: idp.url,
+      auth: authOf(expanded),
       logPath: hub.logPath,
       forgeLogPath: forge.logPath,
       // Plain records: the coordinates are serialized to the run's hubs file.
@@ -85,12 +123,12 @@ export async function startHubStack(dir: string, index: number, profile: TomlTab
 /**
  * Creates the common tenant and furnishes it with what a test needs to make work there and nothing more: the
  * repository `blizzard/common` on the hub's forge, and one apply declaring the forge as the tenant's work source, the
- * repository, and its link to the `default` project. The work source and the repository each name a credential, so the
+ * repository, and its link to the `default` project. `admin` carries the superuser's session on a hub with authentication
+ * on, and `adminUserId` makes the superuser the tenant's admin. The work source and the repository each name a credential, so the
  * tenant holds one fixture secret; nothing furnished here is ever changed again.
  */
-export async function furnishCommonTenant(hub: HubCoordinates): Promise<string> {
-  const admin = new HubInternal(hub.url);
-  const tenant = await admin.createTenant('common');
+export async function furnishCommonTenant(hub: HubCoordinates, admin: HubInternal, adminUserId?: string): Promise<string> {
+  const tenant = await admin.createTenant('common', adminUserId);
   await admin.call('POST', '/api/secrets', {
     tenant: tenant.tenant_id,
     body: { name: FIXTURE_SECRET, value: 'fixture-token' },

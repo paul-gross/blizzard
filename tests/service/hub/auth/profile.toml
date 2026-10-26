@@ -1,0 +1,37 @@
+# The auth profile: authentication is on, with the stub IdP as the one provider, so tests can have people.
+# Sign-in is not throttled, so a test that makes several people at once is not refused.
+[auth]
+mode = "oauth"
+superuser = "superuser@blizzard.test"
+
+[auth.login_throttle]
+enabled = false
+
+[[auth.oauth.provider]]
+name = "stub"
+type = "oidc"
+display_name = "Stub"
+issuer = "${idp}"
+client_id = "blizzard-tests"
+client_secret_env = "BLIZZARD_TEST_IDP_SECRET"
+emails_authoritative = true
+
+# Every sweep steps, as in the default profile.
+
+[sweeps.forge_status]
+mode = "stepped"
+
+[sweeps.event_derivation]
+mode = "stepped"
+
+[sweeps.close_drain]
+mode = "stepped"
+
+[sweeps.tenant_teardown]
+mode = "stepped"
+
+[sweeps.trace_export]
+mode = "stepped"
+
+[sweeps.egress]
+mode = "stepped"
