@@ -101,16 +101,48 @@ function matches(type: string, value: unknown): boolean {
   }
 }
 
+/** The stack addresses a profile's strings may name, `${idp}` and `${forge}`, and the base URL each expands to. */
+export interface StackUrls {
+  idp: string;
+  forge: string;
+}
+
+const PLACEHOLDER = /\$\{([^}]*)\}/g;
+
+/** Every `${…}` in a string value anywhere in the table, whatever the key's type: tables, arrays, and open tables alike. */
+function placeholderProblems(value: unknown, keyPath: string): string[] {
+  if (typeof value === 'string') {
+    return [...value.matchAll(PLACEHOLDER)].flatMap((match) =>
+      match[1] === 'idp' || match[1] === 'forge' ? [] : [`${keyPath}: \${${match[1]}} is not a placeholder; the profile may name \${idp} and \${forge}`],
+    );
+  }
+  if (Array.isArray(value)) return value.flatMap((item, index) => placeholderProblems(item, `${keyPath}[${index}]`));
+  if (isTable(value)) return Object.entries(value).flatMap(([name, item]) => placeholderProblems(item, keyPath === '' ? name : `${keyPath}.${name}`));
+  return [];
+}
+
+/** The profile with `${idp}` and `${forge}` replaced in every string value; it holds no other placeholder once `checkProfile` passed. */
+export function expandProfile(profile: TomlTable, urls: StackUrls): TomlTable {
+  const expand = (value: unknown): unknown => {
+    if (typeof value === 'string') return value.replaceAll('${idp}', urls.idp).replaceAll('${forge}', urls.forge);
+    if (Array.isArray(value)) return value.map(expand);
+    if (isTable(value)) return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, expand(item)]));
+    return value;
+  };
+  return expand(profile) as TomlTable;
+}
+
 /**
  * The problems in a profile, each naming its key. The hub reads its configuration leniently by key, so a misspelled
  * setting would leave every test believing in a configuration the hub never ran; this check asks nothing of the hub.
  *
  * A profile flattens into the contract's own notation: tables join with `.`, and an array of tables flattens as
- * `name[].key`. A key typed `open table` admits any path beneath it.
+ * `name[].key`. A key typed `open table` admits any path beneath it. A string value may name `${idp}` and `${forge}`
+ * and no other `${…}`, wherever it sits.
  */
 export function checkProfile(profile: TomlTable): string[] {
   const keys = hubKeys();
-  const problems: string[] = [];
+  const problems: string[] = placeholderProblems(profile, '');
   const visit = (table: TomlTable, prefix: string): void => {
     for (const [name, value] of Object.entries(table)) {
       const keyPath = `${prefix}${name}`;

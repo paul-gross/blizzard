@@ -6,7 +6,7 @@ import { startHub } from './daemons/hub';
 import { startIdp } from './daemons/idp';
 import { type DaemonRecord, type LiveDaemon, recordOf, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
-import type { TomlTable } from './profiles';
+import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
 export const FIXTURE_SECRET = 'fixture-forge-token';
@@ -52,17 +52,27 @@ export interface HubStack {
   hub: LiveDaemon;
 }
 
-/** A hub, a mock forge, and a stub IdP of its own, started together; `hubEnv` reaches the hub process only. */
+/**
+ * A hub, a mock forge, and a stub IdP of its own. The forge and IdP start first, so the profile's `${forge}` and
+ * `${idp}` expand to their URLs before the hub's file is written; `hubEnv` reaches the hub process only.
+ */
 export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubStack> {
-  const started = await Promise.allSettled([startHub(dir, profile, hubEnv), startForge(dir), startIdp(dir)]);
-  const running = started.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
-  const failure = started.find((outcome) => outcome.status === 'rejected');
+  const beside = await Promise.allSettled([startForge(dir), startIdp(dir)]);
+  const running = beside.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
+  const failure = beside.find((outcome) => outcome.status === 'rejected');
   if (failure !== undefined) {
     // A start that failed stops the daemons beside it, so none is left running with nothing to stop it.
     await Promise.all(running.map(stopDaemon));
     throw (failure as PromiseRejectedResult).reason;
   }
-  const [hub, forge, idp] = running as [LiveDaemon, DaemonRecord, DaemonRecord];
+  const [forge, idp] = running as [DaemonRecord, DaemonRecord];
+  let hub: LiveDaemon;
+  try {
+    hub = await startHub(dir, expandProfile(profile, { idp: idp.url, forge: forge.url }), hubEnv);
+  } catch (error) {
+    await Promise.all(running.map(stopDaemon));
+    throw error;
+  }
   return {
     hub,
     coordinates: {

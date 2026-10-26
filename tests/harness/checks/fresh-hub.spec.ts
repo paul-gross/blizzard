@@ -22,6 +22,11 @@ plain.describe('the hub options are refused before any hub starts', () => {
     expect(() => requireHubOptions('common', {}, { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:1' })).toThrow(/hubEnv.*fresh-hub/);
   });
 
+  plain('a placeholder no stack address answers to is refused, naming the key', () => {
+    expect(() => requireHubOptions('fresh-hub', { auth: { superuser: '${nope}' } }, {})).toThrow(/hubConfig auth\.superuser/);
+    expect(() => requireHubOptions('fresh-hub', { auth: { superuser: '${idp}' } }, {})).not.toThrow();
+  });
+
   plain('sound options at fresh-hub, and none anywhere, pass', () => {
     expect(() => requireHubOptions('fresh-hub', { tracing: { platform: true, platform_sample_ratio: 1.0 } }, { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:1' })).not.toThrow();
     expect(() => requireHubOptions('common', {}, {})).not.toThrow();
@@ -55,6 +60,16 @@ test.describe('hubConfig at fresh-hub', () => {
   test('reaches the hub’s config file', ({ testHub }) => {
     const hubToml = fs.readFileSync(path.join(path.dirname(testHub.coordinates.logPath), 'hub', 'blizzard-hub.toml'), 'utf8');
     expect(hubToml).toMatch(/\[tracing\][\s\S]*platform = true/);
+  });
+});
+
+test.describe('a placeholder in hubConfig', () => {
+  test.use({ isolation: 'fresh-hub', hubConfig: { auth: { superuser: '${idp}/who' } } });
+
+  test('expands to the stack’s IdP in the written hub file', ({ testHub }) => {
+    const hubToml = fs.readFileSync(path.join(path.dirname(testHub.coordinates.logPath), 'hub', 'blizzard-hub.toml'), 'utf8');
+    expect(hubToml).toContain(`superuser = "${testHub.coordinates.idpUrl}/who"`);
+    expect(hubToml).not.toContain('${');
   });
 });
 
