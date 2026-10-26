@@ -89,7 +89,7 @@ class RequeueScope:
     open_takeover: OpenTakeover | None
     open_escalation: ParkedEscalation | None
     held_environment_ids: tuple[str, ...]
-    requeue_pending: bool = False
+    requeue_pending: bool
 
     @property
     def standing(self) -> RequeueStanding:
