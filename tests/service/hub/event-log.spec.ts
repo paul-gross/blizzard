@@ -123,7 +123,10 @@ nodes:
       'runner_id', 'runner_name', 'cause', 'graph_id', 'severity', 'kind', 'by', 'reason']);
     for (const row of feed) {
       expect(Object.keys(row).every((field) => fields.has(field))).toBe(true);
-      for (const field of ['type', 'key', 'at']) expect(row[field]).toEqual(expect.any(String));
+      for (const field of ['type', 'key', 'at']) {
+        expect(row[field]).toEqual(expect.any(String));
+        expect(row[field].length).toBeGreaterThan(0);
+      }
     }
     const causes = new Set(feed.filter((row: { chunk_id: string; type: string }) => row.chunk_id === chunkId && row.type === 'chunk-changed')
       .map((row: { cause: string }) => row.cause));
