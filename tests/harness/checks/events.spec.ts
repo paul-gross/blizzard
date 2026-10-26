@@ -124,6 +124,27 @@ plain('a stream joined from now connects with from=latest, and its resume carrie
   }
 });
 
+plain('a subscription keeps the first connection’s opening comment and content-type through a reconnect', async () => {
+  const hub = await stub((response, number) => {
+    if (number === 1) {
+      response.write(framed(1, 'queue-changed', {}));
+      setTimeout(() => response.destroy(), 50);
+      return;
+    }
+    response.write(framed(2, 'queue-changed', {}));
+  });
+  const subscription = await openStream({ url: hub.url, headers: {}, admits: () => true });
+  try {
+    await subscription.waitFor((frame) => frame.id === 2, { timeout: 5_000 });
+    expect(hub.requests).toHaveLength(2);
+    expect(subscription.openingComment).toBe(': blizzard hub event stream');
+    expect(subscription.contentType).toBe('text/event-stream');
+  } finally {
+    subscription.close();
+    hub.stop();
+  }
+});
+
 plain('a stream with no join policy connects with no cursor', async () => {
   const hub = await stub(() => undefined);
   const subscription = await openStream({ url: hub.url, headers: {}, admits: () => true });

@@ -1,0 +1,20 @@
+# The default profile, with the produces backstop enforced: a completion missing a declared artifact is refused.
+produces_mode = "enforce"
+
+[sweeps.forge_status]
+mode = "stepped"
+
+[sweeps.event_derivation]
+mode = "stepped"
+
+[sweeps.close_drain]
+mode = "stepped"
+
+[sweeps.tenant_teardown]
+mode = "stepped"
+
+[sweeps.trace_export]
+mode = "stepped"
+
+[sweeps.egress]
+mode = "stepped"

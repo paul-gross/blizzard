@@ -130,8 +130,6 @@ def run_hub(
     forge_port: int,
     port: int,
     *,
-    route_token_mode: str | None = None,
-    produces_mode: str | None = None,
     annotate: bool = False,
     annotation_interval_seconds: int | None = None,
     extra_env: Mapping[str, str] | None = None,
@@ -162,21 +160,11 @@ def run_hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not rehost:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    if (
-        export_to
-        or route_token_mode is not None
-        or produces_mode is not None
-        or annotation_interval_seconds is not None
-        or egress is not None
-    ):
+    if export_to or annotation_interval_seconds is not None or egress is not None:
         # Flags read once, at `host` startup: set before the
         # daemon starts, not mutable afterward.
         config = load_hub_config(hub_dir)
         overrides: dict[str, object] = {}
-        if route_token_mode is not None:
-            overrides["route_token_mode"] = route_token_mode
-        if produces_mode is not None:
-            overrides["produces_mode"] = produces_mode
         if annotation_interval_seconds is not None:
             overrides["annotation_interval_seconds"] = annotation_interval_seconds
         if egress is not None:
