@@ -123,6 +123,74 @@ hours ago unless it is among the 10 most recently finished `done` chunks (per pr
 `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status, plus a `total`, over
 exactly the chunks the unfiltered list pages over — the counts ignore the window.
 
+## The hub's sweeps
+
+The hub keeps its derived state current with six sweeps. Each makes one pass over every tenant on its own timer. A pass
+that finds a tenant unchanged since it last converged skips that tenant.
+
+| Sweep              | What a pass does                                                                 | Cadence                                    |
+| ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------ |
+| `forge_status`     | Projects chunk status onto forge labels ([work-sources.md](./work-sources.md))   | `annotation_interval_seconds`, default 120 |
+| `event_derivation` | Derives transcript events from new or changed segments                           | 60 seconds                                 |
+| `close_drain`      | Closes the work items of delivered chunks ([work-sources.md](./work-sources.md)) | 60 seconds                                 |
+| `tenant_teardown`  | Drains each tenant deletion underway ([tenants.md](./tenants.md))                | 30 seconds                                 |
+| `trace_export`     | Exports settled fleet traces, when tracing is on ([tracing.md](./tracing.md))    | `[tracing] sweep_seconds`                  |
+| `egress`           | Writes the fact export, when a directory is set ([egress.md](./egress.md))       | `[egress] sweep_seconds`                   |
+
+Each sweep logs under its own logger, and two names differ from the table: `event_derivation` logs as
+`blizzard.hub.transcript_events` and `close_drain` as `blizzard.hub.work_closure`. The last segment of the logger name
+names each pass's `sweep <name>` span.
+
+### Modes
+
+A `[sweeps.<name>]` table in `blizzard-hub.toml` sets a sweep's `mode`:
+
+```toml
+[sweeps.close_drain]
+mode = "stepped"
+```
+
+`timed`, the default, runs a pass at boot and then on the sweep's timer. `stepped` starts no timer and runs no boot
+pass: the sweep passes only when a route below asks it to. Any other value refuses boot with an error naming the key. A
+mode set for a sweep this hub does not build, such as `trace_export` with tracing off, changes nothing. A file with no
+`[sweeps]` table runs every sweep on its timer.
+
+### Running a pass on request
+
+Two routes run one pass and answer once it has finished, so every write the pass makes is readable when the answer
+arrives. Both serve a sweep in either mode, and both refuse a runner's credential.
+
+| Route                                  | Runs                                                                                      | Who may call        |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- |
+| `POST /api/sweeps/{name}/passes`       | One pass of `forge_status`, `event_derivation` or `close_drain` over the request's tenant | A tenant `admin`    |
+| `POST /api/admin/sweeps/{name}/passes` | One pass of any built sweep over every tenant, exactly as a timed pass                    | A hub administrator |
+
+A pass for one tenant reads the same data as a pass over every tenant and acts in its own tenant alone. It skips a
+tenant that is not due, just as a timed pass does, and still answers `completed`.
+
+| Answer | Meaning                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `200`  | `{started_at, finished_at, outcome, error}`; `outcome` is `completed`, or `failed` with the fault's message in `error` |
+| `404`  | No sweep this hub builds goes by `{name}`                                                                              |
+| `409`  | `{"code": "sweep_in_progress"}`, answered at once: another pass of the sweep holds the lock this one needs             |
+| `422`  | The per-tenant route was asked for `tenant_teardown`, `trace_export` or `egress`, which run over every tenant only     |
+
+A pass for one tenant answers `failed` when its tenant's work raised. A pass over every tenant answers `failed` only
+when the pass itself raised, which the log records as `sweep failed`; a fault in one tenant is logged against that
+tenant, as on a timed pass.
+
+A pass over every tenant holds its sweep's lock. A pass for one tenant holds its sweep's lock in that tenant alone, so
+passes for two tenants run side by side. A timed pass that finds its lock held skips that interval and logs
+`sweep pass skipped` with `reason="in progress"`. The locks live in the hub's memory and end with the process.
+
+### Stopping a misbehaving sweep
+
+1. Set the sweep `stepped` in `blizzard-hub.toml` and restart the hub. Its timer no longer starts, and the log shows no
+   `sweep pass completed` under its logger.
+2. Walk it a pass at a time with `POST /api/admin/sweeps/{name}/passes`, reading the log lines each pass writes between
+   calls.
+3. Remove the `[sweeps.<name>]` table, or set it `timed`, and restart the hub to put the sweep back on its timer.
+
 ## Demo mode
 
 `?demo=true` on any board URL hands the board to an automatic tour for an unattended screen; nothing in the UI announces

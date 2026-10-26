@@ -137,15 +137,16 @@ every live chunk's status onto its forge issue as `blizzard:ingested` (minted bu
 `blizzard:in-progress` (running, paused, waiting_on_human, needs_human, delivering); a chunk with no live holder or one
 that reached stopped/done carries neither.
 
-The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120). It keeps no
-label state: a full pass discovers the forge's actual labels afresh and writes only the difference from desired state.
-Each tick first checks, cheaply, whether anything the hub projects has changed (a chunk's status or work refs, or which
-sources annotate) and skips the forge reads when nothing has, running a full pass anyway once five intervals (ten
-minutes by default) have gone by. A change on the hub side shows on the forge within one interval; a hand-removed label,
-an edit by another actor, or a source's binding edit self-heals within that five-interval floor. Mid-sweep crashes,
-forge outages, and failed writes or clears are retried on the very next pass. A forge that is down, slow, or
-rate-limiting degrades the label sweep to a logged skip; it never blocks a chunk transition, an ingest, or any other hub
-request.
+The label sweep runs every `annotation_interval_seconds` (a top-level `blizzard-hub.toml` key, default 120). It is the
+hub's `forge_status` sweep, which can be stopped and run a pass at a time
+([The hub's sweeps](./observability.md#the-hubs-sweeps)). It keeps no label state: a full pass discovers the forge's
+actual labels afresh and writes only the difference from desired state. Each tick first checks, cheaply, whether
+anything the hub projects has changed (a chunk's status or work refs, or which sources annotate) and skips the forge
+reads when nothing has, running a full pass anyway once five intervals (ten minutes by default) have gone by. A change
+on the hub side shows on the forge within one interval; a hand-removed label, an edit by another actor, or a source's
+binding edit self-heals within that five-interval floor. Mid-sweep crashes, forge outages, and failed writes or clears
+are retried on the very next pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a logged
+skip; it never blocks a chunk transition, an ingest, or any other hub request.
 
 Each tenant is judged on its own. The change check and the five-interval floor are kept per tenant, so a tenant whose
 source's forge cannot be read retries on every pass by itself while every other tenant keeps skipping unchanged passes,
@@ -179,13 +180,13 @@ closer and records each outcome. A PR opened before an upgrade keeps the body it
 
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or
 completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
-a fixed drain sweep, on its own short interval and independent of `annotation_interval_seconds`, then attempts up to a
-fixed number of due intents per pass through that source's binding, shared fairly among the tenants with due intents
-(one tenant's backlog never takes another's turn) and leaving the rest to the next pass, and a failed attempt stays
-pending under backoff — the guarantee half of closing delivered work, where a worker's own commit metadata is only an
-opportunistic hint that may beat the drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a
-close is idempotent at the forge, so more than one hub pointed at the same repo closing the same item is not a race to
-coordinate around.
+a fixed drain sweep (the hub's `close_drain` sweep, [The hub's sweeps](./observability.md#the-hubs-sweeps)), on its own
+short interval and independent of `annotation_interval_seconds`, then attempts up to a fixed number of due intents per
+pass through that source's binding, shared fairly among the tenants with due intents (one tenant's backlog never takes
+another's turn) and leaving the rest to the next pass, and a failed attempt stays pending under backoff — the guarantee
+half of closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the
+drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so
+more than one hub pointed at the same repo closing the same item is not a race to coordinate around.
 
 It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
 any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`; the

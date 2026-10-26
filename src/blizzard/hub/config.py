@@ -53,6 +53,7 @@ from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE, ROUTE_
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS, EgressConfig
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
+from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.layout import CONFIG_FILENAME, DATA_DIRNAME, STORE_FILENAME
 
 ENV_HOST = "BZ_HUB_HOST"
@@ -403,6 +404,18 @@ EGRESS_FILE_PATHS = ("relative", "hashed", "absolute", "omit")
 EGRESS_EXTRACTOR_VERSIONS = ("current", "all")
 
 
+def parse_sweep_modes(raw_sweeps: ConfigView) -> SweepModes:
+    """``[sweeps.<name>] mode`` for every sweep, each ``timed`` when unset; any other value than ``timed`` or
+    ``stepped`` raises :class:`ConfigError` naming its key."""
+    modes: dict[SweepName, SweepMode] = {}
+    for name in SweepName:
+        value = raw_sweeps.table(name).get("mode", SweepMode.TIMED.value)
+        if not isinstance(value, str) or value not in set(SweepMode):
+            raise ConfigError(f"sweeps.{name}.mode must be one of {[str(mode) for mode in SweepMode]}, got {value!r}")
+        modes[name] = SweepMode(value)
+    return SweepModes(modes)
+
+
 def parse_egress_config(raw_egress: ConfigView) -> EgressConfig:
     defaults = EgressConfig()
     return EgressConfig(
@@ -556,6 +569,8 @@ class HubConfig:
     tracing: TracingConfig = field(default_factory=TracingConfig)
     #: Fact-egress export; no sweep runs unless ``[egress] directory`` is set.
     egress: EgressConfig = field(default_factory=EgressConfig)
+    #: Each sweep's ``[sweeps.<name>] mode``; every sweep is timed when ``[sweeps]`` is absent.
+    sweeps: SweepModes = field(default_factory=SweepModes)
     #: Reverse-proxy trust set — addresses or CIDRs whose forwarded headers are honored.
     trusted_proxies: tuple[str, ...] = ()
     #: Absolute ``http(s)`` board origin; ``None`` omits every board link.
@@ -801,6 +816,7 @@ class HubConfig:
             transcripts=TranscriptCapsConfig.of(raw.table("transcripts")),
             tracing=TracingConfig.of(raw.table("tracing"), ConfigError),
             egress=parse_egress_config(raw.table("egress")),
+            sweeps=parse_sweep_modes(raw.table("sweeps")),
             trusted_proxies=TrustedProxies.entries(raw.get("trusted_proxies"), ConfigError),
             public_url=cls.parse_public_url(raw.get("public_url")),
             flags=parse_overrides(raw, ConfigError),

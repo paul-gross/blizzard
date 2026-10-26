@@ -25,6 +25,7 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.sweep import TraceExportSweep
+from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.store import schema
 from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_rows
@@ -405,7 +406,7 @@ def test_a_hub_with_tracing_off_has_no_trace_sweep_and_writes_no_cursor(tmp_path
     sweeps = list(Sweep.all(hub.app))
     assert "blizzard.hub.trace_export" not in [s.logger_name for s in sweeps]
     for sweep in sweeps:
-        sweep.reconciler.sweep()
+        sweep.reconciler()
 
     assert _row_count(hub) == 0
 
@@ -417,7 +418,7 @@ def test_a_hub_with_tracing_on_yields_the_trace_sweep(tmp_path: Path) -> None:
 
     traced = [s for s in Sweep.all(hub.app) if s.logger_name == "blizzard.hub.trace_export"]
 
-    assert [s.reconciler for s in traced] == [hub.hub_services.trace_export]
+    assert [s.config_name for s in traced] == [SweepName.TRACE_EXPORT]
     assert traced[0].interval_seconds == _SETTLED.sweep_seconds
 
 

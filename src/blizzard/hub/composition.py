@@ -179,6 +179,9 @@ from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.domain.runners.version import IVersionWindow
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.hub.domain.sweeps.locks import SweepLocks
+from blizzard.hub.domain.sweeps.names import SweepName
+from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
@@ -499,6 +502,8 @@ class HubServices:
     event_derivation: EventDerivationReconciler
     #: The forge-status annotation sweep — one pass per hub, acting in each tenant over its own sources.
     annotation: AnnotationReconciler | None
+    #: Every sweep built here by name, each pass under its lock — stepped by the timer and run on request.
+    sweeps: SweepRoster
 
 
 @dataclass(frozen=True)
@@ -1534,6 +1539,24 @@ def build_services(
     )
     if auth_throttle is None:
         get_logger("blizzard.hub").warning("sign-ins are unthrottled", key="auth.login_throttle.enabled")
+    tenant_teardown_sweep = TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store)
+    close_drain = CloseDrainSweep(
+        corpus=core.hub_scoped_reads.corpus,
+        tenant=lambda tenant: sweeps_of(tenant).close_drain,
+        clock=clock,
+    )
+    event_derivation = EventDerivationReconciler(
+        corpus=core.hub_scoped_reads.corpus,
+        tenant=lambda tenant: sweeps_of(tenant).event_derivation,
+        clock=clock,
+    )
+    annotation = AnnotationReconciler(
+        corpus=core.hub_scoped_reads.corpus,
+        tenants=lambda: open_tenants.every().keys(),
+        tenant=lambda tenant: sweeps_of(tenant).annotation,
+        clock=clock,
+        full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
+    )
     return HubServices(
         tenants=TenantServicesOpener(
             open_services=core.open_services,
@@ -1548,14 +1571,10 @@ def build_services(
         hub_events=hub_events,
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,
-        tenant_teardown_sweep=TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store),
+        tenant_teardown_sweep=tenant_teardown_sweep,
         clock=clock,
         system_artifacts=system_artifacts,
-        close_drain=CloseDrainSweep(
-            corpus=core.hub_scoped_reads.corpus,
-            tenant=lambda tenant: sweeps_of(tenant).close_drain,
-            clock=clock,
-        ),
+        close_drain=close_drain,
         trace_export=trace_export,
         trace_status=trace_status,
         trace_replay=trace_replay,
@@ -1578,16 +1597,23 @@ def build_services(
         auth_facts=auth_facts_service,
         signing=signing,
         trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
-        event_derivation=EventDerivationReconciler(
-            corpus=core.hub_scoped_reads.corpus,
-            tenant=lambda tenant: sweeps_of(tenant).event_derivation,
+        event_derivation=event_derivation,
+        annotation=annotation,
+        sweeps=SweepRoster(
+            every_tenant={
+                SweepName.FORGE_STATUS: annotation,
+                SweepName.EVENT_DERIVATION: event_derivation,
+                SweepName.CLOSE_DRAIN: close_drain,
+                SweepName.TENANT_TEARDOWN: tenant_teardown_sweep,
+                **({SweepName.TRACE_EXPORT: trace_export} if trace_export is not None else {}),
+                **({SweepName.EGRESS: egress_export} if egress_export is not None else {}),
+            },
+            one_tenant={
+                SweepName.FORGE_STATUS: annotation,
+                SweepName.EVENT_DERIVATION: event_derivation,
+                SweepName.CLOSE_DRAIN: close_drain,
+            },
+            locks=SweepLocks(),
             clock=clock,
-        ),
-        annotation=AnnotationReconciler(
-            corpus=core.hub_scoped_reads.corpus,
-            tenants=lambda: open_tenants.every().keys(),
-            tenant=lambda tenant: sweeps_of(tenant).annotation,
-            clock=clock,
-            full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
         ),
     )

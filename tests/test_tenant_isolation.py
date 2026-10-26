@@ -201,6 +201,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/analytics/spend/models"): _LIST,
     ("GET", "/api/analytics/spend/nodes"): _LIST,
     ("POST", "/api/analytics/re-derive"): _own({}),
+    ("POST", "/api/sweeps/{name}/passes"): _own(ids={"name": "sweep"}),
     ("GET", "/api/spend"): _list(**_SINCE),
     # -- backlog and queue -----------------------------------------------------------------------------------
     ("GET", "/api/backlog"): _LIST,
@@ -538,6 +539,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.ids["spare_token"] = f"hub:{spare['ref']}"
     t.keep("spare_chunk_id", spare["chunk_id"])
     t.ids["hub_source"] = "hub"
+    t.ids["sweep"] = "close_drain"
     chunk = t.keep("chunk_id", item["chunk_id"])
     node = _ok(c.get(f"/api/chunks/{chunk}"), 200)["current_node_id"]
     _ok(c.post(f"/api/chunks/{chunk}/promote"), 202)
@@ -742,7 +744,7 @@ def _ghost_of(tenant: _Tenant) -> _Tenant:
 def _url(path: str, tenant: _Tenant, ids: dict[str, str]) -> str:
     def value(match: re.Match[str]) -> str:
         name = match.group(1)
-        if name == "name":
+        if name == "name" and name not in ids:
             return tenant.ids["secret"]
         if name == "runner_id" and path.startswith("/api/fleet/"):
             return tenant.ids["runner"]
@@ -1071,7 +1073,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     hub.clock.advance(timedelta(hours=1))
     with capture_statements(hub.engine) as statements:
         for name in passes:
-            sweeps[name].sweep()
+            sweeps[name]()
 
     for t in (first, second):
         assert _rows(hub, schema.transcript_event_derivations, t.harness.tenant) == 1, t.label
@@ -1084,7 +1086,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     assert closed.harness.tenant.encode() not in written
     assert not [sql for sql, params in statements if closed.harness.tenant in repr(params)]
 
-    sweeps["tenant_teardown"].sweep()
+    sweeps["tenant_teardown"]()
 
     tenant_owned = [table for table in schema.metadata.sorted_tables if table.name not in schema.GLOBAL_TABLES]
     held = {table.name: _rows(hub, table, closed.harness.tenant) for table in tenant_owned}

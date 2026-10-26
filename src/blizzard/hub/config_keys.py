@@ -32,6 +32,7 @@ from blizzard.hub.config_defaults import (
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.layout import (
     CONFIG_FILENAME,
     DATA_DIRNAME,
@@ -109,6 +110,15 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("work_source[].web_base", STRING),
         ConfigKey("work_source[].close", BOOLEAN, deprecated=True),
         ConfigKey("pm_source", ARRAY_OF_TABLES, deprecated=True, replaced_by="work_source"),
+        ConfigKey("sweeps", TABLE),
+        *(
+            key
+            for name in SweepName
+            for key in (
+                ConfigKey(f"sweeps.{name}", TABLE),
+                ConfigKey(f"sweeps.{name}.mode", STRING, default=SweepMode.TIMED.value),
+            )
+        ),
     ),
     (
         DurablePath(CONFIG_FILENAME, "the hub's configuration"),

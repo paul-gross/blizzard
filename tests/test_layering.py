@@ -1958,6 +1958,7 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "config_apply": frozenset({"garden", "graph", "config", "projects"}),
     "observability": frozenset({"chunk", "graph", "runners"}),
     "tenancy": frozenset({"graph", "config", "projects", "observability"}),
+    "sweeps": frozenset(),
 }
 _DOMAIN_SHARED_KERNEL = "kernel"
 
