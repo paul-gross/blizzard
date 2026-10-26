@@ -1,0 +1,14 @@
+[sweeps.forge_status]
+mode = "timed"
+
+[sweeps.event_derivation]
+mode = "stepped"
+
+[sweeps.close_drain]
+mode = "stepped"
+
+[sweeps.tenant_teardown]
+mode = "stepped"
+
+[sweeps.trace_export]
+mode = "stepped"

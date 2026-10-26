@@ -55,6 +55,7 @@ export const test = tenancy.extend<Fixtures>({
         testInfo,
         tenantId: tenant.id,
         narrow: sharesTenant(level.served),
+        level: level.served,
         ledger,
         logContext: () => testHub.logTail(tenant.id),
       }),

@@ -116,7 +116,7 @@ test.describe('a server error fails the test that caused it', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const context = await playwright.request.newContext({ baseURL: `http://127.0.0.1:${(server.address() as { port: number }).port}` });
     try {
-      const api = hubApi({ context, testInfo, tenantId: 'ten_stub', narrow: false, ledger: new Ledger(), logContext: () => 'a log line' });
+      const api = hubApi({ context, testInfo, tenantId: 'ten_stub', narrow: false, level: 'common', ledger: new Ledger(), logContext: () => 'a log line' });
 
       await plainExpect(api.get('/api/chunks')).rejects.toThrow(/GET \/api\/chunks answered 500/);
       expect(testInfo.attachments.map((attachment) => attachment.name)).toEqual(['GET /api/chunks → 500', 'hub log around GET /api/chunks']);
