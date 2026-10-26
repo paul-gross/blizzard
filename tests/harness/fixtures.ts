@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import { expect } from '@playwright/test';
+import { type People, type Person, peopleFactory } from './people';
 import { type CliResult, CliTimeout, runCommand } from './cli';
 import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, mockRunnerApi, type Verbs } from './client/clients';
-import type { RunnerAddRequest } from './client/wire/hub/types.gen';
+import type { Role, RunnerAddRequest } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
 import {
   type FactoryContext,
@@ -28,6 +29,12 @@ export interface FleetClient extends Verbs {
 
 interface Fixtures {
   api: HubApi;
+  /** The role `user` is invited as; `test.use({ userRole })`. */
+  userRole: Role;
+  /** One signed-in person in `tenant` with the role `userRole` names. Needs a hub with authentication on. */
+  user: Person;
+  /** Signs people in through the stub IdP: `create` for further invited people, `signIn` for an identity the test names. */
+  people: People;
   project: Project;
   fleet: (name: string, options?: RunnerOptions) => Promise<FleetClient>;
   forge: ForgeApi;
@@ -60,6 +67,26 @@ export const test = tenancy.extend<Fixtures>({
         logContext: () => testHub.logTail(tenant.id),
       }),
     );
+  },
+
+  userRole: ['contributor', { option: true }],
+
+  people: async ({ testHub, tenantOf, ledger, level, playwright }, use, testInfo) => {
+    const { people, disposeAll } = peopleFactory({
+      testHub,
+      tenantOf,
+      ledger,
+      testInfo,
+      level: level.served,
+      newContext: () => playwright.request.newContext({ baseURL: testHub.coordinates.url }),
+      unique: (prefix) => uniqueName(testInfo, prefix),
+    });
+    await use(people);
+    await disposeAll();
+  },
+
+  user: async ({ people, userRole }, use) => {
+    await use(await people.create({ role: userRole }));
   },
 
   project: async ({ level, tenant, api }, use, testInfo) => {

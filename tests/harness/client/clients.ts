@@ -114,11 +114,12 @@ async function send(engine: Engine, method: string, route: string, options: Call
         engine.ledger.add(kind, body[resource.id] as string);
       }
       const listField = resource.lists[routeKey];
-      if (narrow && listField !== undefined && Array.isArray(body[listField])) {
-        body = {
-          ...body,
-          [listField]: (body[listField] as Json[]).filter((item) => engine.ledger.has(kind, item?.[resource.id])),
-        };
+      if (!narrow || listField === undefined) continue;
+      const ours = (item: Json): boolean => engine.ledger.has(kind, item?.[resource.id]);
+      if (listField === null) {
+        if (Array.isArray(body)) body = body.filter(ours);
+      } else if (Array.isArray(body[listField])) {
+        body = { ...body, [listField]: (body[listField] as Json[]).filter(ours) };
       }
     }
   }
@@ -131,14 +132,16 @@ function verbs(engine: Engine, narrow: boolean, expected?: number): Verbs {
 }
 
 /**
- * The hub client, acting as the tenant's admin: every request carries `X-Blizzard-Tenant`. It records what the test
+ * The hub client, acting as whoever the context's session is (the tenant's admin on a hub with authentication on, the
+ * implicit operator on one with it off): every request carries `X-Blizzard-Tenant`. It records what the test
  * creates in the ledger, narrows the lists `resources.ts` names to it at the levels that share a tenant, and fails the
  * test on an unexpected `5xx`.
  */
 export function hubApi(options: {
   context: APIRequestContext;
   testInfo: TestInfo;
-  tenantId: string;
+  /** Absent for a person signed in with no tenant bound: a headerless route settles on their one membership. */
+  tenantId?: string;
   narrow: boolean;
   /** The level the test is served, which `sweep` reads to refuse an all-tenant pass below `fresh-hub`. */
   level: Level;
@@ -148,7 +151,7 @@ export function hubApi(options: {
   const engine: Engine = {
     context: options.context,
     testInfo: options.testInfo,
-    headers: { 'X-Blizzard-Tenant': options.tenantId },
+    headers: options.tenantId === undefined ? {} : { 'X-Blizzard-Tenant': options.tenantId },
     ledger: options.ledger,
     logContext: options.logContext,
   };

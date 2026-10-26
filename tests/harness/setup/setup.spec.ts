@@ -4,6 +4,8 @@ import { test } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../../playwright.config';
 import { stopDaemon, sleep } from '../daemons/process';
 import { runDir } from '../env';
+import { signInSuperuser } from '../auth';
+import { HubInternal } from '../client/internal';
 import { furnishCommonTenant, hubsFile, type HubCoordinates, type ProjectHubs, startHubStack } from '../hubs';
 import { assertProfilesSound, discoverProfiles, readProfile } from '../profiles';
 
@@ -40,7 +42,7 @@ async function checkProfilesOnce(): Promise<void> {
   }
 }
 
-test('start the profile’s shared hubs', async ({}, testInfo) => {
+test('start the profile’s shared hubs', async ({ playwright }, testInfo) => {
   testInfo.setTimeout(180_000);
   const project = testInfo.project.name.replace(/^setup-/, '');
   const folder = discoverProfiles().find((candidate) => candidate.project === project);
@@ -63,7 +65,21 @@ test('start the profile’s shared hubs', async ({}, testInfo) => {
 
   const furnished: HubCoordinates[] = [];
   try {
-    for (const hub of hubs) furnished.push({ ...hub, commonTenantId: await furnishCommonTenant(hub) });
+    for (const hub of hubs) {
+      if (hub.auth === undefined) {
+        furnished.push({ ...hub, commonTenantId: await furnishCommonTenant(hub, new HubInternal(hub.url)) });
+        continue;
+      }
+      // Authentication is on: the superuser signs in, which claims the bootstrap, and creates the common tenant as its admin.
+      const context = await playwright.request.newContext({ baseURL: hub.url });
+      try {
+        const superuser = await signInSuperuser(hub, context);
+        const commonTenantId = await furnishCommonTenant(hub, new HubInternal(hub.url, undefined, superuser.session), superuser.userId);
+        furnished.push({ ...hub, commonTenantId, auth: { ...hub.auth, session: superuser.session, userId: superuser.userId } });
+      } finally {
+        await context.dispose();
+      }
+    }
   } catch (error) {
     await Promise.all(hubs.flatMap((hub) => hub.daemons).map(stopDaemon));
     throw error;

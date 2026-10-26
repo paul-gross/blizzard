@@ -57,7 +57,15 @@ export default defineConfig({
       // The harness's own proof runs on the default profile's setup and is selected by name, never by `service-*`.
       name: 'harness',
       testDir: 'harness/checks',
+      // The auth checks run under their own project, on the auth profile's hubs.
+      testIgnore: '**/checks/auth/**',
       dependencies: ['setup-service-hub'],
+    },
+    {
+      name: 'harness-auth',
+      testDir: 'harness/checks/auth',
+      dependencies: ['setup-service-hub-auth'],
+      workers: 1,
     },
   ],
 });
