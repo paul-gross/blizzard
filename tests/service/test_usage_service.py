@@ -1,9 +1,9 @@
-"""Usage service tier — usage facts over the wire, both daemon directions (epic #57, #59).
+"""Usage service tier — usage facts over the wire, the runner direction (epic #57, #59).
 
-Proves the derivation and store-and-forward flow against a running daemon over real HTTP
+Proves the store-and-forward flow against a running daemon over real HTTP
 (``bzh:ci-job-local-command``): a real runner buffers usage through a mock-hub outage
-and flushes once on recovery; a mock runner pushes usage facts to a live hub and the
-derived per-node-step usage + chunk total round-trip the live API, idempotent on replay."""
+and flushes once on recovery. The mock-runner-to-live-hub direction runs in
+``tests/service/hub/usage.spec.ts``."""
 
 from __future__ import annotations
 
@@ -19,14 +19,13 @@ from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.fleet_launchers import REPO, run_forge, run_hub, runner_config
-from tests.fleet_world import REPO_NAME, mint_world
+from tests.fleet_launchers import REPO, runner_config
+from tests.fleet_world import mint_world
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
-    mock_runner,
     poll_until,
     require_mock_fleet,
     service_gate,
@@ -144,208 +143,3 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
         # Recorded once: the extra ticks after the drain re-buffer no usage fact.
         _drive(config, fenced, ticks=2)
         assert _pending_usage(config) == 0, "usage was re-buffered after the flush — not recorded exactly once"
-
-
-# mock runner -> live hub: derived chunk usage totals off the running HTTP API.
-# --------------------------------------------------------------------------- #
-
-
-def _graph_yaml() -> str:
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": "# build",
-                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "deliver"}}},
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "action": "test.answer",
-                "with": {"choice": "landed"},
-                "judgement": {
-                    "choices": {
-                        "landed": {"description": "Every repo merged cleanly.", "to": "done"},
-                        "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
-                        "failure": {"description": "A repo failed to land.", "to": "build"},
-                    },
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
-
-
-def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    return chunk_id
-
-
-def _usage_payload(
-    chunk_id: str,
-    node_id: str,
-    *,
-    epoch: int,
-    cost_usd: float | None,
-    estimated_cost_usd: float | None = None,
-    harness_id: str | None = "claude_code",
-    harness_version: str | None = "1.2.3",
-) -> dict:
-    payload = {
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": epoch,
-        "kind": "spawn",
-        "model": "claude-opus-4-8",
-        "input_tokens": 100,
-        "output_tokens": 50,
-        "cache_read_tokens": 10,
-        "cache_create_tokens": 5,
-        "cost_usd": cost_usd,
-    }
-    # An N-1 runner (A10) omits the provenance keys entirely, rather than
-    # sending them explicitly null — the hub must ingest either shape identically.
-    if harness_id is not None:
-        payload["harness_id"] = harness_id
-    if harness_version is not None:
-        payload["harness_version"] = harness_version
-    if estimated_cost_usd is not None:
-        payload["estimated_cost_usd"] = estimated_cost_usd
-    return payload
-
-
-def _push_usage(hub: httpx2.Client, *, seq: int, payload: dict) -> dict:
-    resp = hub.post(
-        "/api/fleet/events",
-        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
-        headers=fleet_headers(hub),
-    )
-    assert resp.status_code == 200, resp.text
-    return resp.json()
-
-
-def test_hub_derives_chunk_usage_totals_off_a_live_api_from_pushed_facts(tmp_path: Path) -> None:
-    """The mock runner claims a chunk over the wire; pushed usage facts derive
-    per-node-step usage + a chunk total off the live API, with ``cost_partial`` on an
-    absent-cost row and idempotent replay."""
-    bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = free_port(), free_port()
-
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "usage totals over the wire")
-
-        with mock_runner(bin_dir, free_port(), hub_port, name="runner-usage") as runner:
-            assert runner.post("/_drive/register").json()["status"] == 201
-            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
-            assert claim["claimed"] is True, claim
-            node_id = claim["from_node_id"]
-
-        # The claim minted a real lease + epoch on the running hub — read it back over the wire.
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        epoch = detail["latest_epoch"] or 1
-
-        # Push three usage facts on the runner's store-and-forward endpoint: one carrying a
-        # cost, one with cost absent (the envelope-less transcript-summation fallback), and
-        # one from a runner predating harness provenance (A10) — no
-        # provenance keys at all, never rejected and never defaulted.
-        assert _push_usage(hub, seq=1, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=0.10))[
-            "applied"
-        ] == [1]
-        assert _push_usage(hub, seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None))[
-            "applied"
-        ] == [2]
-        assert _push_usage(
-            hub,
-            seq=3,
-            payload=_usage_payload(
-                chunk_id, node_id, epoch=epoch, cost_usd=0.05, harness_id=None, harness_version=None
-            ),
-        )["applied"] == [3]
-
-        # Per-node-step usage + the derived chunk total, read off the LIVE detail API.
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        assert len(detail["usage"]) == 3, detail["usage"]
-        step = detail["usage"][0]
-        assert step["node_id"] == node_id
-        assert step["epoch"] == epoch
-        assert step["input_tokens"] == 100
-        assert step["cache_create_tokens"] == 5
-        # The pushed harness stamp reads back verbatim.
-        assert step["harness_id"] == "claude_code"
-        assert step["harness_version"] == "1.2.3"
-        # The N-1 runner's fact ingested with no provenance keys reads back null, never
-        # rejected and never defaulted to the sibling rows' stamp.
-        legacy_step = detail["usage"][2]
-        assert legacy_step["harness_id"] is None
-        assert legacy_step["harness_version"] is None
-
-        total = detail["cost"]
-        assert total["input_tokens"] == 300  # all three rows summed by class
-        assert total["output_tokens"] == 150
-        assert total["cost_usd"] == pytest.approx(0.15)  # the two cost-bearing rows — the lower bound
-        assert total["cost_partial"] is True  # a cost-absent row flags the total partial
-
-        # The summary listing carries the derived cost total too.
-        row = next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
-        assert row["cost"]["cost_usd"] == pytest.approx(0.15)
-        assert row["cost"]["cost_partial"] is True
-
-        # Idempotent replay: a re-pushed seq lands nothing twice — the total is unchanged.
-        replay = _push_usage(hub, seq=2, payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None))
-        assert replay["applied"] == [] and replay["already_applied"] == [2], replay
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        assert len(detail["usage"]) == 3, "the replayed usage fact was applied twice"
-        assert detail["cost"]["input_tokens"] == 300
-
-
-def test_hub_reads_back_an_estimate_apart_from_billed_cost_off_a_live_api(tmp_path: Path) -> None:
-    """An estimate-bearing payload round-trips on both the per-node-step row and the
-    derived totals ``GET /api/chunks/{id}`` and ``GET /api/chunks`` carry, kept apart from
-    ``cost_usd`` and not flagging the total partial."""
-    bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = free_port(), free_port()
-
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        chunk_id = _ingest(forge, hub, "usage estimate over the wire")
-
-        with mock_runner(bin_dir, free_port(), hub_port, name="runner-usage-estimate") as runner:
-            assert runner.post("/_drive/register").json()["status"] == 201
-            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
-            assert claim["claimed"] is True, claim
-            node_id = claim["from_node_id"]
-
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        epoch = detail["latest_epoch"] or 1
-
-        assert _push_usage(
-            hub,
-            seq=1,
-            payload=_usage_payload(chunk_id, node_id, epoch=epoch, cost_usd=None, estimated_cost_usd=0.03),
-        )["applied"] == [1]
-
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        step = detail["usage"][0]
-        assert step["cost_usd"] is None
-        assert step["estimated_cost_usd"] == pytest.approx(0.03)
-
-        total = detail["cost"]
-        assert total["cost_usd"] == 0.0
-        assert total["estimated_cost_usd"] == pytest.approx(0.03)
-        assert total["cost_partial"] is False  # an estimate is not a lower bound
-
-        row = next(c for c in hub.get("/api/chunks").json()["chunks"] if c["chunk_id"] == chunk_id)
-        assert row["cost"]["estimated_cost_usd"] == pytest.approx(0.03)
-        assert row["cost"]["cost_partial"] is False
