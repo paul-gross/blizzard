@@ -11100,12 +11100,6 @@
    "over_cap": 0,
    "total": 57
   },
-  "service/test_hub_service.py": {
-   "comments": 43,
-   "docstrings": 59,
-   "over_cap": 2,
-   "total": 901
-  },
   "service/test_idp_federation_service.py": {
    "comments": 19,
    "docstrings": 22,

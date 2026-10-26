@@ -370,7 +370,7 @@ def mock_runner(
 ) -> Iterator[httpx2.Client]:
     """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it. With no
     ``token`` the driver adds itself at the hub on start, as ``runner init`` does; the id the hub minted
-    reads back from its ``POST /_drive/register`` (:func:`registered_runner_id`)."""
+    reads back from its ``POST /_drive/register``."""
     hub_url = f"http://127.0.0.1:{hub_port}"
     log = _mock_daemon_log("mock-runner", port, log_dir)
     args = [
@@ -400,14 +400,6 @@ def mock_runner(
     finally:
         client.close()
         terminate(proc)
-
-
-def registered_runner_id(runner: httpx2.Client, body: dict[str, object] | None = None) -> str:
-    """Drive the mock runner's registration (``POST /_drive/register``) and answer the id the hub
-    resolved its token to."""
-    registered = runner.post("/_drive/register", json=body) if body is not None else runner.post("/_drive/register")
-    assert registered.json()["status"] == 201, registered.text
-    return str(registered.json()["response"]["runner_id"])
 
 
 def runner_fleet_view(hub: httpx2.Client, config: RunnerConfig) -> dict[str, Any]:

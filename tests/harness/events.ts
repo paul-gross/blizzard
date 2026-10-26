@@ -42,6 +42,10 @@ export interface WaitOptions {
 export interface Subscription {
   /** Every frame admitted so far, in order. */
   readonly frames: readonly Frame[];
+  /** The `content-type` the first connection answered with; a reconnect does not replace it. */
+  readonly contentType: string;
+  /** The comment line the first connection opened with, as the hub sent it; a reconnect does not replace it. */
+  readonly openingComment: string;
   /** Resolves with the first matching frame, past or to come; its timeout is a failure, never a wait that ends quietly. */
   waitFor(predicate: (frame: Frame) => boolean, options?: WaitOptions): Promise<Frame>;
   /**
@@ -113,6 +117,9 @@ class StreamReader implements BarrierSubscription {
   private abort = new AbortController();
   private readonly waiters = new Set<() => void>();
   private failure: Error | undefined;
+  private connected = false;
+  contentType = '';
+  openingComment = '';
   /** Where in `delivered` the window the next barrier answers for begins. */
   private windowStart = 0;
 
@@ -158,6 +165,12 @@ class StreamReader implements BarrierSubscription {
     // The first chunk of the body is the reserved open-of-stream comment, sent once the subscription is in place.
     const opening = await body.read();
     if (!opening.done) buffer += decoder.decode(opening.value, { stream: true });
+    if (!this.connected) {
+      this.connected = true;
+      this.contentType = response.headers.get('content-type') ?? '';
+      // The first read can carry frames behind the comment; the comment is the first line.
+      this.openingComment = buffer.split('\n')[0] ?? '';
+    }
     void this.pump(body, decoder, buffer);
   }
 

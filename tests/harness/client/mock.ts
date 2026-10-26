@@ -38,7 +38,19 @@ export interface MockDriveClaim {
 export interface MockDriveComplete {
   drove: boolean;
   status?: number;
-  response?: { outcome: string };
+  response?: { outcome: string; detail?: string | null };
+  /** The second submission, when the replay lever armed a duplicate delivery. */
+  replayed?: { response?: { outcome: string } };
+}
+
+export interface MockDrivePeek {
+  status: number;
+  response: { entries: { chunk_id: string }[] };
+}
+
+/** What a drive of `report-external-usage` or `report-external-usage-miss` answers: the hub's per-report disposition. */
+export interface MockDriveUsageReport {
+  response: { applied: number[]; rejected: number[] };
 }
 
 export interface MockRunnerLeverListing {
@@ -46,4 +58,4 @@ export interface MockRunnerLeverListing {
   levers: string[];
 }
 
-export type MockDriveAnswer<V extends string> = V extends 'register' ? MockDriveRegister : V extends 'claim' | 'claim-next' ? MockDriveClaim : V extends 'complete' ? MockDriveComplete : import('./clients').Json;
+export type MockDriveAnswer<V extends string> = V extends 'register' ? MockDriveRegister : V extends 'claim' | 'claim-next' ? MockDriveClaim : V extends 'complete' ? MockDriveComplete : V extends 'peek' ? MockDrivePeek : V extends 'report-external-usage' | 'report-external-usage-miss' ? MockDriveUsageReport : import('./clients').Json;
