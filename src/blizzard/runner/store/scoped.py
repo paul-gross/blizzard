@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from operator import attrgetter
 from typing import Any, cast
 
 import sqlalchemy as sa
@@ -77,10 +76,17 @@ class _LikelyRunnerEquality(BinaryExpression[bool]):
     inherit_cache = True
 
 
+class _TypedSQLCompiler(SQLCompiler):
+    visit_binary: Callable[..., str]
+
+
+class _TypedBinaryExpression(BinaryExpression[bool]):
+    type: sa.types.TypeEngine[bool]
+
+
 @compiles(_LikelyRunnerEquality, "sqlite")
 def _compile_likely_runner_equality(element: _LikelyRunnerEquality, compiler: SQLCompiler, **kw: Any) -> str:
-    visit_binary = cast(Callable[..., str], attrgetter("visit_binary")(compiler))
-    return f"likely({visit_binary(element, **kw)})"
+    return f"likely({cast(_TypedSQLCompiler, compiler).visit_binary(element, **kw)})"
 
 
 def _runner_equality(column: ColumnElement[Any], key: Any) -> ColumnElement[bool]:
@@ -90,7 +96,7 @@ def _runner_equality(column: ColumnElement[Any], key: Any) -> ColumnElement[bool
         equality.left,
         equality.right,
         equality.operator,
-        type_=cast(sa.types.TypeEngine[Any], attrgetter("type")(cast(BinaryExpression[Any], equality))),
+        type_=cast(_TypedBinaryExpression, equality).type,
     )
 
 
