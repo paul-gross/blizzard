@@ -11160,12 +11160,6 @@
    "over_cap": 0,
    "total": 208
   },
-  "service/test_routine_baselines_service.py": {
-   "comments": 0,
-   "docstrings": 11,
-   "over_cap": 0,
-   "total": 74
-  },
   "service/test_runner_analytics_service.py": {
    "comments": 2,
    "docstrings": 15,
