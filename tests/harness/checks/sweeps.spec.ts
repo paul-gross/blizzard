@@ -42,13 +42,14 @@ test.describe('a pass at fresh-tenant', () => {
 test.describe('a pass at fresh-hub', () => {
   test.use({ isolation: 'fresh-hub' });
 
-  test('over every tenant completes, for each of the six sweeps', async ({ api }) => {
-    for (const name of ['forge_status', 'event_derivation', 'close_drain', 'tenant_teardown', 'trace_export', 'egress'] as const) {
-      const answer = await api.unfiltered.post(`/api/admin/sweeps/${name}/passes`);
-      // trace_export and egress are unconfigured, so this hub does not build them.
-      expect([200, 404], name).toContain(answer.status);
+  test('over every tenant completes for each sweep the hub builds, and the unconfigured exports answer 404', async ({ api }) => {
+    for (const name of ['forge_status', 'event_derivation', 'close_drain', 'tenant_teardown'] as const) {
+      expect((await api.sweep(name, { allTenants: true })).outcome, name).toBe('completed');
     }
-    expect((await api.sweep('close_drain', { allTenants: true })).outcome).toBe('completed');
+    // trace_export and egress are unconfigured, so this hub does not build them.
+    for (const name of ['trace_export', 'egress']) {
+      await expect(api.sweep(name as 'egress', { allTenants: true }), name).rejects.toThrow(new RegExp(`${name}.*404`));
+    }
   });
 
   test('a sweep the tenant route does not serve fails the test naming the status', async ({ api }) => {

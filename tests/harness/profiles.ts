@@ -139,7 +139,7 @@ export function checkProfile(profile: TomlTable): string[] {
 }
 
 /** Every sweep the hub's config contract types a `mode` for, so a sweep the hub adds is held to the rule unedited. */
-function sweepNames(): string[] {
+export function sweepNames(): string[] {
   return [...hubKeys().keys()].flatMap((keyPath) => /^sweeps\.([^.]+)\.mode$/.exec(keyPath)?.[1] ?? []);
 }
 

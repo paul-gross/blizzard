@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { assertProfilesSound, checkProfile, checkStepped, discoverProfiles, parseProfile, readProfile } from '../profiles';
+import { ALL_SWEEPS, TENANT_SWEEPS } from '../client/clients';
+import { assertProfilesSound, checkProfile, checkStepped, discoverProfiles, sweepNames, parseProfile, readProfile } from '../profiles';
 
 const fixture = (name: string): string => path.join(__dirname, 'profiles', `${name}.toml`);
 const problemsIn = (name: string): string[] => checkProfile(readProfile(fixture(name)));
@@ -66,4 +67,9 @@ test('a profile fails the stepped rule naming each sweep left timed and each lef
 
 test('every committed profile steps every sweep', () => {
   expect(() => assertProfilesSound()).not.toThrow();
+});
+
+test('api.sweep’s sweep names are the config contract’s', () => {
+  expect([...ALL_SWEEPS].sort()).toEqual(sweepNames().sort());
+  expect(TENANT_SWEEPS.every((name) => (ALL_SWEEPS as readonly string[]).includes(name))).toBe(true);
 });
