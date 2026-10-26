@@ -5,8 +5,11 @@ forwards through the generic ``HubProxy``, not ``IHubClient``, so
 
 from __future__ import annotations
 
+import contextlib
+import socket
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import httpx2
@@ -56,6 +59,41 @@ def test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop(t
         assert entry["stated_priority"] is None
 
 
+def _pump(src: socket.socket, dst: socket.socket) -> None:
+    with contextlib.suppress(OSError):
+        while data := src.recv(65536):
+            dst.sendall(data)
+    with contextlib.suppress(OSError):
+        dst.shutdown(socket.SHUT_WR)
+
+
+def _relay(client: socket.socket, upstream_port: int) -> None:
+    with client, socket.create_connection(("127.0.0.1", upstream_port)) as upstream:
+        back = threading.Thread(target=_pump, args=(upstream, client), daemon=True)
+        back.start()
+        _pump(client, upstream)
+        back.join()
+
+
+@contextlib.contextmanager
+def _tcp_forwarder(listen_port: int, upstream_port: int) -> Iterator[None]:
+    """Relay ``127.0.0.1:listen_port`` to ``upstream_port`` until exit — until it opens,
+    ``listen_port`` refuses connections."""
+    listener = socket.create_server(("127.0.0.1", listen_port))
+
+    def accept_loop() -> None:
+        with contextlib.suppress(OSError):
+            while True:
+                client, _ = listener.accept()
+                threading.Thread(target=_relay, args=(client, upstream_port), daemon=True).start()
+
+    threading.Thread(target=accept_loop, daemon=True).start()
+    try:
+        yield
+    finally:
+        listener.close()
+
+
 def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: Path) -> None:
     """``HubProxy.forward``'s retry over a real bounce: the mock hub is
     killed, the runner's proxied read is already in flight against the closed port, and
@@ -86,14 +124,19 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
     config = runner_config(tmp_path / "runner", tmp_path / "workspace", bin_dir, hub_port, join=False)
 
     respawned = threading.Event()
+    read_landed = threading.Event()
 
     def respawn_after_a_beat() -> None:
         time.sleep(1.5)
-        with mock_hub(bin_dir, hub_port) as respawned_hub:
+        # Seeded on a side port first — reachable but unseeded, it would refuse the runner's token;
+        # until the forwarder reopens `hub_port`, the runner sees a real restart's refused connections.
+        side_port = free_port()
+        with mock_hub(bin_dir, side_port) as respawned_hub:
             seed_pinned_runner(respawned_hub, runner)
             respawned_hub.post("/_seed/chunk", json=chunk_spec)
-            respawned.set()
-            time.sleep(3.0)  # stay up long enough for the in-flight read to land
+            with _tcp_forwarder(hub_port, side_port):
+                respawned.set()
+                read_landed.wait(timeout=40.0)  # stay up until the in-flight read lands
 
     respawn_thread = threading.Thread(target=respawn_after_a_beat, daemon=True)
 
@@ -104,6 +147,7 @@ def test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart(tmp_path: 
             resp = client.get(f"/api/chunks/{chunk_id}/work-items")
         finally:
             client.close()
+            read_landed.set()
         respawn_thread.join(timeout=10.0)
 
     assert respawned.is_set()  # the scenario actually exercised a real down-then-up bounce
