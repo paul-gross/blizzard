@@ -1,7 +1,7 @@
 """The chunk board's Transcripts tab, browser e2e.
 
 Seeds segments through ``POST /api/fleet/transcripts`` as a runner principal — the path
-``tests/service/test_transcript_segments_service.py`` already drives, since the runner's
+``tests/service/hub/transcript-segments.spec.ts`` already drives, since the runner's
 own shipping lane (#246) is undelivered and no runner spawns here. Skipped unless
 ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock`` worktree provisioned and Chromium."""
 

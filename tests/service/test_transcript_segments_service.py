@@ -1,8 +1,6 @@
-"""Transcript-segment service tier — the real hub's fleet
-ingest and lease-transcript-read routes driven from outside a running daemon. No
-runner-side counterpart exists yet (#246), so this drives ``POST /api/fleet/transcripts``
-and ``GET .../transcript-segments`` directly rather than through a mock-runner
-``/_drive/*`` verb. Run with ``BLIZZARD_SERVICE=1``."""
+"""Transcript-segment service tier — the mock hub's counterpart to the lease-transcript
+read route, driven over real HTTP. The real hub's routes live in
+``tests/service/hub/transcript-segments.spec.ts``. Run with ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
 
@@ -10,10 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
-from tests.fleet_launchers import REPO, run_forge, run_hub
-from tests.fleet_world import REPO_NAME, mint_world
-from tests.runner_join import add_runner, fleet_headers
+from tests.fleet_launchers import REPO
+from tests.runner_join import fleet_headers
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
@@ -26,120 +22,8 @@ from tests.support import free_port
 pytestmark = [pytest.mark.service, service_gate]
 
 
-def _stack(tmp_path: Path):  # type: ignore[no-untyped-def]
-    bin_dir = require_mock_fleet()
-    _workspace, origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    forge_port, hub_port = free_port(), free_port()
-    return bin_dir, origins, forge_port, hub_port
-
-
-def _ingest(forge, hub, title: str) -> str:  # type: ignore[no-untyped-def]
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    return str(ingested.json()["chunk_id"])
-
-
 def _record(chunk_id: str, *, seq: int) -> dict:
     return transcript_segment_record(chunk_id, seq=seq)
-
-
-def test_ingest_and_read_back_round_trip_over_the_wire(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        chunk_id = _ingest(forge, hub, "transcript segments")
-
-        ack = hub.post(
-            "/api/fleet/transcripts", json={"records": [_record(chunk_id, seq=1)]}, headers=fleet_headers(hub)
-        )
-        assert ack.status_code == 200, ack.text
-        assert ack.json()["applied"] == [1]
-
-        index = hub.get(f"/api/chunks/{chunk_id}/transcripts")
-        assert index.status_code == 200, index.text
-        [entry] = index.json()["segments"]
-        assert entry["segment_id"] == "sg_1"
-        assert entry["final"] is True
-
-        content = hub.get(f"/api/chunks/{chunk_id}/transcripts/sg_1")
-        assert content.status_code == 200, content.text
-        assert [t["text"] for t in content.json()["turns"]] == ["hi"]
-
-
-def test_a_segment_is_not_readable_through_another_chunks_path(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        owning = _ingest(forge, hub, "owning chunk")
-        other = _ingest(forge, hub, "other chunk")
-        ack = hub.post("/api/fleet/transcripts", json={"records": [_record(owning, seq=1)]}, headers=fleet_headers(hub))
-        assert ack.status_code == 200, ack.text
-
-        assert hub.get(f"/api/chunks/{other}/transcripts/sg_1").status_code == 404
-        assert hub.get(f"/api/chunks/{owning}/transcripts/sg_1").status_code == 200
-
-
-def test_a_cap_rejected_record_re_offered_under_a_fresh_seq_is_re_adjudicated(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        chunk_id = _ingest(forge, hub, "re-adjudicated segment")
-        oversized = _record(chunk_id, seq=1)
-        oversized["turns"][0]["text"] = "x" * (RECORD_MAX_BYTES + 1)
-
-        ack = hub.post("/api/fleet/transcripts", json={"records": [oversized]}, headers=fleet_headers(hub))
-        assert ack.status_code == 200, ack.text
-        assert ack.json()["capped"] == [1]
-        [entry] = hub.get(f"/api/chunks/{chunk_id}/transcripts").json()["segments"]
-        assert entry["truncated"] is True
-
-        retry = hub.post(
-            "/api/fleet/transcripts", json={"records": [_record(chunk_id, seq=99)]}, headers=fleet_headers(hub)
-        )
-        assert retry.json()["applied"] == [99], retry.text
-        content = hub.get(f"/api/chunks/{chunk_id}/transcripts/sg_1")
-        assert [t["text"] for t in content.json()["turns"]] == ["hi"]
-        [entry] = hub.get(f"/api/chunks/{chunk_id}/transcripts").json()["segments"]
-        assert entry["truncated"] is False
-
-
-# --- the lease-transcript read route ------------------------
-
-
-def test_an_enrolled_runner_reads_back_the_lease_segments_it_shipped(tmp_path: Path) -> None:
-    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        chunk_id = _ingest(forge, hub, "lease transcript read")
-        runner_id, _added_token = add_runner(hub, "r1")
-        enroll = hub.post(f"/api/runners/{runner_id}/enrollments")
-        assert enroll.status_code == 201, enroll.text
-        bearer = {"Authorization": f"Bearer {enroll.json()['token']}"}
-        register = hub.post(
-            "/api/fleet/runners",
-            json={
-                "name": "r1",
-                "workspace_id": "ws-1",
-                "capabilities": [{"harness_id": "claude", "default": True}],
-            },
-            headers=bearer,
-        )
-        assert register.status_code == 201, register.text
-
-        ack = hub.post("/api/fleet/transcripts", json={"records": [_record(chunk_id, seq=1)]}, headers=bearer)
-        assert ack.status_code == 200, ack.text
-
-        resp = hub.get(
-            f"/api/fleet/chunks/{chunk_id}/transcript-segments",
-            params={"node_id": "nd_build", "epoch": 1},
-            headers=bearer,
-        )
-
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert body["chunk_id"] == chunk_id
-        assert body["node_id"] == "nd_build"
-        assert body["epoch"] == 1
-        assert body["truncated"] is False
-        assert [t["text"] for t in body["turns"]] == ["hi"]
 
 
 def test_the_mock_hubs_counterpart_route_round_trips_a_shipped_lease(tmp_path: Path) -> None:

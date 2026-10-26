@@ -238,4 +238,5 @@ export const test = tenancy.extend<Fixtures>({
   },
 });
 
+export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export { expect };
