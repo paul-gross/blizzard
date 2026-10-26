@@ -1,4 +1,4 @@
-import { expect, test, type Wire } from '../../harness/fixtures';
+import { expect, type ForgeApi, type HubApi, type Repository, test, type Wire } from '../../harness/fixtures';
 
 // exemplar: bzh:service-fixtures-only, bzh:service-clients-only, bzh:service-isolation-earned.
 
@@ -63,11 +63,11 @@ nodes:
  * only a source of its own over another forge repository — no repository. Returns `default`'s repository, and
  * `second`'s source slug and repository name.
  */
-async function twoProjects({ api, forge, repository }: Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'forge' | 'repository'>) {
+async function twoProjects(api: HubApi, forge: ForgeApi, repository: () => Promise<Repository>) {
   const defaults = await repository();
   const created = await api.post('/api/projects', { data: { slug: 'second', name: 'Second' } });
   expect(created.status).toBe(201);
-  const name = defaults.name.replace(/^r-/, 's-');
+  const name = `${defaults.name}-second`;
   await forge.createRepository('blizzard', name);
   const secret = await api.post('/api/secrets', { data: { name: 'second-forge-token', value: 'fixture-token' } });
   expect(secret.status).toBe(201);
@@ -86,7 +86,7 @@ async function twoProjects({ api, forge, repository }: Pick<Parameters<Parameter
 }
 
 test('test_an_ingest_naming_no_project_mints_into_the_project_its_source_links', async ({ api, forge, repository }) => {
-  const { defaults, secondSource, secondRepo } = await twoProjects({ api, forge, repository });
+  const { defaults, secondSource, secondRepo } = await twoProjects(api, forge, repository);
   const intoDefault = await forge.createIssue(`blizzard/${defaults.name}`, { title: 'into default', body: 'the chunk' });
   const intoSecond = await forge.createIssue(`blizzard/${secondRepo}`, { title: 'into second', body: 'the chunk' });
 
@@ -103,7 +103,7 @@ test('test_an_ingest_naming_no_project_mints_into_the_project_its_source_links',
 });
 
 test('test_an_ingest_whose_sources_disagree_is_refused_whole_naming_the_projects', async ({ api, forge, repository }) => {
-  const { defaults, secondSource, secondRepo } = await twoProjects({ api, forge, repository });
+  const { defaults, secondSource, secondRepo } = await twoProjects(api, forge, repository);
   const one = await forge.createIssue(`blizzard/${defaults.name}`, { title: 'one', body: 'the chunk' });
   const two = await forge.createIssue(`blizzard/${secondRepo}`, { title: 'two', body: 'the chunk' });
 
@@ -118,7 +118,7 @@ test('test_an_ingest_whose_sources_disagree_is_refused_whole_naming_the_projects
 });
 
 test('test_a_commit_its_project_does_not_link_is_refused_at_deliver_before_the_land_action', async ({ api, forge, repository, mockRunner }) => {
-  const { defaults, secondSource, secondRepo } = await twoProjects({ api, forge, repository });
+  const { defaults, secondSource, secondRepo } = await twoProjects(api, forge, repository);
   const minted = await api.post('/api/graphs', { data: { definition_yaml: NOT_LINKED_GRAPH_YAML } });
   expect(minted.status).toBe(201);
   const triage = (minted.body.nodes as { name: string; node_id: string }[]).find((node) => node.name === 'triage')?.node_id;
