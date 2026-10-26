@@ -22,6 +22,8 @@ export interface CallOptions {
   params?: Record<string, string | number | boolean>;
   data?: unknown;
   headers?: Record<string, string>;
+  /** Redirects followed before the answer comes back; 0 hands back the redirect itself. */
+  maxRedirects?: number;
 }
 
 type Verb = <T = Json>(route: string, options?: CallOptions) => Promise<ApiResponse<T>>;
@@ -89,6 +91,7 @@ async function send(engine: Engine, method: string, route: string, options: Call
         params: options.params,
         data: options.data,
         headers: { ...engine.headers, ...options.headers },
+        maxRedirects: options.maxRedirects,
         failOnStatusCode: false,
       }),
     (answer) => answer.status(),
