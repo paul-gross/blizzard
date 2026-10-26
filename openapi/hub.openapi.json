@@ -8556,7 +8556,8 @@
           "inv",
           "proj",
           "repo",
-          "wsrc"
+          "wsrc",
+          "frg"
         ],
         "title": "IdPrefix",
         "type": "string"

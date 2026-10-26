@@ -76,8 +76,9 @@ def _assert_the_first_tenant(engine: sa.Engine) -> None:
 
 
 def _project_change_rows(engine: sa.Engine) -> int:
-    """The change rows the projects revision writes: the default project's and its links'."""
-    kinds = "('project', 'project_source_link', 'project_repository_link')"
+    """The change rows later revisions write: the projects revision's for the default project and its links, and the
+    forges revision's for each forge it creates."""
+    kinds = "('project', 'project_source_link', 'project_repository_link', 'forge')"
     with engine.connect() as conn:
         return conn.execute(sa.text(f"SELECT count(*) FROM config_changes WHERE record_kind IN {kinds}")).scalar_one()
 

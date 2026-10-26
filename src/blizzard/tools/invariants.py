@@ -1510,6 +1510,7 @@ class SlugNotCurrentAndFormer(HubQueryCheck):
         ("project", hub.projects, hub.project_former_slugs, "project_id"),
         ("repository", hub.repositories, hub.repository_former_slugs, "repository_id"),
         ("work source", hub.work_sources, hub.work_source_former_slugs, "work_source_id"),
+        ("forge", hub.forges, hub.forge_former_slugs, "forge_id"),
     )
 
     def run(self) -> list[Violation]:
@@ -1634,6 +1635,145 @@ class WorkSourceReferencesInTenant(HubQueryCheck):
         return Violation(
             "hub:work-source-references-in-tenant",
             f"{table} row {key} of tenant {tenant} names work source {work_source_id}, not a work source of its tenant",
+        )
+
+
+def _retired_keys(check: HubQueryCheck, facts: Table, key: str) -> set[str]:
+    """Every record whose newest (highest ``id``) lifecycle fact in ``facts`` retires it."""
+    newest = select(facts.c[key], func.max(facts.c.id).label("id")).group_by(facts.c[key]).subquery()
+    return {
+        row[0]
+        for row in check.rows(
+            select(facts.c[key]).join(newest, facts.c.id == newest.c.id).where(facts.c.retired.is_(True))
+        )
+    }
+
+
+class ForgeReferenceStanding(HubQueryCheck):
+    """``hub:forge-reference-standing`` — every repository and work source names a forge, no enabled one names a
+    retired forge, every work source names a forge whose kind is its provider, and each record's deprecated address
+    columns equal its forge's: a repository's ``forge_api_url`` and a work source's ``api_base`` the forge's
+    ``api_base``, and a work source's ``web_base`` the forge's own. A reference naming no forge of its tenant is
+    ``hub:forge-references-in-tenant``'s to report."""
+
+    def run(self) -> list[Violation]:
+        forges = hub.forges
+        held = {
+            (row.tenant_id, row.forge_id): row
+            for row in self.rows(
+                select(forges.c.tenant_id, forges.c.forge_id, forges.c.kind, forges.c.api_base, forges.c.web_base)
+            )
+        }
+        retired_forges = _retired_keys(self, hub.forge_lifecycle_facts, "forge_id")
+        repositories, sources = hub.repositories, hub.work_sources
+        retired_repositories = _retired_keys(self, hub.repository_lifecycle_facts, "repository_id")
+        retired_sources = _retired_keys(self, hub.work_source_lifecycle_facts, "work_source_id")
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(
+                repositories.c.tenant_id,
+                repositories.c.repository_id,
+                repositories.c.forge_id,
+                repositories.c.forge_api_url,
+            ).order_by(repositories.c.repository_id)
+        ):
+            subject = f"tenant {row.tenant_id}: repository {row.repository_id}"
+            if row.forge_id is None:
+                violations.append(self._violation(f"{subject} names no forge"))
+                continue
+            forge = held.get((row.tenant_id, row.forge_id))
+            if forge is None:
+                continue
+            if row.repository_id not in retired_repositories and row.forge_id in retired_forges:
+                violations.append(self._violation(f"{subject} is enabled and names retired forge {row.forge_id}"))
+            if row.forge_api_url != forge.api_base:
+                violations.append(
+                    self._violation(
+                        f"{subject} holds forge_api_url {row.forge_api_url!r}, not its forge {row.forge_id}'s "
+                        f"api_base {forge.api_base!r}"
+                    )
+                )
+        for row in self.rows(
+            select(
+                sources.c.tenant_id,
+                sources.c.work_source_id,
+                sources.c.provider,
+                sources.c.forge_id,
+                sources.c.api_base,
+                sources.c.web_base,
+            ).order_by(sources.c.work_source_id)
+        ):
+            subject = f"tenant {row.tenant_id}: work source {row.work_source_id}"
+            if row.forge_id is None:
+                violations.append(self._violation(f"{subject} names no forge"))
+                continue
+            forge = held.get((row.tenant_id, row.forge_id))
+            if forge is None:
+                continue
+            if row.work_source_id not in retired_sources and row.forge_id in retired_forges:
+                violations.append(self._violation(f"{subject} is enabled and names retired forge {row.forge_id}"))
+            if forge.kind != row.provider:
+                violations.append(
+                    self._violation(
+                        f"{subject} of provider {row.provider} names forge {row.forge_id} of kind {forge.kind}"
+                    )
+                )
+            for column, value, expected in (
+                ("api_base", row.api_base, forge.api_base),
+                ("web_base", row.web_base, forge.web_base),
+            ):
+                if value != expected:
+                    violations.append(
+                        self._violation(
+                            f"{subject} holds {column} {value!r}, not its forge {row.forge_id}'s {expected!r}"
+                        )
+                    )
+        return violations
+
+    @staticmethod
+    def _violation(detail: str) -> Violation:
+        return Violation("hub:forge-reference-standing", detail)
+
+
+class ForgeReferencesInTenant(HubQueryCheck):
+    """``hub:forge-references-in-tenant`` — every stored reference to a forge names a forge that exists, of the
+    reference's own tenant: the repositories' and work sources' ``forge_id``, the forge's former slugs and lifecycle
+    facts, and the change rows keyed by a forge id. Through the forge transition the two ``forge_id`` columns carry no
+    foreign key, so this read stands in for one."""
+
+    #: Each referring table, its key column for a message, and its column naming the forge.
+    REFERRING: ClassVar[tuple[tuple[Table, str, str], ...]] = (
+        (hub.repositories, "repository_id", "forge_id"),
+        (hub.work_sources, "work_source_id", "forge_id"),
+        (hub.forge_former_slugs, "slug", "forge_id"),
+        (hub.forge_lifecycle_facts, "id", "forge_id"),
+    )
+
+    def run(self) -> list[Violation]:
+        forges = hub.forges
+        tenant_of = {row.forge_id: row.tenant_id for row in self.rows(select(forges.c.forge_id, forges.c.tenant_id))}
+        violations: list[Violation] = []
+        for table, key, column in self.REFERRING:
+            query = select(table.c[key], table.c.tenant_id, table.c[column]).where(table.c[column].is_not(None))
+            violations.extend(
+                self._violation(table.name, row[0], row.tenant_id, row[2])
+                for row in self.rows(query.order_by(table.c.tenant_id, table.c[key]))
+                if tenant_of.get(row[2]) != row.tenant_id
+            )
+        changes = hub.config_changes
+        keyed = select(changes.c.id, changes.c.tenant_id, changes.c.record_key).where(changes.c.record_kind == "forge")
+        violations.extend(
+            self._violation("config_changes", row.id, row.tenant_id, row.record_key)
+            for row in self.rows(keyed.order_by(changes.c.id))
+            if tenant_of.get(row.record_key) != row.tenant_id
+        )
+        return violations
+
+    @staticmethod
+    def _violation(table: str, key: object, tenant: str, forge_id: str) -> Violation:
+        return Violation(
+            "hub:forge-references-in-tenant",
+            f"{table} row {key} of tenant {tenant} names forge {forge_id}, not a forge of its tenant",
         )
 
 
@@ -1765,6 +1905,8 @@ class HubInvariants:
                 SlugNotCurrentAndFormer(conn),
                 RepositoryReferencesInTenant(conn),
                 WorkSourceReferencesInTenant(conn),
+                ForgeReferenceStanding(conn),
+                ForgeReferencesInTenant(conn),
                 ChunkSourcesLinked(conn),
                 LandedRepositoryLinked(conn),
             )

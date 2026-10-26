@@ -5146,7 +5146,8 @@ export const IdPrefix = {
     INV: 'inv',
     PROJ: 'proj',
     REPO: 'repo',
-    WSRC: 'wsrc'
+    WSRC: 'wsrc',
+    FRG: 'frg'
 } as const;
 
 /**

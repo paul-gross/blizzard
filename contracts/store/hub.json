@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261024_0900_hub_legacy_run",
+  "head_revision": "20261025_0900_forges",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -2745,6 +2745,227 @@
       ],
       "unique": []
     },
+    "forge_former_slugs": {
+      "checks": [],
+      "columns": {
+        "forge_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "left_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "forge_id"
+          ],
+          "references": {
+            "columns": [
+              "forge_id"
+            ],
+            "table": "forges"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "tenant_id",
+        "slug"
+      ],
+      "unique": []
+    },
+    "forge_lifecycle_facts": {
+      "checks": [],
+      "columns": {
+        "forge_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "retired": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "set_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "set_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "forge_id"
+          ],
+          "references": {
+            "columns": [
+              "forge_id"
+            ],
+            "table": "forges"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "forges": {
+      "checks": [],
+      "columns": {
+        "api_base": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "created_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "forge_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "name": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "web_base": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "forge_id"
+      ],
+      "unique": [
+        [
+          "tenant_id",
+          "api_base"
+        ],
+        [
+          "tenant_id",
+          "slug"
+        ]
+      ]
+    },
     "garden_proposal_closures": {
       "checks": [],
       "columns": {
@@ -5473,8 +5694,14 @@
           "type": "String"
         },
         "forge_api_url": {
-          "deprecated": null,
+          "deprecated": "0.3",
           "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "forge_id": {
+          "deprecated": null,
+          "nullable": true,
           "server_default": false,
           "type": "String"
         },
@@ -8812,7 +9039,7 @@
           "type": "Boolean"
         },
         "api_base": {
-          "deprecated": null,
+          "deprecated": "0.3",
           "nullable": true,
           "server_default": false,
           "type": "String"
@@ -8826,6 +9053,12 @@
         "created_by": {
           "deprecated": null,
           "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "forge_id": {
+          "deprecated": null,
+          "nullable": true,
           "server_default": false,
           "type": "String"
         },
@@ -8872,7 +9105,7 @@
           "type": "String"
         },
         "web_base": {
-          "deprecated": null,
+          "deprecated": "0.3",
           "nullable": true,
           "server_default": false,
           "type": "String"

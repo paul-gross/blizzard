@@ -58,6 +58,7 @@ class IdPrefix(StrEnum):
     PROJECT = "proj"  # a project — its slug and name never stand in for it
     REPOSITORY = "repo"  # a repository — its slug and name never stand in for it
     WORK_SOURCE = "wsrc"  # a configured work source — its slug and name never stand in for it
+    FORGE = "frg"  # a forge — its slug, name, and origin never stand in for it
 
 
 @domain_model
