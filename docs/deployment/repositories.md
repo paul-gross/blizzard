@@ -1,24 +1,20 @@
 # Repositories
 
 A hub holds the repositories work lands in as stored records, managed with `blizzard hub repo`. Each record names one
-repository on a forge and the stored secret that authenticates against it, and has a slug you type, a display name, and
-an id the hub mints:
+repository on a [forge](./forges.md) and the stored secret that authenticates against it, and has a slug you type, a
+display name, and an id the hub mints:
 
 ```bash
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 blizzard hub forge create github --kind github --api-base https://api.github.com
-blizzard hub repo create blizzard --forge-api-url https://api.github.com --owner paul-gross --repo blizzard \
+blizzard hub repo create blizzard --forge github --owner paul-gross --repo blizzard \
   --base-branch master --secret gh-token
 blizzard hub repo list
 blizzard hub repo show blizzard
 ```
 
-`blizzard hub forge list|show|edit|retire|enable` manages the tenant's forge records. A forge has a slug, display name,
-kind, API origin and optional web origin. `show` includes the repositories and work sources using it; retiring one still
-in use answers `forge_in_use` with those referrers. A renamed forge remains addressable by its former slug, but a
-configuration document must use its current slug. Edits, retirement and re-enablement accept `--if-match` to guard the
-revision. The API serves `GET` and `POST /api/forges`, `GET` and `PATCH /api/forges/{forge}`, and `POST` to its
-`/retire` and `/enable` routes. Reads require `fleet:view`; writes require `config:edit`.
+[forges.md](./forges.md) owns the forge record: its kind, its API and web origins, and the doors it is managed through.
+A repository stores the forge's id, and a forge in use cannot be retired.
 
 ## Naming a repository
 
@@ -49,18 +45,20 @@ Name such a repository by its new slug.
 
 ## Fields
 
-| Field           | Meaning                                                                  |
-| --------------- | ------------------------------------------------------------------------ |
-| `slug`          | The handle you type. It may be edited; the one it leaves still resolves. |
-| `name`          | The display name, free text. It may be edited.                           |
-| `forge_api_url` | The forge's API origin, an absolute `http` or `https` URL.               |
-| `forge`         | The id of the configured forge; select an enabled forge on the board.    |
-| `owner`         | The repository's owner on the forge.                                     |
-| `repo`          | The repository's name on the forge.                                      |
-| `base_branch`   | The branch work lands on.                                                |
-| `secret_name`   | The stored [secret](./secrets.md) holding the forge token (`--secret`).  |
+| Field           | Meaning                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `slug`          | The handle you type. It may be edited; the one it leaves still resolves.                     |
+| `name`          | The display name, free text. It may be edited.                                               |
+| `forge`         | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`. |
+| `forge_api_url` | Deprecated. The forge's API origin, derived from `forge` on reads.                           |
+| `owner`         | The repository's owner on the forge.                                                         |
+| `repo`          | The repository's name on the forge.                                                          |
+| `base_branch`   | The branch work lands on.                                                                    |
+| `secret_name`   | The stored [secret](./secrets.md) holding the forge token (`--secret`).                      |
 
-Every field is required, and none can be cleared. Each `(forge_api_url, owner, repo)` belongs to one record.
+Every field but the deprecated `forge_api_url` is required, and none can be cleared. Each `(forge, owner, repo)` belongs
+to one record. `create` takes exactly one of `forge` and `forge_api_url`; the old field is accepted with a warning until
+a later release retires it, and [forges.md](./forges.md#the-old-address-fields) owns how it resolves.
 
 ### The forge token
 
@@ -82,8 +80,9 @@ repository holds the slug as its current one, when the forge, owner and repo are
 missing or retired. Taking a slug another repository left moves it to the new repository. Every later change moves the
 revision by one:
 
-- `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge-api-url`, `--owner`, `--repo`,
-  `--base-branch`, and `--secret`. An edit that leaves every field as it is writes nothing and keeps the revision.
+- `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--forge-api-url`, `--owner`,
+  `--repo`, `--base-branch`, and `--secret`. An edit that leaves every field as it is writes nothing and keeps the
+  revision.
 - `retire <repository>` hides the repository from `list` unless `--include-retired` is given. A retired repository keeps
   its forge, owner and repo, so `create` for another slug on the same coordinate is refused with a message naming the
   holder; `enable` the holder instead.
@@ -105,7 +104,7 @@ The board's Admin page lists repositories, with each record's revision, last cha
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
 saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change. The repository
 form picks an enabled forge by name instead of editing an address. Version-2 configuration documents use the forge's
-slug in `forge`; version-1 documents continue to use `forge_api_url`.
+slug in `forge`; version-1 documents continue to use the deprecated `forge_api_url`.
 
 ## Checking forge addresses before the forge migration
 
@@ -142,8 +141,9 @@ script can gate on it. The hub's startup log carries the same finding as one war
 
 A `deliver` step resolves each of its chunk's commit pointers to its own repository record before its action takes a
 pass. Each commit's `repo` is qualified to the record's `owner/repo`, and lands against that record's target: its
-`forge_api_url`, `owner` and `base_branch`. The `land` action reaches each repository through a forge handle built from
-its record and the record's secret, revealed once per distinct secret for that pass, so the secret never leaves the hub.
+`forge`, `owner` and `base_branch`. The `land` action reaches each repository through the landing seam, an adapter for
+the record's forge kind built from the record and its secret, revealed once per distinct secret for that pass, so the
+secret never leaves the hub.
 
 A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
 `file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
@@ -155,6 +155,9 @@ pass, and the shipped graphs poll once a minute.
 
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
+
+A forge that lacks an operation the action needs refuses the step too, escalating the chunk with
+`forge-capability-missing` ([forges.md](./forges.md#a-missing-capability)).
 
 Three outcomes refuse the step before it runs and route its failure choice; the first two also record an event
 ([observability.md](./observability.md)):
