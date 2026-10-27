@@ -1,4 +1,4 @@
-"""``blizzard hub analytics`` — operator verbs over derived transcript-event analytics."""
+"""``blizzard hub analytics`` — operator commands over derived transcript-event analytics."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ class OutcomesListing(Listing):
 
 @click.group("analytics")
 def analytics_group() -> None:
-    """Operator verbs over derived transcript-event analytics."""
+    """Read analytics derived from worker transcripts."""
 
 
 @analytics_group.command("re-derive", cls=FleetCommand)
@@ -104,11 +104,10 @@ def analytics_group() -> None:
 @click.option("--chunk", "chunk_id", default=None, help="Every candidate segment of one chunk.")
 @click.option("--limit", "limit", default=50, show_default=True, help="Cap on segments derived by one call.")
 def analytics_re_derive(cli: CliContext, segment_id: str | None, chunk_id: str | None, limit: int) -> None:
-    """Force the standing derivation sweep's own replacement unit now, rather than
-    waiting for its next tick — scoped to one segment, one chunk, or every candidate
-    (neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero
-    ``remaining`` on a chunk/all-scoped call means running it again continues from where
-    it left off. A segment that is not visible derives nothing."""
+    """Re-derive transcript analytics now for one segment, one chunk, or every candidate
+    (neither option given), while the hub keeps serving. Prints how many segments were
+    derived and how many remain; when some remain, running it again continues. A segment
+    that is not visible derives nothing."""
     if segment_id is not None and chunk_id is not None:
         raise click.ClickException("--segment and --chunk are mutually exclusive")
     body: dict[str, object] = {"limit": limit}
@@ -264,9 +263,8 @@ def analytics_events(
     limit: int | None,
     ndjson: bool,
 ) -> None:
-    """Read the derived transcript-event projection, every ``/events``
-    filter as a flag: a bounded page by default, or the whole filtered set streamed as
-    NDJSON to stdout under ``--ndjson``."""
+    """List the transcript events matching the given filters: one page by default, or
+    every match streamed as NDJSON to stdout under ``--ndjson``."""
     if ndjson:
         if cli.as_json:
             raise click.UsageError("--ndjson is incompatible with --json")
@@ -300,10 +298,8 @@ def analytics_events(
     cli.show(body, EventListing(body["events"]))
 
 
-# `blizzard hub analytics summary` — one verb over the eleven read
-# rollup routes, an explicit dataset→route table (a `-`↔`/` rule would 404 on
-# `agent-types`), and an explicit per-dataset filter-applicability table — a filter
-# inapplicable to the chosen dataset is refused, never silently dropped.
+# `blizzard hub analytics summary`'s dataset table. A filter a dataset does not take is
+# refused, never dropped: test_a_filter_the_dataset_does_not_expose_is_refused.
 
 #: The four scope filters every dataset takes — the common ground each
 #: dataset's own applicable set builds on top of.
@@ -339,9 +335,8 @@ _FLAG_NAMES = {
 @dto
 @dataclass(frozen=True)
 class _Dataset:
-    """One ``summary`` choice: its route, the key its envelope carries the rows under,
-    the view that renders them, and which of the shared filters it honors. Only
-    ``spend-chunks`` paginates or streams; ``top_n`` is ``counts-files``' opt-in ``--limit``."""
+    """One ``summary`` choice: its read path, the key its envelope carries the rows under,
+    the view that renders them, which shared filters it takes, and which paging it supports."""
 
     path: str
     response_key: str
@@ -352,8 +347,7 @@ class _Dataset:
     top_n: bool = False
 
 
-#: Mints the eleven read rollup routes' own criteria types, mirroring each route's own
-#: declared query params (``src/blizzard/hub/api/analytics.py``).
+#: Each ``summary`` dataset name mapped to its read and the filters it takes.
 _DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
         "/api/analytics/counts/files",
@@ -453,9 +447,10 @@ def analytics_summary(
     limit: int | None,
     ndjson: bool,
 ) -> None:
-    """Read one of the canned counts or operational-dataset rollups.
-    Only spend-chunks pages or streams; counts-files alone takes --limit as a top-N, and
-    a filter DATASET's own route does not expose is refused."""
+    """Read one of the canned counts or operational rollups.
+
+    Only spend-chunks pages or streams; counts-files alone takes --limit as a top-N.
+    A filter DATASET does not take is refused."""
     spec = _DATASETS[dataset]
     given = {
         "graph_id": graph_id,

@@ -159,12 +159,13 @@ def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Iterator[
 @collaborator
 @dataclass(frozen=True)
 class InitCollaborators:
-    """What ``init`` and the host's runner verbs reach the hub through: an invoker hands its own to the root
-    group as ``obj``; with none, each builds the HTTP one."""
+    """The hub clients, store migrations, host-process builder, and harness-bundle publisher a runtime verb
+    acts through: an invoker hands its own to the root group as ``obj``; with none, the HTTP clients and the
+    real builders are used."""
 
     hub_clients: Callable[[str, str, str | None], AbstractContextManager[InitHubClients]]
     host_clients: Callable[[str], AbstractContextManager[HostClients]]
-    #: The runner store's migrations at a URL — what ``runner ingest`` migrates a source copy through.
+    #: The runner store's migrations at a URL.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
     build_host_process: Callable[..., HostProcess] = build_host_process
     publish_harness_bundle: Callable[..., BundleSnapshot] = publish_harness_bundle
@@ -183,7 +184,7 @@ class InitCollaborators:
         return self.hub_clients(hub_url, token, SessionFile.of().load(hub_url))
 
     def identity_for(self, hub_url: str, token: str) -> AbstractContextManager[InitHubClients]:
-        """The identity read alone is wanted of the pair: ``--check`` resolves a runner's token with no session."""
+        """The identity read for ``hub_url`` under ``token``, with no operator session."""
         return self.hub_clients(hub_url, token, None)
 
 
@@ -883,7 +884,7 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
 def host(
     ctx: click.Context, directory: str | None, dir_option: str, host_: str | None, port: int | None, check: bool
 ) -> None:
-    """Become the blizzard host: the reconciliation loop of each runner + the local API.
+    """Run the blizzard host until stopped: each runner works its chunks, and its local API answers `runner` verbs.
 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_RUNNER_DIR, then the cwd. A directory that has not graduated to a host is
@@ -1039,7 +1040,7 @@ class _RunnerThreads:
     pass_drivers: list[PeriodicPassDriver]
 
     def start(self) -> None:
-        self.driver.start()  # startup recovery is REAP running first inside the tick
+        self.driver.start()
         for pass_driver in self.pass_drivers:
             pass_driver.start()
 
@@ -1051,8 +1052,7 @@ class _RunnerThreads:
 
 def _runner_threads(runner: RunnerProcess, *, interval: float) -> _RunnerThreads:
     config = runner.config
-    # `PeriodicDriver` resolves its prompt files on this thread, not in the loop thread: a
-    # configured-but-missing prompt raises here, before any socket binds.
+    # A configured-but-missing prompt file raises here, before any socket binds.
     with click_exception_on(ConfigError):
         driver = PeriodicDriver(config, interval_seconds=interval, process_graph=runner)
     announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
@@ -1076,8 +1076,6 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> N
     started: list[_RunnerThreads] = []
     host_tick_started = False
     try:
-        # The shared early-shutdown wrapper sets the stream's shutdown signal
-        # ahead of uvicorn's drain. Bound sockets belong to this whole startup.
         server = build_early_shutdown_server(
             app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown
         )
@@ -1123,9 +1121,8 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> N
 
 
 def _host_tick_driver(host: HostProcess, *, tick_seconds: float) -> PeriodicPassDriver:
-    """The host's own thread, built only here so `runner tick` never runs a credential renewal. It passes on the
-    tick's own interval with no jitter, so a credential lapsed across a restart is renewed at once; each slug's own
-    cadence gates it within the pass."""
+    """The host's own thread, passing on the tick's own interval with no jitter, so a credential lapsed across a
+    restart is renewed at once; each slug's own cadence gates it within the pass."""
     return PeriodicPassDriver(
         host.host_tick.run,
         name="blizzard-host-tick",
@@ -1137,7 +1134,7 @@ def _host_tick_driver(host: HostProcess, *, tick_seconds: float) -> PeriodicPass
 
 
 def _pass_drivers(config: RunnerConfig, runner: RunnerProcess) -> list[PeriodicPassDriver]:
-    """One runner's off-tick drivers, built only here so `runner tick` never runs a trace sweep."""
+    """One runner's off-tick drivers."""
     drivers: list[PeriodicPassDriver] = []
     if runner.trace_sweep is not None:
         drivers.append(
@@ -1163,11 +1160,10 @@ def _pass_drivers(config: RunnerConfig, runner: RunnerProcess) -> list[PeriodicP
 @runner_option
 @click.pass_context
 def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
-    """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE) of the host's runner.
+    """Run one pass of the host's runner against the live hub and workspace, then exit.
 
-    The steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the
-    live hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``, and while another
-    process holds the directory."""
+    Refused on a store revision mismatch, like ``host``, while another process holds the directory, or while
+    any of the host's runners is halted."""
     config = load_host(directory)
     built = [projection for projection in config.projections() if isinstance(projection, BuiltRunner)]
     halted = [projection for projection in config.projections() if isinstance(projection, HaltedRunner)]

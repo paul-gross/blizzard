@@ -1,0 +1,5 @@
+"""Pairs a route clause with a phrase another Blizzard rule rejects."""
+
+
+def both():
+    """A pure client of ``POST /api/things``. Formerly this lived elsewhere."""

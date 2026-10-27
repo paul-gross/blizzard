@@ -54,7 +54,7 @@ class StatusView:
 
 @click.group("egress")
 def egress_group() -> None:
-    """Operator verbs over the fact-egress export."""
+    """Inspect, reset, and backfill the export of the hub's facts."""
 
 
 @egress_group.command("status", cls=AdminCommand)

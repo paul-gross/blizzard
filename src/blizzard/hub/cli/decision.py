@@ -1,4 +1,4 @@
-"""``blizzard hub decision`` — operator verbs over open gate decisions (list, resolve)."""
+"""``blizzard hub decision`` — operator commands over open gate decisions."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class DecisionListing(Listing):
 
 @click.group("decision")
 def decision_group() -> None:
-    """Operator verbs over open gate decisions: list, resolve."""
+    """Read and resolve the decisions a gate waits on a human for."""
 
 
 @decision_group.command("list", cls=FleetCommand)
@@ -40,14 +40,14 @@ def decision_list(cli: CliContext, project: str | None) -> None:
 @decision_group.command("resolve", cls=FleetCommand)
 @click.argument("decision_id")
 @click.argument("choice")
-@click.option("--by", "resolved_by", default="operator", help="Who is resolving (recorded on the resolution).")
+@click.option("--by", "resolved_by", default="operator", help="Who is resolving, recorded as the actor.")
 @click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
 def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by: str, note: str | None) -> None:
-    """Resolve an open decision by picking CHOICE (first-write-wins).
+    """Resolve an open decision by picking CHOICE; the chunk then moves on along that choice.
 
-    A racing second resolution loses and is told who already resolved; a decision closed undecided — by a
-    restart, or by its chunk ending — is refused with the hub's reason. A pure client of
-    ``POST /api/decisions/{id}/resolutions``."""
+    Only the first resolution counts: a later one is refused and told who already resolved.
+    Refused too when CHOICE is not one of the decision's choices, or the decision was closed
+    undecided by a restart or by its chunk ending."""
     request = {"choice": choice, "resolved_by": resolved_by}
     if note is not None:
         request["note"] = note

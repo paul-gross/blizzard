@@ -26,9 +26,7 @@ from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEX
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
 from blizzard.wire.runner_status import IdentityVerdictView
 
-# The operator's TCP door onto the local API — the override for when the socket is not
-# the right address. `BZ_*` is the operator's config namespace, distinct from the worker's
-# spawn-injected `BLIZZARD_*` one, which `worker_call` owns.
+# The operator's TCP address for the local API, overriding the socket.
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 # Each `selftest` poll is a machine-local read of already-computed state, so a short interval is free.
 _SELFTEST_POLL_INTERVAL = 0.2
@@ -160,7 +158,6 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     Every section is this runner's own local read, so the view renders fully with the
     hub unreachable; hub reachability is itself reported, not assumed."""
     with RunnerDaemon.reach("status", directory, runner_url, Door.of(ctx), runner) as daemon:
-        # A host serving no runner fails here, naming why each one is halted.
         runner_id = daemon.runner_id()
         view = daemon.get("/api/runner").json()
         leases_resp = daemon.get("/api/leases")
@@ -304,14 +301,13 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 @runner_option
-@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is pausing, recorded as the actor.")
 @click.pass_context
 def pause(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, by: str) -> None:
-    """Declarative control: pause this runner — it starts no new workers. This runner's
-    **own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled
-    worker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No
-    retry is consumed, and a live worker is left alone — this is not a drain. Distinct from the hub's
-    brake, and each is cleared where it was set."""
+    """Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub
+    unreachable. Running workers are left alone — this is not a drain — but while paused a stalled worker is not
+    killed and an exhausted retry budget does not escalate. Separate from a pause set at the hub; each is cleared
+    where it was set."""
     _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url, runner=runner, door=Door.of(ctx))
 
 
@@ -331,14 +327,13 @@ def pause(ctx: click.Context, directory: str, runner_url: str | None, runner: st
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 @runner_option
-@click.option("--by", "by", default="operator", help="Who is starting it (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is starting, recorded as the actor.")
 @click.pass_context
 def start(ctx: click.Context, directory: str, runner_url: str | None, runner: str | None, by: str) -> None:
-    """Declarative control: clear this runner's own pause brake — it resumes spawning.
+    """Clear the pause ``blizzard runner pause`` set: this runner starts new workers again.
 
-    The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
-    the local brake: a runner also paused at the hub stays paused until ``blizzard hub
-    runner resume <runner_id>`` clears that one too."""
+    Works with the hub unreachable. A runner also paused at the hub stays paused until
+    ``blizzard hub runner resume <runner_id>`` clears that one too."""
     _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url, runner=runner, door=Door.of(ctx))
 
 
@@ -364,7 +359,7 @@ def start(ctx: click.Context, directory: str, runner_url: str | None, runner: st
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 @runner_option
-@click.option("--by", "by", default="operator", help="Who is clearing it (recorded on the clear).")
+@click.option("--by", "by", default="operator", help="Who is clearing, recorded as the actor.")
 @click.pass_context
 def clear_floor(
     ctx: click.Context, subscription: str | None, directory: str, runner_url: str | None, runner: str | None, by: str
@@ -397,7 +392,7 @@ def clear_floor(
 
 @click.command()
 @click.argument("chunk_id")
-@click.option("--force", is_flag=True, default=False, help="Supersede a live worker attempt instead of refusing.")
+@click.option("--force", is_flag=True, default=False, help="End a running worker instead of refusing.")
 @click.option(
     "--end",
     "end",
@@ -432,11 +427,11 @@ def takeover(
     runner_url: str | None,
     runner: str | None,
 ) -> None:
-    """Take over a parked chunk: exec the interactive resume command in this terminal. The
-    takeover fact is recorded before anything else runs, so no loop step can respawn or judge the
-    session while it is open; the lease token travels only in the response body and the exec, never
-    printed. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session
-    still closes the takeover."""
+    """Take over a chunk this runner holds: resume its session interactively in this terminal. The runner
+    leaves the chunk alone until the session exits, and an interrupted session still ends the takeover.
+    Refused when this runner holds no environment for the chunk, a takeover is already open, there is no
+    session to resume, a worker is running (unless ``--force``), or its result is still waiting to reach
+    the hub."""
     if end and force:
         raise click.UsageError("--end and --force are mutually exclusive: --end starts no session")
     if end:
@@ -450,8 +445,6 @@ def takeover(
         view = resp.json()
         click.echo(f"taking over chunk {chunk_id} in {view['workdir']}: {view['command']}")
         try:
-            # The takeover env, layered over the terminal env: the forwarded
-            # vars deliberately WIN over the terminal's own, and carry the lease token.
             exit_code = command_children(ctx).run_foreground(
                 ShellCommand(view["command"]),
                 cwd=view["workdir"],
@@ -498,10 +491,10 @@ def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None, ru
 @runner_option
 @click.pass_context
 def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str | None, runner: str | None) -> None:
-    """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node.
-    Clears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the
-    fleet's next pass. The route is never released and the chunk never re-enters the hub's queue.
-    Refused ``409`` while its takeover is still open, or while it is not parked needs_human."""
+    """Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current
+    node, with its retry budget carried over. The runner keeps its claim, so the chunk never returns to the
+    hub's queue. Refused while a takeover of the chunk is open, when the chunk is not needs_human, or when
+    this runner holds no environment for it; repeating a pending requeue changes nothing."""
     with RunnerDaemon.reach("requeue", directory, runner_url, Door.of(ctx), runner) as daemon:
         resp = daemon.send("post", f"/api/chunks/{chunk_id}/requeues")
         if resp.status_code == 409:
@@ -531,10 +524,10 @@ def requeue(ctx: click.Context, chunk_id: str, directory: str, runner_url: str |
 def selftest(
     ctx: click.Context, coding_harness: str, directory: str, runner_url: str | None, runner: str | None
 ) -> None:
-    """Adapter-drift canary before an unattended period: exercises CODING_HARNESS against a
-    throwaway scratch repo — spawn with a pre-assigned session id, a trivial edit+commit, verdict
-    elicitation, an automated follow-up resume, and resume-command composition — touching no chunk,
-    lease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure."""
+    """Check CODING_HARNESS still works before an unattended period: runs it against a throwaway scratch repo
+    — a spawn, a trivial edit and commit, a verdict, an automated resume, and the resume command — touching
+    no chunk, environment, or hub. Prints each check and exits non-zero when any fails; refused for an
+    unknown coding harness."""
     with RunnerDaemon.reach("selftest", directory, runner_url, Door.of(ctx), runner) as daemon:
         resp = daemon.send("post", "/api/selftests", json_body={"harness": coding_harness})
         if resp.status_code == 422:

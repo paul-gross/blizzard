@@ -324,5 +324,10 @@ jobs:
         uses: jdx/mise-action@v2
         with:
           version: 2026.9.2
-      - name: process-reference and change-history prose lint (mise run process-ref-lint)
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: process-reference, change-history and route-clause prose lint (mise run process-ref-lint)
         run: mise run process-ref-lint

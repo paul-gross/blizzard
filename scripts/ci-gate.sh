@@ -33,8 +33,8 @@ step "markdown format: dprint check"
 mise x dprint@0.55.2 -- dprint check
 
 # --- Vale prose lint (bzh:comment-locality) -----------------------------------
-step "process-reference and change-history prose lint: vale --output=line ."
-mise exec -- vale --output=line .
+step "process-reference and change-history prose lint (blizzard:process-ref-lint): vale scan, then the route-clause fixtures"
+mise run process-ref-lint
 
 # --- Structural gate (contracts/ast-grep/) -----------------------------------
 step "structural gate (blizzard:structural-gate): ast-grep scan"

@@ -315,7 +315,7 @@
     "artifact": {
       "commands": {
         "commit": {
-          "help": "Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. The origin\ncomes from the environment's repo manifest. Echoes a confirmation naming REPO, BRANCH,\nand the sha on success.",
+          "help": "Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Echoes a\nconfirmation naming REPO, BRANCH, and the sha on success.",
           "params": [
             {
               "help": "The leased environment the repo worktree lives in. Inferred while a chunk holds exactly one environment; required once it holds several.",
@@ -330,7 +330,7 @@
               "type": "text"
             },
             {
-              "help": "The repo's name in the leased env's manifest (not an `owner/name` slug or URL) \u2014 the runner looks this up in the environment's repo manifest to find both the worktree and the origin to verify against. A name the manifest does not list is rejected outright, naming the repos that are.",
+              "help": "The repo's name in the environment's repo manifest (not an `owner/name` slug or URL). A name the manifest does not list is refused, naming the repos that are.",
               "hidden": false,
               "kind": "option",
               "name": "repo",
@@ -354,7 +354,7 @@
               "type": "text"
             },
             {
-              "help": "The FULL commit sha (`git rev-parse HEAD`), not an abbreviated form \u2014 verify compares it byte-exact against the forge's full sha.",
+              "help": "The FULL commit sha (`git rev-parse HEAD`); an abbreviated sha fails verification against the pushed commit.",
               "hidden": false,
               "kind": "option",
               "name": "commit_sha",
@@ -413,7 +413,7 @@
           "short_help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node scope only."
         },
         "get": {
-          "help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph\ndeclaration (graph scope), or one of blizzard's own published documents (system scope);\nunknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints\nraw asset text, and errors on the ``git_commit`` kind, which carries none.\n\nServes the last *published* epoch only \u2014 a node-step's own just-submitted content is not\npublished until the node-step completes; a not-yet-published NAME 404s naming\n``artifact staged`` instead. Read it back before completion with that verb.\n\nPass NAME literally, slashes included.",
+          "help": "Worker: read one published artifact by NAME, passed literally, slashes included \u2014 a ``produces:`` name\n(node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents\n(system scope). Refused when NAME is unknown, when more than one candidate matches (naming them), or when\nthis node-step has only staged it (pointing at ``artifact staged``). ``--content`` prints raw asset text,\nrefused for a git-commit artifact, which carries none.",
           "params": [
             {
               "hidden": false,
@@ -476,7 +476,7 @@
             }
           ],
           "path": "runner artifact get",
-          "short_help": "Worker: read one artifact by NAME \u2014 a ``produces:`` name (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents (system scope); unknown is a ``404``, more than one candidate a ``409`` naming them."
+          "short_help": "Worker: read one published artifact by NAME, passed literally, slashes included \u2014 a ``produces:`` name (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents (system scope)."
         },
         "list": {
           "help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch,\nplus the graph mint's own baked-in declarations and blizzard's published system-artifact\nset \u2014 ``--scope`` narrows to one. Content is elided by default; ``--content`` includes it.\nAlso includes this node-step's own staged, not-yet-published submissions,\neach carrying ``\"staged\": true`` \u2014 everything published carries ``\"staged\": false``.",
@@ -510,7 +510,7 @@
           "short_help": "Worker: list this node-step's artifacts as kind-discriminated JSON, resolved latest-by-epoch, plus the graph mint's own baked-in declarations and blizzard's published system-artifact set \u2014 ``--scope`` narrows to one."
         },
         "staged": {
-          "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.\nRead straight off the runner's own ``attachments`` record rather than the hub envelope,\nso a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full\ntext.",
+          "help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.\nA fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text.",
           "params": [
             {
               "help": "Include each staged submission's full content instead of just its byte length.",
@@ -541,13 +541,13 @@
           "short_help": "Worker: list this node-step's own staged (not-yet-published) submissions, node scope only."
         }
       },
-      "help": "Worker: read node-step, graph, and system artifacts; write this node-step's own.\nThe lease binding is ambient: every verb acts on the worker's own lease, resolved\nfrom the spawn environment \u2014 none takes a flag naming another chunk. ``--scope`` picks node\nscope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.\n``create`` *stages* a submission, published on completion.",
+      "help": "Worker: read node-step, graph, and system artifacts; write this node-step's own.\nEvery verb acts on this worker's own chunk \u2014 none names another. ``--scope`` picks node\nscope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.\n``create`` *stages* a submission, published on completion.",
       "params": [],
       "path": "runner artifact",
       "short_help": "Worker: read node-step, graph, and system artifacts; write this node-step's own."
     },
     "ask": {
-      "help": "Worker: ask-and-exit \u2014 the ask is a durable runner-store fact before this returns.",
+      "help": "Worker: ask a question, then exit \u2014 the question is recorded before this returns, and its id printed.",
       "params": [
         {
           "hidden": false,
@@ -574,7 +574,7 @@
         }
       ],
       "path": "runner ask",
-      "short_help": "Worker: ask-and-exit \u2014 the ask is a durable runner-store fact before this returns."
+      "short_help": "Worker: ask a question, then exit \u2014 the question is recorded before this returns, and its id printed."
     },
     "attach": {
       "help": "Deprecated alias for ``blizzard runner artifact create``.\n\nKept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior.",
@@ -673,7 +673,7 @@
           "type": "text"
         },
         {
-          "help": "Who is clearing it (recorded on the clear).",
+          "help": "Who is clearing, recorded as the actor.",
           "hidden": false,
           "kind": "option",
           "name": "by",
@@ -786,10 +786,10 @@
           "short_help": "Worker: list this run's own routine's garden proposals as JSON, filtered by STATE \u2014 closed ones carry their closure and pass reason."
         }
       },
-      "help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both\nderived server-side from the worker's own lease, so no verb here takes a flag\nnaming either.",
+      "help": "Worker: read the findings and garden proposals of the routine this run belongs to \u2014 always\nthis run's own routine and scope, so no verb names either.",
       "params": [],
       "path": "runner garden",
-      "short_help": "Worker: read this run's own garden machinery \u2014 the routine and scope are both derived server-side from the worker's own lease, so no verb here takes a flag naming either."
+      "short_help": "Worker: read the findings and garden proposals of the routine this run belongs to \u2014 always this run's own routine and scope, so no verb names either."
     },
     "harness": {
       "commands": {
@@ -831,13 +831,13 @@
       "short_help": "Operator: the harness-config bundle this runtime loads."
     },
     "heartbeat": {
-      "help": "Worker hook: record a lease heartbeat (identity from the environment).\n\nFails **soft**: a hook must never break the worker's tool call, so a missing identity or an\nunreachable runner is reported to stderr and this still exits 0.",
+      "help": "Worker hook: report that this worker is still alive (identity from the environment).\n\nFails **soft**: a missing identity or an unreachable runner is reported to stderr and this still exits 0.",
       "params": [],
       "path": "runner heartbeat",
-      "short_help": "Worker hook: record a lease heartbeat (identity from the environment)."
+      "short_help": "Worker hook: report that this worker is still alive (identity from the environment)."
     },
     "host": {
-      "help": "Become the blizzard host: the reconciliation loop of each runner + the local API.\n\nDIRECTORY (positional) and --dir are equivalent \u2014 pass one; giving both requires\nthey agree. Defaults to $BZ_RUNNER_DIR, then the cwd. A directory that has not graduated to a host is\nrefused, naming the graduation procedure.",
+      "help": "Run the blizzard host until stopped: each runner works its chunks, and its local API answers `runner` verbs.\n\nDIRECTORY (positional) and --dir are equivalent \u2014 pass one; giving both requires\nthey agree. Defaults to $BZ_RUNNER_DIR, then the cwd. A directory that has not graduated to a host is\nrefused, naming the graduation procedure.",
       "params": [
         {
           "hidden": false,
@@ -900,7 +900,7 @@
         }
       ],
       "path": "runner host",
-      "short_help": "Become the blizzard host: the reconciliation loop of each runner + the local API."
+      "short_help": "Run the blizzard host until stopped: each runner works its chunks, and its local API answers `runner` verbs."
     },
     "ingest": {
       "help": "Move one runner from SOURCE \u2014 another host's directory, a `store reset --runner` archive, or a runner directory\nthat has not graduated \u2014 into this host:\nits rows, its workspace, subscription and `[[runner]]` where this host lacks them, and its token; then delete its\nrows from SOURCE, moving a source left with no runner aside. An archive's `[[runner]]` and token must already be\nhere. Refused while either host runs, or the hub does not hold the runner under this host; a re-run completes an\ninterrupted ingest.",
@@ -1154,7 +1154,7 @@
       "short_help": "Read-only diagnostics for OpenCode's admitted-version compatibility contract."
     },
     "pause": {
-      "help": "Declarative control: pause this runner \u2014 it starts no new workers. This runner's\n**own** brake, a pure client of its local API, so it works with the hub unreachable: a stalled\nworker is not killed, and an exhausted retry budget does not escalate, until it is cleared. No\nretry is consumed, and a live worker is left alone \u2014 this is not a drain. Distinct from the hub's\nbrake, and each is cleared where it was set.",
+      "help": "Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub\nunreachable. Running workers are left alone \u2014 this is not a drain \u2014 but while paused a stalled worker is not\nkilled and an exhausted retry budget does not escalate. Separate from a pause set at the hub; each is cleared\nwhere it was set.",
       "params": [
         {
           "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1193,7 +1193,7 @@
           "type": "text"
         },
         {
-          "help": "Who is pausing (recorded on the fact).",
+          "help": "Who is pausing, recorded as the actor.",
           "hidden": false,
           "kind": "option",
           "name": "by",
@@ -1206,10 +1206,10 @@
         }
       ],
       "path": "runner pause",
-      "short_help": "Declarative control: pause this runner \u2014 it starts no new workers."
+      "short_help": "Pause this runner: it starts no new workers until ``blizzard runner start``, and works with the hub unreachable."
     },
     "pm-items": {
-      "help": "Deprecated alias for ``blizzard runner work-items``.\n\nKept working, hidden from ``--help`` (pinned by\ntests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item).",
+      "help": "Deprecated alias for ``blizzard runner work-items``.\n\nKept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior.",
       "params": [
         {
           "hidden": false,
@@ -1272,7 +1272,7 @@
           "short_help": "Drop the store override so the configured workspace prompt resolves again."
         },
         "diff": {
-          "help": "Diff this runtime's effective workspace prompt against packaged sample NAME.\n\nEffective means the lane a spawn reads: the store override when one stands, else the\nconfigured knob. Exits 1 when they differ, so a deploy can check a forked copy for drift.",
+          "help": "Diff this runtime's effective workspace prompt against packaged sample NAME.\n\nEffective means the prompt a new worker starts with: the override `prompt clear` drops when one\nstands, else the configured prompt. Exits 1 when they differ, so a deploy can check a forked copy for drift.",
           "params": [
             {
               "hidden": false,
@@ -1314,7 +1314,7 @@
           "short_help": "Diff this runtime's effective workspace prompt against packaged sample NAME."
         },
         "install": {
-          "help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy.\n\nThe forked shape: the workspace carries `prompt_file`, never the package knob, so\n`prompt diff` has a local file to compare. Takes effect on the next runner restart.",
+          "help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy, which\n`prompt diff` then checks for drift. Takes effect on the next runner restart.",
           "params": [
             {
               "hidden": false,
@@ -1365,7 +1365,7 @@
             }
           ],
           "path": "runner prompt install",
-          "short_help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy."
+          "short_help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy, which `prompt diff` then checks for drift."
         },
         "list": {
           "help": "List the workspace-prompt samples shipped in this wheel.",
@@ -1429,7 +1429,7 @@
       "short_help": "Operator: the packaged workspace-prompt samples, and which one this runtime uses."
     },
     "requeue": {
-      "help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node.\nClears the chunk's local needs_human hold; a fresh attempt spawns at the current node on the\nfleet's next pass. The route is never released and the chunk never re-enters the hub's queue.\nRefused ``409`` while its takeover is still open, or while it is not parked needs_human.",
+      "help": "Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current\nnode, with its retry budget carried over. The runner keeps its claim, so the chunk never returns to the\nhub's queue. Refused while a takeover of the chunk is open, when the chunk is not needs_human, or when\nthis runner holds no environment for it; repeating a pending requeue changes nothing.",
       "params": [
         {
           "hidden": false,
@@ -1480,10 +1480,10 @@
         }
       ],
       "path": "runner requeue",
-      "short_help": "Hand a needs_human chunk back to the fleet: a fresh attempt at its current node."
+      "short_help": "Hand a needs_human chunk back to this runner after a human has worked it: one more try at its current node, with its retry budget carried over."
     },
     "retire": {
-      "help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A\nrunning host halts it at its next tick, the hub refusing its token; the host's store forgets its identity, and\nits other rows stay there, inert.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
+      "help": "Retire one of this registered host's runners at its hub, forget its identity here, and remove its\n`[[runner]]` from the host file. A running host stops running it shortly after.\n\nRefused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force\nreleases them.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -1523,7 +1523,7 @@
         }
       ],
       "path": "runner retire",
-      "short_help": "Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file."
+      "short_help": "Retire one of this registered host's runners at its hub, forget its identity here, and remove its `[[runner]]` from the host file."
     },
     "scope": {
       "commands": {
@@ -1540,7 +1540,7 @@
       "short_help": "Worker: read the deployment's scope vocabulary."
     },
     "selftest": {
-      "help": "Adapter-drift canary before an unattended period: exercises CODING_HARNESS against a\nthrowaway scratch repo \u2014 spawn with a pre-assigned session id, a trivial edit+commit, verdict\nelicitation, an automated follow-up resume, and resume-command composition \u2014 touching no chunk,\nlease, environment, or hub. Posts the run, polls it, prints each check, exits non-zero on failure.",
+      "help": "Check CODING_HARNESS still works before an unattended period: runs it against a throwaway scratch repo\n\u2014 a spawn, a trivial edit and commit, a verdict, an automated resume, and the resume command \u2014 touching\nno chunk, environment, or hub. Prints each check and exits non-zero when any fails; refused for an\nunknown coding harness.",
       "params": [
         {
           "hidden": false,
@@ -1591,7 +1591,7 @@
         }
       ],
       "path": "runner selftest",
-      "short_help": "Adapter-drift canary before an unattended period: exercises CODING_HARNESS against a throwaway scratch repo \u2014 spawn with a pre-assigned session id, a trivial edit+commit, verdict elicitation, an automated follow-up resume, and resume-command composition \u2014 touching no chunk, lease, environment, or hub."
+      "short_help": "Check CODING_HARNESS still works before an unattended period: runs it against a throwaway scratch repo \u2014 a spawn, a trivial edit and commit, a verdict, an automated resume, and the resume command \u2014 touching no chunk, environment, or hub."
     },
     "session-end": {
       "help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's\n\"declared done\" signal.\n\nFails **soft**, like the heartbeat.",
@@ -1600,7 +1600,7 @@
       "short_help": "Worker hook: record the session's exit (identity from the environment) \u2014 the worker's \"declared done\" signal."
     },
     "start": {
-      "help": "Declarative control: clear this runner's own pause brake \u2014 it resumes spawning.\n\nThe counterpart to ``blizzard runner pause``, and local in the same way. It clears only\nthe local brake: a runner also paused at the hub stays paused until ``blizzard hub\nrunner resume <runner_id>`` clears that one too.",
+      "help": "Clear the pause ``blizzard runner pause`` set: this runner starts new workers again.\n\nWorks with the hub unreachable. A runner also paused at the hub stays paused until\n``blizzard hub runner resume <runner_id>`` clears that one too.",
       "params": [
         {
           "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -1639,7 +1639,7 @@
           "type": "text"
         },
         {
-          "help": "Who is starting it (recorded on the fact).",
+          "help": "Who is starting, recorded as the actor.",
           "hidden": false,
           "kind": "option",
           "name": "by",
@@ -1652,7 +1652,7 @@
         }
       ],
       "path": "runner start",
-      "short_help": "Declarative control: clear this runner's own pause brake \u2014 it resumes spawning."
+      "short_help": "Clear the pause ``blizzard runner pause`` set: this runner starts new workers again."
     },
     "status": {
       "help": "The machine-local view: capacities, held environments, open asks, escalations, open takeovers.\nEvery section is this runner's own local read, so the view renders fully with the\nhub unreachable; hub reachability is itself reported, not assumed.",
@@ -1736,7 +1736,7 @@
       "short_help": "Administer the host's local store while the host is down."
     },
     "takeover": {
-      "help": "Take over a parked chunk: exec the interactive resume command in this terminal. The\ntakeover fact is recorded before anything else runs, so no loop step can respawn or judge the\nsession while it is open; the lease token travels only in the response body and the exec, never\nprinted. ``--force`` supersedes a live worker attempt instead of refusing. An interrupted session\nstill closes the takeover.",
+      "help": "Take over a chunk this runner holds: resume its session interactively in this terminal. The runner\nleaves the chunk alone until the session exits, and an interrupted session still ends the takeover.\nRefused when this runner holds no environment for the chunk, a takeover is already open, there is no\nsession to resume, a worker is running (unless ``--force``), or its result is still waiting to reach\nthe hub.",
       "params": [
         {
           "hidden": false,
@@ -1750,7 +1750,7 @@
           "type": "text"
         },
         {
-          "help": "Supersede a live worker attempt instead of refusing.",
+          "help": "End a running worker instead of refusing.",
           "hidden": false,
           "kind": "option",
           "name": "force",
@@ -1811,10 +1811,10 @@
         }
       ],
       "path": "runner takeover",
-      "short_help": "Take over a parked chunk: exec the interactive resume command in this terminal."
+      "short_help": "Take over a chunk this runner holds: resume its session interactively in this terminal."
     },
     "tick": {
-      "help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE) of the host's runner.\n\nThe steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a single pass against the\nlive hub and workspace, then exit. Refuses on a store revision mismatch, like ``host``, and while another\nprocess holds the directory.",
+      "help": "Run one pass of the host's runner against the live hub and workspace, then exit.\n\nRefused on a store revision mismatch, like ``host``, while another process holds the directory, or while\nany of the host's runners is halted.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -1842,12 +1842,12 @@
         }
       ],
       "path": "runner tick",
-      "short_help": "Run ONE synchronous reconciliation tick (REAP \u2192 PULL \u2192 FILL \u2192 ADVANCE) of the host's runner."
+      "short_help": "Run one pass of the host's runner against the live hub and workspace, then exit."
     },
     "traces": {
       "commands": {
         "replay": {
-          "help": "Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor\ndoes not move, so spans the backend already holds arrive again \u2014 it dedupes on their ids. A range over\nreplay_max_window is told in windows; a failure names the --since to resume from.",
+          "help": "Export again the spans of every node-step run that ended in [since, until), under their original span\nids, so a span the trace backend already holds is not duplicated; ongoing export is unaffected. A range\nover replay_max_window is sent in windows; a failure names the --since to resume from.",
           "params": [
             {
               "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
@@ -1935,7 +1935,7 @@
             }
           ],
           "path": "runner traces replay",
-          "short_help": "Tell every lease that closed in [since, until) again, with the live sweep's span ids."
+          "short_help": "Export again the spans of every node-step run that ended in [since, until), under their original span ids, so a span the trace backend already holds is not duplicated; ongoing export is unaffected."
         },
         "status": {
           "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",
@@ -2001,7 +2001,7 @@
     "transcript": {
       "commands": {
         "backfill": {
-          "help": "Import worker transcripts predating the outbound lane, best-effort.\n\nDriven from this runner's own lease records, never a sweep of the harness directory. Rerunnable:\nan already-imported session is skipped, and one left unfinished resumes. Writes the store\ndirectly, so run it as the runner's own user with its environment, and with the daemon stopped.",
+          "help": "Import the transcripts of sessions this runner ran before it shipped transcripts, best-effort.\n\nRerunnable: an already-imported session is skipped, and one left unfinished resumes. Run it as the\nrunner's own user with its environment; refused while the host is running.",
           "params": [
             {
               "help": "Runner runtime directory (overrides $BZ_RUNNER_DIR).",
@@ -2053,7 +2053,7 @@
             }
           ],
           "path": "runner transcript backfill",
-          "short_help": "Import worker transcripts predating the outbound lane, best-effort."
+          "short_help": "Import the transcripts of sessions this runner ran before it shipped transcripts, best-effort."
         },
         "reship": {
           "help": "Re-read SEGMENT_ID's session and ship it again under a new segment id.\n\nFor a segment the hub holds in a form this runner has outgrown \u2014 most often one an older,\nsmaller per-record cap shrank. The hub never overwrites an accepted record, so superseding\none means a second segment: BOTH then show on the board. Same operating rules as `backfill`.",
@@ -2104,7 +2104,7 @@
       "short_help": "Operator: maintenance over this runner's own transcript lane."
     },
     "work-items": {
-      "help": "Worker: pass-through read of a chunk's work items (runner -> hub -> vendor).\n\nThe items print as JSON, one entry per pointer.",
+      "help": "Worker: read a chunk's work items from its tracker, printed as JSON, one entry per pointer.",
       "params": [
         {
           "hidden": false,
@@ -2119,7 +2119,7 @@
         }
       ],
       "path": "runner work-items",
-      "short_help": "Worker: pass-through read of a chunk's work items (runner -> hub -> vendor)."
+      "short_help": "Worker: read a chunk's work items from its tracker, printed as JSON, one entry per pointer."
     }
   },
   "help": "Talk to \u2014 or become \u2014 the blizzard runner.",

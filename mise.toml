@@ -109,8 +109,8 @@ description = "Export the store schema and daemon config documents to ./contract
 run = "uv run blizzard-export-contracts --out-dir contracts"
 
 [tasks."process-ref-lint"]
-description = "blizzard:process-ref-lint — Vale prose gate for process references and change-history narration"
-run = "vale --output=line ."
+description = "blizzard:process-ref-lint — Vale prose gate for process references, change-history narration and CLI route clauses, then the rule fixtures (Vale required)"
+run = "vale --output=line . && BLIZZARD_REQUIRE_VALE=1 uv run pytest tests/test_route_clause_rule.py -p no:cacheprovider"
 
 [tasks.compat]
 description = "blizzard:compat — hold HEAD's committed surface documents to the supported releases, with this branch's commits since origin/master as the range a `!` may sit in"

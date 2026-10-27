@@ -1,4 +1,4 @@
-"""``blizzard hub scope`` — operator verbs over scopes."""
+"""``blizzard hub scope`` — operator commands over scopes."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ScopeListing(Listing):
 
 @click.group("scope")
 def scope_group() -> None:
-    """Operator verbs over scopes: create, list, show, edit, retire, re-enable."""
+    """Manage scopes, the named buckets findings are grouped into."""
 
 
 @scope_group.command("create", cls=FleetCommand)
@@ -90,7 +90,7 @@ def scope_edit(cli: CliContext, slug: str, description: str, project: str | None
 
 @scope_group.command("retire", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 @project_option(required_by_hub=True)
 def scope_retire(cli: CliContext, slug: str, by: str, project: str | None) -> None:
     """Retire SLUG — a reversible brake; in-flight users of it are untouched."""
@@ -99,7 +99,7 @@ def scope_retire(cli: CliContext, slug: str, by: str, project: str | None) -> No
 
 @scope_group.command("enable", cls=FleetCommand)
 @click.argument("slug")
-@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
 @project_option(required_by_hub=True)
 def scope_enable(cli: CliContext, slug: str, by: str, project: str | None) -> None:
     """Re-enable a retired SLUG."""

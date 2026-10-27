@@ -30,7 +30,7 @@ class InvitationListing(Listing):
 
 @click.group("invite")
 def invite_group() -> None:
-    """A tenant's invitations: create one and hand its link on, list them, revoke one."""
+    """Manage a tenant's invitations, whose links bring new members in."""
 
 
 @invite_group.command("create", cls=FleetCommand)

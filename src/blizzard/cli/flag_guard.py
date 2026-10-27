@@ -25,7 +25,7 @@ _MARKER = "Not yet on: this works only once the flag {flag} is on."
 
 
 def flag_refusal(flag: str) -> click.ClickException:
-    """The refusal of a verb or option whose flag is off — the one message text the daemons' ``404`` also carries."""
+    """The refusal of a verb or option whose flag is off, in :class:`FlagOff`'s wording."""
     return click.ClickException(FlagOff.of(flag).message)
 
 

@@ -1,4 +1,4 @@
-"""``blizzard hub chunk`` — operator verbs over one chunk (ingest, inspect, edit, transition)."""
+"""``blizzard hub chunk`` — operator commands over one chunk."""
 
 from __future__ import annotations
 
@@ -44,8 +44,7 @@ class ChunkDetail:
             labels = ", ".join(pointer_label(p) for p in pointers)
             yield f"  pointers: {labels}"
         route = body.get("route")
-        # A terminal transition from a runner node leaves the route fact standing; status, not
-        # route liveness, says whether a runner still holds the chunk (`holds_claim`).
+        # A done or stopped chunk can still carry a route; no runner holds it.
         if route and body["status"] not in TERMINAL_STATUSES:
             yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
         blocked = body.get("blocked")
@@ -65,8 +64,8 @@ class ChunkDetail:
 
 
 def _escalation_lines(escalation: dict[str, Any]) -> Iterator[str]:
-    """The open escalation's block: why, then the one command to paste — the wrapped form when the
-    runner composed one, else the raw resume command (which an empty ``takeover_command`` omits)."""
+    """The open escalation's block: its cause and detail, then the takeover command to paste,
+    preferring the wrapped form."""
     yield f"  escalated: {escalation.get('cause') or 'unknown cause'}"
     if escalation.get("detail"):
         yield f"    detail: {escalation['detail']}"
@@ -116,13 +115,13 @@ class WorkItemListing(Listing):
 
 @click.group("chunk")
 def chunk_group() -> None:
-    """Operator verbs over one chunk: ingest, inspect, edit, and transition it."""
+    """Create, inspect, edit, and move chunks."""
 
 
 @chunk_group.command("list", cls=FleetCommand)
 @project_option(required_by_hub=False)
 def chunk_list(cli: CliContext, project: str | None) -> None:
-    """The fleet chunk list — derived status per chunk."""
+    """List chunks with each one's status."""
     rows = cli.get_all("/api/chunks", "GET /chunks", key="chunks", params=project_query(project))
     cli.show(rows, ChunkListing(rows))
 
@@ -130,7 +129,7 @@ def chunk_list(cli: CliContext, project: str | None) -> None:
 @chunk_group.command("show", cls=FleetCommand)
 @click.argument("chunk_id")
 def chunk_show(cli: CliContext, chunk_id: str) -> None:
-    """One chunk's full aggregate — status, current node, route, pointers, cost."""
+    """Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."""
     resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
     detail = resp.json()
     cli.show(detail, ChunkDetail(detail))
@@ -167,9 +166,9 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     """Ingest work items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
-    work item URL; a batch mints one chunk carrying every pointer. 422 when no
-    configured work source claims a token or a pointer's source is not linked to the
-    project; 409 when a pointer is already held."""
+    work item URL; a batch mints one chunk carrying every pointer. Refused when no
+    configured work source claims a token, a pointer's source is not linked to the
+    project, or another chunk already holds a pointer."""
     tokens = list(pointers)
     request: dict[str, object] = {"tokens": tokens}
     if project is not None:
@@ -223,9 +222,9 @@ def chunk_set(
 ) -> None:
     """Repin CHUNK's graph and/or default model/effort/harnesses in one call.
 
-    A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and
-    applied all-or-nothing. At least one option is required; 409 for the defaults once
-    CHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271)."""
+    The given fields apply together or not at all; at least one option is required.
+    Defaults are refused once a runner has claimed CHUNK, and ``--graph`` once CHUNK is
+    claimed or has moved off its first node."""
     if graph_id is None and not default_model and default_effort is None and not default_harnesses:
         raise click.UsageError(
             "at least one of --graph/--default-model/--default-effort/--default-harnesses is required"
@@ -264,10 +263,8 @@ def chunk_set(
 def chunk_promote(cli: CliContext, chunk_id: str, after: str | None) -> None:
     """Promote a not-ready CHUNK to ready so a runner may claim it.
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
-    a currently promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a
-    not-currently-promoted chunk is already done or stopped, or ``--after`` names a chunk outside
-    the ready queue."""
+    Promoting an already-ready chunk changes nothing. Refused when CHUNK is done or
+    stopped, or ``--after`` names a chunk outside the ready queue or CHUNK itself."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/promote",
         "POST /chunks/{id}/promote",
@@ -289,10 +286,9 @@ def chunk_promote(cli: CliContext, chunk_id: str, after: str | None) -> None:
 def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
     """Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults.
 
-    A pure client of the hub API: ``POST /api/chunks/{id}/demote``. Idempotent — demoting a
-    chunk that is not currently promoted is a harmless no-op; 404 when the chunk is unknown, 409
-    when it is claimed, delivering, gated on a human, or ended, or ``--after`` names a chunk outside
-    the backlog. Detach a held chunk first."""
+    Demoting a chunk that is not ready changes nothing. Refused when CHUNK is claimed,
+    delivering, waiting on a human, or ended, or ``--after`` names a chunk outside the
+    backlog or CHUNK itself. Detach a claimed chunk first."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/demote",
         "POST /chunks/{id}/demote",
@@ -308,13 +304,13 @@ def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
 
 @chunk_group.command("pause", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is pausing, recorded as the actor.")
 def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
     """Pause CHUNK — hold it where it stands until resumed.
 
     A runner holding the chunk parks its worker after a brief grace period, keeping the claim; an
-    unclaimed chunk has no worker and is only held out of the queue. A pure client of the hub API:
-    ``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering."""
+    unclaimed chunk is held out of the queue. Refused when the chunk is done, stopped, or
+    delivering."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",
@@ -330,13 +326,12 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
 
 @chunk_group.command("resume", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is resuming, recorded as the actor.")
 def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
     """Resume a paused CHUNK — clear the pause.
 
-    A held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client
-    of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming an unpaused chunk is a
-    harmless no-op. 404 only when the chunk is unknown."""
+    A held chunk continues from its current node; an unclaimed one rejoins the queue.
+    Resuming an unpaused chunk changes nothing; refused only when the chunk is unknown."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/resume",
         "POST /chunks/{id}/resume",
@@ -373,14 +368,13 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
 @chunk_group.command("depend", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.argument("prerequisite_chunk_id")
-@click.option("--by", "by", default="operator", help="Who is declaring (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is declaring, recorded as the actor.")
 def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
     """Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.
 
-    A pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent — an
-    already-standing pair is reported back rather than refused. 404 for an unknown
-    dependent or prerequisite; 409 for a dependent past its declarable window, a
-    cycle the edge would close, or an ephemeral prerequisite."""
+    CHUNK_ID waits until PREREQUISITE_CHUNK_ID is done. Declaring an existing
+    dependency changes nothing. Refused when CHUNK_ID can no longer be edited, the dependency
+    would close a cycle, or the prerequisite is ephemeral."""
     resp = cli.send(
         "post",
         f"/api/chunks/{chunk_id}/dependencies",
@@ -409,12 +403,11 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
 @chunk_group.command("release-dependency", cls=FleetCommand)
 @click.argument("chunk_id")
 @click.argument("prerequisite_chunk_id")
-@click.option("--by", "by", default="operator", help="Who is releasing (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is releasing, recorded as the actor.")
 def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by: str) -> None:
     """Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.
 
-    A pure client of ``POST /api/chunks/{id}/dependencies/release``. 404 for an unknown
-    dependent; 409 when no edge stands."""
+    Refused when CHUNK_ID has no such dependency."""
     resp = cli.send(
         "post",
         f"/api/chunks/{chunk_id}/dependencies/release",
@@ -433,7 +426,9 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
 @click.argument("chunk_id")
 @click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
 def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
-    """Close an escalation by supersession: requeue CHUNK at its current node."""
+    """Close CHUNK's open escalation and return it to the queue at its current node.
+
+    Refused when CHUNK has no open escalation."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/requeues",
         "POST /chunks/{id}/requeues",
@@ -445,13 +440,13 @@ def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
 
 @chunk_group.command("stop", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is stopping (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is stopping, recorded as the actor.")
 def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
     """Terminally abandon CHUNK — the operator's last-resort verb.
 
-    A pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and
-    never re-derives ``ready``; any live route is released and any open escalation closed
-    in the same operation. 409 when already done/stopped. There is no ``un-stop``."""
+    CHUNK becomes ``stopped`` and is never offered to a runner again; its runner is
+    released and any open escalation closed. Refused when CHUNK is already done or
+    stopped. There is no ``un-stop``."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/stop",
         "POST /chunks/{id}/stop",
@@ -463,13 +458,12 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
 
 @chunk_group.command("done", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is completing (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is completing, recorded as the actor.")
 def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
-    """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
-    A pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live
-    route and held hub-exec slot are released in the same operation, and its work refs become
-    eligible for closure. Idempotent — an already-``done`` chunk is a harmless no-op, never
-    refused."""
+    """Mark CHUNK done from any status, including ``stopped``.
+
+    Its runner and any hub-exec slot are released, and its work items become eligible
+    for closure. Completing a done chunk changes nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/complete",
         "POST /chunks/{id}/complete",
@@ -493,16 +487,17 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     help="Node name to force CHUNK onto, on --to-graph's graph when one is given and CHUNK's own "
     "otherwise. Omit for its current node's name, or that graph's entry node if CHUNK has never moved.",
 )
-@click.option("--by", "by", default="operator", help="Who is restarting (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is restarting, recorded as the actor.")
 @click.option("--note", default=None, help="A note binding every later session on the chunk, as an answer does.")
 def chunk_restart(
     cli: CliContext, chunk_id: str, to_graph: str | None, node: str | None, by: str, note: str | None
 ) -> None:
     """Force CHUNK onto a node now, on a freshly minted session.
 
-    A pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call
-    returns: the running attempt is torn down and re-entered, where ``migrate`` only records an
-    intent for the next transition. 409 when CHUNK is terminal or the target refuses it."""
+    The move has happened when the command returns: the running worker is stopped and the chunk
+    re-enters at the node, where ``migrate`` only takes effect at the next transition. Refused when
+    CHUNK is done or stopped, the node is not on the graph, or ``--to-graph`` names CHUNK's own
+    graph or a retired one."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
@@ -563,10 +558,11 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
 @click.argument("chunk_id")
 @click.argument("merge_ids", nargs=-1, required=True)
 def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) -> None:
-    """Merge MERGE_IDS into CHUNK_ID, the survivor — a pure client of
-    ``POST /api/chunks/{id}/group``. Every id must be **unacquired** (409 otherwise); the
-    survivor absorbs the union of work refs, keeps its own status, and absorbs each
-    merged chunk's standing dependency edges, refused 409 if that would close a cycle."""
+    """Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items
+    and dependencies.
+
+    Refused when any named chunk is claimed or finished, belongs to another project than
+    CHUNK_ID, or the merged dependencies would close a cycle."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/group",
         "POST /chunks/{id}/group",
@@ -580,13 +576,13 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
 
 @chunk_group.command("delete", cls=FleetCommand)
 @click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is deleting (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is deleting, recorded as the actor.")
 @click.option("--yes", is_flag=True, default=False, help="Skip the confirmation prompt.")
 def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
-    """Delete unacquired CHUNK, withdrawing every open hub item it holds — a
-    pure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless
-    ``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another
-    chunk, which the response names; 404 only when CHUNK is unknown."""
+    """Delete CHUNK, withdrawing every open hub item it holds.
+
+    Irreversible, so confirms first unless ``--yes``. Refused when CHUNK is claimed, done or
+    stopped, or a prerequisite of another chunk, which the refusal names."""
     if not yes and not click.confirm(f"delete {chunk_id}? this withdraws its hub item(s) too"):
         raise click.Abort()
     resp = cli.delete(
@@ -619,10 +615,9 @@ class WorkItems:
 @chunk_group.command("work-items", cls=FleetCommand)
 @click.argument("chunk_id")
 def chunk_work_items(cli: CliContext, chunk_id: str) -> None:
-    """CHUNK's work items, pass-through — one entry per work ref, vendor-native.
+    """Show CHUNK's work items as their sources report them, one entry per pointer.
 
-    A pure client of ``GET /api/chunks/{id}/work-items``; a per-pointer forge failure
-    degrades to that entry's own ``error`` rather than failing the whole read."""
+    An item its source fails to fetch shows that error in its own entry; the rest still list."""
     WorkItems(cli, chunk_id).show()
 
 

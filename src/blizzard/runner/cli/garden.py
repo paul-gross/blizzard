@@ -10,9 +10,8 @@ from blizzard.runner.cli.worker_call import WorkerCall
 
 @click.group("garden")
 def garden_group() -> None:
-    """Worker: read this run's own garden machinery — the routine and scope are both
-    derived server-side from the worker's own lease, so no verb here takes a flag
-    naming either."""
+    """Worker: read the findings and garden proposals of the routine this run belongs to — always
+    this run's own routine and scope, so no verb names either."""
 
 
 @garden_group.command("findings")

@@ -67,8 +67,7 @@ def _target(source: str | None, repository: str | None) -> tuple[str, str, str]:
 
 @click.group("project")
 def project_group() -> None:
-    """Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a
-    repository."""
+    """Manage the tenant's projects and the work sources and repositories linked to them."""
 
 
 @project_group.command("create", cls=FleetCommand)

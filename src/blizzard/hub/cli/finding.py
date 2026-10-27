@@ -54,7 +54,7 @@ def _blank_note_fallback(verb: str) -> str:
 
 @click.group("finding")
 def finding_group() -> None:
-    """List or inspect findings, or exit/reopen one or many."""
+    """Read findings, and close or reopen them."""
 
 
 @finding_group.command("list", cls=FleetCommand)

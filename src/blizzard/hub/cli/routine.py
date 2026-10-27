@@ -1,5 +1,4 @@
-"""``blizzard hub routine`` — operator verbs over routines: create, list, inspect,
-edit, run, and the ``trend``/``sweeps``/``proposal-counts`` gardening reports."""
+"""``blizzard hub routine`` — operator commands over routines and their gardening reports."""
 
 from __future__ import annotations
 
@@ -60,7 +59,7 @@ class RoutineDetail:
 
 @click.group("routine")
 def routine_group() -> None:
-    """Operator verbs over routines: create, list, inspect, edit."""
+    """Manage routines, run them, and read their gardening reports."""
 
 
 @routine_group.command("create", cls=FleetCommand)
@@ -189,17 +188,16 @@ def routine_edit(
 
 @routine_group.group("scope")
 def routine_scope_group() -> None:
-    """Manage a routine's scope membership: add, remove."""
+    """Manage which scopes a routine may run over."""
 
 
 @routine_scope_group.command("add", cls=FleetCommand)
 @click.argument("routine_id")
 @click.argument("scope_slug")
 def routine_scope_add(cli: CliContext, routine_id: str, scope_slug: str) -> None:
-    """Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent.
+    """Link SCOPE_SLUG into ROUTINE_ID's scope set; linking a linked scope changes nothing.
 
-    404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
-    malformed SCOPE_SLUG."""
+    Refused when ROUTINE_ID or SCOPE_SLUG is unknown, or SCOPE_SLUG is malformed."""
     resp = cli.send("put", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
     if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"scope add rejected: {cli.detail(resp, 'validation failed')}")
@@ -217,11 +215,10 @@ def routine_scope_add(cli: CliContext, routine_id: str, scope_slug: str) -> None
 @click.argument("routine_id")
 @click.argument("scope_slug")
 def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> None:
-    """Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent.
+    """Unlink SCOPE_SLUG from ROUTINE_ID's scope set; unlinking an unlinked scope changes nothing.
 
-    404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a
-    malformed SCOPE_SLUG, or on naming ROUTINE_ID's own default scope — always a member
-    of its own set."""
+    Refused when ROUTINE_ID or SCOPE_SLUG is unknown, SCOPE_SLUG is malformed, or it is
+    ROUTINE_ID's default scope, which always stays linked."""
     resp = cli.send("delete", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
     if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         raise click.ClickException(f"scope remove rejected: {cli.detail(resp, 'validation failed')}")
@@ -255,7 +252,7 @@ def _resolve_routine_id(cli: CliContext, name: str, project: str | None) -> str:
 
 @routine_group.command("retire", cls=FleetCommand)
 @click.argument("name")
-@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 @project_option(required_by_hub=True)
 def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> None:
     """Retire routine NAME — a reversible brake; in-flight runs are untouched."""
@@ -264,7 +261,7 @@ def routine_retire(cli: CliContext, name: str, by: str, project: str | None) -> 
 
 @routine_group.command("enable", cls=FleetCommand)
 @click.argument("name")
-@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is re-enabling, recorded as the actor.")
 @project_option(required_by_hub=True)
 def routine_enable(cli: CliContext, name: str, by: str, project: str | None) -> None:
     """Re-enable a retired routine NAME."""
@@ -304,11 +301,10 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
 def routine_run(
     cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None, project: str | None
 ) -> None:
-    """Mint and ingest a hub work item from routine NAME, in one act.
+    """Create a work item from routine NAME and a chunk carrying it.
 
-    The chunk rests not_ready until `blizzard hub chunk promote`. NAME resolves through
-    the routine list, including a retired routine — so it reaches the domain's own
-    retired refusal."""
+    The chunk stays not ready until `blizzard hub chunk promote`. Refused when the routine
+    is retired or ``--scope`` is not linked to it."""
     routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.send(
         "post",
@@ -433,8 +429,7 @@ class SweepsDetail:
 @until_option(required=True)
 @project_option(required_by_hub=True)
 def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime, project: str | None) -> None:
-    """NAME's per-scope last-swept table — its declared scope set, retired scopes
-    filtered out unless already swept while linked — and its measurement series over
+    """Show when routine NAME last swept each of its scopes, and its measurements over
     --since/--until."""
     routine_id = _resolve_routine_id(cli, name, project)
     resp = cli.send(

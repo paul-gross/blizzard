@@ -1,4 +1,4 @@
-"""``blizzard hub graph`` — operator verbs over minted graphs."""
+"""``blizzard hub graph`` — operator commands over minted graphs."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _session_summary(session: dict[str, Any]) -> str:
 
 @click.group("graph")
 def graph_group() -> None:
-    """Operator verbs over minted graphs: list, inspect, mint, retire, re-enable."""
+    """Mint and manage the workflow graphs chunks run on."""
 
 
 @graph_group.command("list", cls=FleetCommand)
@@ -113,7 +113,7 @@ def graph_mint(cli: CliContext, path: str) -> None:
 
     A file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict — a duplicate key is an
     error, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only
-    when it reads as a path, every 'artifacts:' value always. Stdin posts verbatim; a 422 renders in full."""
+    when it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error."""
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
     else:
@@ -150,14 +150,14 @@ def graph_sync(cli: CliContext) -> None:
 @graph_group.command("retire", cls=FleetCommand)
 @click.argument("graph_id")
 def graph_retire(cli: CliContext, graph_id: str) -> None:
-    """Retire GRAPH_ID — excludes it from name resolution; in-flight chunks run on."""
+    """Retire GRAPH_ID: its name no longer resolves to it; chunks already on it run on."""
     _set_graph_lifecycle(cli, graph_id, verb="retire")
 
 
 @graph_group.command("enable", cls=FleetCommand)
 @click.argument("graph_id")
 def graph_enable(cli: CliContext, graph_id: str) -> None:
-    """Re-enable a retired GRAPH_ID — restores normal newest-per-name derivation."""
+    """Re-enable a retired GRAPH_ID: its name resolves to it again when it is that name's newest mint."""
     _set_graph_lifecycle(cli, graph_id, verb="enable")
 
 
@@ -167,9 +167,9 @@ def graph_enable(cli: CliContext, graph_id: str) -> None:
 def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
     """Set GRAPH_ID's follow-latest policy: true, false, or inherit.
 
-    With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint
-    of the same *name* at its next transition. ``inherit`` (the stored ``null``, and
-    every mint's default) defers to the hub's own ``follow_latest``."""
+    With the policy on, a chunk on this mint moves to the newest enabled mint of the same
+    *name* at its next transition. ``inherit``, every mint's default, follows the hub's
+    own setting."""
     follow_latest = None if value == "inherit" else value == "true"
     resp = cli.patch(
         f"/api/graphs/{graph_id}",

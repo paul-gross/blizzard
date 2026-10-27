@@ -17,8 +17,7 @@ import uvicorn
 from blizzard.foundation.events.server import EarlyShutdownServer as _EarlyShutdownServer
 from blizzard.foundation.store.migrations import MigrationRunner, StoreBelowFloorError
 
-# Bounds uvicorn's own connection-drain wait — defense-in-depth; the actual fix is
-# ``EarlyShutdownServer``, the shared foundation wrapper, imported above.
+# Bounds how long shutdown waits for open connections to drain.
 GRACEFUL_SHUTDOWN_SECONDS = 5
 
 

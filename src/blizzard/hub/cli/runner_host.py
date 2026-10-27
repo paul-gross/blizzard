@@ -1,7 +1,4 @@
-"""``blizzard hub runner-host`` — operator verbs over one host, each addressed by its hub-minted id.
-
-The group is not ``hub host``: that name is the hub daemon's launcher, whose positional ``DIRECTORY`` a deployed launch
-form pins."""
+"""``blizzard hub runner-host`` — operator commands over one host, each addressed by its hub-minted id."""
 
 from __future__ import annotations
 
@@ -86,7 +83,7 @@ def _token_lines(token: str) -> tuple[str, str]:
 
 @click.group("runner-host")
 def runner_host_group() -> None:
-    """Operator verbs over one host: adding it, the runners under it, its credential, and retirement.
+    """Register hosts, place runners under them, credential, and retire them.
 
     Every verb but `add` and `list` takes a host's hub-minted id, which `list` shows beside each name. A name is
     display-only and never resolves to a host. (`blizzard hub host` is the hub daemon's launcher.)"""
@@ -163,7 +160,7 @@ def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *,
 @runner_host_group.command("adopt", cls=FleetCommand)
 @click.argument("host_id")
 @click.argument("runner_ids", nargs=-1, required=True)
-@click.option("--by", "by", default="operator", help="Who is adopting (recorded in the log).")
+@click.option("--by", "by", default="operator", help="Who is adopting, recorded as the actor.")
 def host_adopt(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by: str) -> None:
     """Place existing runners RUNNER_IDS under host HOST_ID, all or none.
 
@@ -175,7 +172,7 @@ def host_adopt(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by: s
 @runner_host_group.command("release", cls=FleetCommand)
 @click.argument("host_id")
 @click.argument("runner_ids", nargs=-1, required=True)
-@click.option("--by", "by", default="operator", help="Who is releasing (recorded in the log).")
+@click.option("--by", "by", default="operator", help="Who is releasing, recorded as the actor.")
 def host_release(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by: str) -> None:
     """Return runners RUNNER_IDS under host HOST_ID to standing alone, keeping their ids and tokens.
 
@@ -186,7 +183,7 @@ def host_release(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], by:
 
 @runner_host_group.command("revoke-token", cls=FleetCommand)
 @click.argument("host_id")
-@click.option("--by", "by", default="operator", help="Who is revoking (recorded on the revocation).")
+@click.option("--by", "by", default="operator", help="Who is revoking, recorded as the actor.")
 def host_revoke_token(cli: CliContext, host_id: str, by: str) -> None:
     """Revoke host HOST_ID's token and issue none — it stays added, and is refused until `enroll` issues a new one."""
     resp = cli.post(
@@ -203,8 +200,7 @@ def host_revoke_token(cli: CliContext, host_id: str, by: str) -> None:
 def host_enroll(cli: CliContext, host_id: str) -> None:
     """Issue host HOST_ID a new bearer token; prints the plaintext exactly once.
 
-    A thin client of ``POST /hosts/{id}/enrollments``. The token it replaces stops resolving immediately. HOST_ID
-    must already be added (404 otherwise) and not retired (409)."""
+    The previous token stops working immediately. Refused when HOST_ID is unknown or retired."""
     resp = cli.post(
         f"/api/hosts/{host_id}/enrollments",
         "POST /hosts/{id}/enrollments",
@@ -217,11 +213,11 @@ def host_enroll(cli: CliContext, host_id: str) -> None:
 @runner_host_group.command("retire", cls=FleetCommand)
 @click.argument("host_id")
 @click.option("--force", is_flag=True, default=False, help="Release every chunk the runners under the host hold.")
-@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
     """Retire host HOST_ID — revoke its token and retire every runner under it.
 
-    Refused (409) while any of them holds chunks unless --force, which releases them. Re-running finishes a partial
+    Refused while any of them holds chunks unless --force, which releases them. Re-running finishes a partial
     retirement. Stop the host process too: the hub refuses it from here on."""
     resp = cli.post(
         f"/api/hosts/{host_id}/retire",

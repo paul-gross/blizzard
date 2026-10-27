@@ -1,4 +1,4 @@
-"""``blizzard hub tenant`` — a hub administrator's verbs over the hub's tenants: create, list, rename, delete."""
+"""``blizzard hub tenant`` — a hub administrator's verbs over the hub's tenants."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class TenantListing(Listing):
 
 @click.group("tenant")
 def tenant_group() -> None:
-    """A hub administrator's verbs over the hub's tenants: create, list, rename, delete."""
+    """Manage the hub's tenants; a hub administrator's commands."""
 
 
 @tenant_group.command("create", cls=AdminCommand)

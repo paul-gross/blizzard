@@ -118,15 +118,15 @@
           "short_help": "Revoke USER_ID's hub administrator role; the hub's last one keeps theirs."
         }
       },
-      "help": "The hub's administrators, who create and delete tenants and grant anyone into one: list, grant, revoke.",
+      "help": "Manage the hub's administrators, who create and delete tenants and can grant anyone into one.",
       "params": [],
       "path": "hub admin",
-      "short_help": "The hub's administrators, who create and delete tenants and grant anyone into one: list, grant, revoke."
+      "short_help": "Manage the hub's administrators, who create and delete tenants and can grant anyone into one."
     },
     "analytics": {
       "commands": {
         "events": {
-          "help": "Read the derived transcript-event projection, every ``/events``\nfilter as a flag: a bounded page by default, or the whole filtered set streamed as\nNDJSON to stdout under ``--ndjson``.",
+          "help": "List the transcript events matching the given filters: one page by default, or\nevery match streamed as NDJSON to stdout under ``--ndjson``.",
           "params": [
             {
               "help": "Scope to one workflow graph.",
@@ -370,10 +370,10 @@
             }
           ],
           "path": "hub analytics events",
-          "short_help": "Read the derived transcript-event projection, every ``/events`` filter as a flag: a bounded page by default, or the whole filtered set streamed as NDJSON to stdout under ``--ndjson``."
+          "short_help": "List the transcript events matching the given filters: one page by default, or every match streamed as NDJSON to stdout under ``--ndjson``."
         },
         "re-derive": {
-          "help": "Force the standing derivation sweep's own replacement unit now, rather than\nwaiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate\n(neither option given). No downtime. Prints ``derived``/``remaining``; a nonzero\n``remaining`` on a chunk/all-scoped call means running it again continues from where\nit left off. A segment that is not visible derives nothing.",
+          "help": "Re-derive transcript analytics now for one segment, one chunk, or every candidate\n(neither option given), while the hub keeps serving. Prints how many segments were\nderived and how many remain; when some remain, running it again continues. A segment\nthat is not visible derives nothing.",
           "params": [
             {
               "help": "Force one visible segment, regardless of its candidacy.",
@@ -449,10 +449,10 @@
             }
           ],
           "path": "hub analytics re-derive",
-          "short_help": "Force the standing derivation sweep's own replacement unit now, rather than waiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate (neither option given)."
+          "short_help": "Re-derive transcript analytics now for one segment, one chunk, or every candidate (neither option given), while the hub keeps serving."
         },
         "summary": {
-          "help": "Read one of the canned counts or operational-dataset rollups.\nOnly spend-chunks pages or streams; counts-files alone takes --limit as a top-N, and\na filter DATASET's own route does not expose is refused.",
+          "help": "Read one of the canned counts or operational rollups.\n\nOnly spend-chunks pages or streams; counts-files alone takes --limit as a top-N.\nA filter DATASET does not take is refused.",
           "params": [
             {
               "hidden": false,
@@ -707,18 +707,18 @@
             }
           ],
           "path": "hub analytics summary",
-          "short_help": "Read one of the canned counts or operational-dataset rollups."
+          "short_help": "Read one of the canned counts or operational rollups."
         }
       },
-      "help": "Operator verbs over derived transcript-event analytics.",
+      "help": "Read analytics derived from worker transcripts.",
       "params": [],
       "path": "hub analytics",
-      "short_help": "Operator verbs over derived transcript-event analytics."
+      "short_help": "Read analytics derived from worker transcripts."
     },
     "chunk": {
       "commands": {
         "delete": {
-          "help": "Delete unacquired CHUNK, withdrawing every open hub item it holds \u2014 a\npure client of ``DELETE /api/chunks/{id}``. Irreversible, so confirms first unless\n``--yes``. 409 when CHUNK is held, terminal, or a standing prerequisite for another\nchunk, which the response names; 404 only when CHUNK is unknown.",
+          "help": "Delete CHUNK, withdrawing every open hub item it holds.\n\nIrreversible, so confirms first unless ``--yes``. Refused when CHUNK is claimed, done or\nstopped, or a prerequisite of another chunk, which the refusal names.",
           "params": [
             {
               "hidden": false,
@@ -732,7 +732,7 @@
               "type": "text"
             },
             {
-              "help": "Who is deleting (recorded on the fact).",
+              "help": "Who is deleting, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -793,10 +793,10 @@
             }
           ],
           "path": "hub chunk delete",
-          "short_help": "Delete unacquired CHUNK, withdrawing every open hub item it holds \u2014 a pure client of ``DELETE /api/chunks/{id}``."
+          "short_help": "Delete CHUNK, withdrawing every open hub item it holds."
         },
         "demote": {
-          "help": "Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/demote``. Idempotent \u2014 demoting a\nchunk that is not currently promoted is a harmless no-op; 404 when the chunk is unknown, 409\nwhen it is claimed, delivering, gated on a human, or ended, or ``--after`` names a chunk outside\nthe backlog. Detach a held chunk first.",
+          "help": "Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults.\n\nDemoting a chunk that is not ready changes nothing. Refused when CHUNK is claimed,\ndelivering, waiting on a human, or ended, or ``--after`` names a chunk outside the\nbacklog or CHUNK itself. Detach a claimed chunk first.",
           "params": [
             {
               "hidden": false,
@@ -862,7 +862,7 @@
           "short_help": "Demote a ready CHUNK back to not-ready, keeping its id, history, edges, pin, and defaults."
         },
         "depend": {
-          "help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies``. Idempotent \u2014 an\nalready-standing pair is reported back rather than refused. 404 for an unknown\ndependent or prerequisite; 409 for a dependent past its declarable window, a\ncycle the edge would close, or an ephemeral prerequisite.",
+          "help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID.\n\nCHUNK_ID waits until PREREQUISITE_CHUNK_ID is done. Declaring an existing\ndependency changes nothing. Refused when CHUNK_ID can no longer be edited, the dependency\nwould close a cycle, or the prerequisite is ephemeral.",
           "params": [
             {
               "hidden": false,
@@ -887,7 +887,7 @@
               "type": "text"
             },
             {
-              "help": "Who is declaring (recorded on the fact).",
+              "help": "Who is declaring, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -993,7 +993,7 @@
           "short_help": "Forcibly release CHUNK from its runner."
         },
         "done": {
-          "help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nA pure client of ``POST /api/chunks/{id}/complete``. The chunk derives ``done``; any live\nroute and held hub-exec slot are released in the same operation, and its work refs become\neligible for closure. Idempotent \u2014 an already-``done`` chunk is a harmless no-op, never\nrefused.",
+          "help": "Mark CHUNK done from any status, including ``stopped``.\n\nIts runner and any hub-exec slot are released, and its work items become eligible\nfor closure. Completing a done chunk changes nothing.",
           "params": [
             {
               "hidden": false,
@@ -1007,7 +1007,7 @@
               "type": "text"
             },
             {
-              "help": "Who is completing (recorded on the fact).",
+              "help": "Who is completing, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1056,10 +1056,10 @@
             }
           ],
           "path": "hub chunk done",
-          "short_help": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``."
+          "short_help": "Mark CHUNK done from any status, including ``stopped``."
         },
         "group": {
-          "help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of\n``POST /api/chunks/{id}/group``. Every id must be **unacquired** (409 otherwise); the\nsurvivor absorbs the union of work refs, keeps its own status, and absorbs each\nmerged chunk's standing dependency edges, refused 409 if that would close a cycle.",
+          "help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items\nand dependencies.\n\nRefused when any named chunk is claimed or finished, belongs to another project than\nCHUNK_ID, or the merged dependencies would close a cycle.",
           "params": [
             {
               "hidden": false,
@@ -1121,10 +1121,10 @@
             }
           ],
           "path": "hub chunk group",
-          "short_help": "Merge MERGE_IDS into CHUNK_ID, the survivor \u2014 a pure client of ``POST /api/chunks/{id}/group``."
+          "short_help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items and dependencies."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. 422 when no\nconfigured work source claims a token or a pointer's source is not linked to the\nproject; 409 when a pointer is already held.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. Refused when no\nconfigured work source claims a token, a pointer's source is not linked to the\nproject, or another chunk already holds a pointer.",
           "params": [
             {
               "hidden": false,
@@ -1190,7 +1190,7 @@
           "short_help": "Ingest work items by token, minting a chunk."
         },
         "list": {
-          "help": "The fleet chunk list \u2014 derived status per chunk.",
+          "help": "List chunks with each one's status.",
           "params": [
             {
               "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
@@ -1242,7 +1242,7 @@
             }
           ],
           "path": "hub chunk list",
-          "short_help": "The fleet chunk list \u2014 derived status per chunk."
+          "short_help": "List chunks with each one's status."
         },
         "migrate": {
           "help": "Set, overwrite, or clear CHUNK's standing migration intent.\n\n``--node`` present selects ``forced``, absent selects ``auto``; ``--cancel`` clears\na standing intent and conflicts with ``--to-graph``/``--node``. The intent is consulted\nat the chunk's next transition.",
@@ -1335,7 +1335,7 @@
           "short_help": "Set, overwrite, or clear CHUNK's standing migration intent."
         },
         "pause": {
-          "help": "Pause CHUNK \u2014 hold it where it stands until resumed.\n\nA runner holding the chunk parks its worker after a brief grace period, keeping the claim; an\nunclaimed chunk has no worker and is only held out of the queue. A pure client of the hub API:\n``POST /api/chunks/{id}/pause``. 409 when the chunk is done/stopped/delivering.",
+          "help": "Pause CHUNK \u2014 hold it where it stands until resumed.\n\nA runner holding the chunk parks its worker after a brief grace period, keeping the claim; an\nunclaimed chunk is held out of the queue. Refused when the chunk is done, stopped, or\ndelivering.",
           "params": [
             {
               "hidden": false,
@@ -1349,7 +1349,7 @@
               "type": "text"
             },
             {
-              "help": "Who is pausing (recorded on the fact).",
+              "help": "Who is pausing, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1455,7 +1455,7 @@
           "short_help": "Deprecated alias for ``blizzard hub chunk work-items``."
         },
         "promote": {
-          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nA pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent \u2014 promoting\na currently promoted chunk is a harmless no-op; 404 when the chunk is unknown, 409 when a\nnot-currently-promoted chunk is already done or stopped, or ``--after`` names a chunk outside\nthe ready queue.",
+          "help": "Promote a not-ready CHUNK to ready so a runner may claim it.\n\nPromoting an already-ready chunk changes nothing. Refused when CHUNK is done or\nstopped, or ``--after`` names a chunk outside the ready queue or CHUNK itself.",
           "params": [
             {
               "hidden": false,
@@ -1521,7 +1521,7 @@
           "short_help": "Promote a not-ready CHUNK to ready so a runner may claim it."
         },
         "release-dependency": {
-          "help": "Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.\n\nA pure client of ``POST /api/chunks/{id}/dependencies/release``. 404 for an unknown\ndependent; 409 when no edge stands.",
+          "help": "Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID.\n\nRefused when CHUNK_ID has no such dependency.",
           "params": [
             {
               "hidden": false,
@@ -1546,7 +1546,7 @@
               "type": "text"
             },
             {
-              "help": "Who is releasing (recorded on the fact).",
+              "help": "Who is releasing, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1598,7 +1598,7 @@
           "short_help": "Release CHUNK_ID's standing dependency on PREREQUISITE_CHUNK_ID."
         },
         "requeue": {
-          "help": "Close an escalation by supersession: requeue CHUNK at its current node.",
+          "help": "Close CHUNK's open escalation and return it to the queue at its current node.\n\nRefused when CHUNK has no open escalation.",
           "params": [
             {
               "hidden": false,
@@ -1661,10 +1661,10 @@
             }
           ],
           "path": "hub chunk requeue",
-          "short_help": "Close an escalation by supersession: requeue CHUNK at its current node."
+          "short_help": "Close CHUNK's open escalation and return it to the queue at its current node."
         },
         "restart": {
-          "help": "Force CHUNK onto a node now, on a freshly minted session.\n\nA pure client of ``POST /api/chunks/{id}/restart``. The move has already happened when the call\nreturns: the running attempt is torn down and re-entered, where ``migrate`` only records an\nintent for the next transition. 409 when CHUNK is terminal or the target refuses it.",
+          "help": "Force CHUNK onto a node now, on a freshly minted session.\n\nThe move has happened when the command returns: the running worker is stopped and the chunk\nre-enters at the node, where ``migrate`` only takes effect at the next transition. Refused when\nCHUNK is done or stopped, the node is not on the graph, or ``--to-graph`` names CHUNK's own\ngraph or a retired one.",
           "params": [
             {
               "hidden": false,
@@ -1702,7 +1702,7 @@
               "type": "text"
             },
             {
-              "help": "Who is restarting (recorded on the fact).",
+              "help": "Who is restarting, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1766,7 +1766,7 @@
           "short_help": "Force CHUNK onto a node now, on a freshly minted session."
         },
         "resume": {
-          "help": "Resume a paused CHUNK \u2014 clear the pause.\n\nA held chunk continues from its current node; an unclaimed one rejoins the queue. A pure client\nof the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming an unpaused chunk is a\nharmless no-op. 404 only when the chunk is unknown.",
+          "help": "Resume a paused CHUNK \u2014 clear the pause.\n\nA held chunk continues from its current node; an unclaimed one rejoins the queue.\nResuming an unpaused chunk changes nothing; refused only when the chunk is unknown.",
           "params": [
             {
               "hidden": false,
@@ -1780,7 +1780,7 @@
               "type": "text"
             },
             {
-              "help": "Who is resuming (recorded on the fact).",
+              "help": "Who is resuming, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -1832,7 +1832,7 @@
           "short_help": "Resume a paused CHUNK \u2014 clear the pause."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nA pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given and\napplied all-or-nothing. At least one option is required; 409 for the defaults once\nCHUNK is claimed, and for ``--graph`` once it is claimed or has moved (#271).",
+          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nThe given fields apply together or not at all; at least one option is required.\nDefaults are refused once a runner has claimed CHUNK, and ``--graph`` once CHUNK is\nclaimed or has moved off its first node.",
           "params": [
             {
               "hidden": false,
@@ -1934,7 +1934,7 @@
           "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call."
         },
         "show": {
-          "help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost.",
+          "help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost.",
           "params": [
             {
               "hidden": false,
@@ -1985,10 +1985,10 @@
             }
           ],
           "path": "hub chunk show",
-          "short_help": "One chunk's full aggregate \u2014 status, current node, route, pointers, cost."
+          "short_help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."
         },
         "stop": {
-          "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nA pure client of ``POST /api/chunks/{id}/stop``. The chunk derives ``stopped`` and\nnever re-derives ``ready``; any live route is released and any open escalation closed\nin the same operation. 409 when already done/stopped. There is no ``un-stop``.",
+          "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nCHUNK becomes ``stopped`` and is never offered to a runner again; its runner is\nreleased and any open escalation closed. Refused when CHUNK is already done or\nstopped. There is no ``un-stop``.",
           "params": [
             {
               "hidden": false,
@@ -2002,7 +2002,7 @@
               "type": "text"
             },
             {
-              "help": "Who is stopping (recorded on the fact).",
+              "help": "Who is stopping, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -2054,7 +2054,7 @@
           "short_help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb."
         },
         "work-items": {
-          "help": "CHUNK's work items, pass-through \u2014 one entry per work ref, vendor-native.\n\nA pure client of ``GET /api/chunks/{id}/work-items``; a per-pointer forge failure\ndegrades to that entry's own ``error`` rather than failing the whole read.",
+          "help": "Show CHUNK's work items as their sources report them, one entry per pointer.\n\nAn item its source fails to fetch shows that error in its own entry; the rest still list.",
           "params": [
             {
               "hidden": false,
@@ -2105,13 +2105,13 @@
             }
           ],
           "path": "hub chunk work-items",
-          "short_help": "CHUNK's work items, pass-through \u2014 one entry per work ref, vendor-native."
+          "short_help": "Show CHUNK's work items as their sources report them, one entry per pointer."
         }
       },
-      "help": "Operator verbs over one chunk: ingest, inspect, edit, and transition it.",
+      "help": "Create, inspect, edit, and move chunks.",
       "params": [],
       "path": "hub chunk",
-      "short_help": "Operator verbs over one chunk: ingest, inspect, edit, and transition it."
+      "short_help": "Create, inspect, edit, and move chunks."
     },
     "config": {
       "commands": {
@@ -2390,10 +2390,10 @@
           "short_help": "Carry this hub's [[work_source]] blocks and BZ_FORGE_* variables into records \u2014 offline, on the hub host."
         }
       },
-      "help": "Operator verbs over configuration: changes, apply, export, import-legacy, check-forges.",
+      "help": "Read, export, and apply the tenant's configuration.",
       "params": [],
       "path": "hub config",
-      "short_help": "Operator verbs over configuration: changes, apply, export, import-legacy, check-forges."
+      "short_help": "Read, export, and apply the tenant's configuration."
     },
     "decision": {
       "commands": {
@@ -2453,7 +2453,7 @@
           "short_help": "List open decisions awaiting a human (gate surfacing), or only one project's."
         },
         "resolve": {
-          "help": "Resolve an open decision by picking CHOICE (first-write-wins).\n\nA racing second resolution loses and is told who already resolved; a decision closed undecided \u2014 by a\nrestart, or by its chunk ending \u2014 is refused with the hub's reason. A pure client of\n``POST /api/decisions/{id}/resolutions``.",
+          "help": "Resolve an open decision by picking CHOICE; the chunk then moves on along that choice.\n\nOnly the first resolution counts: a later one is refused and told who already resolved.\nRefused too when CHOICE is not one of the decision's choices, or the decision was closed\nundecided by a restart or by its chunk ending.",
           "params": [
             {
               "hidden": false,
@@ -2478,7 +2478,7 @@
               "type": "text"
             },
             {
-              "help": "Who is resolving (recorded on the resolution).",
+              "help": "Who is resolving, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "resolved_by",
@@ -2539,13 +2539,13 @@
             }
           ],
           "path": "hub decision resolve",
-          "short_help": "Resolve an open decision by picking CHOICE (first-write-wins)."
+          "short_help": "Resolve an open decision by picking CHOICE; the chunk then moves on along that choice."
         }
       },
-      "help": "Operator verbs over open gate decisions: list, resolve.",
+      "help": "Read and resolve the decisions a gate waits on a human for.",
       "params": [],
       "path": "hub decision",
-      "short_help": "Operator verbs over open gate decisions: list, resolve."
+      "short_help": "Read and resolve the decisions a gate waits on a human for."
     },
     "egress": {
       "commands": {
@@ -2715,10 +2715,10 @@
           "short_help": "Whether the export is on, its directory and format, each dataset's cursor and lag, the last pass and file, the last error, and the free space."
         }
       },
-      "help": "Operator verbs over the fact-egress export.",
+      "help": "Inspect, reset, and backfill the export of the hub's facts.",
       "params": [],
       "path": "hub egress",
-      "short_help": "Operator verbs over the fact-egress export."
+      "short_help": "Inspect, reset, and backfill the export of the hub's facts."
     },
     "events": {
       "help": "Read the operational event feed \u2014 the event log unified with open escalations,\nnewest first. ``--json`` prints the raw response, ``detail`` included.",
@@ -3403,10 +3403,10 @@
           "short_help": "Withdraw FINDING_IDS as won't-fix \u2014 the ground hasn't moved, they don't merit standing."
         }
       },
-      "help": "List or inspect findings, or exit/reopen one or many.",
+      "help": "Read findings, and close or reopen them.",
       "params": [],
       "path": "hub finding",
-      "short_help": "List or inspect findings, or exit/reopen one or many."
+      "short_help": "Read findings, and close or reopen them."
     },
     "garden-proposal": {
       "commands": {
@@ -3501,7 +3501,7 @@
           "short_help": "Accept PROPOSAL_ID."
         },
         "attach": {
-          "help": "Link FINDING_IDS to PROPOSAL_ID. Works on either origin while open; refused with\n409 once it carries a closure.",
+          "help": "Link FINDING_IDS to PROPOSAL_ID. Works on either origin;\nrefused once the proposal is passed or accepted.",
           "params": [
             {
               "hidden": false,
@@ -3681,7 +3681,7 @@
           "short_help": "Author a fresh operator garden proposal, naming zero or more findings."
         },
         "detach": {
-          "help": "Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin while open; refused\nwith 409 once it carries a closure.",
+          "help": "Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin;\nrefused once the proposal is passed or accepted.",
           "params": [
             {
               "hidden": false,
@@ -3746,7 +3746,7 @@
           "short_help": "Unlink FINDING_IDS from PROPOSAL_ID."
         },
         "edit": {
-          "help": "Edit PROPOSAL_ID in place \u2014 only the given fields change. Works on either origin\nwhile open; refused with 409 once it carries a closure.",
+          "help": "Edit PROPOSAL_ID in place \u2014 only the given fields change. Works on either origin;\nrefused once the proposal is passed or accepted.",
           "params": [
             {
               "hidden": false,
@@ -4023,15 +4023,15 @@
           "short_help": "One garden proposal's whole record."
         }
       },
-      "help": "Create, list, show, edit, attach, detach, pass, or accept a garden proposal.",
+      "help": "Author, review, and decide garden proposals.",
       "params": [],
       "path": "hub garden-proposal",
-      "short_help": "Create, list, show, edit, attach, detach, pass, or accept a garden proposal."
+      "short_help": "Author, review, and decide garden proposals."
     },
     "graph": {
       "commands": {
         "enable": {
-          "help": "Re-enable a retired GRAPH_ID \u2014 restores normal newest-per-name derivation.",
+          "help": "Re-enable a retired GRAPH_ID: its name resolves to it again when it is that name's newest mint.",
           "params": [
             {
               "hidden": false,
@@ -4082,10 +4082,10 @@
             }
           ],
           "path": "hub graph enable",
-          "short_help": "Re-enable a retired GRAPH_ID \u2014 restores normal newest-per-name derivation."
+          "short_help": "Re-enable a retired GRAPH_ID: its name resolves to it again when it is that name's newest mint."
         },
         "follow-latest": {
-          "help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit.\n\nWith the policy on, a chunk pinned to this mint re-pins to the newest enabled mint\nof the same *name* at its next transition. ``inherit`` (the stored ``null``, and\nevery mint's default) defers to the hub's own ``follow_latest``.",
+          "help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit.\n\nWith the policy on, a chunk on this mint moves to the newest enabled mint of the same\n*name* at its next transition. ``inherit``, every mint's default, follows the hub's\nown setting.",
           "params": [
             {
               "hidden": false,
@@ -4193,7 +4193,7 @@
           "short_help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired."
         },
         "mint": {
-          "help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin.\n\nA file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict \u2014 a duplicate key is an\nerror, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only\nwhen it reads as a path, every 'artifacts:' value always. Stdin posts verbatim; a 422 renders in full.",
+          "help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin.\n\nA file PATH is decoded by extension (.yaml, .yml, .json; else refused); YAML is strict \u2014 a duplicate key is an\nerror, 'yes' or a date stays a string. It inlines file references relative to its own directory: a 'prompt' only\nwhen it reads as a path, every 'artifacts:' value always. Stdin is sent as is. Refusal lists every error.",
           "params": [
             {
               "hidden": false,
@@ -4247,7 +4247,7 @@
           "short_help": "Mint a graph from PATH's definition; PATH may be '-' to read stdin."
         },
         "retire": {
-          "help": "Retire GRAPH_ID \u2014 excludes it from name resolution; in-flight chunks run on.",
+          "help": "Retire GRAPH_ID: its name no longer resolves to it; chunks already on it run on.",
           "params": [
             {
               "hidden": false,
@@ -4298,7 +4298,7 @@
             }
           ],
           "path": "hub graph retire",
-          "short_help": "Retire GRAPH_ID \u2014 excludes it from name resolution; in-flight chunks run on."
+          "short_help": "Retire GRAPH_ID: its name no longer resolves to it; chunks already on it run on."
         },
         "show": {
           "help": "One graph's full reified definition \u2014 session pools, nodes, and edges.",
@@ -4386,10 +4386,10 @@
           "short_help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant."
         }
       },
-      "help": "Operator verbs over minted graphs: list, inspect, mint, retire, re-enable.",
+      "help": "Mint and manage the workflow graphs chunks run on.",
       "params": [],
       "path": "hub graph",
-      "short_help": "Operator verbs over minted graphs: list, inspect, mint, retire, re-enable."
+      "short_help": "Mint and manage the workflow graphs chunks run on."
     },
     "host": {
       "help": "Become the blizzard-hub daemon: HTTP API + SSE + the embedded web app.\n\nDIRECTORY (positional) and --dir are equivalent \u2014 pass one; giving both requires\nthey agree. Defaults to $BZ_HUB_DIR, then the cwd.",
@@ -4666,10 +4666,10 @@
           "short_help": "Revoke INVITATION_ID, live or expired, so its link admits nobody; an accepted one stays accepted."
         }
       },
-      "help": "A tenant's invitations: create one and hand its link on, list them, revoke one.",
+      "help": "Manage a tenant's invitations, whose links bring new members in.",
       "params": [],
       "path": "hub invite",
-      "short_help": "A tenant's invitations: create one and hand its link on, list them, revoke one."
+      "short_help": "Manage a tenant's invitations, whose links bring new members in."
     },
     "item": {
       "commands": {
@@ -4933,10 +4933,10 @@
           "short_help": "Edit the item at TOKEN (e.g."
         }
       },
-      "help": "Operator verbs over one work item: author, edit, or withdraw it at its source.",
+      "help": "Author, edit, and withdraw work items at their source.",
       "params": [],
       "path": "hub item",
-      "short_help": "Operator verbs over one work item: author, edit, or withdraw it at its source."
+      "short_help": "Author, edit, and withdraw work items at their source."
     },
     "login": {
       "help": "Log into the hub \u2014 opens the browser to authorize and stores the\nresulting session token locally. ``--paste`` uses the paste-code fallback for a\nshell with no reachable loopback listener; ``--no-browser`` still runs the loopback\nflow, printing the URL.",
@@ -5165,10 +5165,10 @@
           "short_help": "Revoke USER_ID's membership in the tenant."
         }
       },
-      "help": "A tenant's members, named by user id: list, grant, revoke. Bringing in someone new is an invitation.",
+      "help": "Manage a tenant's members, named by user id. Bringing in someone new is an invitation.",
       "params": [],
       "path": "hub member",
-      "short_help": "A tenant's members, named by user id: list, grant, revoke."
+      "short_help": "Manage a tenant's members, named by user id."
     },
     "migrate": {
       "help": "Apply or reverse migrations, or inspect this build's migration tree.",
@@ -5721,15 +5721,15 @@
           "short_help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source no longer goes to PROJECT, and PROJECT's work no longer lands in that repository."
         }
       },
-      "help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a\nrepository.",
+      "help": "Manage the tenant's projects and the work sources and repositories linked to them.",
       "params": [],
       "path": "hub project",
-      "short_help": "Operator verbs over the tenant's projects: create, list, show, edit, and link or unlink a work source or a repository."
+      "short_help": "Manage the tenant's projects and the work sources and repositories linked to them."
     },
     "question": {
       "commands": {
         "answer": {
-          "help": "Answer an open question (first-write-wins CAS at the hub).\n\nA racing second answer loses and is told who already answered; a question whose chunk\nhas ended is refused with the hub's reason. A pure client of\n``POST /api/questions/{id}/answers``.",
+          "help": "Answer an open question; the waiting chunk's runner then resumes its session.\n\nOnly the first answer counts: a later one is refused and told who already answered.\nRefused too when the question's chunk has ended.",
           "params": [
             {
               "hidden": false,
@@ -5754,7 +5754,7 @@
               "type": "text"
             },
             {
-              "help": "Who is answering (recorded on the row).",
+              "help": "Who is answering, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "answered_by",
@@ -5803,7 +5803,7 @@
             }
           ],
           "path": "hub question answer",
-          "short_help": "Answer an open question (first-write-wins CAS at the hub)."
+          "short_help": "Answer an open question; the waiting chunk's runner then resumes its session."
         },
         "list": {
           "help": "Every open (unanswered) question across the fleet, or only one project's.",
@@ -5861,15 +5861,15 @@
           "short_help": "Every open (unanswered) question across the fleet, or only one project's."
         }
       },
-      "help": "Operator verbs over open questions: list, answer.",
+      "help": "Read and answer the questions workers raise.",
       "params": [],
       "path": "hub question",
-      "short_help": "Operator verbs over open questions: list, answer."
+      "short_help": "Read and answer the questions workers raise."
     },
     "queue": {
       "commands": {
         "move": {
-          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nClient of the fractional ``POST /api/queue/position``; 409 when CHUNK_ID\nis not in the ready list, not the backlog.",
+          "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nNo other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included.",
           "params": [
             {
               "hidden": false,
@@ -5934,7 +5934,7 @@
           "short_help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front)."
         },
         "set": {
-          "help": "Replace the whole ready-queue order with CHUNK_IDS, front to back.\n\nA pure client of ``PUT /api/queue`` \u2014 an idempotent whole-order replacement.\nEvery id must be in the ready list, not the backlog (409), and must\nnot repeat (422); a chunk not named keeps its relative order, appended last.",
+          "help": "Replace the whole ready-queue order with CHUNK_IDS, front to back.\n\nReady chunks not named keep their relative order after the named ones. Refused when an\nid is not ready (a backlog chunk included) or repeats.",
           "params": [
             {
               "hidden": false,
@@ -5988,7 +5988,7 @@
           "short_help": "Replace the whole ready-queue order with CHUNK_IDS, front to back."
         },
         "show": {
-          "help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained\nto its whole order.",
+          "help": "Show the whole ready queue, front first.",
           "params": [
             {
               "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
@@ -6040,13 +6040,13 @@
             }
           ],
           "path": "hub queue show",
-          "short_help": "The hub-ordered ready queue, read-only \u2014 a client of ``GET /api/queue``, drained to its whole order."
+          "short_help": "Show the whole ready queue, front first."
         }
       },
-      "help": "Operator verbs over the ready queue: show its order, replace it, move one chunk.",
+      "help": "Read and reorder the queue of ready chunks runners claim from.",
       "params": [],
       "path": "hub queue",
-      "short_help": "Operator verbs over the ready queue: show its order, replace it, move one chunk."
+      "short_help": "Read and reorder the queue of ready chunks runners claim from."
     },
     "record-marker": {
       "help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way. A hub\nnode's action records its own markers. Removed in 0.4.",
@@ -6621,13 +6621,13 @@
           "short_help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
-      "help": "Operator verbs over repository records: create, list, show, edit, retire, enable.",
+      "help": "Manage the tenant's repository records.",
       "params": [],
       "path": "hub repo",
-      "short_help": "Operator verbs over repository records: create, list, show, edit, retire, enable."
+      "short_help": "Manage the tenant's repository records."
     },
     "rotate-signing-key": {
-      "help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the\nold key still verifies already-issued tokens, and no restart is needed. A no-op error under\n``auth.mode = \"none\"`` (no keypair exists). Human-plane, gated on ``user:manage`` \u2014 under\n``auth.mode = \"oauth\"`` this requires a hub session (``blizzard hub login``).",
+      "help": "Rotate the hub's signing key: a new key signs from now on, tokens already issued\nstill verify, and the hub needs no restart. Refused under ``auth.mode = \"none\"``, which\nhas no key. Needs the ``user:manage`` permission, and under ``auth.mode = \"oauth\"`` a\nhub session (``blizzard hub login``).",
       "params": [
         {
           "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
@@ -6643,7 +6643,7 @@
         }
       ],
       "path": "hub rotate-signing-key",
-      "short_help": "Rotate the hub's IdP signing keypair \u2014 a fresh key signs immediately; the old key still verifies already-issued tokens, and no restart is needed."
+      "short_help": "Rotate the hub's signing key: a new key signs from now on, tokens already issued still verify, and the hub needs no restart."
     },
     "routine": {
       "commands": {
@@ -6912,7 +6912,7 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling (recorded on the fact).",
+              "help": "Who is re-enabling, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -7159,7 +7159,7 @@
               "type": "text"
             },
             {
-              "help": "Who is retiring (recorded on the fact).",
+              "help": "Who is retiring, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -7223,7 +7223,7 @@
           "short_help": "Retire routine NAME \u2014 a reversible brake; in-flight runs are untouched."
         },
         "run": {
-          "help": "Mint and ingest a hub work item from routine NAME, in one act.\n\nThe chunk rests not_ready until `blizzard hub chunk promote`. NAME resolves through\nthe routine list, including a retired routine \u2014 so it reaches the domain's own\nretired refusal.",
+          "help": "Create a work item from routine NAME and a chunk carrying it.\n\nThe chunk stays not ready until `blizzard hub chunk promote`. Refused when the routine\nis retired or ``--scope`` is not linked to it.",
           "params": [
             {
               "hidden": false,
@@ -7322,12 +7322,12 @@
             }
           ],
           "path": "hub routine run",
-          "short_help": "Mint and ingest a hub work item from routine NAME, in one act."
+          "short_help": "Create a work item from routine NAME and a chunk carrying it."
         },
         "scope": {
           "commands": {
             "add": {
-              "help": "Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent.\n\n404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a\nmalformed SCOPE_SLUG.",
+              "help": "Link SCOPE_SLUG into ROUTINE_ID's scope set; linking a linked scope changes nothing.\n\nRefused when ROUTINE_ID or SCOPE_SLUG is unknown, or SCOPE_SLUG is malformed.",
               "params": [
                 {
                   "hidden": false,
@@ -7389,10 +7389,10 @@
                 }
               ],
               "path": "hub routine scope add",
-              "short_help": "Link SCOPE_SLUG into ROUTINE_ID's own scope set; idempotent."
+              "short_help": "Link SCOPE_SLUG into ROUTINE_ID's scope set; linking a linked scope changes nothing."
             },
             "remove": {
-              "help": "Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent.\n\n404 on an unknown ROUTINE_ID or a well-formed but unknown SCOPE_SLUG; 422 on a\nmalformed SCOPE_SLUG, or on naming ROUTINE_ID's own default scope \u2014 always a member\nof its own set.",
+              "help": "Unlink SCOPE_SLUG from ROUTINE_ID's scope set; unlinking an unlinked scope changes nothing.\n\nRefused when ROUTINE_ID or SCOPE_SLUG is unknown, SCOPE_SLUG is malformed, or it is\nROUTINE_ID's default scope, which always stays linked.",
               "params": [
                 {
                   "hidden": false,
@@ -7454,13 +7454,13 @@
                 }
               ],
               "path": "hub routine scope remove",
-              "short_help": "Unlink SCOPE_SLUG from ROUTINE_ID's own scope set; idempotent."
+              "short_help": "Unlink SCOPE_SLUG from ROUTINE_ID's scope set; unlinking an unlinked scope changes nothing."
             }
           },
-          "help": "Manage a routine's scope membership: add, remove.",
+          "help": "Manage which scopes a routine may run over.",
           "params": [],
           "path": "hub routine scope",
-          "short_help": "Manage a routine's scope membership: add, remove."
+          "short_help": "Manage which scopes a routine may run over."
         },
         "show": {
           "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes.",
@@ -7517,7 +7517,7 @@
           "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes."
         },
         "sweeps": {
-          "help": "NAME's per-scope last-swept table \u2014 its declared scope set, retired scopes\nfiltered out unless already swept while linked \u2014 and its measurement series over\n--since/--until.",
+          "help": "Show when routine NAME last swept each of its scopes, and its measurements over\n--since/--until.",
           "params": [
             {
               "hidden": false,
@@ -7604,7 +7604,7 @@
             }
           ],
           "path": "hub routine sweeps",
-          "short_help": "NAME's per-scope last-swept table \u2014 its declared scope set, retired scopes filtered out unless already swept while linked \u2014 and its measurement series over --since/--until."
+          "short_help": "Show when routine NAME last swept each of its scopes, and its measurements over --since/--until."
         },
         "trend": {
           "help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and\nper-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut\nagainst --introduced-boundary.",
@@ -7721,10 +7721,10 @@
           "short_help": "NAME's finding inflow-against-outflow over --since/--until: per-period created and per-kind exit counts, the outflow/withdrawn roll-ups, and the introduced-age cut against --introduced-boundary."
         }
       },
-      "help": "Operator verbs over routines: create, list, inspect, edit.",
+      "help": "Manage routines, run them, and read their gardening reports.",
       "params": [],
       "path": "hub routine",
-      "short_help": "Operator verbs over routines: create, list, inspect, edit."
+      "short_help": "Manage routines, run them, and read their gardening reports."
     },
     "run": {
       "commands": {
@@ -7862,10 +7862,10 @@
           "short_help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it delivered, the added/observed/gone entries its own artifact published."
         }
       },
-      "help": "Reading routine runs: the windowed list and one run's own delta.",
+      "help": "Read routine runs and what each one changed.",
       "params": [],
       "path": "hub run",
-      "short_help": "Reading routine runs: the windowed list and one run's own delta."
+      "short_help": "Read routine runs and what each one changed."
     },
     "runner": {
       "commands": {
@@ -7948,7 +7948,7 @@
           "short_help": "Add a runner under NAME; prints its hub-minted id and bearer token exactly once."
         },
         "enroll": {
-          "help": "Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once.\n\nA thin client of ``POST /runners/{id}/enrollments``. The token it replaces stops resolving\nimmediately, the one `add` minted included. RUNNER_ID must already be added at the hub\n(404 otherwise) and not retired (409 \u2014 `reinstate` it first).",
+          "help": "Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once.\n\nThe previous token, the one `add` issued included, stops working immediately. Refused when\nRUNNER_ID is unknown or retired \u2014 `reinstate` it first.",
           "params": [
             {
               "hidden": false,
@@ -8071,7 +8071,7 @@
               "type": "text"
             },
             {
-              "help": "Who is pausing (recorded on the fact).",
+              "help": "Who is pausing, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8137,7 +8137,7 @@
               "type": "text"
             },
             {
-              "help": "Who is reinstating (recorded on the fact).",
+              "help": "Who is reinstating, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8203,7 +8203,7 @@
               "type": "text"
             },
             {
-              "help": "Who is resuming (recorded on the fact).",
+              "help": "Who is resuming, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8255,7 +8255,7 @@
           "short_help": "Resume paused runner RUNNER_ID \u2014 it claims work again on its next pull."
         },
         "retire": {
-          "help": "Retire runner RUNNER_ID \u2014 revoke its token and refuse its claims and registrations.\n\nRefused (409) while it holds chunks unless --force, which releases them. Re-running\nfinishes a partial release. Stop the runner process too: the hub refuses it from here on.",
+          "help": "Retire runner RUNNER_ID \u2014 revoke its token and refuse its claims and registrations.\n\nRefused while it holds chunks unless --force, which releases them. Re-running\nfinishes a partial release. Stop the runner process too: the hub refuses it from here on.",
           "params": [
             {
               "hidden": false,
@@ -8281,7 +8281,7 @@
               "type": "boolean"
             },
             {
-              "help": "Who is retiring (recorded on the fact).",
+              "help": "Who is retiring, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8347,7 +8347,7 @@
               "type": "text"
             },
             {
-              "help": "Who is revoking (recorded on the revocation).",
+              "help": "Who is revoking, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8453,10 +8453,10 @@
           "short_help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``."
         }
       },
-      "help": "Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement.\n\nEvery verb but `add` and `list` takes a runner's hub-minted id, which `list` shows beside each\nname. A name is display-only and never resolves to a runner.",
+      "help": "Register, pause, credential, and retire runners.\n\nEvery verb but `add` and `list` takes a runner's hub-minted id, which `list` shows beside each\nname. A name is display-only and never resolves to a runner.",
       "params": [],
       "path": "hub runner",
-      "short_help": "Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement."
+      "short_help": "Register, pause, credential, and retire runners."
     },
     "runner-host": {
       "commands": {
@@ -8552,7 +8552,7 @@
               "type": "text"
             },
             {
-              "help": "Who is adopting (recorded in the log).",
+              "help": "Who is adopting, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8604,7 +8604,7 @@
           "short_help": "Place existing runners RUNNER_IDS under host HOST_ID, all or none."
         },
         "enroll": {
-          "help": "Issue host HOST_ID a new bearer token; prints the plaintext exactly once.\n\nA thin client of ``POST /hosts/{id}/enrollments``. The token it replaces stops resolving immediately. HOST_ID\nmust already be added (404 otherwise) and not retired (409).",
+          "help": "Issue host HOST_ID a new bearer token; prints the plaintext exactly once.\n\nThe previous token stops working immediately. Refused when HOST_ID is unknown or retired.",
           "params": [
             {
               "hidden": false,
@@ -8738,7 +8738,7 @@
               "type": "text"
             },
             {
-              "help": "Who is releasing (recorded in the log).",
+              "help": "Who is releasing, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8790,7 +8790,7 @@
           "short_help": "Return runners RUNNER_IDS under host HOST_ID to standing alone, keeping their ids and tokens."
         },
         "retire": {
-          "help": "Retire host HOST_ID \u2014 revoke its token and retire every runner under it.\n\nRefused (409) while any of them holds chunks unless --force, which releases them. Re-running finishes a partial\nretirement. Stop the host process too: the hub refuses it from here on.",
+          "help": "Retire host HOST_ID \u2014 revoke its token and retire every runner under it.\n\nRefused while any of them holds chunks unless --force, which releases them. Re-running finishes a partial\nretirement. Stop the host process too: the hub refuses it from here on.",
           "params": [
             {
               "hidden": false,
@@ -8816,7 +8816,7 @@
               "type": "boolean"
             },
             {
-              "help": "Who is retiring (recorded on the fact).",
+              "help": "Who is retiring, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8882,7 +8882,7 @@
               "type": "text"
             },
             {
-              "help": "Who is revoking (recorded on the revocation).",
+              "help": "Who is revoking, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -8988,10 +8988,10 @@
           "short_help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``."
         }
       },
-      "help": "Operator verbs over one host: adding it, the runners under it, its credential, and retirement.\n\nEvery verb but `add` and `list` takes a host's hub-minted id, which `list` shows beside each name. A name is\ndisplay-only and never resolves to a host. (`blizzard hub host` is the hub daemon's launcher.)",
+      "help": "Register hosts, place runners under them, credential, and retire them.\n\nEvery verb but `add` and `list` takes a host's hub-minted id, which `list` shows beside each name. A name is\ndisplay-only and never resolves to a host. (`blizzard hub host` is the hub daemon's launcher.)",
       "params": [],
       "path": "hub runner-host",
-      "short_help": "Operator verbs over one host: adding it, the runners under it, its credential, and retirement."
+      "short_help": "Register hosts, place runners under them, credential, and retire them."
     },
     "scope": {
       "commands": {
@@ -9166,7 +9166,7 @@
               "type": "text"
             },
             {
-              "help": "Who is re-enabling (recorded on the fact).",
+              "help": "Who is re-enabling, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -9299,7 +9299,7 @@
               "type": "text"
             },
             {
-              "help": "Who is retiring (recorded on the fact).",
+              "help": "Who is retiring, recorded as the actor.",
               "hidden": false,
               "kind": "option",
               "name": "by",
@@ -9429,10 +9429,10 @@
           "short_help": "Show SLUG's record \u2014 state, description, revision, and when it was created."
         }
       },
-      "help": "Operator verbs over scopes: create, list, show, edit, retire, re-enable.",
+      "help": "Manage scopes, the named buckets findings are grouped into.",
       "params": [],
       "path": "hub scope",
-      "short_help": "Operator verbs over scopes: create, list, show, edit, retire, re-enable."
+      "short_help": "Manage scopes, the named buckets findings are grouped into."
     },
     "secret": {
       "commands": {
@@ -9781,10 +9781,10 @@
           "short_help": "Show NAME's metadata \u2014 revision, who replaced it and when."
         }
       },
-      "help": "Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key.",
+      "help": "Manage the write-only secret store.",
       "params": [],
       "path": "hub secret",
-      "short_help": "Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key."
+      "short_help": "Manage the write-only secret store."
     },
     "source": {
       "commands": {
@@ -10370,10 +10370,10 @@
           "short_help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
-      "help": "Operator verbs over work-source records: create, list, show, edit, retire, enable.",
+      "help": "Manage the tenant's work sources, where work items come from.",
       "params": [],
       "path": "hub source",
-      "short_help": "Operator verbs over work-source records: create, list, show, edit, retire, enable."
+      "short_help": "Manage the tenant's work sources, where work items come from."
     },
     "status": {
       "help": "The fleet view: every chunk with its derived status, the runners, and open questions.",
@@ -10625,15 +10625,15 @@
           "short_help": "Rename the open tenant TENANT_ID to NAME; its id does not change."
         }
       },
-      "help": "A hub administrator's verbs over the hub's tenants: create, list, rename, delete.",
+      "help": "Manage the hub's tenants; a hub administrator's commands.",
       "params": [],
       "path": "hub tenant",
-      "short_help": "A hub administrator's verbs over the hub's tenants: create, list, rename, delete."
+      "short_help": "Manage the hub's tenants; a hub administrator's commands."
     },
     "traces": {
       "commands": {
         "replay": {
-          "help": "Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span\nids. The live cursor does not move, so spans the backend already holds arrive again \u2014 it dedupes on their\nids. A range over replay_max_window is told in windows; a failure names the --since to resume from.",
+          "help": "Export again every step that closed and chunk that finished in [since, until). Spans keep the ids they\nwere first exported with, so the trace backend can drop duplicates, and ongoing export is unaffected. A range\nover the hub's replay_max_window is sent in windows; a failure names the --since to resume from.",
           "params": [
             {
               "help": "Only records at/after this instant: a bare time is read in the caller's own local time, one ending Z or +hh:mm is that instant.",
@@ -10697,7 +10697,7 @@
             }
           ],
           "path": "hub traces replay",
-          "short_help": "Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span ids."
+          "short_help": "Export again every step that closed and chunk that finished in [since, until)."
         },
         "status": {
           "help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the\nlast error. A credential in the endpoint is never shown.",
@@ -10731,10 +10731,10 @@
           "short_help": "Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the last error."
         }
       },
-      "help": "Operator verbs over fleet-trace export.",
+      "help": "Inspect and replay the export of the fleet's traces.",
       "params": [],
       "path": "hub traces",
-      "short_help": "Operator verbs over fleet-trace export."
+      "short_help": "Inspect and replay the export of the fleet's traces."
     }
   },
   "help": "Talk to \u2014 or become \u2014 the blizzard hub.",

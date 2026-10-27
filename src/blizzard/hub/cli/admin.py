@@ -20,7 +20,7 @@ class HubAdminListing(Listing):
 
 @click.group("admin")
 def admin_group() -> None:
-    """The hub's administrators, who create and delete tenants and grant anyone into one: list, grant, revoke."""
+    """Manage the hub's administrators, who create and delete tenants and can grant anyone into one."""
 
 
 @admin_group.command("list", cls=AdminCommand)

@@ -27,7 +27,7 @@ ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
 SERVICE_DEFAULT = "blizzard-cli"
 TRACEPARENT_HEADER = "traceparent"
 
-# `host` becomes a daemon with its own SDK pipeline; `record-marker` refuses before doing any work.
+# Commands never wrapped in an operator span: `host` traces as a daemon, `record-marker` does no work.
 _NEVER_TRACED = frozenset({"host", "record-marker"})
 _META_KEY = "blizzard.cli.operator_trace"
 

@@ -22,7 +22,7 @@ class MemberListing(Listing):
 
 @click.group("member")
 def member_group() -> None:
-    """A tenant's members, named by user id: list, grant, revoke. Bringing in someone new is an invitation."""
+    """Manage a tenant's members, named by user id. Bringing in someone new is an invitation."""
 
 
 @member_group.command("list", cls=FleetCommand)

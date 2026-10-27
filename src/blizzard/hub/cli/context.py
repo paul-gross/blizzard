@@ -34,7 +34,7 @@ _LOGIN_HINT = "not authenticated — run `blizzard hub login`"
 #: The fallback a verb's own unnamed 403 falls back to when the body carries no ``detail``.
 _FORBIDDEN_FALLBACK = "forbidden"
 
-#: The header a person's call names its tenant in; with none, the hub acts in the caller's only membership.
+#: The header a call names its tenant in; sent only when the call names one.
 TENANT_HEADER = "X-Blizzard-Tenant"
 
 #: The error code a call answers when the caller belongs to several tenants and named none.
@@ -109,9 +109,8 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> list[Any]:
-        """Drain every page of a keyset-paginated list read, concatenating
-        ``key``'s rows across pages. Fixed at ``limit=1000`` so it never truncates as the
-        fleet grows; no verb exposes ``--cursor``/``--limit`` of its own (``blizzard:cli-contract``)."""
+        """Every row of a cursor-paginated list read: ``key``'s rows concatenated across
+        pages of up to 1000, following ``next_cursor`` until it is absent."""
         page_params = dict(params or {})
         page_params["limit"] = "1000"
         rows: list[Any] = []
@@ -198,10 +197,8 @@ class CliContext:
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
     ) -> Iterator[str]:
-        """A ``GET`` read one decoded line at a time (the NDJSON bulk-export seam).
-        Streams through a client the injected factory builds; a refusal resolves before any line is
-        yielded, so it surfaces like :meth:`check`'s buffered path, not mid-iteration — a
-        tenant or project refusal as :meth:`send` raises it."""
+        """A ``GET`` read one decoded line at a time. Any refusal raises before the first
+        line, through the same common refusals as :meth:`send` and then :meth:`check`."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         try:
             with (
@@ -230,9 +227,9 @@ class CliContext:
         door: bool = False,
         raw_body: RawBody | None = None,
     ) -> Response:
-        """The call itself, unchecked — for a verb that reads a status code of its own first —
-        except a tenant or project refusal, which no verb answers itself (:meth:`_refuse_tenant`,
-        :meth:`_refuse_project`). Sent through a client the injected factory builds, same as :meth:`stream`."""
+        """The call itself, its status left for the caller to read — except the refusals no
+        verb answers itself, which raise here: the tenant (:meth:`_refuse_tenant`), a missing
+        project (:meth:`_refuse_project`), and a feature flag that is off (:meth:`_refuse_flag_off`)."""
         full_url = f"{self.hub_url.rstrip('/')}{path}"
         kwargs: dict[str, Any] = {}
         if json_body is not None:
@@ -259,11 +256,8 @@ class CliContext:
         return resp
 
     def check(self, resp: Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
-        """Map a handful of status codes to a ``ClickException`` reading the body's own
-        ``detail`` (falling back to the per-code default named in ``on_status``); anything
-        else still errors via ``raise_for_status``. A bare 401 not named in ``on_status``
-        gets the actionable login hint; a bare 403 not named in ``on_status``
-        surfaces the server's own ``detail``."""
+        """Raise a ``ClickException`` for an error response: a code ``on_status`` names reads
+        the body's ``detail``, else that code's default; an unnamed 401 hints at login."""
         if on_status and resp.status_code in on_status:
             raise click.ClickException(self.detail(resp, on_status[resp.status_code]))
         if resp.status_code == HTTPStatus.UNAUTHORIZED:
@@ -373,9 +367,7 @@ class CliContext:
             )
 
     def _refuse_project(self, resp: Response) -> None:
-        """Raise on a ``422 project_required`` — the call needs a project, named none, and the tenant holds several —
-        listing the tenant's projects from the refusal itself, ids beside slugs and names, and asking for
-        ``--project``."""
+        """Raise :func:`project_required` on a ``project_required`` refusal, with the projects it carries."""
         if resp.status_code != HTTPStatus.UNPROCESSABLE_ENTITY or _error_code(resp) != _PROJECT_REQUIRED:
             return
         raise project_required(_projects_of(resp))

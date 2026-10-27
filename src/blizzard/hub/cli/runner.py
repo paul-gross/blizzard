@@ -55,7 +55,7 @@ def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
 
 @click.group("runner")
 def runner_group() -> None:
-    """Operator verbs over one runner: adding it, its liveness, its pause brake, and retirement.
+    """Register, pause, credential, and retire runners.
 
     Every verb but `add` and `list` takes a runner's hub-minted id, which `list` shows beside each
     name. A name is display-only and never resolves to a runner."""
@@ -133,7 +133,7 @@ def runner_show(cli: CliContext, runner_id: str) -> None:
 
 @runner_group.command("pause", cls=FleetCommand)
 @click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is pausing, recorded as the actor.")
 def runner_pause(cli: CliContext, runner_id: str, by: str) -> None:
     """Pause runner RUNNER_ID — it stops claiming new work; in-flight chunks run on."""
     _set_runner_pause(cli, runner_id, verb="pause", by=by)
@@ -141,7 +141,7 @@ def runner_pause(cli: CliContext, runner_id: str, by: str) -> None:
 
 @runner_group.command("resume", cls=FleetCommand)
 @click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is resuming, recorded as the actor.")
 def runner_resume(cli: CliContext, runner_id: str, by: str) -> None:
     """Resume paused runner RUNNER_ID — it claims work again on its next pull."""
     _set_runner_pause(cli, runner_id, verb="resume", by=by)
@@ -168,11 +168,10 @@ def _set_runner_pause(cli: CliContext, runner_id: str, *, verb: str, by: str) ->
 def runner_enroll(cli: CliContext, runner_id: str) -> None:
     """Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once.
 
-    A thin client of ``POST /runners/{id}/enrollments``. The token it replaces stops resolving
-    immediately, the one `add` minted included. RUNNER_ID must already be added at the hub
-    (404 otherwise) and not retired (409 — `reinstate` it first)."""
-    # The enrollment answers no name, and the variable the token goes in is derived from it: the registry entry has
-    # it. It is read first, so a read that fails leaves the token unrotated rather than minting one no line shows.
+    The previous token, the one `add` issued included, stops working immediately. Refused when
+    RUNNER_ID is unknown or retired — `reinstate` it first."""
+    # Read first, so a failed read leaves the token unrotated:
+    # test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read.
     entry = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
     resp = cli.post(
         f"/api/runners/{runner_id}/enrollments",
@@ -190,11 +189,11 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
 @runner_group.command("retire", cls=FleetCommand)
 @click.argument("runner_id")
 @click.option("--force", is_flag=True, default=False, help="Release every chunk the runner still holds.")
-@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is retiring, recorded as the actor.")
 def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None:
     """Retire runner RUNNER_ID — revoke its token and refuse its claims and registrations.
 
-    Refused (409) while it holds chunks unless --force, which releases them. Re-running
+    Refused while it holds chunks unless --force, which releases them. Re-running
     finishes a partial release. Stop the runner process too: the hub refuses it from here on."""
     resp = cli.post(
         f"/api/runners/{runner_id}/retire",
@@ -212,7 +211,7 @@ def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None
 
 @runner_group.command("reinstate", cls=FleetCommand)
 @click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is reinstating (recorded on the fact).")
+@click.option("--by", "by", default="operator", help="Who is reinstating, recorded as the actor.")
 def runner_reinstate(cli: CliContext, runner_id: str, by: str) -> None:
     """Reinstate retired runner RUNNER_ID — it stays unenrolled; `enroll` it afresh."""
     resp = cli.post(
@@ -227,7 +226,7 @@ def runner_reinstate(cli: CliContext, runner_id: str, by: str) -> None:
 
 @runner_group.command("revoke-token", cls=FleetCommand)
 @click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is revoking (recorded on the revocation).")
+@click.option("--by", "by", default="operator", help="Who is revoking, recorded as the actor.")
 def runner_revoke_token(cli: CliContext, runner_id: str, by: str) -> None:
     """Revoke runner RUNNER_ID's token — it stays added, and is refused until re-enrolled."""
     resp = cli.post(

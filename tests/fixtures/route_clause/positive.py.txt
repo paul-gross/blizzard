@@ -1,0 +1,31 @@
+"""Docstrings carrying the route clause the rule rejects; each function is one hit."""
+
+
+def direct():
+    """A pure client of ``POST /api/things/{id}/go``."""
+
+
+def single_backtick():
+    """A thin client of `GET /api/things`."""
+
+
+def bare_route():
+    """A client of DELETE /api/things/{id}."""
+
+
+def hub_api_form():
+    """A pure client of the hub API: ``POST /api/things/{id}/promote``."""
+
+
+def fractional_form():
+    """Client of the fractional ``POST /api/queue/position``."""
+
+
+def wrapped():
+    """A pure client
+    of ``PATCH /api/things/{id}``."""
+
+
+def wrapped_before_route():
+    """A pure client of ``PUT
+    /api/things``."""

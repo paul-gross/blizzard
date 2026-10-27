@@ -16,8 +16,7 @@ from blizzard.runner.cli.worker_call import WorkerCall
 @click.group("artifact")
 def artifact_group() -> None:
     """Worker: read node-step, graph, and system artifacts; write this node-step's own.
-    The lease binding is ambient: every verb acts on the worker's own lease, resolved
-    from the spawn environment — none takes a flag naming another chunk. ``--scope`` picks node
+    Every verb acts on this worker's own chunk — none names another. ``--scope`` picks node
     scope, the graph mint's baked-in declarations, or blizzard's published system-artifact set.
     ``create`` *stages* a submission, published on completion."""
 
@@ -26,8 +25,7 @@ def artifact_group() -> None:
 @dataclass(frozen=True)
 class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to
-    its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``).
-    Carries ``scope`` (node/graph/system) like every other field."""
+    its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
 
     artifact: dict
 
@@ -53,10 +51,8 @@ _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
-    excludes node — ``graph`` and ``system`` never have one, so no read is worth making. Also
-    ``[]`` on a failed read: by the time this runs, ``list``'s primary ``artifacts`` call has
-    already succeeded, and a value-add feature (staged visibility) must never take that
-    already-successful read down with it."""
+    excludes node — ``graph`` and ``system`` never have one. Also ``[]``, noted on stderr, on a
+    failed read."""
     if scope not in (None, ArtifactScope.NODE.value):
         return []
     try:
@@ -159,16 +155,11 @@ def _is_not_found(exc: click.ClickException) -> bool:
 def artifact_get(
     name_arg: str | None, name_opt: str | None, node: str | None, scope: str | None, content: bool
 ) -> None:
-    """Worker: read one artifact by NAME — a ``produces:`` name (node scope), a baked-in graph
-    declaration (graph scope), or one of blizzard's own published documents (system scope);
-    unknown is a ``404``, more than one candidate a ``409`` naming them. ``--content`` prints
-    raw asset text, and errors on the ``git_commit`` kind, which carries none.
-
-    Serves the last *published* epoch only — a node-step's own just-submitted content is not
-    published until the node-step completes; a not-yet-published NAME 404s naming
-    ``artifact staged`` instead. Read it back before completion with that verb.
-
-    Pass NAME literally, slashes included."""
+    """Worker: read one published artifact by NAME, passed literally, slashes included — a ``produces:`` name
+    (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents
+    (system scope). Refused when NAME is unknown, when more than one candidate matches (naming them), or when
+    this node-step has only staged it (pointing at ``artifact staged``). ``--content`` prints raw asset text,
+    refused for a git-commit artifact, which carries none."""
     name = name_opt if name_opt is not None else name_arg
     if name_arg is not None and name_opt is not None and name_arg != name_opt:
         raise click.ClickException("artifact get: NAME given both positionally and via --name — pick one")
@@ -264,9 +255,7 @@ def artifact_create(name: str, scope: str | None) -> None:
 )
 def artifact_staged(content: bool, scope: str | None) -> None:
     """Worker: list this node-step's own staged (not-yet-published) submissions, node scope only.
-    Read straight off the runner's own ``attachments`` record rather than the hub envelope,
-    so a fresh ``artifact create`` shows up here immediately; ``--content`` gives the full
-    text."""
+    A fresh ``artifact create`` shows up here immediately; ``--content`` gives the full text."""
     _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
@@ -288,18 +277,15 @@ def artifact_staged(content: bool, scope: str | None) -> None:
 @click.option(
     "--repo",
     required=True,
-    help="The repo's name in the leased env's manifest (not an `owner/name` slug or "
-    "URL) — the runner looks this up in the environment's repo manifest to find both "
-    "the worktree and the origin to verify against. A name the manifest does not list "
-    "is rejected outright, naming the repos that are.",
+    help="The repo's name in the environment's repo manifest (not an `owner/name` slug or "
+    "URL). A name the manifest does not list is refused, naming the repos that are.",
 )
 @click.option("--branch", required=True, help="The branch the commit was pushed to.")
 @click.option(
     "--commit",
     "commit_sha",
     required=True,
-    help="The FULL commit sha (`git rev-parse HEAD`), not an abbreviated form — verify "
-    "compares it byte-exact against the forge's full sha.",
+    help="The FULL commit sha (`git rev-parse HEAD`); an abbreviated sha fails verification against the pushed commit.",
 )
 @click.option(
     "--scope",
@@ -310,9 +296,8 @@ def artifact_staged(content: bool, scope: str | None) -> None:
 )
 def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str, scope: str | None) -> None:
     """Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``
-    kind only — an asset is declared through ``artifact create``. Node scope only. The origin
-    comes from the environment's repo manifest. Echoes a confirmation naming REPO, BRANCH,
-    and the sha on success."""
+    kind only — an asset is declared through ``artifact create``. Node scope only. Echoes a
+    confirmation naming REPO, BRANCH, and the sha on success."""
     _refuse_read_only_scope("commit", scope)
     worker = WorkerCall.of("artifact commit")
     body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
