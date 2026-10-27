@@ -1,10 +1,5 @@
-"""People wire bodies — a tenant's members, the hub administrators, and the deprecated user routes.
-
-``GET /api/members`` lists the request tenant's members and ``PUT``/``DELETE /api/members/{user_id}`` grant, change and
-revoke one (``src/blizzard/hub/api/members.py``); ``GET``/``PUT``/``DELETE /api/admin/hub-admins[/{user_id}]`` list,
-grant and revoke the hub administrator role (``src/blizzard/hub/api/hub_admins.py``). ``GET /api/users`` and
-``POST /api/users/{id}/role`` are their deprecated aliases (``src/blizzard/hub/api/users.py``).
-"""
+"""People wire bodies — member, hub-administrator, and user views, the role requests, and the
+caller's tenant views."""
 
 from __future__ import annotations
 

@@ -1,9 +1,5 @@
-"""The worker-facing chunk-history wire shapes.
-
-``HistoryRowView`` is a flat, kind-discriminated row merged oldest-first across a chunk's
-hub-side histories. The merge
-itself is not here: a wire model declares shape only, never a projection into another
-model."""
+"""The worker-facing chunk-history wire shapes: ``HistoryRowView``, one kind-discriminated row of a chunk's
+timeline, and ``ChunkHistoryView``, the history slice of a chunk's detail."""
 
 from __future__ import annotations
 
@@ -39,10 +35,8 @@ class HistoryRowView(WireModel):
 
 
 class ChunkHistoryView(BaseModel):
-    """The history/migrations/bounces slice of a hub ``ChunkDetail`` payload — never a FastAPI
-    ``response_model``, decoded with pydantic's default ``extra="ignore"``. The first three fields
-    are **required**, not defaulted to ``[]``, so a rename fails loudly rather than decoding as
-    "no history yet"; the person-made lists are defaulted, so a hub without them still decodes."""
+    """The history slice of a chunk's detail: its transitions, migrations, bounces, resolutions, requeues, and
+    restarts. The first three are required; the other three are empty when absent."""
 
     history: list[TransitionView]
     migrations: list[MigrationView]

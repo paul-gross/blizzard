@@ -1,8 +1,5 @@
-"""The ask/answer wire shapes.
-
-A ``question.asked`` reaches the hub either as a batched ``POST /events`` fact or,
-equivalently, through the typed ``POST /questions`` route, where it becomes a durable
-row; ``POST /questions/{id}/answer`` writes the answer first-write-wins."""
+"""The ask/answer wire shapes: the ``question.asked`` fact, the answer request and its result, and the question
+view."""
 
 from __future__ import annotations
 
@@ -29,7 +26,7 @@ class QuestionAsked(BaseModel):
     lease_id: str | None = None
     question: str
     options: list[str] = []
-    asked_at: str  # ISO-8601 instant the ask was recorded (reap clock stops here)
+    asked_at: str  # ISO-8601 instant the ask was recorded
 
 
 class AnswerRequest(BaseModel):
@@ -55,8 +52,8 @@ class AnswerResult(BaseModel):
 class QuestionView(WireModel):
     """A question row with its derived answer *and delivery* state.
 
-    ``answered`` and the answer fields derive from the presence of the answer row;
-    ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact."""
+    ``answered`` and the answer fields are set once an answer is recorded;
+    ``delivered``/``delivered_at`` once that answer has been delivered."""
 
     question_id: str
     chunk_id: str

@@ -1,8 +1,5 @@
-"""Routine create/edit/run requests and their read views.
-
-A create names the graph its runs execute and a default scope (minted if unseen);
-edit is sparse and changes everything but the name, which is immutable. A run mints and ingests a
-hub work item from the routine in one act; its chunk rests ``not_ready`` until promoted."""
+"""Routine create, edit, lifecycle, and run requests, the routine document, and the routine,
+baseline, and run read views."""
 
 from __future__ import annotations
 
@@ -59,8 +56,7 @@ class RoutineEditRequest(BaseModel):
 
 
 class RoutineLifecycleRequest(BaseModel):
-    """Retire or re-enable a routine — ``by`` is recorded on the lifecycle fact; the change
-    row's actor is the authenticated caller."""
+    """A request to retire or re-enable a routine; ``by`` names who the change is attributed to."""
 
     by: str = "operator"
 

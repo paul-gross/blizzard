@@ -1,5 +1,4 @@
-"""Repository record wire models — the ``/api/repositories`` record verbs. Request models
-are ``extra="forbid"``."""
+"""Repository record wire models — the ``/api/repositories`` record verbs."""
 
 from __future__ import annotations
 

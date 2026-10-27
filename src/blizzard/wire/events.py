@@ -16,7 +16,7 @@ from blizzard.wire.vocabulary import OPEN
 
 
 class EventView(WireModel):
-    """One operational event on the wire — an ``event_log`` row or a projected open
+    """One operational event on the wire — a recorded event or a projected open
     escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
     event; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,
     never ``""``); ``detail`` is the event-specific JSON payload."""

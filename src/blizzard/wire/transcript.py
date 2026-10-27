@@ -1,9 +1,4 @@
-"""Transcript wire bodies — ``GET /api/leases/{lease_id}/transcript``.
-
-A turn's ``timestamp`` is an ISO-8601 string with an explicit UTC offset, never naive
-(``bzh:utc-instants``). ``available=False`` carries ``reason`` and an empty ``turns``.
-``TurnView`` is retired for ``src/blizzard/wire/transcript_segment.py``'s ``TurnSegmentView``,
-the same shape reused across every transcript read path."""
+"""The transcript wire body: ``TranscriptResponse``, a lease's parsed transcript."""
 
 from __future__ import annotations
 
@@ -18,7 +13,8 @@ from blizzard.wire.vocabulary import OPEN
 
 class TranscriptResponse(WireModel):
     """A lease's parsed transcript — 200 when the lease exists and its recorded harness
-    owner is known and available; 503 when that owner is unknown or unavailable."""
+    owner is known and available; 503 when that owner is unknown or unavailable.
+    ``available=False`` carries ``reason`` and an empty ``turns``."""
 
     lease_id: str
     session_id: str | None

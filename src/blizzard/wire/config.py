@@ -50,7 +50,7 @@ class ConfigChangesPage(WireModel):
 
     changes: list[ConfigChangeView]
     next_before: int | None = None
-    #: Every change the request's filters select, whatever ``before`` — the figure a count badge reads.
+    #: Every change the request's filters select, whatever ``before``.
     total: int = 0
 
 

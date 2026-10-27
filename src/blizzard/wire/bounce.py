@@ -1,7 +1,5 @@
-"""The ``bounce-envelope`` artifact body — the one-line JSON a hub node records when delivery did not complete.
-
-The hub's domain writer (``BounceEnvelope.serialize``) produces it; this is its schema, so the board types the
-artifact off the generated client rather than restating the keys."""
+"""The ``bounce-envelope`` artifact body and the shapes it nests: the unlanded repositories and their pull requests,
+the failed step, and the answering action."""
 
 from __future__ import annotations
 
@@ -27,8 +25,8 @@ class BounceUnlandedRepo(BaseModel):
 
 
 class BounceFailedStep(BaseModel):
-    """The ``run:`` step an envelope recorded before hub steps stopped running commands — one that exited non-zero.
-    ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log."""
+    """A step that exited non-zero. ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full
+    log."""
 
     name: str
     exit_code: int
@@ -48,11 +46,11 @@ class BounceAction(BaseModel):
 class BounceEnvelope(WireModel):
     """Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
     ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout. ``step`` is
-    written ``null``; only an envelope stored before hub steps stopped running commands carries one."""
+    deprecated and ``null`` unless the envelope carries a failed step."""
 
     cause: str
     detail: str
     unlanded: list[BounceUnlandedRepo]
     step: BounceFailedStep | None = Field(deprecated=True)
-    # Defaulted: an envelope stored before the hub named the action carries none, and parses as ``null``.
+    # An envelope that names no action parses as ``null``.
     action: BounceAction | None = None

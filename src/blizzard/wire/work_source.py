@@ -1,9 +1,5 @@
-"""Work-source item routes — the operator-plane editor surface over a
-work source's browsable items, distinct from the pass-through ``WorkItemEntry``
-(``src/blizzard/wire/chunk.py``). Every request model is ``extra="forbid"`` (mirrors ``src/blizzard/wire/sse.py``);
-the patch model follows ``ChunkPatchRequest``'s omitted-versus-explicit-null convention
-for the nullable ``stated_priority``, and ``stated_priority``/``closure`` type on the
-domain's own enums, request and response alike (``status: ChunkStatus`` precedent)."""
+"""Work-source wire shapes: the source summary, document, patch request, and list; the hub-owned work item, its
+author, and its list; and the item create and patch requests and create response."""
 
 from __future__ import annotations
 
@@ -19,9 +15,7 @@ from blizzard.wire.vocabulary import OPEN
 
 
 class WorkSourceSummary(WireModel):
-    """One work source — the ``GET /api/work-sources`` listing row and every record verb's
-    view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
-    information; ``edit`` is the "has browsable items" signal the item routes gate on.
+    """One work source. ``edit`` is whether the source has browsable items.
     ``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display
     label. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record
     fields."""

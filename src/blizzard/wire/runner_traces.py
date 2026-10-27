@@ -1,8 +1,5 @@
-"""Runner-trace operator wire bodies — ``GET /api/traces/status`` and ``POST /api/traces/replay`` on the runner.
-
-The replay request is the hub's own (:mod:`blizzard.wire.traces`). The status body is the hub's plus the runner-only
-harness-telemetry read; the hub's body is not widened. The replay counts differ, since the runner tells leases where
-the hub tells steps."""
+"""Runner-trace operator wire bodies: the runner's trace status, with its harness-telemetry read, and its trace-replay
+response and failure, alongside the shared shapes of :mod:`blizzard.wire.traces`."""
 
 from __future__ import annotations
 

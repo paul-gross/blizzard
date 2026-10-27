@@ -1,8 +1,4 @@
-"""Scope create/edit requests and the read view.
-
-A create names a slug and mints it if unseen, or reads back the existing scope
-unchanged; edit is sparse and changes only the stored description. The lifecycle verbs
-return an updated view, the graph lifecycle shape."""
+"""Scope wire shapes: the create, document, edit, and lifecycle requests, and the read view."""
 
 from __future__ import annotations
 

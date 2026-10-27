@@ -17,12 +17,11 @@ class DeliveredSetView(BaseModel):
     finding_set_id: str
     revisions: dict[str, str]
     measurement: str | None
-    #: How many `add`/`observed`/`gone` facts this delivery recorded — this delivery's
-    #: own act, never a finding's whole life history. `0`, never null, when a kind is
-    #: absent. Named with the `_count` suffix, distinct from `DeliveredSetDeltaView`'s
-    #: own full `added`/`observed`/`gone` lists.
+    #: How many `add` facts this delivery recorded; `0` when it recorded none.
     added_count: int
+    #: How many `observed` facts this delivery recorded; `0` when it recorded none.
     observed_count: int
+    #: How many `gone` facts this delivery recorded; `0` when it recorded none.
     gone_count: int
 
 
@@ -53,9 +52,7 @@ class AddedFindingView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     finding_id: str | None = Field(
-        description="The finding this add minted, or null when the delivered set predates "
-        "the finding_facts.finding_set_id linkage — the add still renders from the "
-        "artifact, just linked to no finding row."
+        description="The finding this add minted, or null when the add is linked to no finding."
     )
     class_: str = Field(alias="class")
     locus: str
@@ -67,11 +64,11 @@ class ObservedFindingView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     finding_id: str
-    #: The finding row's own class/locus/summary — an observed op names only an id, so
-    #: these are read back from the finding it points at, and are null when it names no
-    #: finding row: the entry still renders by id rather than being dropped.
+    #: The observed finding's class; null when the id names no known finding.
     class_: str | None = Field(alias="class")
+    #: The observed finding's locus; null when the id names no known finding.
     locus: str | None
+    #: The observed finding's summary; null when the id names no known finding.
     summary: str | None
 
 

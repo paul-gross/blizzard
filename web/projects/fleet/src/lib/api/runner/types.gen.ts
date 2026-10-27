@@ -475,9 +475,7 @@ export type CapacitiesView = {
 /**
  * CheckResult
  *
- * One deterministic check's **runner-executed** outcome.
- *
- * Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.
+ * One deterministic check's runner-executed outcome: the command and whether it passed.
  */
 export type CheckResult = {
     /**
@@ -749,8 +747,8 @@ export type ChunkEscalationView = {
  *
  * One standing-edge neighbor, one hop away. ``status`` is null only for
  * the residual race a neighbor's facts fail to resolve — the edge is still drawn,
- * unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
- * scope this shares.
+ * unsatisfied, rather than dropped. The neighbor is an immediate one only, with no transitive walk
+ * beyond it.
  */
 export type ChunkNeighborView = {
     /**
@@ -1054,10 +1052,8 @@ export type ChunkUsageView = {
 /**
  * DashboardView
  *
- * ``GET /runners/{runner_id}/api/dashboard`` — seven status reads composed into one response.
- * ``fleet_summary`` alone is a hub pass-through and the only nullable section —
- * ``None`` on a hub failure or an unwired runner, while the six local sections
- * still populate. The host's environments and subscriptions are its own reads, under ``/api/host``.
+ * One runner's dashboard: its status, asks, escalations, open takeovers, recent facts and harness health,
+ * with the fleet summary — ``None`` when the fleet summary is unavailable.
  */
 export type DashboardView = {
     asks: AskListResponse;
@@ -1335,10 +1331,8 @@ export type ExternalSubscriptionUsageWindowView = {
 /**
  * FactChangedPayload
  *
- * A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
- * shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,
- * since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries
- * neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived.
+ * A hub-bound fact was enqueued or acknowledged: its sequence and kind, and the chunk and lease it concerns —
+ * each null for a fact that concerns none. A heartbeat is not a fact.
  */
 export type FactChangedPayload = {
     /**
@@ -1378,10 +1372,8 @@ export type FactListResponse = {
 /**
  * FactView
  *
- * One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
- *
- * The local fact log: the record itself minus its JSON ``payload``. ``acked_at``
- * null means still buffered.
+ * One hub-bound fact the runner recorded: its sequence, kind, chunk, lease and instants, without its payload.
+ * ``acked_at`` is null while the hub has not yet acknowledged it.
  */
 export type FactView = {
     /**
@@ -1842,8 +1834,8 @@ export type GardenProposalView = {
  *
  * A worker's explicit git-commit declaration for one repo it touched.
  *
- * Carries no forge: the origin verified against is read from the environment's
- * repo manifest. ``environment_id`` is required once a chunk holds several.
+ * It names the repo, branch and commit, and no forge. ``environment_id`` names the environment the repo is in,
+ * required once a chunk holds several.
  */
 export type GitCommitDeclarationRequest = {
     /**
@@ -2437,15 +2429,8 @@ export type IdentityState = typeof IdentityState[keyof typeof IdentityState];
 /**
  * IdentityVerdictView
  *
- * Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
- *
- * ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
- * while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
- * retired) — the runner then drives no lease until a check resolves it again. On a registered host,
- * ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
- * in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
- * version window refuses it. ``reason`` says why for those last four.
- * ``reset_command`` names how to restore the token: the token variable and the configured id.
+ * The runner's identity verdict: whether its token resolves to the runner its host file configures
+ * (``store_runner_id``), and whether it may work as that runner.
  */
 export type IdentityVerdictView = {
     /**
@@ -2748,8 +2733,7 @@ export type MigrationSource = typeof MigrationSource[keyof typeof MigrationSourc
  * MigrationView
  *
  * One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
- * ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
- * the attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the
+ * ``landed_node`` in ``to_graph`` — its own step, never a transition. ``model`` is the
  * re-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``
  * records the submitting step's epoch for an authored-edge migration.
  */
@@ -2874,8 +2858,8 @@ export type PauseStateView = {
  * PauseView
  *
  * An open pause on a chunk — who set it and when, present only while ``paused=True``
- * is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
- * statuses in the derivation order, so this is the only carrier of a pause on a gated chunk.
+ * is the newest pause fact. Carried independently of ``status``, so it is present even when ``status``
+ * reads something other than ``paused``.
  */
 export type PauseView = {
     /**
@@ -2930,8 +2914,8 @@ export type PrView = {
  *
  * A question row with its derived answer *and delivery* state.
  *
- * ``answered`` and the answer fields derive from the presence of the answer row;
- * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact.
+ * ``answered`` and the answer fields are set once an answer is recorded;
+ * ``delivered``/``delivered_at`` once that answer has been delivered.
  */
 export type QuestionView = {
     /**
@@ -3133,7 +3117,7 @@ export type RequeueResponse = {
 /**
  * RequeueView
  *
- * One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.
+ * One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded.
  */
 export type RequeueView = {
     /**
@@ -3981,6 +3965,7 @@ export type TraceReplayRequest = {
  *
  * A lease's parsed transcript — 200 when the lease exists and its recorded harness
  * owner is known and available; 503 when that owner is unknown or unavailable.
+ * ``available=False`` carries ``reason`` and an empty ``turns``.
  */
 export type TranscriptResponse = {
     /**

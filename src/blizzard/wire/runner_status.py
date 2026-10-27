@@ -1,7 +1,6 @@
-"""The runner's machine-local status view — wire bodies: identity, pause states, capacities
-and hub connectivity; the configured environment pool; open questions; parked escalations
-with their literal resume command; and open operator takeovers. Datetimes are ISO-8601
-strings with an explicit UTC offset (``bzh:utc-instants``)."""
+"""The runner's machine-local status wire bodies: the status, identity-verdict, served-project and environment
+views, the ask, escalation, takeover, fact, harness-health and subscription lists, and the dashboard. Datetimes are
+ISO-8601 strings with an explicit UTC offset (``bzh:utc-instants``)."""
 
 from __future__ import annotations
 
@@ -120,21 +119,16 @@ class HubConnectivityView(WireModel):
 
 
 class IdentityVerdictView(WireModel):
-    """Whether the runner's token resolves to the runner its host file configures (``store_runner_id``).
-
-    ``unchecked`` until the hub first answers the check, ``matched`` while it does, ``mismatched``
-    while the token names another runner, ``refused`` while the hub refuses the token (unknown, revoked,
-    retired) — the runner then drives no lease until a check resolves it again. On a registered host,
-    ``not_held`` while the hub does not hold the runner under the host and ``tenant_differs`` while it stands
-    in another tenant than the host's halt the runner alone, as does ``version_refused`` while the hub's
-    version window refuses it. ``reason`` says why for those last four.
-    ``reset_command`` names how to restore the token: the token variable and the configured id."""
+    """The runner's identity verdict: whether its token resolves to the runner its host file configures
+    (``store_runner_id``), and whether it may work as that runner."""
 
     state: Annotated[IdentityState | Unrecognized, OPEN]
     store_runner_id: str | None
     token_runner_id: str | None
     checked_at: str | None
+    #: How to restore the token: the token variable and the configured id.
     reset_command: str
+    #: Why the verdict refuses the token or halts the runner; ``None`` when it states no reason.
     reason: str | None = None
 
 
@@ -184,7 +178,7 @@ class RunnerStatusView(WireModel):
     gates: list[str] = []
     #: The identity verdict; ``None`` from a runner with no loop checking it.
     identity: IdentityVerdictView | None = None
-    #: The projects the runner serves, read from its store with no hub call; ``None`` when neither its
+    #: The projects the runner serves, as configured and as its hub last answered them; ``None`` when neither its
     #: configuration nor its hub has named any.
     served_projects: list[ServedProjectStatusView] | None = None
     #: Each held binding no workspace has claimed; empty when every held binding names one.
@@ -276,10 +270,8 @@ class OpenTakeoverListResponse(WireModel):
 
 
 class FactView(WireModel):
-    """One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
-
-    The local fact log: the record itself minus its JSON ``payload``. ``acked_at``
-    null means still buffered."""
+    """One hub-bound fact the runner recorded: its sequence, kind, chunk, lease and instants, without its payload.
+    ``acked_at`` is null while the hub has not yet acknowledged it."""
 
     seq: int
     kind: str
@@ -337,10 +329,8 @@ class SubscriptionView(WireModel):
 
 
 class DashboardView(BaseModel):
-    """``GET /runners/{runner_id}/api/dashboard`` — seven status reads composed into one response.
-    ``fleet_summary`` alone is a hub pass-through and the only nullable section —
-    ``None`` on a hub failure or an unwired runner, while the six local sections
-    still populate. The host's environments and subscriptions are its own reads, under ``/api/host``."""
+    """One runner's dashboard: its status, asks, escalations, open takeovers, recent facts and harness health,
+    with the fleet summary — ``None`` when the fleet summary is unavailable."""
 
     runner: RunnerStatusView
     asks: AskListResponse

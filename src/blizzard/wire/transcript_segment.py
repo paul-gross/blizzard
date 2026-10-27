@@ -53,6 +53,7 @@ class TurnSegmentView(BaseModel):
     #: Closed to :data:`TurnKind` — an out-of-vocabulary kind is a hard failure, never a
     #: silent round-trip (`docs/versioning.md`).
     kind: TurnKind
+    #: ISO-8601 with an explicit UTC offset, never naive.
     timestamp: str | None
     text: str
     tool: ToolCallSegmentView | None
@@ -158,9 +159,8 @@ class TranscriptSegmentContentView(WireModel):
 
 class LeaseTranscriptView(WireModel):
     """A lease's transcript, concatenated across every segment stored under its
-    ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. The fleet-plane
-    counterpart to the per-segment content read: a runner's read-back of its own shipped
-    segments. No ``final``: a segment's own closes only *that* segment."""
+    ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. No ``final``: a
+    segment's own closes only *that* segment."""
 
     chunk_id: str
     node_id: str

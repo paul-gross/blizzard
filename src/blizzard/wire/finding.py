@@ -1,8 +1,5 @@
-"""Finding wire shapes — the candidate, the delta ops, and the read view.
-
-Both this and ``blizzard.wire.garden_proposal`` are the platform's own shapes
-(blizzard-product:/delivered/garden/machinery.md §Where the formats live): a garden graph
-never carries its own copy."""
+"""Finding wire shapes: the survey and its candidates, the delta and its ops, the review round's delta and entries,
+the read views, and the exit requests."""
 
 from __future__ import annotations
 
@@ -141,10 +138,7 @@ ReviewFindingEntry = Annotated[
 
 
 class ReviewFindingDelta(BaseModel):
-    """A delivery lane review round's own delta — the wire shape
-    `review/finding-format` documents in full; this restates only the field meanings a
-    caller needs. `entries` is required, not defaulted: a payload naming no `entries`
-    key at all is refused rather than read as an empty, `recorded` delta."""
+    """A delivery-lane review round's delta: one entry per finding the round disposed of."""
 
     model_config = ConfigDict(extra="forbid")
 

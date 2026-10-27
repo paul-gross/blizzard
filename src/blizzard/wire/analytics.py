@@ -65,10 +65,9 @@ class AnalyticsCountsResponse(BaseModel):
 
 
 class AnalyticsDurationView(BaseModel):
-    """One grouping key's step-duration rollup — ``key`` is a node
-    id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
-    stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
-    zero instead. Provenance filters: see ``docs/deployment/analytics.md``."""
+    """One grouping key's step-duration rollup — ``key`` is a node id or a graph id. A duration
+    is hub-observed wall-clock time, not runner-measured, so time a step spends parked counts
+    toward it. Provenance filters: see ``docs/deployment/analytics.md``."""
 
     key: str
     completed_steps: int
@@ -138,10 +137,10 @@ class AnalyticsChunkSpendResponse(BaseModel):
 
 
 class AnalyticsOutcomeView(BaseModel):
-    """One node's judged-choice distribution and attempt-failure count,
-    never blended — a judged failure consumes no retry budget, an ended (superseded by a
-    strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
-    does a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``."""
+    """One node's judged-choice distribution and attempt-failure count, kept separate: a judged
+    failure is a choice, while an attempt failure is an attempt ended by a strictly newer lease.
+    A still-open final attempt counts as neither, nor does a kick-back. The two counts' differing
+    time windows are in ``docs/deployment/analytics.md``."""
 
     node_id: str
     choice_counts: dict[str, int]

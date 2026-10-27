@@ -1,7 +1,4 @@
-"""Invitation wire bodies — issuing, listing and revoking a tenant's invitations
-(``src/blizzard/hub/api/invitations.py``).
-
-:class:`InvitationCreateResponse` is the only body that ever carries an invitation's token; the listing never does."""
+"""Invitation wire bodies — the create request and response, the invitation view, and the listing."""
 
 from __future__ import annotations
 
@@ -48,8 +45,8 @@ class InvitationView(WireModel):
 
 
 class InvitationCreateResponse(BaseModel):
-    """The issued invitation and its link's token. ``token`` is visible only here, once — only its sha256 is kept;
-    the link handed to the invited person ends ``/invite/<token>``."""
+    """The issued invitation and its token. The token appears in this response only, once; it cannot be
+    read back later."""
 
     invitation: InvitationView
     token: str
