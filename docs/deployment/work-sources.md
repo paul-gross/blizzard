@@ -29,6 +29,9 @@ blizzard hub source show blizzard
 - `locator` is the owner/name coordinate the source is pinned to; each (provider, locator) pair belongs to one record,
   since two records for one repo would let an item be ingested twice under two identities.
 - `provider` names the adapter grammar; only `github` exists.
+- `forge` is the id of the configured forge. The board offers enabled forges of the selected provider's kind; version-2
+  configuration documents name one by slug. The Admin Forges tab manages the forge's addresses and lists its linked work
+  sources and repositories.
 - `api_base` overrides the provider's API origin (needed for a self-hosted forge such as GitHub Enterprise); `web_base`
   overrides the web origin for the item's browsable URL and derives from `api_base` when omitted, so a GHE source needs
   only `api_base`. A later release stores both addresses in one canonical form;
@@ -63,7 +66,8 @@ A source whose secret cannot be revealed is an error on every call through it, n
 The board's Admin page lists work sources, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
 before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
-built-in `hub` source is listed and cannot be changed.
+built-in `hub` source is listed and cannot be changed. The form picks a matching enabled forge instead of editing its
+API and web origins. Version-1 configuration documents still accept `api_base` and `web_base`; version 2 uses `forge`.
 
 ## Naming a work source
 

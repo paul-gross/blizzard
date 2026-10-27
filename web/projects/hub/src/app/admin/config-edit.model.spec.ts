@@ -48,6 +48,23 @@ describe('configEdit', () => {
     annotate: false,
   });
 
+  it('labels a select change with the chosen option, so the preview matches the saved revision', () => {
+    const fields: readonly ConfigFieldDef[] = [
+      {
+        key: 'forge',
+        label: 'Forge',
+        kind: 'select',
+        options: [
+          { value: 'frg_1', label: 'gh · GitHub' },
+          { value: 'frg_2', label: 'gl · GitLab' },
+        ],
+      },
+    ];
+    expect(configEdit(fields, { forge: 'frg_1' }, { forge: 'frg_2' }).diff).toEqual([
+      { field: 'Forge', old: 'frg_1', new: 'frg_2', old_label: 'gh · GitHub', new_label: 'gl · GitLab' },
+    ]);
+  });
+
   it('is empty when the form matches the record', () => {
     expect(configEdit(FIELDS, shown, shown)).toEqual({ body: {}, diff: [] });
   });
@@ -60,15 +77,15 @@ describe('configEdit', () => {
     });
     expect(edit.body).toEqual({ locator: 'o/r2', annotate: true });
     expect(edit.diff).toEqual([
-      { field: 'Locator', old: 'o/r', new: 'o/r2' },
-      { field: 'Annotates', old: false, new: true },
+       { field: 'Locator', old: 'o/r', new: 'o/r2', old_label: null, new_label: null },
+       { field: 'Annotates', old: false, new: true, old_label: null, new_label: null },
     ]);
   });
 
   it('sends a cleared input as null', () => {
     const edit = configEdit(FIELDS, shown, { ...shown, web_base: '  ' });
     expect(edit.body).toEqual({ web_base: null });
-    expect(edit.diff).toEqual([{ field: 'Web base', old: 'https://x', new: null }]);
+    expect(edit.diff).toEqual([{ field: 'Web base', old: 'https://x', new: null, old_label: null, new_label: null }]);
   });
 
   it('never edits a create-only field', () => {

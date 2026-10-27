@@ -21,6 +21,8 @@ import type { ConfigRowVm } from '../config-record-list';
 import { REPOSITORY_FIELDS, repositoryCreate, repositoryRows } from './repositories.model';
 import { injectRepositoriesQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
+import { forgePickerFields } from '../forges/forges.model';
+import { injectForgesQuery } from '../forges/forges.query';
 
 /**
  * `/admin/repositories` — the repository list beside a `<router-outlet>` holding the
@@ -84,7 +86,8 @@ export class RepositoriesPage {
 
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateRepositoryMutation();
-  protected readonly fields = REPOSITORY_FIELDS;
+  private readonly forgesQuery = injectForgesQuery(() => false);
+  protected readonly fields = computed(() => forgePickerFields(REPOSITORY_FIELDS, this.forgesQuery.data() ?? []));
   protected readonly createOpen = signal(false);
   protected readonly createError = signal<string | null>(null);
 
@@ -97,7 +100,7 @@ export class RepositoriesPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = repositoryCreate(createBody(this.fields, values));
+    const body = repositoryCreate(createBody(this.fields(), values));
     this.createError.set(null);
     this.createMutation.mutate(body, {
       onSuccess: () => {

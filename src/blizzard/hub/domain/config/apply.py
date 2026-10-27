@@ -28,7 +28,7 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ConfiguredForge
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, ForgeKindImmutable
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
@@ -45,6 +45,7 @@ from blizzard.hub.domain.config.work_sources import (
 
 PROJECTS_SECTION = "projects"
 SECRETS_SECTION = "secrets"
+FORGES_SECTION = "forges"
 WORK_SOURCES_SECTION = "work_sources"
 REPOSITORIES_SECTION = "repositories"
 SCOPES_SECTION = "scopes"
@@ -102,6 +103,17 @@ class RepositoryDeclaration:
     @property
     def key(self) -> str:
         return self.slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class ForgeDeclaration:
+    slug: str
+    name: str | None
+    kind: str
+    fields: ForgeFields
+    edit: ForgeEdit
+    forge_id: ForgeId
 
 
 class DeclarableRecord(Protocol):
@@ -252,6 +264,7 @@ class ConfigDeclaration:
     secrets: tuple[str, ...] = ()
     #: The forges the entries need created, committed before any entry.
     forges: tuple[PlannedForge, ...] = ()
+    declared_forges: tuple[ForgeDeclaration, ...] = ()
     work_sources: tuple[WorkSourceDeclaration, ...] = ()
     repositories: tuple[RepositoryDeclaration, ...] = ()
     #: The ``projects`` section, planned by the package that owns projects.
@@ -270,6 +283,8 @@ class StoredConfig:
     repositories: Mapping[str, ConfiguredRepository]
     #: The lifecycle state of each listed secret that exists; an absent name is unknown.
     secrets: Mapping[str, RecordState]
+    forges: Mapping[str, ConfiguredForge] = field(default_factory=dict)
+    former_forges: Mapping[str, ConfiguredForge] = field(default_factory=dict)
     #: For each declared repository slug no repository holds, the repository that left it.
     former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict)
     #: For each declared work-source slug no work source holds, the work source that left it.
@@ -298,6 +313,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         if state is not RecordState.ACTIVE:
             raise ApplyEntryRefused(SECRETS_SECTION, index, SecretNotActive(name, retired=state is not None))
     plan = _Accumulator()
+    _reconcile_section(_ForgeSection(declaration.declared_forges, stored, ctx, at), stored.forges, plan)
     for forge in declaration.forges:
         plan.writes.append(PlannedWrite(forge.section, forge.index, forge.record, None, forge.change))
         plan.outcomes.append(EntryOutcome(RecordKind.FORGE, forge.record.slug, forge.change.op, forge.change.diff))
@@ -409,6 +425,22 @@ class _SlugSection[D: _SlugEntry, R: _SlugRecord]:
 
     def settle(self, entry: D, record: R) -> tuple[R, ConfigChange] | None:
         return None
+
+
+class _ForgeSection(_SlugSection[ForgeDeclaration, ConfiguredForge]):
+    section = FORGES_SECTION
+    kind = RecordKind.FORGE
+
+    def guard(self, entry: ForgeDeclaration, record: ConfiguredForge | None) -> None:
+        require_declarable_forge(entry.slug, entry.kind, record, self._stored.former_forges.get(entry.slug))
+
+    def create(self, entry: ForgeDeclaration) -> tuple[ConfiguredForge, ConfigChange]:
+        return ConfiguredForge.new(
+            entry.slug, entry.name, entry.kind, entry.fields, self._ctx, at=self._at, forge_id=entry.forge_id
+        )
+
+    def edit(self, entry: ForgeDeclaration, record: ConfiguredForge) -> tuple[ConfiguredForge, ConfigChange] | None:
+        return record.edit(entry.edit, self._ctx, if_match=None, at=self._at)
 
 
 class _WorkSourceSection(_SlugSection[WorkSourceDeclaration, ConfiguredWorkSource]):
@@ -535,18 +567,33 @@ def _reconcile_section[K: Hashable, D, R: WrittenRecord](
 def _require_unclaimed(
     kind: str,
     slug: str,
-    record: ConfiguredRepository | ConfiguredWorkSource | None,
-    left: ConfiguredRepository | ConfiguredWorkSource | None,
+    record: ConfiguredRepository | ConfiguredWorkSource | ConfiguredForge | None,
+    left: ConfiguredRepository | ConfiguredWorkSource | ConfiguredForge | None,
 ) -> None:
     """:class:`ConfigFieldError` when an entry names a ``slug`` no record of its ``kind`` holds but ``left`` left:
     name that record by its current slug, or choose another."""
     if record is None and left is not None:
-        left_id = left.repository_id if isinstance(left, ConfiguredRepository) else left.work_source_id
+        left_id = (
+            left.repository_id
+            if isinstance(left, ConfiguredRepository)
+            else left.work_source_id
+            if isinstance(left, ConfiguredWorkSource)
+            else left.forge_id
+        )
         raise ConfigFieldError(
             "slug",
             f"{slug!r} is a slug {kind} {left.slug!r} ({left_id}) left; "
             f"name that {kind} by its current slug, or choose another",
         )
+
+
+def require_declarable_forge(
+    slug: str, kind: str, record: ConfiguredForge | None, left: ConfiguredForge | None
+) -> None:
+    """The refusals a declared forge entry meets before any write: a slug another forge left, and a changed kind."""
+    _require_unclaimed("forge", slug, record, left)
+    if record is not None and kind != record.kind:
+        raise ForgeKindImmutable("kind", f"forge {slug} is a {record.kind} forge; kind is immutable")
 
 
 def _settle[K: Hashable, D, R: WrittenRecord](

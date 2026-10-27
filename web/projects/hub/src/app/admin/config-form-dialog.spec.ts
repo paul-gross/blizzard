@@ -93,6 +93,29 @@ describe('ConfigFormDialog', () => {
     expect(emitted).toEqual([{ annotate: true }]);
   });
 
+  it('offers enabled forge choices through the kit select, filtered when the provider changes', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [
+      { key: 'provider', label: 'Provider', kind: 'text', required: true },
+      { key: 'forge', label: 'Forge', kind: 'select', required: true, filterBy: 'provider', options: [
+        { value: 'frg_github', label: 'GitHub', kind: 'github' },
+        { value: 'frg_gitlab', label: 'GitLab', kind: 'gitlab' },
+      ] },
+    ]);
+    await fixture.whenStable();
+    await type(fixture, 'dlg-field-provider', 'github');
+    const select = el(fixture, 'dlg-field-forge') as HTMLButtonElement;
+    select.click();
+    await fixture.whenStable();
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(1);
+    expect(document.querySelector('[role="option"]')?.textContent).toContain('GitHub');
+    (document.querySelector('[role="option"]') as HTMLElement).click();
+    await fixture.whenStable();
+    expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(false);
+    await type(fixture, 'dlg-field-provider', 'gitlab');
+    expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('edit: a refetched initial reaches untouched fields after a failed save', async () => {
     const fixture = await mount('edit', 'revision conflict');
     const emitted: ConfigFormValues[] = [];

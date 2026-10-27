@@ -17,6 +17,14 @@
             [testid]="testidPrefix() + '-field-' + field.key"
             (checkedChange)="onFlag(field.key, $event)"
           />
+        } @else if (field.kind === 'select') {
+          <fleet-kit-select
+            [options]="optionsFor(field)"
+            [selectedValue]="textOf(field.key) || null"
+            [ariaLabel]="field.label"
+            [testid]="testidPrefix() + '-field-' + field.key"
+            (choose)="onText(field.key, $event)"
+          />
         } @else {
           <fleet-kit-text-input
             [type]="field.kind === 'password' ? 'password' : 'text'"

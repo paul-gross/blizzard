@@ -70,6 +70,19 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     assert _repo(["show", "nope"]).exit_code != 0
 
 
+def test_forge_cli_create_edit_show_and_lifecycle(client: TestClient) -> None:
+    created = _cli("forge", ["create", "ghe", "--kind", "github", "--api-base", "https://ghe.example/api/v3"])
+    assert created.exit_code == 0, created.output
+    listed = json.loads(_cli("forge", ["list", "--json"]).stdout)
+    assert [(r["slug"], r["web_origin"]) for r in listed] == [("ghe", "https://ghe.example")]
+    assert json.loads(_cli("forge", ["show", "ghe", "--json"]).stdout) == client.get("/api/forges/ghe").json()
+    assert "revision 2" in _cli("forge", ["edit", "ghe", "--name", "Enterprise", "--if-match", "1"]).output
+    assert _cli("forge", ["edit", "ghe", "--name", "Enterprise", "--if-match", "1"]).exit_code != 0
+    assert "retired" in _cli("forge", ["retire", "ghe"]).output
+    assert json.loads(_cli("forge", ["list", "--json"]).stdout) == []
+    assert "enabled" in _cli("forge", ["enable", "ghe"]).output
+
+
 def test_create_refuses_a_taken_coordinate_and_a_missing_secret(client: TestClient) -> None:
     _seed()
 
@@ -105,7 +118,9 @@ def test_retire_enable_and_the_change_log(client: TestClient) -> None:
 
     raw = json.loads(_cli("config", ["changes", "--json", "--kind", "repository", "--all"]).stdout)["changes"]
     assert [(c["op"], c["door"]) for c in raw] == [("retire", "cli"), ("edit", "cli"), ("create", "cli")]
-    assert raw[1]["diff"] == [{"field": "base_branch", "old": "master", "new": "main"}]
+    assert raw[1]["diff"] == [
+        {"field": "base_branch", "old": "master", "new": "main", "old_label": None, "new_label": None}
+    ]
     text = _cli("config", ["changes", "--kind", "repository"]).output
     assert "cli  repository blizzard  r1  create" in text
     assert _SENTINEL not in text + json.dumps(raw)

@@ -3886,6 +3886,78 @@
         "title": "ConfigDocument",
         "type": "object"
       },
+      "ConfigDocumentV2": {
+        "additionalProperties": false,
+        "description": "A declarative document whose forge records and references are explicit.",
+        "properties": {
+          "forges": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ForgeEntry"
+            },
+            "title": "Forges",
+            "type": "array"
+          },
+          "projects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDocument"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "repositories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RepositoryEntry"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "routines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoutineEntry"
+            },
+            "title": "Routines",
+            "type": "array"
+          },
+          "scopes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScopeEntry"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "secrets": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Secrets",
+            "type": "array"
+          },
+          "version": {
+            "const": 2,
+            "title": "Version",
+            "type": "integer"
+          },
+          "work_sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkSourceEntry"
+            },
+            "title": "Work Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "ConfigDocumentV2",
+        "type": "object"
+      },
       "DecisionChoiceModel": {
         "description": "One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks\nwhen a person resolves to it while one is red. ``would_override_red_checks`` is the hub's judgment that\nresolving to this choice now would be that override.",
         "properties": {
@@ -5226,14 +5298,38 @@
           "new": {
             "title": "New"
           },
+          "new_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Label"
+          },
           "old": {
             "title": "Old"
+          },
+          "old_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Label"
           }
         },
         "required": [
           "field",
           "old",
-          "new"
+          "new",
+          "old_label",
+          "new_label"
         ],
         "title": "FieldChangeView",
         "type": "object"
@@ -6130,6 +6226,376 @@
           "needs"
         ],
         "title": "FleetSummaryView",
+        "type": "object"
+      },
+      "ForgeCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_base": {
+            "title": "Api Base",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          }
+        },
+        "required": [
+          "slug",
+          "kind",
+          "api_base"
+        ],
+        "title": "ForgeCreateRequest",
+        "type": "object"
+      },
+      "ForgeDetail": {
+        "properties": {
+          "api_base": {
+            "title": "Api Base",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/ForgeReferenceView"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          },
+          "web_origin": {
+            "title": "Web Origin",
+            "type": "string"
+          },
+          "work_sources": {
+            "items": {
+              "$ref": "#/components/schemas/ForgeReferenceView"
+            },
+            "title": "Work Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "forge_id",
+          "slug",
+          "name",
+          "kind",
+          "api_base",
+          "web_base",
+          "web_origin",
+          "revision",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "retired",
+          "repositories",
+          "work_sources"
+        ],
+        "title": "ForgeDetail",
+        "type": "object"
+      },
+      "ForgeEntry": {
+        "additionalProperties": false,
+        "description": "A forge declared by slug; an omitted mutable field stays as stored.",
+        "properties": {
+          "api_base": {
+            "title": "Api Base",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          }
+        },
+        "required": [
+          "slug",
+          "kind",
+          "api_base"
+        ],
+        "title": "ForgeEntry",
+        "type": "object"
+      },
+      "ForgePatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          }
+        },
+        "title": "ForgePatchRequest",
+        "type": "object"
+      },
+      "ForgeReferenceView": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "label"
+        ],
+        "title": "ForgeReferenceView",
+        "type": "object"
+      },
+      "ForgeSummary": {
+        "properties": {
+          "api_base": {
+            "title": "Api Base",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Base"
+          },
+          "web_origin": {
+            "title": "Web Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "forge_id",
+          "slug",
+          "name",
+          "kind",
+          "api_base",
+          "web_base",
+          "web_origin",
+          "revision",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "retired"
+        ],
+        "title": "ForgeSummary",
+        "type": "object"
+      },
+      "ForgesListView": {
+        "properties": {
+          "forges": {
+            "items": {
+              "$ref": "#/components/schemas/ForgeSummary"
+            },
+            "title": "Forges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "forges"
+        ],
+        "title": "ForgesListView",
         "type": "object"
       },
       "GardenDeliveryRequest": {
@@ -11008,6 +11474,57 @@
           "secret_name"
         ],
         "title": "RepositoryDocument",
+        "type": "object"
+      },
+      "RepositoryEntry": {
+        "additionalProperties": false,
+        "description": "A version-2 repository entry, naming its forge instead of an address.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "forge",
+          "owner",
+          "repo",
+          "base_branch",
+          "secret_name"
+        ],
+        "title": "RepositoryEntry",
         "type": "object"
       },
       "RepositoryLinkView": {
@@ -16965,6 +17482,63 @@
         "title": "WorkSourceDocument",
         "type": "object"
       },
+      "WorkSourceEntry": {
+        "additionalProperties": false,
+        "description": "A version-2 work source entry, naming its forge instead of addresses.",
+        "properties": {
+          "annotate": {
+            "default": false,
+            "title": "Annotate",
+            "type": "boolean"
+          },
+          "forge": {
+            "title": "Forge",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "provider",
+          "locator",
+          "forge"
+        ],
+        "title": "WorkSourceEntry",
+        "type": "object"
+      },
       "WorkSourcePatchRequest": {
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;\n``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one\nother than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null\n``secret`` clears it. A slug that changes keeps resolving to the source until another claims it.",
@@ -22652,7 +23226,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. An entry's address \u2014 a work source's `api_base` and\n`web_base`, a repository's `forge_api_url` \u2014 resolves to the tenant's forge with that origin, planned in the same\ntransaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for\na stored record that states no address keeps its forge.",
+        "description": "Reconcile a version 1 or 2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. An entry's address \u2014 a work source's `api_base` and\n`web_base`, a repository's `forge_api_url` \u2014 resolves to the tenant's forge with that origin, planned in the same\ntransaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for\na stored record that states no address keeps its forge. Version 2 declares forges and names them by id or slug.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -22670,12 +23244,40 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigDocument"
+                "discriminator": {
+                  "mapping": {
+                    "1": "#/components/schemas/ConfigDocument",
+                    "2": "#/components/schemas/ConfigDocumentV2"
+                  },
+                  "propertyName": "version"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfigDocument"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV2"
+                  }
+                ]
               }
             },
             "application/yaml": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigDocument"
+                "discriminator": {
+                  "mapping": {
+                    "1": "#/components/schemas/ConfigDocument",
+                    "2": "#/components/schemas/ConfigDocumentV2"
+                  },
+                  "propertyName": "version"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfigDocument"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfigDocumentV2"
+                  }
+                ]
               }
             }
           },
@@ -22824,16 +23426,48 @@
       "get": {
         "description": "Every project with its standing links, every active, non-built-in work source and repository, and every\nactive scope and routine (its linked scope set included) named in its project by slug, with every field, and\nevery active secret name, as a document that applies back as a no-op. Retired records are left out, since\napplying one would enable it.",
         "operationId": "export_config_api_config_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigDocument"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfigDocument"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigDocumentV2"
+                    }
+                  ],
+                  "title": "Response Export Config Api Config Export Get"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Export Config",
@@ -22854,6 +23488,18 @@
             "schema": {
               "title": "Kind",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
             }
           }
         ],
@@ -25967,6 +26613,384 @@
         "summary": "Ingest Transcript Segments",
         "tags": [
           "fleet"
+        ]
+      }
+    },
+    "/api/forges": {
+      "get": {
+        "description": "List forges by slug, including retired ones when requested.",
+        "operationId": "list_forges_api_forges_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgesListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Forges",
+        "tags": [
+          "forges"
+        ]
+      },
+      "post": {
+        "description": "Create a forge at revision one. Invalid fields answer 422; taken slug or API origin answers 409.",
+        "operationId": "create_forge_api_forges_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgeCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Forge",
+        "tags": [
+          "forges"
+        ]
+      }
+    },
+    "/api/forges/{forge}": {
+      "get": {
+        "description": "Show a forge by id, current slug or former slug, with linked records.",
+        "operationId": "get_forge_api_forges__forge__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "forge",
+            "required": true,
+            "schema": {
+              "title": "Forge",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Forge",
+        "tags": [
+          "forges"
+        ]
+      },
+      "patch": {
+        "description": "Edit stated fields, keeping the revision on a no-op. A stale If-Match answers 409.",
+        "operationId": "patch_forge_api_forges__forge__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "forge",
+            "required": true,
+            "schema": {
+              "title": "Forge",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Forge",
+        "tags": [
+          "forges"
+        ]
+      }
+    },
+    "/api/forges/{forge}/enable": {
+      "post": {
+        "description": "Enable a retired forge; an enabled forge remains unchanged.",
+        "operationId": "enable_forge_api_forges__forge__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "forge",
+            "required": true,
+            "schema": {
+              "title": "Forge",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Forge",
+        "tags": [
+          "forges"
+        ]
+      }
+    },
+    "/api/forges/{forge}/retire": {
+      "post": {
+        "description": "Retire a forge only when no enabled configured record names it.",
+        "operationId": "retire_forge_api_forges__forge__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "forge",
+            "required": true,
+            "schema": {
+              "title": "Forge",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgeDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Forge",
+        "tags": [
+          "forges"
         ]
       }
     },

@@ -5,6 +5,7 @@ import { page } from 'vitest/browser';
 
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';
+import { ConfigFormDialog } from './config-form-dialog';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
 
 /**
@@ -78,6 +79,24 @@ async function mountMaster(canCreate: boolean) {
   return fixture;
 }
 
+async function mountForgeForm() {
+  await TestBed.configureTestingModule({
+    imports: [ConfigFormDialog], providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(ConfigFormDialog);
+  fixture.componentRef.setInput('heading', 'New repository');
+  fixture.componentRef.setInput('mode', 'create');
+  fixture.componentRef.setInput('fields', [
+    { key: 'forge', label: 'Forge', kind: 'select', required: true, options: [
+      { value: 'frg_github', label: 'github · GitHub Enterprise with a long display name' },
+    ] },
+  ]);
+  fixture.componentRef.setInput('submitLabel', 'Create');
+  fixture.componentRef.setInput('testidPrefix', 'forge-form');
+  await fixture.whenStable();
+  return fixture;
+}
+
 async function sweep(
   width: number,
   body: (root: HTMLElement) => Promise<void> | void,
@@ -117,6 +136,21 @@ function expectNoOverflow(root: HTMLElement, id: string, width: number) {
 }
 
 describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('forge picker at %ipx: usable without horizontal overflow', async (width) => {
+    await sweep(width, async (root) => {
+      const trigger = root.querySelector<HTMLButtonElement>('[data-testid="forge-form-field-forge"]')!;
+      expect(trigger).not.toBeNull();
+      expect((root.querySelector('[data-testid="forge-form-submit"]') as HTMLButtonElement).disabled).toBe(true);
+      trigger.click();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const option = document.querySelector<HTMLElement>('[role="option"]')!;
+      expect(option?.textContent).toContain('GitHub Enterprise');
+      option.click();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect((root.querySelector('[data-testid="forge-form-submit"]') as HTMLButtonElement).disabled).toBe(false);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    }, mountForgeForm);
+  });
   it('desktop: the detail carries its write controls and no CLI command, with no overflow', async () => {
     await sweep(
       1280,

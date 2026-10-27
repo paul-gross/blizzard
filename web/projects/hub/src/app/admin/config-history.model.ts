@@ -41,7 +41,9 @@ export function revisionRows(history: readonly ConfigChangeView[] | undefined): 
     id: change.id,
     revision: change.revision,
     op: change.op,
-    fields: change.diff.map((field) => field.field).join(', '),
+    fields: change.diff.map((field) => field.field === 'forge'
+      ? `forge: ${field.old_label ?? field.old ?? '—'} → ${field.new_label ?? field.new ?? '—'}`
+      : field.field).join(', '),
     at: change.recorded_at,
     actor: changeActor(change),
     door: change.door,

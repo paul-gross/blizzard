@@ -40,6 +40,14 @@ export const ADMIN_ROUTES: Routes = [
         ],
       },
       {
+        path: 'forges',
+        loadComponent: () => import('./forges/forges-page').then((m) => m.ForgesPage),
+        children: [
+          { path: '', loadComponent: () => import('./forges/forge-detail').then((m) => m.ForgeDetailPage) },
+          { path: ':key', loadComponent: () => import('./forges/forge-detail').then((m) => m.ForgeDetailPage) },
+        ],
+      },
+      {
         path: 'secrets',
         loadComponent: () => import('./secrets/secrets-page').then((m) => m.SecretsPage),
         children: [

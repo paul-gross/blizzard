@@ -307,6 +307,14 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/users"): _LIST,
     ("POST", "/api/users/{user_id}/role"): _f({"role": "admin"}),
     # -- repositories, secrets, work sources -----------------------------------------------------------------
+    ("GET", "/api/forges"): _LIST,
+    ("POST", "/api/forges"): _own(
+        {"slug": "beta-extra", "kind": "github", "api_base": "https://beta-extra.example"}, status=201
+    ),
+    ("GET", "/api/forges/{forge}"): _f(),
+    ("PATCH", "/api/forges/{forge}"): _f({}),
+    ("POST", "/api/forges/{forge}/retire"): _f(),
+    ("POST", "/api/forges/{forge}/enable"): _f(),
     ("GET", "/api/repositories"): _LIST,
     ("POST", "/api/repositories"): _own(
         {
@@ -619,7 +627,9 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         "base_branch": "main",
         "secret_name": f"{label}-secret",
     }
-    t.keep("repository", _ok(c.post("/api/repositories", json=repository), 201)["repository_id"])
+    created_repository = _ok(c.post("/api/repositories", json=repository), 201)
+    t.keep("repository", created_repository["repository_id"])
+    t.keep("forge", created_repository["forge_id"])
     source = {"slug": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(

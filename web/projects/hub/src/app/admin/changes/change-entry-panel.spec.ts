@@ -15,7 +15,7 @@ const ENTRY: ChangeEntryVm = {
       id: 8,
       title: 'repository winter · edit',
       route: ['/admin', 'repositories', 'winter'],
-      diff: [{ field: 'base_branch', old: 'master', new: 'main' }],
+      diff: [{ field: 'base_branch', old: 'master', new: 'main', old_label: null, new_label: null }],
       revisionStep: null,
     },
     { id: 7, title: 'secret gh · replace', route: ['/admin', 'secrets', 'gh'], diff: [], revisionStep: 'r1 → r2' },

@@ -2,7 +2,7 @@ import type { FieldChangeView } from 'fleet';
 
 /** How a config form field is entered. `password` is a write-only value the board
  * never reads back. */
-export type ConfigFieldKind = 'text' | 'password' | 'checkbox';
+export type ConfigFieldKind = 'text' | 'password' | 'checkbox' | 'select';
 
 /** One field of a config record's form. `K` is the set of keys the form may name — a
  * list typed against a generated model fails to build when a wire field is renamed. */
@@ -14,6 +14,10 @@ export interface ConfigFieldDef<K extends string = string> {
   readonly required?: boolean;
   /** Whether a create is the only place it can be set — a name is immutable. */
   readonly createOnly?: boolean;
+  /** Choices for a select field; an empty list leaves its required value unpickable. */
+  readonly options?: readonly { readonly value: string; readonly label: string; readonly kind?: string }[];
+  /** A choice is offered only when its kind matches this other field's current value. */
+  readonly filterBy?: string;
 }
 
 /** A form's values by field key: text for `text`/`password`, a flag for `checkbox`. */
@@ -65,15 +69,22 @@ export function configEdit(
     const raw = form[field.key];
     const after = typeof raw === 'string' ? raw.trim() : raw;
     if (after === before) continue;
-    const next = after === '' ? null : after;
+    const next = after === '' && field.kind !== 'select' ? null : after;
     body[field.key] = next;
     diff.push({
       field: field.label,
       old: before === '' ? null : before,
       new: next,
+      old_label: optionLabel(field, before),
+      new_label: optionLabel(field, next),
     });
   }
   return { body, diff };
+}
+
+function optionLabel(field: ConfigFieldDef, value: string | boolean | null): string | null {
+  if (field.kind !== 'select' || typeof value !== 'string') return null;
+  return field.options?.find((option) => option.value === value)?.label ?? null;
 }
 
 /** The labels of the required fields `form` leaves empty. */

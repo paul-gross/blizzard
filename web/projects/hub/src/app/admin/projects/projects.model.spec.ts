@@ -194,10 +194,10 @@ describe('projects model', () => {
 
   it('reads former slugs from the history, newest first, without the current one', () => {
     const history = [
-      change(1, [{ field: 'slug', old: 'default', new: 'core' }]),
-      change(2, [{ field: 'name', old: 'Default', new: 'Core' }]),
-      change(3, [{ field: 'slug', old: 'core', new: 'blizzard' }]),
-      change(4, [{ field: 'slug', old: 'blizzard', new: 'default' }]),
+      change(1, [{ field: 'slug', old: 'default', new: 'core', old_label: null, new_label: null }]),
+      change(2, [{ field: 'name', old: 'Default', new: 'Core', old_label: null, new_label: null }]),
+      change(3, [{ field: 'slug', old: 'core', new: 'blizzard', old_label: null, new_label: null }]),
+      change(4, [{ field: 'slug', old: 'blizzard', new: 'default', old_label: null, new_label: null }]),
     ];
     expect(formerSlugs(history, project('proj_b', 'default', 'Default'))).toEqual(['blizzard', 'core']);
     expect(formerSlugs(undefined, BLIZZARD)).toEqual([]);

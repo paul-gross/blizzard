@@ -22,7 +22,7 @@
   <app-config-form-dialog
     heading="New repository"
     mode="create"
-    [fields]="fields"
+    [fields]="fields()"
     submitLabel="Create"
     [submitError]="createError()"
     [submitting]="createMutation.isPending()"
