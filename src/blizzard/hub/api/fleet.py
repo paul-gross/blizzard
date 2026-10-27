@@ -999,6 +999,7 @@ def register_runner(
             harness_id=c.harness_id,
             version=c.version,
             tiers=tuple(c.tiers),
+            supported_models=tuple(c.supported_models),
             default=c.default,
             available=c.available,
         )

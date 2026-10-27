@@ -252,6 +252,29 @@ def test_preference_order_skips_an_unresolvable_member_and_falls_through_to_the_
         assert harness_ids == {"claude_code"}, harness_ids
 
 
+def test_a_native_only_multi_harness_session_is_matched_by_the_reported_supported_models(tmp_path: Path) -> None:
+    """A strict session naming only native models across both harnesses has no tier to match: the matched peek
+    offers it only because each binding reports the native names it supports, and the runner then resolves the
+    one OpenCode accepts."""
+    bin_dir = require_mock_fleet()
+    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
+    fenced = _tick_env()
+
+    hub_port = free_port()
+    with mock_hub(bin_dir, hub_port) as hub:
+        spec = _preference_chunk_spec(
+            _WORK_REF_URL, harnesses=["opencode", "claude_code"], build_script=OPENCODE_BUILD_SCRIPT
+        )
+        spec["nodes"]["build"]["session_model"] = ["opus-unreported", "openai/gpt-5"]
+        chunk_id = _seed(hub, spec)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+
+        landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
+        assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+        harness_ids = {row["harness_id"] for row in _leases_for_chunk(config, chunk_id)}
+        assert harness_ids == {"opencode"}, harness_ids
+
+
 # --------------------------------------------------------------------------- #
 # 3. A bare lineage resolving through the default.
 

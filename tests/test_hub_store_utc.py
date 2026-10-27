@@ -7,6 +7,8 @@ were retyped ``UtcDateTime``, since sqlite drops ``tzinfo`` on write.
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -68,6 +70,31 @@ def test_registration_round_trips_its_capability_snapshot(tmp_path: Path) -> Non
     registration = store.get_runner("r1")
     assert registration is not None
     assert registration.capabilities == capabilities
+
+
+def test_registration_round_trips_supported_models_and_an_old_row_reads_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.record_registration(
+        "r1",
+        workspace_id="ws1",
+        env_capacity=None,
+        capabilities=(RunnerCapability(harness_id="claude_code", supported_models=("opus", "claude-*")),),
+        at=_NOW,
+    )
+    registration = store.get_runner("r1")
+    assert registration is not None
+    assert registration.capabilities[0].supported_models == ("opus", "claude-*")
+
+    # A row written before the key existed carries no `supported_models` entry.
+    with closing(sqlite3.connect(tmp_path / "hub.db")) as raw:
+        raw.execute(
+            "UPDATE runner_registrations SET capabilities = ? WHERE runner_id = 'r1'",
+            ('[{"harness_id": "claude_code", "tiers": []}]',),
+        )
+        raw.commit()
+    old = store.get_runner("r1")
+    assert old is not None
+    assert old.capabilities[0].supported_models == ()
 
 
 def test_registration_without_capabilities_leaves_it_empty(tmp_path: Path) -> None:

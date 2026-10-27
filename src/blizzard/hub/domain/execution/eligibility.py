@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from blizzard.foundation.model_support import model_supported
 from blizzard.foundation.node_steps import TIER_PREFIX, Executor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
@@ -84,7 +85,10 @@ class EligibilityCheck:
             capability = next((c for c in available if c.harness_id == harness_id), None)
             if capability is None:
                 continue
-            if strict and not any(tier in capability.tiers for tier in session.model):
+            if strict and not any(
+                entry in capability.tiers or model_supported(entry, capability.supported_models)
+                for entry in session.model
+            ):
                 continue
             return True
         return False

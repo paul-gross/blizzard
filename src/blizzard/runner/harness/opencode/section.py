@@ -9,9 +9,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.config_table import Table
+from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 
 DEFAULT_OPENCODE_BINARY = "opencode"
@@ -28,6 +28,9 @@ class OpenCodeSection:
     binary: str = DEFAULT_OPENCODE_BINARY
     #: `[opencode].enabled` — false leaves OpenCode unbound, unprobed, and unadvertised.
     enabled: bool = True
+    #: `[opencode.models].supported` — `provider/model` names or glob patterns this binding accepts; `None` takes
+    #: the adapter's built-in vocabulary, an explicit empty tuple means no native names.
+    supported_models: tuple[str, ...] | None = None
     #: OpenCode's tier -> `provider/model` mapping; an unmapped tier skips this binding.
     model_aliases: tuple[tuple[str, str], ...] = ()
     #: OpenCode's effort -> `--variant` mapping; unmapped drops to `None` and logs once.
@@ -71,6 +74,14 @@ class OpenCodeSection:
                 if self.auth_path is not None
                 else '# auth_path = "/path/to/auth.json"  # defaults to the path resolved from the worker env\n'
             )
+            + "\n[opencode.models]\n"
+            + "# The `provider/model` names (exact, or `*` globs) this binding supports. Absent, it takes\n"
+            + "# `*/*`; the list replaces it. Alias targets below bypass it.\n"
+            + (
+                f"supported = {json.dumps(list(self.supported_models))}\n"
+                if self.supported_models is not None
+                else '# supported = ["openai/*", "anthropic/claude-sonnet-4-5"]\n'
+            )
             + "\n[opencode.models.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
             + "\n[opencode.effort.aliases]\n"
@@ -100,6 +111,7 @@ class OpenCodeSectionKind:
             ConfigKey("opencode.auth_path", STRING),
             ConfigKey("opencode.worker_config_path", STRING),
             ConfigKey("opencode.models", TABLE),
+            ConfigKey("opencode.models.supported", STRING_LIST),
             ConfigKey("opencode.models.aliases", OPEN_TABLE),
             ConfigKey("opencode.effort", TABLE),
             ConfigKey("opencode.effort.aliases", OPEN_TABLE),
@@ -112,6 +124,7 @@ class OpenCodeSectionKind:
             binary=table.word("binary") or DEFAULT_OPENCODE_BINARY,
             enabled=table.boolean("enabled", True),
             auth_path=table.word("auth_path"),
+            supported_models=_supported(Table.of(view.table("models"))),
             model_aliases=Table.of(view.table("models")).pairs("aliases"),
             effort_aliases=Table.of(view.table("effort")).pairs("aliases"),
             # A pre-`[opencode]` config carries no `worker_config_path`; default to the
@@ -124,6 +137,18 @@ class OpenCodeSectionKind:
 
     def scaffold(self, root: Path, environ: Mapping[str, str]) -> OpenCodeSection:
         return OpenCodeSection(worker_config_path=str(root / OPENCODE_WORKER_CONFIG_FILENAME))
+
+
+def _supported(models: Table) -> tuple[str, ...] | None:
+    """The declared supported list, or ``None`` when the key is absent. Every entry must carry a ``/``: the CLI takes
+    only a ``provider/model`` reference, so a name without one could be matched by the hub and then refused here."""
+    if models.get("supported") is None:
+        return None
+    entries = models.names("supported")
+    for entry in entries:
+        if "/" not in entry:
+            raise ConfigError(f"[opencode.models] supported entry {entry!r} must be a 'provider/model' name or pattern")
+    return entries
 
 
 OPENCODE_SECTION = OpenCodeSectionKind()

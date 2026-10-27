@@ -7737,6 +7737,10 @@ export type RunnerCapability = {
      */
     harness_id: string;
     /**
+     * Supported Models
+     */
+    supported_models?: Array<string>;
+    /**
      * Tiers
      */
     tiers?: Array<string>;

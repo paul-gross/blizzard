@@ -418,6 +418,7 @@ class RunnerCapability:
     harness_id: str
     version: str | None = None
     tiers: tuple[str, ...] = ()
+    supported_models: tuple[str, ...] = ()
     default: bool = False
     available: bool = True
 

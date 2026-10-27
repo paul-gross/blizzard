@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.model_support import model_supported
 from blizzard.foundation.node_steps import TIER_PREFIX
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness import harness_shared
@@ -58,10 +59,10 @@ _BUILTIN_TIERS = {
     "blizzard:basic": "sonnet",
 }
 
-# The native names recognized without a tier alias — which is what lets an unrecognized
-# one be **skipped** as another harness's rather than handed to a CLI that rejects it.
-_NATIVE_SHORT_NAMES = frozenset({"fable", "opus", "sonnet", "haiku"})
-_NATIVE_PREFIX = "claude-"
+# The native names recognized without a tier alias when the runner declares no `[models] supported` list —
+# which is what lets an unrecognized one be **skipped** as another harness's rather than handed to a CLI that
+# rejects it. Exact names or glob patterns, matched by ``foundation.model_support``.
+DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("fable", "opus", "sonnet", "haiku", "claude-*")
 
 # The well-known effort ordinal, extended by the runner's ``[effort.aliases]`` — which is
 # also how a deployment reaches a native tier outside the ordinal.
@@ -176,6 +177,7 @@ class ClaudeCodeAdapter:
         worker_env: AllowlistedEnv,
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
+        supported_models: Sequence[str] | None = None,
         transcript_source: IHarnessTranscriptSource | None = None,
         process: IProcessProbe,
         launcher: IProcessLauncher,
@@ -194,6 +196,8 @@ class ClaudeCodeAdapter:
         # ``[effort.aliases]``), overriding this adapter's built-ins entry by entry.
         self._model_aliases = dict(model_aliases)
         self._effort_aliases = dict(effort_aliases)
+        # The effective native-name list: the declared one replaces the built-in vocabulary outright.
+        self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         # Values already logged as unrecognized, so the notice fires once per value.
         self._unrecognized_efforts: set[str] = set()
         self._unrecognized_compaction_windows: set[str] = set()
@@ -241,7 +245,7 @@ class ClaudeCodeAdapter:
         # operator naming their own shorthand), so the table is consulted first.
         if entry in self._model_aliases:
             return self._model_aliases[entry]
-        if entry in _NATIVE_SHORT_NAMES or entry.startswith(_NATIVE_PREFIX):
+        if model_supported(entry, self._supported_models):
             return entry
         return None
 
@@ -269,6 +273,11 @@ class ClaudeCodeAdapter:
         once — the same override-by-key precedence :meth:`_resolve_one_model` applies.
         Shared with OpenCode (``harness_shared.resolvable_tier_ids``)."""
         return harness_shared.resolvable_tier_ids(_BUILTIN_TIERS, self._model_aliases)
+
+    def supported_models(self) -> tuple[str, ...]:
+        """The effective native-name list — the declared one, else the built-in vocabulary — which both
+        gates :meth:`_resolve_one_model`'s native branch and is what the capability report advertises."""
+        return self._supported_models
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         """``"auto"`` or a token-count spelling, else dropped and logged once."""

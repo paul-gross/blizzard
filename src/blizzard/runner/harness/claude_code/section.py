@@ -6,11 +6,12 @@ Imports nothing from :mod:`blizzard.runner.config`: the config module reads this
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
@@ -39,6 +40,9 @@ class ClaudeCodeSection:
     credentials_path: str | None = None
     #: Tier aliases onto Claude Code's model names; one neither this nor the adapter maps is skipped.
     model_aliases: tuple[tuple[str, str], ...] = ()
+    #: `[models].supported` — the native names or glob patterns this binding accepts; `None` takes the adapter's
+    #: built-in vocabulary, an explicit empty tuple means no native names.
+    supported_models: tuple[str, ...] | None = None
     #: Effort alias mappings onto the `low|medium|high|max` ordinal; the well-known four need no entry.
     effort_aliases: tuple[tuple[str, str], ...] = ()
 
@@ -73,7 +77,15 @@ class ClaudeCodeSection:
             + "# (blizzard:frontier/advanced/basic), so a zero-config runner needs no entry here;\n"
             + "# an entry overrides the built-in. An unmapped alias is skipped at resolution, never\n"
             + "# a spawn failure. Effort maps onto the low|medium|high|max ordinal.\n"
-            + "[models.aliases]\n"
+            + "[models]\n"
+            + "# The native model names (exact, or `*` globs) this binding supports. Absent, it takes the\n"
+            + "# built-in vocabulary; the list replaces it. Alias targets above bypass it.\n"
+            + (
+                f"supported = {json.dumps(list(self.supported_models))}\n"
+                if self.supported_models is not None
+                else '# supported = ["fable", "opus", "sonnet", "haiku", "claude-*"]  # the default\n'
+            )
+            + "\n[models.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
             + "\n[effort.aliases]\n"
             + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.effort_aliases)
@@ -100,6 +112,7 @@ class ClaudeCodeSectionKind:
             ConfigKey("claude_code.enabled", BOOLEAN, default=ClaudeCodeSection.enabled),
             ConfigKey("claude_code.binary", STRING, default=DEFAULT_HARNESS_BINARY),
             ConfigKey("models", TABLE),
+            ConfigKey("models.supported", STRING_LIST),
             ConfigKey("models.aliases", OPEN_TABLE),
             ConfigKey("effort", TABLE),
             ConfigKey("effort.aliases", OPEN_TABLE),
@@ -127,6 +140,7 @@ class ClaudeCodeSectionKind:
             permission_mode=permission_mode,
             worker_settings_path=_present(document, "worker_settings_path"),
             credentials_path=_present(document, "claude_code_credentials_path"),
+            supported_models=_supported(Table.of(document.table("models"))),
             model_aliases=Table.of(document.table("models")).pairs("aliases"),
             effort_aliases=Table.of(document.table("effort")).pairs("aliases"),
         )
@@ -141,6 +155,11 @@ class ClaudeCodeSectionKind:
             binary=environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
         )
+
+
+def _supported(models: Table) -> tuple[str, ...] | None:
+    """The declared supported list, or ``None`` when the key is absent."""
+    return None if models.get("supported") is None else models.names("supported")
 
 
 def _present(document: ConfigView, key: str) -> str | None:

@@ -2281,3 +2281,41 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     cmd = captured["cmd"]
     assert envelope.prompt in cmd
     assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)
+
+
+@pytest.mark.unit
+def test_a_declared_supported_list_refuses_a_native_name_outside_it(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="claude", supported_models=["opus"])
+    assert adapter.resolve_model_strict(["sonnet", "claude-sonnet-4"]) is None
+    assert adapter.resolve_model_strict(["sonnet", "opus"]) == "opus"
+
+
+@pytest.mark.unit
+def test_a_declared_supported_pattern_accepts_a_matching_native_name(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="claude", supported_models=["claude-opus-*"])
+    assert adapter.resolve_model_strict(["claude-opus-5"]) == "claude-opus-5"
+    assert adapter.resolve_model_strict(["opus"]) is None
+
+
+@pytest.mark.unit
+def test_an_empty_supported_list_accepts_no_native_name_but_still_maps_a_tier(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="claude", supported_models=[])
+    assert adapter.resolve_model_strict(["opus"]) is None
+    assert adapter.resolve_model_strict(["blizzard:advanced"]) == "opus"
+
+
+@pytest.mark.unit
+def test_an_alias_target_bypasses_the_supported_list(spawn_executor: Executor) -> None:
+    adapter = _adapter(
+        spawn_executor, binary="claude", supported_models=["haiku"], model_aliases=[("house", "gpt-custom")]
+    )
+    assert adapter.resolve_model_strict(["house"]) == "gpt-custom"
+
+
+@pytest.mark.unit
+def test_with_no_declared_list_the_built_in_vocabulary_is_accepted_and_reported(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, binary="claude")
+    assert adapter.resolve_model_strict(["fable"]) == "fable"
+    assert adapter.resolve_model_strict(["claude-opus-5"]) == "claude-opus-5"
+    assert adapter.resolve_model_strict(["gpt-5"]) is None
+    assert adapter.supported_models() == ("fable", "opus", "sonnet", "haiku", "claude-*")

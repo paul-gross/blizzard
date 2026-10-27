@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.model_support import model_supported
 from blizzard.foundation.node_steps import TIER_PREFIX
 from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness import harness_shared
@@ -69,6 +70,9 @@ from blizzard.runner.process.probe import IProcessProbe
 _log = get_logger("blizzard.runner.harness")
 
 # The well-known effort ordinal; outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
+# The native names recognized when the runner declares no `[opencode.models] supported` list: any `provider/model`.
+DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
+
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 # How often a fresh mint's pending handle re-reads the stdout capture while awaiting identity.
@@ -226,6 +230,7 @@ class OpenCodeAdapter:
         worker_env: AllowlistedEnv,
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
+        supported_models: Sequence[str] | None = None,
         worker_config_path: str | None = None,
         effective_config_dir: str | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
@@ -244,6 +249,8 @@ class OpenCodeAdapter:
         self._model = model
         self._model_aliases = dict(model_aliases)
         self._effort_aliases = dict(effort_aliases)
+        # The effective native-name list: the declared one replaces the built-in vocabulary outright.
+        self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         self._unrecognized_efforts: set[str] = set()
         self._unrecognized_compaction_windows: set[str] = set()
         # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
@@ -293,8 +300,10 @@ class OpenCodeAdapter:
             return self._model_aliases.get(entry)
         if entry in self._model_aliases:
             return self._model_aliases[entry]
-        # A non-namespaced entry is accepted only as a valid `provider/model` OpenCode
-        # reference (execution spec) — OpenCode has no fixed short-name vocabulary.
+        if not model_supported(entry, self._supported_models):
+            return None
+        # A supported entry must still be a valid `provider/model` OpenCode reference
+        # (execution spec) — the CLI takes nothing else.
         try:
             parse_model_reference(entry)
         except OpenCodeShapeError:
@@ -319,6 +328,11 @@ class OpenCodeAdapter:
         built-in tier mapping, so only the runner's own ``[opencode.models.aliases]``
         table is resolvable here. Shared with Claude Code (``harness_shared.resolvable_tier_ids``)."""
         return harness_shared.resolvable_tier_ids({}, self._model_aliases)
+
+    def supported_models(self) -> tuple[str, ...]:
+        """The effective native-name list — the declared one, else ``*/*`` — which both gates
+        :meth:`_resolve_one_model`'s native branch and is what the capability report advertises."""
+        return self._supported_models
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
         """Always unsupported: OpenCode's compaction reserve and automatic-compaction

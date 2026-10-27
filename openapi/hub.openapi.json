@@ -12596,6 +12596,14 @@
             "title": "Harness Id",
             "type": "string"
           },
+          "supported_models": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Models",
+            "type": "array"
+          },
           "tiers": {
             "default": [],
             "items": {

@@ -306,6 +306,7 @@ def _capability_views(r: RunnerRegistration) -> list[RunnerCapabilityWire]:
             harness_id=c.harness_id,
             version=c.version,
             tiers=list(c.tiers),
+            supported_models=list(c.supported_models),
             default=c.default,
             available=c.available,
         )

@@ -1912,3 +1912,27 @@ def test_spawn_never_splices_graph_artifact_content_into_the_prompt(
     (cmd,) = captured
     assert envelope.prompt in cmd
     assert not any("RUBRIC-BODY-7f3a" in part or "rubric" in part for part in cmd)
+
+
+@pytest.mark.unit
+def test_a_declared_supported_list_refuses_a_provider_model_outside_it(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor, supported_models=["openai/*"])
+    assert adapter.resolve_model_strict(["anthropic/claude-sonnet-4"]) is None
+    assert adapter.resolve_model_strict(["anthropic/claude-sonnet-4", "openai/gpt-5"]) == "openai/gpt-5"
+
+
+@pytest.mark.unit
+def test_an_empty_supported_list_accepts_no_native_name_but_still_maps_a_tier(spawn_executor: Executor) -> None:
+    adapter = _adapter(
+        spawn_executor, supported_models=[], model_aliases=[("blizzard:frontier", "openai/gpt-5.6-luna")]
+    )
+    assert adapter.resolve_model_strict(["openai/gpt-5"]) is None
+    assert adapter.resolve_model_strict(["blizzard:frontier"]) == "openai/gpt-5.6-luna"
+
+
+@pytest.mark.unit
+def test_with_no_declared_list_any_provider_model_is_accepted_and_reported(spawn_executor: Executor) -> None:
+    adapter = _adapter(spawn_executor)
+    assert adapter.resolve_model_strict(["openai/gpt-5.6-luna"]) == "openai/gpt-5.6-luna"
+    assert adapter.resolve_model_strict(["opus"]) is None
+    assert adapter.supported_models() == ("*/*",)

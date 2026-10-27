@@ -17,12 +17,13 @@ from blizzard.runner.harness.registry import IHarnessRegistry
 @dataclass(frozen=True)
 class HarnessCapability:
     """One harness binding this runner can execute — its id, its observed version (``None`` when
-    the binding exposes none), the tier ids it resolves, whether it is the runner's default, and
-    whether it is available."""
+    the binding exposes none), the tier ids it resolves, the native model names or patterns it supports,
+    whether it is the runner's default, and whether it is available."""
 
     harness_id: str
     version: str | None = None
     tiers: list[str] = field(default_factory=list[str])
+    supported_models: list[str] = field(default_factory=list[str])
     default: bool = False
     available: bool = True
 
@@ -81,6 +82,7 @@ def capability_snapshot(
                 harness_id=harness_id,
                 version=version,
                 tiers=list(model.resolvable_tier_ids()),
+                supported_models=list(model.supported_models()),
                 default=harness_id == default_id,
                 available=result.available,
             )

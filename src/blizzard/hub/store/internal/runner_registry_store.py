@@ -266,6 +266,7 @@ class RunnerRegistryStore:
                         "harness_id": c.harness_id,
                         "version": c.version,
                         "tiers": list(c.tiers),
+                        "supported_models": list(c.supported_models),
                         "default": c.default,
                         "available": c.available,
                     }
@@ -675,6 +676,7 @@ class RunnerRegistryStore:
                 harness_id=c["harness_id"],
                 version=c.get("version"),
                 tiers=tuple(c.get("tiers") or ()),
+                supported_models=tuple(c.get("supported_models") or ()),
                 default=bool(c.get("default", False)),
                 available=bool(c.get("available", True)),
             )
