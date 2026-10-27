@@ -62,6 +62,7 @@ def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:  # type: ignore[no-un
         open_takeover=store.open_takeover_for_chunk(chunk_id),
         open_escalation=store.open_escalation_for_chunk(chunk_id),
         held_environment_ids=tuple(b.environment_id for b in store.bindings_for_chunk(chunk_id)),
+        requeue_pending=chunk_id in store.pending_requeue_chunk_ids(),
     )
 
 
@@ -308,12 +309,15 @@ def _rows(tmp_path, stmt):  # type: ignore[no-untyped-def]
 
 
 def test_a_requeue_asked_while_one_is_pending_changes_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """Two marks, one fill, one lease, one retry charged — the second ask is absorbed by consumption."""
+    """One mark, untouched by the second ask; one fill, one lease, one retry charged."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
+    marks = select(requeues.c.requeued_at, requeues.c.seq).where(requeues.c.runner_id == FIXTURE_RUNNER_ID)
     _service(store, clock=FixedClock(_LATER)).requeue(_scope(store))
+    written = _rows(tmp_path, marks)
     _service(store, clock=FixedClock(_LATER + (_EVEN_LATER - _LATER) / 2)).requeue(_scope(store))
-    assert len(_rows(tmp_path, select(requeues.c.chunk_id).where(requeues.c.runner_id == FIXTURE_RUNNER_ID))) == 2
+    assert len(written) == 1
+    assert _rows(tmp_path, marks) == written
     assert store.pending_requeue_chunk_ids() == {"ch_1"}
 
     hub = FakeHub()

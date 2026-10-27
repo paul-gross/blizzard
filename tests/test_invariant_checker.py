@@ -731,8 +731,8 @@ def test_a_held_row_naming_no_workspace_conflicts_with_any_row_on_its_environmen
     assert "ch_1" in details[0] and "ch_2" in details[0]
 
 
-def _bind_at(engine, chunk_id: str, *, runner_id: str, at: datetime) -> None:
-    """``chunk_id`` bound to ``r1`` of ``ws_a`` by ``runner_id`` at ``at``."""
+def _bind_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
+    """``chunk_id`` bound to ``r1`` of ``ws_a`` by ``runner_id`` at ``at``, the ``seq``-th fact it appended."""
     with engine.begin() as conn:
         conn.execute(
             sa.insert(runner.env_bindings).values(
@@ -742,52 +742,54 @@ def _bind_at(engine, chunk_id: str, *, runner_id: str, at: datetime) -> None:
                 bound_at=at,
                 workspace_id="ws_a",
                 runner_id=runner_id,
+                seq=seq,
             )
         )
 
 
-def _release_at(engine, chunk_id: str, *, runner_id: str, at: datetime) -> None:
+def _release_at(engine, chunk_id: str, *, runner_id: str, at: datetime, seq: int) -> None:
     with engine.begin() as conn:
         conn.execute(
             sa.insert(runner.binding_releases).values(
-                chunk_id=chunk_id, environment_id="r1", released_at=at, runner_id=runner_id
+                chunk_id=chunk_id, environment_id="r1", released_at=at, runner_id=runner_id, seq=seq
             )
         )
 
 
 @pytest.mark.unit
-def test_a_release_frees_only_its_own_runners_binding_bound_at_or_before_it(tmp_path: Path) -> None:
-    """Held means what the runner's own reads mean: no release by the binding's runner at or after its bind."""
+def test_a_release_frees_only_its_own_runners_binding_appended_before_it(tmp_path: Path) -> None:
+    """Held means what the runner's own reads mean: no release by the binding's runner appended after the bind."""
     later = _NOW + timedelta(hours=1)
+    me = FIXTURE_RUNNER_ID
 
     # Another runner's release of the same (chunk, environment) does not free this runner's binding.
     cross = _two_runner_engine(tmp_path / "cross")
-    _bind_at(cross, "ch_1", runner_id=_OTHER_RUNNER, at=_NOW)
-    _release_at(cross, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=later)
-    _bind_at(cross, "ch_2", runner_id=FIXTURE_RUNNER_ID, at=later)
+    _bind_at(cross, "ch_1", runner_id=_OTHER_RUNNER, at=_NOW, seq=1)
+    _release_at(cross, "ch_1", runner_id=me, at=later, seq=1)
+    _bind_at(cross, "ch_2", runner_id=me, at=later, seq=2)
     assert len(_unique_env_violations(cross)) == 1
 
-    # A release older than the bind does not free it.
-    stale = _runner_engine(tmp_path / "stale")
-    _bind_at(stale, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=later)
-    _release_at(stale, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=_NOW)
-    _bind_at(stale, "ch_2", runner_id=FIXTURE_RUNNER_ID, at=later)
-    assert len(_unique_env_violations(stale)) == 1
+    # A release appended before the bind does not free it, whatever instants they carry.
+    early = _runner_engine(tmp_path / "early")
+    _release_at(early, "ch_1", runner_id=me, at=later, seq=1)
+    _bind_at(early, "ch_1", runner_id=me, at=_NOW, seq=2)
+    _bind_at(early, "ch_2", runner_id=me, at=later, seq=3)
+    assert len(_unique_env_violations(early)) == 1
 
-    # Bind, release, rebind by one runner: the rebind is held, the released bind is not.
+    # Bind, release, rebind by one runner at one instant: the rebind is held, the released bind is not.
     rebound = _runner_engine(tmp_path / "rebound")
-    _bind_at(rebound, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=_NOW)
-    _release_at(rebound, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=_NOW)
-    _bind_at(rebound, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=later)
+    _bind_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=1)
+    _release_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=2)
+    _bind_at(rebound, "ch_1", runner_id=me, at=_NOW, seq=3)
     assert _unique_env_violations(rebound) == []
-    _bind_at(rebound, "ch_2", runner_id=FIXTURE_RUNNER_ID, at=later)
+    _bind_at(rebound, "ch_2", runner_id=me, at=later, seq=4)
     assert len(_unique_env_violations(rebound)) == 1
 
-    # A release by the binding's own runner, at its bind instant, frees it.
+    # A release by the binding's own runner, appended after it, frees it.
     freed = _runner_engine(tmp_path / "freed")
-    _bind_at(freed, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=_NOW)
-    _release_at(freed, "ch_1", runner_id=FIXTURE_RUNNER_ID, at=_NOW)
-    _bind_at(freed, "ch_2", runner_id=FIXTURE_RUNNER_ID, at=later)
+    _bind_at(freed, "ch_1", runner_id=me, at=_NOW, seq=1)
+    _release_at(freed, "ch_1", runner_id=me, at=_NOW, seq=2)
+    _bind_at(freed, "ch_2", runner_id=me, at=later, seq=3)
     assert _unique_env_violations(freed) == []
 
 

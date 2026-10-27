@@ -24,6 +24,7 @@ from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
     escalation_closures,
+    fact_counters,
     lease_closures,
     lease_context,
     leases,
@@ -47,7 +48,7 @@ NO_NORMALIZER_VERSION = ""
 class Unsuperseded:
     """A fact row stands while no superseding row exists — one correlated ``NOT EXISTS``.
 
-    Correlated on the superseding row's own ordering column, an instant or an epoch, never
+    Correlated on the superseding row's own ordering column, an append sequence, an instant or an epoch, never
     a bare key ``NOT IN``: a re-mark above an earlier close reads as open again."""
 
     marker: Any
@@ -74,13 +75,14 @@ class Unclosed:
         return self.key.not_in(store.select(self.closers.table, self.closers))
 
 
-# Pinned by tests/test_pin_runner_store.py::test_a_rebind_after_a_release_reads_as_held.
+# A release closes only a bind appended before it; pinned by
+# tests/test_pin_runner_store.py::test_a_same_instant_rebind_after_a_release_reads_as_held.
 HELD_BINDING = Unsuperseded(
     binding_releases.c.id,
     (
         binding_releases.c.chunk_id == env_bindings.c.chunk_id,
         binding_releases.c.environment_id == env_bindings.c.environment_id,
-        binding_releases.c.released_at >= env_bindings.c.bound_at,
+        binding_releases.c.seq > env_bindings.c.seq,
     ),
 )
 
@@ -93,12 +95,13 @@ OPEN_INTENT = Unsuperseded(
     ),
 )
 
-# A second pause under one lease is not masked by the first pause's resume.
+# A resume closes only a park appended before it, so a second pause under one lease is not masked by the first
+# pause's resume, even at the same instant.
 _UNRESUMED_PAUSE_PARK = Unsuperseded(
     pause_park_resumes.c.id,
     (
         pause_park_resumes.c.lease_id == pause_parks.c.lease_id,
-        pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at,
+        pause_park_resumes.c.seq > pause_parks.c.seq,
     ),
 )
 
@@ -218,31 +221,52 @@ def insert_outbox_row(store: RunnerStoreConnections, conn: Connection, table: Ta
     The one door every outbox write passes through: the lane's counter in ``outbox_counters`` advances in the same
     transaction as the row, so a rollback returns the seq, and a counter never moves backwards, so a pruned row's seq is
     never issued again. ``tests/test_layering.py`` fails an insert into either table that goes around it."""
-    seq = _next_outbox_seq(store, conn, _OUTBOX_LANES[table])
+    seq = _advance_counter(
+        store, conn, outbox_counters, outbox_counters.c.lane == _OUTBOX_LANES[table], lane=_OUTBOX_LANES[table]
+    )
     conn.execute(store.insert(table).values(seq=seq, **values))
     return seq
 
 
-def _next_outbox_seq(store: RunnerStoreConnections, conn: Connection, lane: str) -> int:
-    """Advance the bound runner's counter for ``lane`` and answer its new value. The advance takes the counter's row
-    lock, so concurrent writers of one lane queue behind it; the first allocation creates the row, and a writer that
-    loses that race advances the row the winner created."""
-    advance = (
-        store.update(outbox_counters)
-        .where(outbox_counters.c.lane == lane)
-        .values(last_seq=outbox_counters.c.last_seq + 1)
-    )
+def insert_fact_row(store: RunnerStoreConnections, conn: Connection, table: Table, **values: Any) -> int:
+    """Insert one row into a sequenced fact table on ``conn`` — the caller's transaction —
+    under the next ``seq`` of the bound runner's fact counter; answer that ``seq``.
+
+    The sequenced tables are ``env_bindings``, ``binding_releases``, ``pause_parks``, ``pause_park_resumes``,
+    ``requeues`` and ``leases``: each closure between them — release closes bind, resume closes park, lease mint
+    consumes requeue — is judged by ``seq``, never by comparing instants.
+
+    The one door every write to those tables passes through: the counter advances in the same transaction as the row,
+    so rows are numbered in the order they were appended and a rollback returns the seq. ``tests/test_layering.py``
+    fails an insert into any of them that goes around it."""
+    seq = _advance_counter(store, conn, fact_counters)
+    conn.execute(store.insert(table).values(seq=seq, **values))
+    return seq
+
+
+def _advance_counter(
+    store: RunnerStoreConnections,
+    conn: Connection,
+    counters: Table,
+    where: ColumnElement[bool] | None = None,
+    **key: Any,
+) -> int:
+    """Advance the bound runner's counter row in ``counters`` (the one ``where`` selects, created with ``key`` columns)
+    and answer its new value. The advance takes the counter's row lock, so concurrent writers queue behind it; the first
+    allocation creates the row, and a writer that loses that race advances the row the winner created."""
+    advance = store.update(counters).values(last_seq=counters.c.last_seq + 1)
+    read = store.select(counters, counters.c.last_seq)
+    if where is not None:
+        advance, read = advance.where(where), read.where(where)
     if not conn.execute(advance).rowcount:
         try:
             with conn.begin_nested():
-                conn.execute(store.insert(outbox_counters).values(lane=lane, last_seq=1))
+                conn.execute(store.insert(counters).values(last_seq=1, **key))
         except IntegrityError:
             conn.execute(advance)
         else:
             return 1
-    return conn.execute(
-        store.select(outbox_counters, outbox_counters.c.last_seq).where(outbox_counters.c.lane == lane)
-    ).scalar_one()
+    return conn.execute(read).scalar_one()
 
 
 #: The tables a runner transfer carries through :func:`carry_outbox_rows` rather than its generic table loop.

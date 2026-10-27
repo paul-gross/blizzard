@@ -241,8 +241,8 @@ class IReadPauseRepository(Protocol):
         ...
 
     def pause_parked_lease_ids(self) -> set[str]:
-        """Leases dormant on an operator pause — a pause-park fact with no later
-        pause-resume at or after it and no closure of its lease.
+        """Leases dormant on an operator pause — a pause-park fact with no
+        pause-resume appended after it and no closure of its lease.
 
         A hub-terminal chunk closes its lease, and the lease closure closes its park."""
         ...

@@ -12,7 +12,12 @@ import sqlalchemy as sa
 from sqlalchemy import Connection, func
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.store.internal.base import insert_outbox_row, open_pause_park, pause_parked_lease_ids
+from blizzard.runner.store.internal.base import (
+    insert_fact_row,
+    insert_outbox_row,
+    open_pause_park,
+    pause_parked_lease_ids,
+)
 from blizzard.runner.store.schema import (
     hub_control,
     local_pause_facts,
@@ -223,14 +228,15 @@ class PauseStore:
         cause: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(pause_parks).values(
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    parked_at=parked_at,
-                    interrupted_elicitation_id=interrupted_elicitation_id,
-                    cause=cause,
-                )
+            insert_fact_row(
+                self._store,
+                conn,
+                pause_parks,
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                parked_at=parked_at,
+                interrupted_elicitation_id=interrupted_elicitation_id,
+                cause=cause,
             )
         _log.info(
             "chunk parked on operator pause",
@@ -241,7 +247,7 @@ class PauseStore:
 
     def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
         with self._store.begin() as conn:
-            conn.execute(self._store.insert(pause_park_resumes).values(lease_id=lease_id, resumed_at=resumed_at))
+            insert_fact_row(self._store, conn, pause_park_resumes, lease_id=lease_id, resumed_at=resumed_at)
         _log.info("pause park resumed", lease_id=lease_id)
 
 

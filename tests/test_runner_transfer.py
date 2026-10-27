@@ -170,10 +170,26 @@ def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_sou
     for name in ("outbound_buffer", "transcript_outbound_buffer"):
         assert [r["seq"] for r in _rows(here, name, runner_id=_MOVING)] == [r["seq"] for r in _rows(source, name)]
     assert _rows(here, "outbox_counters", runner_id=_MOVING) == _rows(source, "outbox_counters")
+    assert _rows(here, "fact_counters", runner_id=_MOVING) == _rows(source, "fact_counters")
     for name in _HOST_TABLES:
         assert _rows(here, name) == hosts[name], f"{name}: an identical host row is not carried again"
     assert _everything(source) == untouched
     assert RunnerInvariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+
+
+def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> None:  # type: ignore[no-untyped-def]
+    here, source = stores
+    tables = ("env_bindings", "binding_releases", "pause_parks", "pause_park_resumes", "requeues", "leases")
+    with source.begin() as conn:
+        shapes = reflect(source)
+        for seq, name in enumerate(tables, start=7):
+            conn.execute(sa.update(shapes.tables[name]).values(seq=seq))
+        conn.execute(sa.update(shapes.tables["fact_counters"]).values(last_seq=12))
+
+    _transfer(source, here).copy_runner()
+
+    assert [_rows(here, name, runner_id=_MOVING)[0]["seq"] for name in tables] == list(range(7, 13))
+    assert [r["last_seq"] for r in _rows(here, "fact_counters", runner_id=_MOVING)] == [12]
 
 
 def test_a_copy_keeps_each_counter_at_the_larger_of_the_two_stores(stores) -> None:  # type: ignore[no-untyped-def]
@@ -276,7 +292,7 @@ def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counte
     build_runner_removal(here, errors=_errors(), runner_id=_MOVING).remove_runner_rows(keep_counters=keep_counters)
 
     for name in _RUNNER_TABLES - {"outbox_counters"}:
-        assert _rows(here, name, runner_id=_MOVING) == [], name
+        assert _rows(here, name, runner_id=_MOVING) == [], name  # the fact counter goes with its facts
     assert _rows(here, "outbox_counters", runner_id=_MOVING) == (counters if keep_counters else [])
     assert {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES} == held
     assert {name: _rows(here, name) for name in _HOST_TABLES} == hosts

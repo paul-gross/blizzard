@@ -16,7 +16,7 @@ from blizzard.runner.environments.repository import (
     IWriteEnvironmentRepository,
     OpenLeaseHold,
 )
-from blizzard.runner.store.internal.base import HELD_BINDING, Unclosed
+from blizzard.runner.store.internal.base import HELD_BINDING, Unclosed, insert_fact_row
 from blizzard.runner.store.schema import binding_releases, env_bindings, lease_closures, leases
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
@@ -91,15 +91,16 @@ class EnvironmentStore:
         project_id: str | None = None,
     ) -> None:
         with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(env_bindings).values(
-                    chunk_id=chunk_id,
-                    environment_id=environment_id,
-                    workdir=workdir,
-                    bound_at=bound_at,
-                    workspace_id=workspace_id,
-                    project_id=project_id,
-                )
+            insert_fact_row(
+                self._store,
+                conn,
+                env_bindings,
+                chunk_id=chunk_id,
+                environment_id=environment_id,
+                workdir=workdir,
+                bound_at=bound_at,
+                workspace_id=workspace_id,
+                project_id=project_id,
             )
         _log.info("env bound", chunk_id=chunk_id, environment_id=environment_id, workdir=workdir)
 
@@ -177,13 +178,14 @@ class EnvironmentStore:
             floor = conn.execute(
                 self._store.select(leases, func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
             ).scalar_one()
-            conn.execute(
-                self._store.insert(binding_releases).values(
-                    chunk_id=chunk_id,
-                    environment_id=environment_id,
-                    released_at=released_at,
-                    lease_epoch_floor=floor,
-                )
+            insert_fact_row(
+                self._store,
+                conn,
+                binding_releases,
+                chunk_id=chunk_id,
+                environment_id=environment_id,
+                released_at=released_at,
+                lease_epoch_floor=floor,
             )
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)
 
