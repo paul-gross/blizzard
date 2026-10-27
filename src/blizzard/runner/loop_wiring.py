@@ -344,14 +344,15 @@ class RunnerStepper:
                 held.enter_context(self._trace_lock.hold())
             clock = self._graph.clock
             started_at = clock.now()
-            fault: Exception | None = None
+            faults: list[Exception] = []
             for run in (self._tick, self._sweep_traces):
                 try:
                     run()
                 except Exception as exc:
                     _log.error("tick failed" if run == self._tick else "lease trace sweep failed", detail=str(exc))
-                    fault = fault or exc
-            return ended(clock, started_at, fault)
+                    faults.append(exc)
+            joined = RuntimeError("; ".join(str(f) or type(f).__name__ for f in faults)) if faults else None
+            return ended(clock, started_at, joined)
 
     def timed_tick(self) -> None:
         try:

@@ -396,3 +396,25 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         assert seen["threads"] == set()
         assert cast(PassResult, seen["result"]).outcome is SweepPassOutcome.COMPLETED
         assert seen["reports"] == 1 and len(ticked) == 1 and registration.runs == 1
+
+
+def test_a_requested_pass_whose_tick_and_trace_sweep_both_raise_answers_both_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(_: LoopContext) -> None:
+        raise RuntimeError("tick broke")
+
+    class _Failing:
+        def sweep(self) -> None:
+            raise RuntimeError("sweep broke")
+
+    monkeypatch.setattr(loop_wiring, "tick", boom)
+    config = _config(tmp_path)
+    with loop_graph(config) as graph:
+        stepper = RunnerStepper(config, process_graph=dataclasses.replace(graph, trace_sweep=cast(Any, _Failing())))
+        try:
+            result = stepper.request()
+        finally:
+            stepper.close()
+
+    assert (result.outcome, result.error) == (SweepPassOutcome.FAILED, "tick broke; sweep broke")
