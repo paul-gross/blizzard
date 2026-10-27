@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitButton, KitCheckbox, KitDialog, KitErrorLine, KitTextInput } from 'fleet';
+import { KitButton, KitCheckbox, KitDialog, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
 import { ConfigFieldDiff } from './config-field-diff';
 import {
@@ -25,7 +25,7 @@ export type ConfigFormMode = 'create' | 'edit' | 'replace';
 @Component({
   selector: 'app-config-form-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitErrorLine, KitTextInput],
+  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitErrorLine, KitSelect, KitTextInput],
   templateUrl: './config-form-dialog.html',
   styleUrl: './config-form-dialog.css',
 })
@@ -73,7 +73,14 @@ export class ConfigFormDialog {
   }
 
   protected onText(key: string, value: string): void {
-    this.typed.update((typed) => ({ ...typed, [key]: value }));
+    this.typed.update((typed) => ({
+      ...typed, [key]: value,
+      ...Object.fromEntries(this.fields().filter((field) => field.filterBy === key).map((field) => [field.key, ''])),
+    }));
+  }
+
+  protected optionsFor(field: ConfigFieldDef): readonly { value: string; label: string }[] {
+    return (field.options ?? []).filter((option) => !field.filterBy || option.kind === this.textOf(field.filterBy));
   }
 
   protected onFlag(key: string, checked: boolean): void {

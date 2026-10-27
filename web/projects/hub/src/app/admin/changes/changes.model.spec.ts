@@ -24,7 +24,7 @@ function change(id: number, overrides: Partial<ConfigChangeView> = {}): ConfigCh
     record_kind: 'repository',
     record_key: 'winter',
     recorded_at: `2026-01-01T00:00:${String(id).padStart(2, '0')}Z`,
-    diff: [{ field: 'base_branch', old: 'master', new: 'main' }],
+    diff: [{ field: 'base_branch', old: 'master', new: 'main', old_label: null, new_label: null }],
     ...overrides,
   };
 }
@@ -104,7 +104,7 @@ describe('changeEntryVm', () => {
         id: 5,
         title: 'repository winter · edit',
         route: ['/admin', 'repositories', 'winter'],
-        diff: [{ field: 'base_branch', old: 'master', new: 'main' }],
+        diff: [{ field: 'base_branch', old: 'master', new: 'main', old_label: null, new_label: null }],
         revisionStep: null,
       },
     ]);

@@ -39,9 +39,15 @@ describe('lastChange', () => {
 });
 
 describe('revisionRows', () => {
+  it('names the forge by its labels instead of stored ids in a revision', () => {
+    const rows = revisionRows([change(10, 3, { diff: [{
+      field: 'forge', old: 'frg_1', new: 'frg_2', old_label: 'github · GitHub', new_label: 'enterprise · Enterprise',
+    }] })]);
+    expect(rows[0].fields).toBe('forge: github · GitHub → enterprise · Enterprise');
+  });
   it('maps each change, joining the fields it changed', () => {
     const rows = revisionRows([
-      change(9, 2, { diff: [{ field: 'annotate', old: false, new: true }, { field: 'secret', old: 'a', new: 'b' }] }),
+      change(9, 2, { diff: [{ field: 'annotate', old: false, new: true, old_label: null, new_label: null }, { field: 'secret', old: 'a', new: 'b', old_label: null, new_label: null }] }),
       change(3, 1, { op: 'create' }),
     ]);
     expect(rows.map((r) => [r.revision, r.op, r.fields])).toEqual([

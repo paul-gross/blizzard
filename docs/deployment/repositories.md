@@ -6,11 +6,19 @@ an id the hub mints:
 
 ```bash
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
+blizzard hub forge create github --kind github --api-base https://api.github.com
 blizzard hub repo create blizzard --forge-api-url https://api.github.com --owner paul-gross --repo blizzard \
   --base-branch master --secret gh-token
 blizzard hub repo list
 blizzard hub repo show blizzard
 ```
+
+`blizzard hub forge list|show|edit|retire|enable` manages the tenant's forge records. A forge has a slug, display name,
+kind, API origin and optional web origin. `show` includes the repositories and work sources using it; retiring one still
+in use answers `forge_in_use` with those referrers. A renamed forge remains addressable by its former slug, but a
+configuration document must use its current slug. Edits, retirement and re-enablement accept `--if-match` to guard the
+revision. The API serves `GET` and `POST /api/forges`, `GET` and `PATCH /api/forges/{forge}`, and `POST` to its
+`/retire` and `/enable` routes. Reads require `fleet:view`; writes require `config:edit`.
 
 ## Naming a repository
 
@@ -46,6 +54,7 @@ Name such a repository by its new slug.
 | `slug`          | The handle you type. It may be edited; the one it leaves still resolves. |
 | `name`          | The display name, free text. It may be edited.                           |
 | `forge_api_url` | The forge's API origin, an absolute `http` or `https` URL.               |
+| `forge`         | The id of the configured forge; select an enabled forge on the board.    |
 | `owner`         | The repository's owner on the forge.                                     |
 | `repo`          | The repository's name on the forge.                                      |
 | `base_branch`   | The branch work lands on.                                                |
@@ -94,7 +103,9 @@ Writes need the `config:edit` permission and reads need `fleet:view`. Over HTTP 
 
 The board's Admin page lists repositories, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
-saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change.
+saves. On a phone the page is read-only and names the `blizzard hub repo` command that makes the change. The repository
+form picks an enabled forge by name instead of editing an address. Version-2 configuration documents use the forge's
+slug in `forge`; version-1 documents continue to use `forge_api_url`.
 
 ## Checking forge addresses before the forge migration
 

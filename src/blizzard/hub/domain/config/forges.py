@@ -226,6 +226,8 @@ def canonical_field(field: str, value: str) -> str:
 
 
 class ForgeSlugTaken(Exception):
+    code = "forge_slug_taken"
+
     def __init__(self, slug: str) -> None:
         super().__init__(f"forge {slug} already exists")
         self.slug = slug
@@ -279,6 +281,25 @@ class ForgeKindMismatch(ConfigFieldError):
     """A work source names a forge whose kind is not its provider."""
 
     code = "forge_kind_mismatch"
+
+
+class ForgeKindImmutable(ConfigFieldError):
+    code = "forge_kind_immutable"
+
+
+@domain_model
+@dataclass(frozen=True)
+class PlannedForges:
+    """Forges available to an apply, including ones declared in the document."""
+
+    records: tuple[ConfiguredForge, ...]
+    former: Mapping[str, ConfiguredForge]
+
+    def resolve(self, value: str) -> ConfiguredForge | None:
+        for record in self.records:
+            if value in (record.forge_id, record.slug):
+                return record
+        return self.former.get(value)
 
 
 @domain_model

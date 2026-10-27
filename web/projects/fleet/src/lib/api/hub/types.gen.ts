@@ -2298,6 +2298,46 @@ export type ConfigDocument = {
 };
 
 /**
+ * ConfigDocumentV2
+ *
+ * A declarative document whose forge records and references are explicit.
+ */
+export type ConfigDocumentV2 = {
+    /**
+     * Forges
+     */
+    forges?: Array<ForgeEntry>;
+    /**
+     * Projects
+     */
+    projects?: Array<ProjectDocument>;
+    /**
+     * Repositories
+     */
+    repositories?: Array<RepositoryEntry>;
+    /**
+     * Routines
+     */
+    routines?: Array<RoutineEntry>;
+    /**
+     * Scopes
+     */
+    scopes?: Array<ScopeEntry>;
+    /**
+     * Secrets
+     */
+    secrets?: Array<string>;
+    /**
+     * Version
+     */
+    version: 2;
+    /**
+     * Work Sources
+     */
+    work_sources?: Array<WorkSourceEntry>;
+};
+
+/**
  * DecisionChoiceModel
  *
  * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
@@ -3102,9 +3142,17 @@ export type FieldChangeView = {
      */
     new: unknown;
     /**
+     * New Label
+     */
+    new_label: string | null;
+    /**
      * Old
      */
     old: unknown;
+    /**
+     * Old Label
+     */
+    old_label: string | null;
 };
 
 /**
@@ -3629,6 +3677,226 @@ export type FleetSummaryView = {
      * Waiting
      */
     waiting: number;
+};
+
+/**
+ * ForgeCreateRequest
+ */
+export type ForgeCreateRequest = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
+};
+
+/**
+ * ForgeDetail
+ */
+export type ForgeDetail = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created By Name
+     */
+    created_by_name: string | null;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Repositories
+     */
+    repositories: Array<ForgeReferenceView>;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Web Base
+     */
+    web_base: string | null;
+    /**
+     * Web Origin
+     */
+    web_origin: string;
+    /**
+     * Work Sources
+     */
+    work_sources: Array<ForgeReferenceView>;
+};
+
+/**
+ * ForgeEntry
+ *
+ * A forge declared by slug; an omitted mutable field stays as stored.
+ */
+export type ForgeEntry = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
+};
+
+/**
+ * ForgePatchRequest
+ */
+export type ForgePatchRequest = {
+    /**
+     * Api Base
+     */
+    api_base?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+    /**
+     * Web Base
+     */
+    web_base?: string | null;
+};
+
+/**
+ * ForgeReferenceView
+ */
+export type ForgeReferenceView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Label
+     */
+    label: string | null;
+};
+
+/**
+ * ForgeSummary
+ */
+export type ForgeSummary = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Created By Name
+     */
+    created_by_name: string | null;
+    /**
+     * Forge Id
+     */
+    forge_id: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Web Base
+     */
+    web_base: string | null;
+    /**
+     * Web Origin
+     */
+    web_origin: string;
+};
+
+/**
+ * ForgesListView
+ */
+export type ForgesListView = {
+    /**
+     * Forges
+     */
+    forges: Array<ForgeSummary>;
 };
 
 /**
@@ -6726,6 +6994,42 @@ export type RepositoryDocument = {
      * Forge Api Url
      */
     forge_api_url: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Secret Name
+     */
+    secret_name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * RepositoryEntry
+ *
+ * A version-2 repository entry, naming its forge instead of an address.
+ */
+export type RepositoryEntry = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Forge
+     */
+    forge: string;
     /**
      * Name
      */
@@ -10358,6 +10662,42 @@ export type WorkSourceDocument = {
 };
 
 /**
+ * WorkSourceEntry
+ *
+ * A version-2 work source entry, naming its forge instead of addresses.
+ */
+export type WorkSourceEntry = {
+    /**
+     * Annotate
+     */
+    annotate?: boolean;
+    /**
+     * Forge
+     */
+    forge: string;
+    /**
+     * Locator
+     */
+    locator: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Secret
+     */
+    secret?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
  * WorkSourcePatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
@@ -12973,7 +13313,11 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
 
 export type ApplyConfigApiConfigApplyPostData = {
-    body: ConfigDocument;
+    body: ({
+        version: 1;
+    } & ConfigDocument) | ({
+        version: 2;
+    } & ConfigDocumentV2);
     path?: never;
     query?: {
         /**
@@ -13051,15 +13395,31 @@ export type ListChangesApiConfigChangesGetResponse = ListChangesApiConfigChanges
 export type ExportConfigApiConfigExportGetData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Version
+         */
+        version?: number;
+    };
     url: '/api/config/export';
 };
 
+export type ExportConfigApiConfigExportGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportConfigApiConfigExportGetError = ExportConfigApiConfigExportGetErrors[keyof ExportConfigApiConfigExportGetErrors];
+
 export type ExportConfigApiConfigExportGetResponses = {
     /**
+     * Response Export Config Api Config Export Get
+     *
      * Successful Response
      */
-    200: ConfigDocument;
+    200: ConfigDocument | ConfigDocumentV2;
 };
 
 export type ExportConfigApiConfigExportGetResponse = ExportConfigApiConfigExportGetResponses[keyof ExportConfigApiConfigExportGetResponses];
@@ -13072,7 +13432,12 @@ export type GetSchemaApiConfigSchemaKindGetData = {
          */
         kind: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Version
+         */
+        version?: number;
+    };
     url: '/api/config/schema/{kind}';
 };
 
@@ -14909,6 +15274,217 @@ export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponses = {
 };
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponse = IngestTranscriptSegmentsApiFleetTranscriptsPostResponses[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostResponses];
+
+export type ListForgesApiForgesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Include Retired
+         */
+        include_retired?: boolean;
+    };
+    url: '/api/forges';
+};
+
+export type ListForgesApiForgesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListForgesApiForgesGetError = ListForgesApiForgesGetErrors[keyof ListForgesApiForgesGetErrors];
+
+export type ListForgesApiForgesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForgesListView;
+};
+
+export type ListForgesApiForgesGetResponse = ListForgesApiForgesGetResponses[keyof ListForgesApiForgesGetResponses];
+
+export type CreateForgeApiForgesPostData = {
+    body: ForgeCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/forges';
+};
+
+export type CreateForgeApiForgesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateForgeApiForgesPostError = CreateForgeApiForgesPostErrors[keyof CreateForgeApiForgesPostErrors];
+
+export type CreateForgeApiForgesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ForgeDetail;
+};
+
+export type CreateForgeApiForgesPostResponse = CreateForgeApiForgesPostResponses[keyof CreateForgeApiForgesPostResponses];
+
+export type GetForgeApiForgesForgeGetData = {
+    body?: never;
+    path: {
+        /**
+         * Forge
+         */
+        forge: string;
+    };
+    query?: never;
+    url: '/api/forges/{forge}';
+};
+
+export type GetForgeApiForgesForgeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetForgeApiForgesForgeGetError = GetForgeApiForgesForgeGetErrors[keyof GetForgeApiForgesForgeGetErrors];
+
+export type GetForgeApiForgesForgeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForgeDetail;
+};
+
+export type GetForgeApiForgesForgeGetResponse = GetForgeApiForgesForgeGetResponses[keyof GetForgeApiForgesForgeGetResponses];
+
+export type PatchForgeApiForgesForgePatchData = {
+    body: ForgePatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Forge
+         */
+        forge: string;
+    };
+    query?: never;
+    url: '/api/forges/{forge}';
+};
+
+export type PatchForgeApiForgesForgePatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchForgeApiForgesForgePatchError = PatchForgeApiForgesForgePatchErrors[keyof PatchForgeApiForgesForgePatchErrors];
+
+export type PatchForgeApiForgesForgePatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForgeDetail;
+};
+
+export type PatchForgeApiForgesForgePatchResponse = PatchForgeApiForgesForgePatchResponses[keyof PatchForgeApiForgesForgePatchResponses];
+
+export type EnableForgeApiForgesForgeEnablePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Forge
+         */
+        forge: string;
+    };
+    query?: never;
+    url: '/api/forges/{forge}/enable';
+};
+
+export type EnableForgeApiForgesForgeEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableForgeApiForgesForgeEnablePostError = EnableForgeApiForgesForgeEnablePostErrors[keyof EnableForgeApiForgesForgeEnablePostErrors];
+
+export type EnableForgeApiForgesForgeEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForgeDetail;
+};
+
+export type EnableForgeApiForgesForgeEnablePostResponse = EnableForgeApiForgesForgeEnablePostResponses[keyof EnableForgeApiForgesForgeEnablePostResponses];
+
+export type RetireForgeApiForgesForgeRetirePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Forge
+         */
+        forge: string;
+    };
+    query?: never;
+    url: '/api/forges/{forge}/retire';
+};
+
+export type RetireForgeApiForgesForgeRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireForgeApiForgesForgeRetirePostError = RetireForgeApiForgesForgeRetirePostErrors[keyof RetireForgeApiForgesForgeRetirePostErrors];
+
+export type RetireForgeApiForgesForgeRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForgeDetail;
+};
+
+export type RetireForgeApiForgesForgeRetirePostResponse = RetireForgeApiForgesForgeRetirePostResponses[keyof RetireForgeApiForgesForgeRetirePostResponses];
 
 export type ListGardenProposalsApiGardenProposalsGetData = {
     body?: never;

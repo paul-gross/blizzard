@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.domain.garden.routines import RoutineEdit
@@ -41,6 +42,16 @@ class DeclaredRepository:
     draft: RepositoryDraft
     edit: RepositoryEdit
     forge: ForgeChoice
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredForge:
+    slug: str
+    name: str | None
+    kind: str
+    fields: ForgeFields
+    edit: ForgeEdit
 
 
 @domain_model
@@ -77,6 +88,7 @@ class DocumentEntries:
     """Every entry of one document, by section, as its edge decoded them."""
 
     secrets: tuple[str, ...] = ()
+    forges: tuple[DeclaredForge, ...] = ()
     work_sources: tuple[DeclaredWorkSource, ...] = ()
     repositories: tuple[DeclaredRepository, ...] = ()
     projects: tuple[ProjectDeclaration, ...] = ()

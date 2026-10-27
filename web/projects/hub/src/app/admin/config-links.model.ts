@@ -7,6 +7,7 @@ import type { ConfigLinkVm } from './config-record-panel';
 const SURFACE_SEGMENT: Partial<Record<RecordKind, readonly string[]>> = {
   [RecordKind.WORK_SOURCE]: ['/admin', 'work-sources'],
   [RecordKind.REPOSITORY]: ['/admin', 'repositories'],
+  [RecordKind.FORGE]: ['/admin', 'forges'],
   [RecordKind.SECRET]: ['/admin', 'secrets'],
   [RecordKind.PROJECT]: ['/admin', 'projects'],
   [RecordKind.SCOPE]: ['/gardening', 'scopes'],

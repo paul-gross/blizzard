@@ -319,7 +319,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     ]
     assert full["next_before"] is None
     edit = full["changes"][0]
-    assert edit["diff"] == [{"field": "annotate", "old": True, "new": False}]
+    assert edit["diff"] == [{"field": "annotate", "old": True, "new": False, "old_label": None, "new_label": None}]
     assert (edit["record_kind"], edit["record_key"], edit["record_label"], edit["revision"], edit["actor"]) == (
         "work_source",
         source_id,
@@ -698,7 +698,7 @@ def test_refusals_carry_their_status_and_entry_and_leave_the_store_unchanged(hub
     invalid = _apply_json(hub, {"version": 1, "work_sources": [_DEMO, {**_DEMO, "slug": "b", "provider": "x"}]})
     assert invalid.json()["detail"][0]["loc"] == ["body", "work_sources", 1, "provider"]
 
-    shape = _apply_json(hub, {"version": 2})
+    shape = _apply_json(hub, {"version": 3})
     assert shape.status_code == 422
     assert shape.json()["detail"][0]["loc"] == ["body", "version"]
 
@@ -872,7 +872,9 @@ def test_a_stated_field_is_edited_an_omitted_one_left_and_a_retired_record_enabl
     edit = applied.json()["outcomes"][3]
     assert [d["field"] for d in edit["diff"]] == ["graph_name", "default_scope_slug"]
     relinked = applied.json()["outcomes"][4]["diff"]
-    assert relinked == [{"field": "scopes", "old": ["core", "edge"], "new": ["edge"]}]
+    assert relinked == [
+        {"field": "scopes", "old": ["core", "edge"], "new": ["edge"], "old_label": None, "new_label": None}
+    ]
     after = _routine(hub)
     assert (after["graph_name"], after["default_effort"], after["retired"]) == ("beta", "high", False)
     assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["edge"]

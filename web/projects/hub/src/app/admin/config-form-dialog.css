@@ -22,7 +22,8 @@ h2 {
   min-width: 0;
 }
 
-.field fleet-kit-text-input {
+.field fleet-kit-text-input,
+.field fleet-kit-select {
   align-self: stretch;
 }
 

@@ -14,6 +14,7 @@ describe('recordRoute', () => {
   it('opens each kind on its own admin surface', () => {
     expect(recordRoute(RecordKind.WORK_SOURCE, 'winter')).toEqual(['/admin', 'work-sources', 'winter']);
     expect(recordRoute(RecordKind.REPOSITORY, 'blizzard')).toEqual(['/admin', 'repositories', 'blizzard']);
+    expect(recordRoute(RecordKind.FORGE, 'github')).toEqual(['/admin', 'forges', 'github']);
     expect(recordRoute(RecordKind.SECRET, 'gh')).toEqual(['/admin', 'secrets', 'gh']);
   });
 

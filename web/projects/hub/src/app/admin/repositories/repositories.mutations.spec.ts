@@ -67,7 +67,7 @@ describe('repository mutations', () => {
       owner: 'o',
       repo: 'r',
       base_branch: 'main',
-      forge_api_url: 'https://x',
+      forge: 'frg_a',
       secret_name: 's',
     });
 

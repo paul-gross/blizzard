@@ -1,0 +1,13 @@
+<app-config-master
+  paneId="admin-forges" listCaption="Forges" [filter]="lifecycle()" [rows]="rows()" [state]="state()"
+  [emptyText]="emptyText()" [selectedKey]="selectedKey()" [drilldown]="mobile()"
+  backLabel="Forges" testidPrefix="admin-forges" [canCreate]="canCreate()" newLabel="New forge"
+  (create)="onNew()" (filterChange)="onFilter($event)" (pick)="onPick($event)" (back)="onBack()"
+>
+  <router-outlet />
+</app-config-master>
+@if (createOpen()) {
+  <app-config-form-dialog heading="New forge" mode="create" [fields]="fields" submitLabel="Create"
+    [submitError]="createError()" [submitting]="createMutation.isPending()" testidPrefix="admin-forges-create"
+    (closed)="createOpen.set(false)" (submitted)="onCreate($event)" />
+}

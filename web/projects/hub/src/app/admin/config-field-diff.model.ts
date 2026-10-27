@@ -17,5 +17,9 @@ export function formatDiffValue(value: unknown): string {
 
 /** The rows a field diff renders. */
 export function fieldDiffRows(diff: readonly FieldChangeView[]): readonly FieldDiffRowVm[] {
-  return diff.map((change) => ({ field: change.field, old: formatDiffValue(change.old), new: formatDiffValue(change.new) }));
+  return diff.map((change) => ({
+    field: change.field,
+    old: formatDiffValue(change.old_label ?? change.old),
+    new: formatDiffValue(change.new_label ?? change.new),
+  }));
 }

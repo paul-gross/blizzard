@@ -34,7 +34,7 @@ def test_create_is_revision_one_and_a_repeat_create_writes_nothing(hub: HubHarne
     assert (again.json()["revision"], again.json()["description"]) == (1, "old")
     [row] = _changes(hub)
     assert (row["record_key"], row["revision"], row["op"]) == ("blizzard", 1, "create")
-    assert row["diff"] == [{"field": "description", "old": None, "new": "old"}]
+    assert row["diff"] == [{"field": "description", "old": None, "new": "old", "old_label": None, "new_label": None}]
 
 
 def test_an_older_clis_description_edit_moves_the_revision_and_logs_it(hub: HubHarness) -> None:
@@ -43,7 +43,10 @@ def test_an_older_clis_description_edit_moves_the_revision_and_logs_it(hub: HubH
     assert resp.status_code == 200, resp.text
     assert (resp.json()["description"], resp.json()["revision"]) == ("new", 2)
     row = _changes(hub)[-1]
-    assert (row["op"], row["diff"]) == ("edit", [{"field": "description", "old": "old", "new": "new"}])
+    assert (row["op"], row["diff"]) == (
+        "edit",
+        [{"field": "description", "old": "old", "new": "new", "old_label": None, "new_label": None}],
+    )
 
 
 def test_an_edit_that_changes_nothing_writes_nothing(hub: HubHarness) -> None:

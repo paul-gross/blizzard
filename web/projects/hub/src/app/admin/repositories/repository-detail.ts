@@ -23,6 +23,8 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { REPOSITORY_FIELDS, repositoryRecordVm } from './repositories.model';
 import { injectRepositoryQuery } from './repositories.query';
+import { forgePickerFields } from '../forges/forges.model';
+import { injectForgesQuery } from '../forges/forges.query';
 
 /**
  * The selected repository's detail — the right-hand child of `/admin/repositories`,
@@ -67,7 +69,8 @@ export class RepositoryDetail {
   protected readonly editMutation = injectEditRepositoryMutation();
   private readonly lifecycleMutation = injectRepositoryLifecycleMutation();
 
-  protected readonly fields = REPOSITORY_FIELDS;
+  private readonly forgesQuery = injectForgesQuery(() => false);
+  protected readonly fields = computed(() => forgePickerFields(REPOSITORY_FIELDS, this.forgesQuery.data() ?? []));
   protected readonly editOpen = signal(false);
   protected readonly editError = signal<string | null>(null);
   private readonly pendingKey = signal<string | null>(null);
@@ -76,7 +79,10 @@ export class RepositoryDetail {
   protected readonly actions = computed(() =>
     configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()),
   );
-  protected readonly shown = computed(() => shownFormValues(this.fields, this.repositoryQuery.data()));
+  protected readonly shown = computed(() => {
+    const record = this.repositoryQuery.data();
+    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id });
+  });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
@@ -108,7 +114,7 @@ export class RepositoryDetail {
       {
         repositoryId: record.repository_id,
         revision: record.revision,
-        body: configEdit(this.fields, shown, values).body,
+        body: configEdit(this.fields(), shown, values).body,
       },
       {
         onSuccess: () => this.editOpen.set(false),

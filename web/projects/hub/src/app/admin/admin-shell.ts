@@ -6,6 +6,7 @@ import { hasPermission, injectMeQuery } from '../core/auth/me.query';
 import { injectProjectsQuery } from '../core/projects.query';
 import { changesTotal, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
+import { injectForgesQuery } from './forges/forges.query';
 import { injectMembersQuery } from './members/members.query';
 import { injectLensLinks } from './projects/lens-links';
 import { injectRepositoriesQuery } from './repositories/repositories.query';
@@ -35,6 +36,7 @@ export class AdminShell {
   private readonly projectsQuery = injectProjectsQuery();
   private readonly sourcesQuery = injectWorkSourcesQuery(() => false);
   private readonly repositoriesQuery = injectRepositoriesQuery(() => false);
+  private readonly forgesQuery = injectForgesQuery(() => false);
   private readonly secretsQuery = injectSecretsQuery(() => false);
   private readonly sourceLinks = injectLensLinks('source');
   private readonly repositoryLinks = injectLensLinks('repository');
@@ -45,6 +47,7 @@ export class AdminShell {
     projects: tabCount(this.projectsQuery.data()),
     sources: tabCount(this.sourcesQuery.data(), this.sourceLinks.names()),
     repositories: tabCount(this.repositoriesQuery.data(), this.repositoryLinks.names()),
+    forges: tabCount(this.forgesQuery.data()),
     secrets: tabCount(this.secretsQuery.data()),
     changes: changesTotal(this.changesQuery.data()?.pages),
   }));

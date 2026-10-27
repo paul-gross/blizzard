@@ -10,6 +10,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.apply import (
+    FORGES_SECTION,
     REPOSITORIES_SECTION,
     ROUTINES_SECTION,
     SCOPES_SECTION,
@@ -19,6 +20,7 @@ from blizzard.hub.domain.config.apply import (
     DeclarableRecord,
     DeclaredReferences,
     EntryOutcome,
+    ForgeDeclaration,
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
@@ -32,7 +34,14 @@ from blizzard.hub.domain.config.forge_resolution import (
     ForgePlanner,
     OldFieldUsed,
 )
-from blizzard.hub.domain.config.forges import IReadForgeRepository
+from blizzard.hub.domain.config.forges import (
+    ConfiguredForge,
+    ForgeId,
+    ForgeKindImmutable,
+    ForgeSlug,
+    IReadForgeRepository,
+    PlannedForges,
+)
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IReadRepositoryRecordRepository,
@@ -54,7 +63,7 @@ from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDec
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, Routine
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
-from blizzard.hub.domain.kernel.unset import UnsetType
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.declarations import (
     PlannedRepositories,
@@ -162,14 +171,74 @@ class ConfigApplication:
         repositories = self._held_repositories(entries)
         sources = self._held_work_sources(entries)
         projects = self._plan_projects(entries, ctx, repositories, sources)
-        planner = ForgePlanner(self._forges.list_all(include_retired=True), ctx, at=self._clock.now())
-        declaration, warnings = self._declaration(entries, projects, repositories, sources, planner)
+        held_forges = {f.slug: f for f in self._forges.list_all(include_retired=True)}
+        declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
+        planner = ForgePlanner(lookup.records, ctx, at=self._clock.now())
+        declaration, warnings = self._declaration(entries, projects, repositories, sources, planner, lookup)
+        declaration = replace(declaration, declared_forges=declared_forges)
         outcomes = self._authoring.apply(
-            declaration, self._stored(declaration, repositories, sources), ctx, dry_run=dry_run
+            declaration,
+            self._stored(declaration, repositories, sources, held_forges, former_forges),
+            ctx,
+            dry_run=dry_run,
         )
         if apply_id is not None:
             self._authoring.record_old_fields(warnings, record=f"config apply {apply_id}")
         return ApplyResult(apply_id, tuple(outcomes), warnings)
+
+    def _held_forges(
+        self, entries: DocumentEntries, held: dict[str, ConfiguredForge], ctx: ChangeContext
+    ) -> tuple[tuple[ForgeDeclaration, ...], PlannedForges, dict[str, ConfiguredForge]]:
+        former: dict[str, ConfiguredForge] = {}
+        for entry in entries.forges:
+            if entry.slug not in held and (slug := ForgeSlug.of(entry.slug)) is not None:
+                left = self._forges.get_by_former_slug(slug)
+                if left is not None:
+                    former[entry.slug] = left
+        projected = dict(held)
+        declarations: list[ForgeDeclaration] = []
+        seen: set[str] = set()
+        for index, entry in enumerate(entries.forges):
+            try:
+                if entry.slug in seen:
+                    raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
+                seen.add(entry.slug)
+                if entry.slug in former:
+                    raise ConfigFieldError(
+                        "slug",
+                        f"{entry.slug!r} is a slug forge {former[entry.slug].slug!r} left; "
+                        "name that forge by its current slug",
+                    )
+                stored = held.get(entry.slug)
+                if stored is not None and stored.kind != entry.kind:
+                    raise ForgeKindImmutable("kind", f"forge {entry.slug} is a {stored.kind} forge; kind is immutable")
+                forge_id = stored.forge_id if stored else ForgeId(Id.mint(IdPrefix.FORGE, self._clock).value)
+                if stored is None:
+                    record, _ = ConfiguredForge.new(
+                        entry.slug, entry.name, entry.kind, entry.fields, ctx, at=self._clock.now(), forge_id=forge_id
+                    )
+                else:
+                    enabled = (
+                        stored.set_retired(False, ctx, if_match=None, at=self._clock.now()) if stored.retired else None
+                    )
+                    record = stored if enabled is None else enabled[0]
+                    edited = record.edit(entry.edit, ctx, if_match=None, at=self._clock.now())
+                    record = record if edited is None else edited[0]
+                projected[entry.slug] = record
+                declarations.append(
+                    ForgeDeclaration(entry.slug, entry.name, entry.kind, entry.fields, entry.edit, forge_id)
+                )
+            except ConfigFieldError as exc:
+                raise ApplyEntryRefused(FORGES_SECTION, index, exc) from exc
+        origins: dict[str, str] = {}
+        for forge in projected.values():
+            if (holder := origins.get(forge.fields.api_base)) is not None and holder != forge.slug:
+                index = next((i for i, e in enumerate(entries.forges) if e.slug == forge.slug), 0)
+                raise ApplyEntryRefused(
+                    FORGES_SECTION, index, ConfigFieldError("api_base", f"origin is held by forge {holder}")
+                )
+            origins[forge.fields.api_base] = forge.slug
+        return tuple(declarations), PlannedForges(tuple(projected.values()), former), former
 
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
         stored = {r.slug: r for r in self._repositories.list_all(include_retired=True)}
@@ -286,6 +355,7 @@ class ConfigApplication:
         held: _Repositories,
         sources_held: _WorkSources,
         planner: ForgePlanner,
+        forges: PlannedForges,
     ) -> tuple[ConfigDeclaration, tuple[OldFieldUsed, ...]]:
         """The domain's declarations from the entries: each record under the id it takes and on the forge it names —
         the forges no origin's forge holds yet planned beside them — and each scope and routine within the project it
@@ -305,7 +375,9 @@ class ConfigApplication:
             try:
                 require_known_provider(provider)
                 resolved = planner.decide(
-                    entry.forge,
+                    replace(entry.forge, named=forges.resolve(entry.forge.forge))
+                    if entry.forge.forge is not UNSET
+                    else entry.forge,
                     WORK_SOURCE_FORGE_RULES,
                     provider=provider,
                     current=current,
@@ -332,7 +404,9 @@ class ConfigApplication:
             current = None if stored_repo is None else stored_repo.fields.forge_id
             try:
                 resolved = planner.decide(
-                    repo.forge,
+                    replace(repo.forge, named=forges.resolve(repo.forge.forge))
+                    if repo.forge.forge is not UNSET
+                    else repo.forge,
                     REPOSITORY_FORGE_RULES,
                     provider=None,
                     current=current,
@@ -384,7 +458,14 @@ class ConfigApplication:
             ),
         ), tuple(warnings)
 
-    def _stored(self, declaration: ConfigDeclaration, held: _Repositories, sources_held: _WorkSources) -> StoredConfig:
+    def _stored(
+        self,
+        declaration: ConfigDeclaration,
+        held: _Repositories,
+        sources_held: _WorkSources,
+        forges: dict[str, ConfiguredForge],
+        former_forges: dict[str, ConfiguredForge],
+    ) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))
         declared_slugs = {d.slug for d in declaration.repositories if isinstance(d, RepositoryDeclaration)}
         source_slugs = {d.slug for d in declaration.work_sources if isinstance(d, WorkSourceDeclaration)}
@@ -408,6 +489,8 @@ class ConfigApplication:
         linked = {key: tuple(scope_links[routine_id]) for key, routine_id in ids.items()}
         declared_scopes = [d for d in declaration.scopes if isinstance(d, ScopeDeclaration)]
         return StoredConfig(
+            forges=forges,
+            former_forges=former_forges,
             work_sources={slug: sources_held.stored[slug] for slug in source_slugs if slug in sources_held.stored},
             former_work_sources={
                 slug: sources_held.former[slug] for slug in source_slugs if slug in sources_held.former
