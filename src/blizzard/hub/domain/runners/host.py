@@ -7,7 +7,7 @@ mutable exception; a revoked hash is kept as a fact."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -292,6 +292,11 @@ class IReadHostRegistry(Protocol):
     """Read-only host registry access."""
 
     def get_host(self, host_id: str) -> Host | None: ...
+
+    def get_hosts(self, host_ids: Iterable[str]) -> dict[str, Host]:
+        """Each named host, retired ones included, keyed by its id; an id with no host is absent. One read per id
+        batch, none for no ids."""
+        ...
 
     def list_hosts(self, *, include_retired: bool = False) -> list[Host]:
         """Every host, oldest added first — retired hosts only when ``include_retired``."""

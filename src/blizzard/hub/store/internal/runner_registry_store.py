@@ -97,31 +97,48 @@ class RunnerRegistryStore:
             rows = conn.execute(
                 query.order_by(s.runner_registrations.c.added_at, s.runner_registrations.c.runner_id)
             ).all()
+            return self._hydrate(conn, rows, include_retired=include_retired)
+
+    def get_runners(self, runner_ids: Iterable[str]) -> dict[str, RunnerRegistration]:
+        ids = list(dict.fromkeys(runner_ids))
+        if not ids:
+            return {}
+        registrations = s.runner_registrations
+        with self._store.read("get_runners") as conn:
+            rows = [
+                row
+                for batch in id_batches(ids)
+                for row in conn.execute(self._store.select(registrations).where(registrations.c.runner_id.in_(batch)))
+            ]
+            return {r.runner_id: r for r in self._hydrate(conn, rows, include_retired=True)}
+
+    def _hydrate(self, conn: Connection, rows: Sequence, *, include_retired: bool) -> list[RunnerRegistration]:
+        """The registrations ``rows`` stand for, in row order — retired ones only when ``include_retired``."""
+        runner_ids = [row.runner_id for row in rows]
+        lifecycle = self._lifecycle_many(conn, runner_ids)
+        if not include_retired:
+            rows = [row for row in rows if not lifecycle[row.runner_id][0]]
             runner_ids = [row.runner_id for row in rows]
-            lifecycle = self._lifecycle_many(conn, runner_ids)
-            if not include_retired:
-                rows = [row for row in rows if not lifecycle[row.runner_id][0]]
-                runner_ids = [row.runner_id for row in rows]
-            paused = self._paused_many(conn, runner_ids)
-            local_pause = self._local_pause_detail_many(conn, runner_ids)
-            # A hosted runner's usage is its host's, so its own rows are not read.
-            alone = [row.runner_id for row in rows if row.host_id is None]
-            usage = self._external_usage_many(conn, alone)
-            usage_misses = self._external_usage_misses_many(conn, alone)
-            return self._reading_hosts(
-                conn,
-                [
-                    self._registration(
-                        row,
-                        paused[row.runner_id],
-                        local_pause[row.runner_id],
-                        usage.get(row.runner_id, []),
-                        usage_misses.get(row.runner_id, []),
-                        lifecycle[row.runner_id],
-                    )
-                    for row in rows
-                ],
-            )
+        paused = self._paused_many(conn, runner_ids)
+        local_pause = self._local_pause_detail_many(conn, runner_ids)
+        # A hosted runner's usage is its host's, so its own rows are not read.
+        alone = [row.runner_id for row in rows if row.host_id is None]
+        usage = self._external_usage_many(conn, alone)
+        usage_misses = self._external_usage_misses_many(conn, alone)
+        return self._reading_hosts(
+            conn,
+            [
+                self._registration(
+                    row,
+                    paused[row.runner_id],
+                    local_pause[row.runner_id],
+                    usage.get(row.runner_id, []),
+                    usage_misses.get(row.runner_id, []),
+                    lifecycle[row.runner_id],
+                )
+                for row in rows
+            ],
+        )
 
     def _reading_hosts(self, conn: Connection, registrations: list[RunnerRegistration]) -> list[RunnerRegistration]:
         """Each hosted registration presenting its host's usage and roster, in two bulk reads however many hosts

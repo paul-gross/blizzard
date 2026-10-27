@@ -199,16 +199,12 @@ def registry_view(
 
 
 def hosts_of(services: TenantServices, registrations: Sequence[RunnerRegistration]) -> Mapping[str, Host]:
-    """The hosts the registrations stand under, by id — one point read for a single host, one list read for several,
+    """The hosts the registrations stand under, by id — one subset read for the hosts named,
     none for runners that stand alone."""
     ids = {r.host_id for r in registrations if r.host_id is not None}
-    if len(ids) == 1:
-        (host_id,) = ids
-        host = services.hosts.get_host(host_id)
-        return {} if host is None else {host_id: host}
     if not ids:
         return {}
-    return {h.host_id: h for h in services.hosts.list_hosts(include_retired=True) if h.host_id in ids}
+    return services.hosts.get_hosts(sorted(ids))
 
 
 def host_of(registration: RunnerRegistration, hosts: Mapping[str, Host]) -> Host | None:

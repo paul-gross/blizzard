@@ -720,6 +720,11 @@ class IReadRunnerRegistry(Protocol):
     """Read-only registry access."""
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
+    def get_runners(self, runner_ids: Iterable[str]) -> dict[str, RunnerRegistration]:
+        """Each named runner's registration, retired ones included, keyed by its id; an id with no registration is
+        absent. One read per id batch, none for no ids."""
+        ...
+
     def is_retired(self, runner_id: str) -> bool:
         """Whether ``runner_id``'s newest lifecycle fact reads retired — the one boolean the
         id-keyed guard needs, read without reconstituting the registration. A runner with no

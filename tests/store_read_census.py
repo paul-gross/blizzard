@@ -2512,6 +2512,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.graph.graph_id, w.default_graph.graph_id]
     ),
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
+    (IReadRunnerRegistry, "get_runners"): lambda w: w.hub.services.registry.get_runners([HUB_RUNNER_ID]),
     (IReadRunnerRegistry, "is_retired"): lambda w: w.hub.services.registry.is_retired(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
     (CredentialReads, "runner_for_token_hash"): lambda w: (
@@ -2525,6 +2526,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadHostRegistry, "get_host"): lambda w: w.hub.services.hosts.get_host(w.host_id),
     (IReadHostRegistry, "list_hosts"): lambda w: w.hub.services.hosts.list_hosts(),
+    (IReadHostRegistry, "get_hosts"): lambda w: w.hub.services.hosts.get_hosts([w.host_id]),
     (IReadHostRegistry, "live_names"): lambda w: w.hub.services.hosts.live_names(),
     (CredentialReads, "host_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.host_by_id(w.host_id),
     (IReadHostRegistry, "high_water"): lambda w: w.hub.services.hosts.high_water(w.host_id),

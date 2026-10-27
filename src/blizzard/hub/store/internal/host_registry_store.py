@@ -7,7 +7,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection
@@ -58,6 +58,20 @@ class HostRegistryStore:
             if row is None:
                 return None
             return self._host(row, self._lifecycle_many(conn, [host_id])[host_id])
+
+    def get_hosts(self, host_ids: Iterable[str]) -> dict[str, Host]:
+        ids = list(dict.fromkeys(host_ids))
+        if not ids:
+            return {}
+        hosts = s.hosts
+        with self._store.read("get_hosts") as conn:
+            rows = [
+                row
+                for batch in id_batches(ids)
+                for row in conn.execute(self._store.select(hosts).where(hosts.c.host_id.in_(batch)))
+            ]
+            lifecycle = self._lifecycle_many(conn, [row.host_id for row in rows])
+            return {row.host_id: self._host(row, lifecycle[row.host_id]) for row in rows}
 
     def list_hosts(self, *, include_retired: bool = False) -> list[Host]:
         with self._store.read("list_hosts") as conn:
