@@ -36,6 +36,16 @@ requeuing.
 the chunk's project does not link. The step is refused before any command runs and routes its failure choice; the remedy
 is linking the repository to the project ([projects.md](./projects.md#links)), then requeuing.
 
+`forge-capability-missing` (warning): a `deliver` step's repository sits on a forge that lacks an operation the step's
+action requires. The hub refuses the visit before the action runs, writes a `hub-log.forge-capability-missing` artifact,
+and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the forge.
+The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
+
+`config-old-field-used` (warning): a write named its forge by a deprecated address field (`forge_api_url`, `api_base`,
+or `web_base`) instead of `forge`. The hub records one event per field, naming the record, the field, and the forge it
+resolved to, and the write answers with a `Deprecation` header and a warning. No event appears once nothing still sends
+an old field ([forges.md](./forges.md#the-old-address-fields)).
+
 `owner-unresolvable` (critical): a runner reached an existing session whose recorded harness owner it cannot resolve
 right now. The runner binds every enabled declared harness ([worker-spawn.md](./worker-spawn.md) owns that binding).
 **Unknown** means the session was recorded under a harness id this runner build doesn't bind at all — the remedy is to

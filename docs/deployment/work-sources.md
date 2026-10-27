@@ -29,23 +29,24 @@ blizzard hub source show blizzard
 - `locator` is the owner/name coordinate the source is pinned to; each (provider, locator) pair belongs to one record,
   since two records for one repo would let an item be ingested twice under two identities.
 - `provider` names the adapter grammar; only `github` exists.
-- `forge` is the id of the configured forge. The board offers enabled forges of the selected provider's kind; version-2
-  configuration documents name one by slug. The Admin Forges tab manages the forge's addresses and lists its linked work
-  sources and repositories.
-- `api_base` overrides the provider's API origin (needed for a self-hosted forge such as GitHub Enterprise); `web_base`
-  overrides the web origin for the item's browsable URL and derives from `api_base` when omitted, so a GHE source needs
-  only `api_base`. A later release stores both addresses in one canonical form;
-  [check them first](./repositories.md#checking-forge-addresses-before-the-forge-migration).
+- `forge` is the [forge](./forges.md) the source reads from, by id or slug, and its kind must be the source's
+  `provider`. The forge owns the API and web origins, so a GitHub Enterprise source names a forge whose `api_base` is
+  the Enterprise host, and the item's browsable URL uses that forge's web origin. The board offers enabled forges of the
+  selected provider's kind; version-2 configuration documents name one by slug.
+- `api_base` and `web_base` are deprecated. A write that sends one is accepted with a warning and resolved to the forge
+  with that origin, created if none exists; [forges.md](./forges.md#the-old-address-fields) owns the rules. A `web_base`
+  is accepted only when it is the forge's web origin. Check stored addresses before the forge migration with
+  [`config check-forges`](./repositories.md#checking-forge-addresses-before-the-forge-migration).
 - `secret` names the stored secret holding the forge token, revealed only when the hub calls the forge.
 
 `create <slug>` stores the source at revision 1, named `--name` (default: the slug). It is refused when another source
 holds the slug as its current one or the slug is `hub`. Taking a slug another source left moves it to the new source.
 Every later change moves the revision by one:
 
-- `edit <source>` changes only the flags given: `--slug`, `--name`, `--provider`, `--locator`, `--secret`, `--api-base`,
-  `--web-base`, and `--annotate` or `--no-annotate`. `--clear api-base`, `--clear web-base`, or `--clear secret` unsets
-  a field, and `--clear secret` is refused for a provider that needs a credential, which includes `github`. An edit that
-  leaves every field as it is writes nothing and keeps the revision.
+- `edit <source>` changes only the flags given: `--slug`, `--name`, `--provider`, `--locator`, `--secret`, `--forge`,
+  `--api-base`, `--web-base`, and `--annotate` or `--no-annotate`. `--clear api-base`, `--clear web-base`, or
+  `--clear secret` unsets a field, and `--clear secret` is refused for a provider that needs a credential, which
+  includes `github`. An edit that leaves every field as it is writes nothing and keeps the revision.
 - `retire <source>` hides the source from `list` unless `--include-retired` is given, and ingest naming it is refused
   with a 422. Items already ingested from it keep their labels, close and annotate through it. A retired source keeps
   its provider and locator, so `create` for another slug on the same locator is refused with a message naming the
@@ -67,7 +68,8 @@ The board's Admin page lists work sources, with each record's revision, last cha
 with `config:edit` can also create, edit, retire, and enable them there; an edit shows the fields that will change
 before it saves. On a phone the page is read-only and names the `blizzard hub source` command that makes the change. The
 built-in `hub` source is listed and cannot be changed. The form picks a matching enabled forge instead of editing its
-API and web origins. Version-1 configuration documents still accept `api_base` and `web_base`; version 2 uses `forge`.
+API and web origins. Version-1 configuration documents still accept the deprecated `api_base` and `web_base`; version 2
+uses `forge`.
 
 ## Naming a work source
 

@@ -75,9 +75,14 @@ the same kind has left is refused `422`, naming that record: name it by its curr
 ([work-sources.md](./work-sources.md#naming-a-work-source), [repositories.md](./repositories.md#naming-a-repository)). A
 work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`.
 
+A version-1 entry that carries an address (`forge_api_url`, `api_base`, or `web_base`) applies as it always did, but
+each address resolves to the forge with that origin, created when none exists, and the apply result lists a warning for
+it ([forges.md](./forges.md#the-old-address-fields)). A version-2 entry names its forge with `forge`, an id or a slug.
+
 A version-2 forge entry is keyed by `slug` and carries `kind`, `api_base`, and optional `name` and `web_base`. The kind
 of an existing forge cannot change. A slug another forge left is refused, naming its holder. Forge entries reconcile
 after the secret check and before sources and repositories, so those entries may name a forge declared in the same file.
+[forges.md](./forges.md) owns the forge record.
 
 A project entry is keyed by its `slug`; one the document creates needs a `name`. A `color` it states is stored, and one
 it leaves out keeps the stored color, or gives a created project the tenant's least-used one
