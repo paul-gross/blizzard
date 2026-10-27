@@ -178,7 +178,7 @@ jobs:
         env:
           CI: "1"
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
-        run: cd blizzard && mise run playwright -- --project='service-*' --project=harness --project=harness-auth --shard=${{ matrix.shard }}/2
+        run: cd blizzard && mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner --shard=${{ matrix.shard }}/2
       - name: keep the failure evidence
         if: ${{ failure() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

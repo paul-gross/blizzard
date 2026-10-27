@@ -1,11 +1,10 @@
-import * as crypto from 'node:crypto';
 import * as path from 'node:path';
-import { type APIRequestContext, test as base, type TestInfo } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../playwright.config';
 import { signInSuperuser, type Superuser } from './auth';
+import { base, uniqueName } from './base';
 import { HubInternal } from './client/internal';
-import { type CallRecorder, LATENCY_ATTACHMENT, recorderFor, recordsOf } from './client/latency';
-import { Ledger } from './client/ledger';
+import { type CallRecorder, recorderFor } from './client/latency';
 import { hostHub } from './daemons/hub';
 import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
 import { readContract, runDir } from './env';
@@ -152,21 +151,8 @@ export interface TestFixtures {
   /** The test's tenant, resolved on first call: a test that never asks never forces the superuser's sign-in. */
   tenantOf: () => Promise<Tenant>;
   tenant: Tenant;
-  ledger: Ledger;
   touched: Touched;
   attachLogs: void;
-  attachLatency: void;
-}
-
-/** A name from the test's title and a random suffix, so two runs of one test never collide. */
-export function uniqueName(testInfo: TestInfo, prefix = ''): string {
-  const slug = testInfo.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 24)
-    .replace(/-$/, '');
-  return `${prefix}${slug}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
 export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
@@ -320,23 +306,9 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     await use(await tenantOf());
   },
 
-  ledger: async ({}, use) => {
-    await use(new Ledger());
-  },
-
   touched: async ({}, use) => {
     await use({});
   },
-
-  // Runs for every test: the calls its clients made, each with its duration, attached for the reporter's summary.
-  attachLatency: [
-    async ({}, use, testInfo) => {
-      await use();
-      const calls = recordsOf(testInfo);
-      if (calls.length > 0) await testInfo.attach(LATENCY_ATTACHMENT, { body: JSON.stringify(calls), contentType: 'application/json' });
-    },
-    { auto: true },
-  ],
 
   // Runs for every test: a test that never set `isolation` fails here, naming the option, and a failing test has the
   // tail of the hub log it touched attached to its report.

@@ -3,7 +3,8 @@ import { type APIRequestContext, expect } from '@playwright/test';
 import { type People, type Person, peopleFactory } from './people';
 import { walk } from './auth';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
-import { fleetApi, forgeApi, type ForgeApi, type HubApi, hubApi, idpApi, mockRunnerApi, type Verbs } from './client/clients';
+import { forgeApi, type ForgeApi, type HubApi, hubApi, idpApi, mockRunnerApi } from './client/clients';
+import { fleetApi, type Verbs } from './client/engine';
 import type { Role, RunnerAddRequest, RunnerDeclining } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
 import {
@@ -19,8 +20,9 @@ import {
 } from './factories';
 import { binDir, daemonEnv, requireBinary } from './env';
 import { type HubLog, hubLog as readHubLog } from './logs';
-import { type OtlpSink, startOtlpSink } from './otlp-sink';
-import { type Project, sharesTenant, tenancy, uniqueName } from './tenancy';
+import { uniqueName } from './base';
+import { mockWorld } from './mock-world';
+import { type Project, sharesTenant, tenancy } from './tenancy';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -52,8 +54,6 @@ interface Fixtures {
    * acts as that person: the first call for a person logs them in (`hub login --paste`) in a config home of theirs.
    */
   cli: (args: string[], options?: { as?: Person }) => Promise<CliResult>;
-  /** Starts a loopback OTLP/HTTP receiver, closed when the test ends. */
-  otlpSink: () => Promise<OtlpSink>;
   issue: (title: string, options?: { repository?: Repository }) => Promise<FiledIssue>;
   repository: (name?: string) => Promise<Repository>;
   mockRunner: (name: string, options?: RunnerOptions) => Promise<MockRunner>;
@@ -242,16 +242,6 @@ export const test = tenancy.extend<Fixtures>({
     });
   },
 
-  otlpSink: async ({}, use) => {
-    const started: OtlpSink[] = [];
-    await use(async () => {
-      const sink = await startOtlpSink();
-      started.push(sink);
-      return sink;
-    });
-    await Promise.all(started.map((sink) => sink.close()));
-  },
-
   factoryContext: async ({ api, forge, project, level, testHub, ledger }, use, testInfo) => {
     await use({ api, forge, project, level: level.served, testHub, ledger, unique: (prefix) => uniqueName(testInfo, prefix),
       mockClient: (url) => mockRunnerApi({ context: testHub.context, testInfo, url, ledger }) });
@@ -272,9 +262,19 @@ export const test = tenancy.extend<Fixtures>({
   },
 });
 
+/** The runner world's `test`: a mock hub the test owns and runner clients, with no shared hub in reach. */
+export const runnerTest = mockWorld;
+
+/** The runner host's wire types, for a spec that builds a typed literal: `satisfies RunnerWire.FactView`. */
+export type * as RunnerWire from './client/wire/runner/types.gen';
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export type { OtlpSink, ReceivedSpan } from './otlp-sink';
+export type { AuthStub } from './auth-stub';
+export type { MockHub } from './mock-world';
 export { expect };
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
 export type { RunnerDeclining };
 export type { MockRunner };
+export type { Barrier, BarrierSubscription, Frame, Subscription } from './events';
+export type { MockHubClient } from './client/mock-hub';
+export type { RunnerClient, RunnerHostClient } from './client/runner';

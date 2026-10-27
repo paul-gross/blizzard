@@ -1,40 +1,10 @@
 import type { APIRequestContext, TestInfo } from '@playwright/test';
-import { recorderFor, timed } from './latency';
+import { type ApiResponse, type Engine, expecting, type Json, type LogContext, send, type Verbs, verbs } from './engine';
 import type { Ledger } from './ledger';
 import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing } from './mock';
-import { RESOURCES } from './resources';
 import type { SweepPassResponse } from './wire/hub/types.gen';
 import { requireFreshHub } from '../factories';
 import type { Level } from '../tenancy';
-
-// A hub answer is whatever the route returns; a test names the fields it reads.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Json = any;
-
-export interface ApiResponse<T = Json> {
-  status: number;
-  ok: boolean;
-  body: T;
-  headers: Record<string, string>;
-}
-
-export interface CallOptions {
-  params?: Record<string, string | number | boolean>;
-  data?: unknown;
-  headers?: Record<string, string>;
-  /** Redirects followed before the answer comes back; 0 hands back the redirect itself. */
-  maxRedirects?: number;
-}
-
-type Verb = <T = Json>(route: string, options?: CallOptions) => Promise<ApiResponse<T>>;
-
-export interface Verbs {
-  get: Verb;
-  post: Verb;
-  put: Verb;
-  patch: Verb;
-  delete: Verb;
-}
 
 /** The sweeps a pass over one tenant serves; the other three run over every tenant only. */
 export const TENANT_SWEEPS = ['forge_status', 'event_derivation', 'close_drain'] as const;
@@ -60,78 +30,6 @@ export interface HubApi extends Verbs {
   readonly unfiltered: Verbs;
   /** The verbs for one call whose `5xx` comes back to the test instead of failing it. */
   expecting(status: number): Verbs;
-}
-
-/** What a client needs to read the hub's log around a server error. */
-export type LogContext = () => string;
-
-interface Engine {
-  context: APIRequestContext;
-  testInfo: TestInfo;
-  /** Headers every call carries: the tenant, or a runner's bearer token. */
-  headers: Record<string, string>;
-  ledger: Ledger;
-  /** Hub-side log lines around a failure, attached with the response. */
-  logContext: LogContext;
-}
-
-/** The route as recorded: no query, and no origin on a call that names its full URL. */
-function recordedRoute(route: string): string {
-  return route.replace(/^https?:\/\/[^/]+/, '').split('?')[0] as string;
-}
-
-async function send(engine: Engine, method: string, route: string, options: CallOptions, narrow: boolean, expected?: number): Promise<ApiResponse> {
-  const response = await timed(
-    recorderFor(engine.testInfo),
-    method,
-    recordedRoute(route),
-    () =>
-      engine.context.fetch(route, {
-        method,
-        params: options.params,
-        data: options.data,
-        headers: { ...engine.headers, ...options.headers },
-        maxRedirects: options.maxRedirects,
-        failOnStatusCode: false,
-      }),
-    (answer) => answer.status(),
-  );
-  const text = await response.text();
-  let body: Json = text;
-  try {
-    body = text === '' ? undefined : JSON.parse(text);
-  } catch {
-    // Not JSON: the text stands.
-  }
-  const call = `${method} ${route}`;
-  if (response.status() >= 500 && response.status() !== expected) {
-    await engine.testInfo.attach(`${call} → ${response.status()}`, { body: text, contentType: 'text/plain' });
-    const log = engine.logContext();
-    if (log !== '') await engine.testInfo.attach(`hub log around ${call}`, { body: log, contentType: 'text/plain' });
-    throw new Error(`${call} answered ${response.status()}, a server error: ${text.slice(0, 500)}`);
-  }
-  const routeKey = `${method} ${route.split('?')[0]}`;
-  if (response.ok() && body !== null && typeof body === 'object') {
-    for (const [kind, resource] of Object.entries(RESOURCES)) {
-      if (resource.creates.includes(routeKey) && typeof body[resource.id] === 'string') {
-        engine.ledger.add(kind, body[resource.id] as string);
-      }
-      const listField = resource.lists[routeKey];
-      if (!narrow || listField === undefined) continue;
-      const ours = (item: Json): boolean => engine.ledger.has(kind, item?.[resource.id]);
-      if (listField === null) {
-        if (Array.isArray(body)) body = body.filter(ours);
-      } else if (Array.isArray(body[listField])) {
-        body = { ...body, [listField]: (body[listField] as Json[]).filter(ours) };
-      }
-    }
-  }
-  return { status: response.status(), ok: response.ok(), body, headers: response.headers() };
-}
-
-function verbs(engine: Engine, narrow: boolean, expected?: number): Verbs {
-  const verb = (method: string): Verb => ((route, options = {}) => send(engine, method, route, options, narrow, expected)) as Verb;
-  return { get: verb('GET'), post: verb('POST'), put: verb('PUT'), patch: verb('PATCH'), delete: verb('DELETE') };
 }
 
 /**
@@ -176,22 +74,8 @@ export function hubApi(options: {
       return pass;
     },
     unfiltered: verbs(engine, false),
-    expecting: (status) => verbs(engine, options.narrow, status),
+    expecting: (status) => expecting(engine, options.narrow, status),
   };
-}
-
-/** A fleet-plane client for one runner: its token names the tenant, so it sends no tenant header. */
-export function fleetApi(options: { context: APIRequestContext; testInfo: TestInfo; token: string; ledger: Ledger; logContext: LogContext }): Verbs {
-  return verbs(
-    {
-      context: options.context,
-      testInfo: options.testInfo,
-      headers: { Authorization: `Bearer ${options.token}` },
-      ledger: options.ledger,
-      logContext: options.logContext,
-    },
-    false,
-  );
 }
 
 /** The mock runner's control plane, sent through the same timed and diagnosed request path as the hub. */

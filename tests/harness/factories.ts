@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ChunkIngestResponse, RunnerAddRequest } from './client/wire/hub/types.gen';
-import { type ApiResponse, type ForgeApi, type HubApi } from './client/clients';
+import { type ForgeApi, type HubApi } from './client/clients';
+import type { ApiResponse } from './client/engine';
 import type { Ledger } from './client/ledger';
 import type { MockDriveAnswer, MockIssue, MockRunnerLeverListing } from './client/mock';
 import { startMockRunner } from './daemons/mock-runner';
