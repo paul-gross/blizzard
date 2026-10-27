@@ -178,7 +178,7 @@ export type AddedFindingView = {
     /**
      * Finding Id
      *
-     * The finding this add minted, or null when the delivered set predates the finding_facts.finding_set_id linkage — the add still renders from the artifact, just linked to no finding row.
+     * The finding this add minted, or null when the add is linked to no finding.
      */
     finding_id: string | null;
     /**
@@ -318,10 +318,9 @@ export type AnalyticsCountsResponse = {
 /**
  * AnalyticsDurationView
  *
- * One grouping key's step-duration rollup — ``key`` is a node
- * id or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate
- * stretches it, a delayed store-and-forward mint-report *flush* compresses it toward
- * zero instead. Provenance filters: see ``docs/deployment/analytics.md``.
+ * One grouping key's step-duration rollup — ``key`` is a node id or a graph id. A duration
+ * is hub-observed wall-clock time, not runner-measured, so time a step spends parked counts
+ * toward it. Provenance filters: see ``docs/deployment/analytics.md``.
  */
 export type AnalyticsDurationView = {
     /**
@@ -455,10 +454,10 @@ export type AnalyticsEventsResponse = {
 /**
  * AnalyticsOutcomeView
  *
- * One node's judged-choice distribution and attempt-failure count,
- * never blended — a judged failure consumes no retry budget, an ended (superseded by a
- * strictly newer lease) attempt does; a still-open final attempt counts as neither, nor
- * does a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.
+ * One node's judged-choice distribution and attempt-failure count, kept separate: a judged
+ * failure is a choice, while an attempt failure is an attempt ended by a strictly newer lease.
+ * A still-open final attempt counts as neither, nor does a kick-back. The two counts' differing
+ * time windows are in ``docs/deployment/analytics.md``.
  */
 export type AnalyticsOutcomeView = {
     /**
@@ -860,7 +859,7 @@ export type BounceAction = {
  *
  * Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the
  * ``action`` whose pass answered the bounce — ``null`` when the hub itself judged it, as a poll timeout. ``step`` is
- * written ``null``; only an envelope stored before hub steps stopped running commands carries one.
+ * deprecated and ``null`` unless the envelope carries a failed step.
  */
 export type BounceEnvelope = {
     action: BounceAction | null;
@@ -885,8 +884,8 @@ export type BounceEnvelope = {
 /**
  * BounceFailedStep
  *
- * The ``run:`` step an envelope recorded before hub steps stopped running commands — one that exited non-zero.
- * ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log.
+ * A step that exited non-zero. ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full
+ * log.
  */
 export type BounceFailedStep = {
     /**
@@ -968,9 +967,7 @@ export type BounceView = {
 /**
  * CheckResult
  *
- * One deterministic check's **runner-executed** outcome.
- *
- * Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.
+ * One deterministic check's runner-executed outcome: the command and whether it passed.
  */
 export type CheckResult = {
     /**
@@ -1218,9 +1215,7 @@ export type ChunkDeleteRequest = {
 /**
  * ChunkDeleteResponse
  *
- * The result of one ``DELETE /chunks/{id}`` — the deleted chunk's own
- * id, echoed back. Nothing richer: the chunk is gone from every read the instant this
- * returns, with no fresh status left to derive a summary from.
+ * The result of one ``DELETE /chunks/{id}`` — the deleted chunk's own id, echoed back.
  */
 export type ChunkDeleteResponse = {
     /**
@@ -1573,8 +1568,8 @@ export type ChunkIngestResponse = {
  *
  * One standing-edge neighbor, one hop away. ``status`` is null only for
  * the residual race a neighbor's facts fail to resolve — the edge is still drawn,
- * unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
- * scope this shares.
+ * unsatisfied, rather than dropped. The neighbor is an immediate one only, with no transitive walk
+ * beyond it.
  */
 export type ChunkNeighborView = {
     /**
@@ -2984,7 +2979,7 @@ export type EventLoggedPayload = {
 /**
  * EventView
  *
- * One operational event on the wire — an ``event_log`` row or a projected open
+ * One operational event on the wire — a recorded event or a projected open
  * escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
  * event; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,
  * never ``""``); ``detail`` is the event-specific JSON payload.
@@ -4125,8 +4120,8 @@ export type GoneFindingView = {
 /**
  * GraphArtifact
  *
- * One graph-scoped artifact baked into the mint — the loader-inlined content of
- * a graph's ``artifacts:`` entry, carried alongside every envelope for that graph.
+ * One graph-scoped artifact baked into the mint — the inlined content of a graph's
+ * ``artifacts:`` entry, carried alongside every envelope for that graph.
  */
 export type GraphArtifact = {
     /**
@@ -4675,8 +4670,7 @@ export type HostLifecycleRequest = {
 /**
  * HostRecordResponse
  *
- * A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired —
- * a runner retired or released is one the host should halt.
+ * A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired.
  */
 export type HostRecordResponse = {
     /**
@@ -4797,7 +4791,7 @@ export type HostRegistryView = {
 /**
  * HostReportRequest
  *
- * What the calling host reports about itself on every tick — the host its bearer token was issued to. The
+ * What the calling host reports about itself — the host its bearer token was issued to. The
  * ``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its
  * content: a ``name`` that is blank, or that another live host holds, leaves the held name.
  */
@@ -4909,8 +4903,7 @@ export type HostRunnersRequest = {
 /**
  * HostSubscriptionUsageView
  *
- * One of a host's subscriptions with its newest reported usage — as a runner's card shows it — and the runners
- * spending it.
+ * One of a host's subscriptions with its newest reported usage and the runners spending it.
  */
 export type HostSubscriptionUsageView = {
     condition: SampleMissReason | null;
@@ -4993,10 +4986,7 @@ export type HubAdminView = {
 /**
  * HubAdvanceResponse
  *
- * The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
- * completion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the
- * slot was held by a different chunk and this call deferred without touching anything — not an
- * error.
+ * The result of one advance request for a chunk parked at a hub command node.
  */
 export type HubAdvanceResponse = {
     /**
@@ -5225,8 +5215,8 @@ export type InvitationCreateRequest = {
 /**
  * InvitationCreateResponse
  *
- * The issued invitation and its link's token. ``token`` is visible only here, once — only its sha256 is kept;
- * the link handed to the invited person ends ``/invite/<token>``.
+ * The issued invitation and its token. The token appears in this response only, once; it cannot be
+ * read back later.
  */
 export type InvitationCreateResponse = {
     invitation: InvitationView;
@@ -5339,9 +5329,8 @@ export type LandedRepoView = {
  * LeaseTranscriptView
  *
  * A lease's transcript, concatenated across every segment stored under its
- * ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. The fleet-plane
- * counterpart to the per-segment content read: a runner's read-back of its own shipped
- * segments. No ``final``: a segment's own closes only *that* segment.
+ * ``(chunk_id, node_id, epoch)`` — every spawn generation, not one. No ``final``: a
+ * segment's own closes only *that* segment.
  */
 export type LeaseTranscriptView = {
     /**
@@ -5550,8 +5539,7 @@ export type MigrationSource = typeof MigrationSource[keyof typeof MigrationSourc
  * MigrationView
  *
  * One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
- * ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
- * the attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the
+ * ``landed_node`` in ``to_graph`` — its own step, never a transition. ``model`` is the
  * re-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``
  * records the submitting step's epoch for an authored-edge migration.
  */
@@ -5802,8 +5790,8 @@ export type OpenDecisionsResponse = {
  * PauseView
  *
  * An open pause on a chunk — who set it and when, present only while ``paused=True``
- * is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
- * statuses in the derivation order, so this is the only carrier of a pause on a gated chunk.
+ * is the newest pause fact. Carried independently of ``status``, so it is present even when ``status``
+ * reads something other than ``paused``.
  */
 export type PauseView = {
     /**
@@ -6227,8 +6215,8 @@ export type QuestionAskedPayload = {
  *
  * A question row with its derived answer *and delivery* state.
  *
- * ``answered`` and the answer fields derive from the presence of the answer row;
- * ``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact.
+ * ``answered`` and the answer fields are set once an answer is recorded;
+ * ``delivered``/``delivered_at`` once that answer has been delivered.
  */
 export type QuestionView = {
     /**
@@ -6920,7 +6908,7 @@ export type RepositorySummary = {
 /**
  * RequeueView
  *
- * One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.
+ * One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded.
  */
 export type RequeueView = {
     /**
@@ -7361,8 +7349,7 @@ export type RoutineEntry = {
 /**
  * RoutineLifecycleRequest
  *
- * Retire or re-enable a routine — ``by`` is recorded on the lifecycle fact; the change
- * row's actor is the authenticated caller.
+ * A request to retire or re-enable a routine; ``by`` names who the change is attributed to.
  */
 export type RoutineLifecycleRequest = {
     /**
@@ -7664,7 +7651,7 @@ export type RunnerAddRequest = {
  *
  * The added runner — its hub-minted id, its initial name, and its plaintext bearer token.
  *
- * ``token`` is visible only here, once — only its sha256 hash is kept. The runner is added but
+ * ``token`` is the plaintext, disclosed in this response only and never again. The runner is added but
  * never connected until it first registers with this token.
  */
 export type RunnerAddResponse = {
@@ -7734,8 +7721,7 @@ export type RunnerBindingView = {
  * One harness binding this runner can execute — the id, its observed
  * version (``None`` when the binding exposes none), the tier ids it can resolve, and
  * whether it is this runner's default binding. ``available`` defaults
- * ``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is
- * eligible for nothing.
+ * ``True``: a binding that does not state otherwise is available.
  */
 export type RunnerCapability = {
     /**
@@ -7887,8 +7873,8 @@ export type RunnerDecliningView = {
  *
  * A rotated bearer token for an existing runner id.
  *
- * ``token`` is the plaintext, visible only here — only its sha256 hash is kept. The old
- * token stops resolving the moment this response lands.
+ * ``token`` is the plaintext, disclosed in this response only and never again. The runner's previous
+ * token no longer resolves.
  */
 export type RunnerEnrollmentResponse = {
     /**
@@ -8116,8 +8102,7 @@ export type RunnerRegistrationRequest = {
  * RunnerRegistrationResponse
  *
  * The registered runner's hub-minted id and current name, whether this call was its first
- * registration since it was added, and the tenant it serves. Registration doubles as the
- * heartbeat, so a renamed tenant reaches the runner on its next tick.
+ * registration since it was added, and the tenant it serves, by its current name.
  */
 export type RunnerRegistrationResponse = {
     /**
@@ -8424,10 +8409,7 @@ export type RunnerVersionStanding = typeof RunnerVersionStanding[keyof typeof Ru
 /**
  * RunnerView
  *
- * A registered runner's own view of its registration.
- *
- * The two brakes stay separate: ``hub_paused`` is claims-only, while
- * ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory.
+ * A registered runner's own view of its registration. Subscription usage is advisory.
  */
 export type RunnerView = {
     /**
@@ -8751,8 +8733,8 @@ export type SecretView = {
  * One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
  * it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
  * ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
- * serves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the
- * runner can claim the project now.
+ * serves nothing until a project answers to it. ``claimable`` is whether the runner can claim work in the project now;
+ * ``False`` when not judged.
  */
 export type ServedProjectView = {
     /**
@@ -9065,7 +9047,7 @@ export type TenantCreateRequest = {
  * TenantDeletionResponse
  *
  * ``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
- * ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).
+ * ``deleting`` while its deletion is still in progress (``202``).
  */
 export type TenantDeletionResponse = {
     /**
@@ -9302,7 +9284,7 @@ export type TraceReplayResponse = {
  *
  * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
  * error text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.
- * ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
+ * ``receiver`` is the span-receiver tally, ``None`` where no span receiver runs. ``replay_max_window_seconds`` is the
  * widest window one replay request may cover.
  */
 export type TraceStatusResponse = {
@@ -10412,9 +10394,7 @@ export type WorkSourcePatchRequest = {
 /**
  * WorkSourceSummary
  *
- * One work source — the ``GET /api/work-sources`` listing row and every record verb's
- * view. ``readable`` is not a field: every source answers ``fetch``, so it carries no
- * information; ``edit`` is the "has browsable items" signal the item routes gate on.
+ * One work source. ``edit`` is whether the source has browsable items.
  * ``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display
  * label. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record
  * fields.

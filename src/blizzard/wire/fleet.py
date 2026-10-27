@@ -1,9 +1,4 @@
-"""Fleet-wide wire views — reads that span every chunk rather than one.
-
-``FleetSpendView`` is a usage/cost total summed at read time over a caller-chosen window,
-never a stored column. ``FleetSummaryView`` folds every chunk's derived status to four
-buckets.
-"""
+"""Fleet-wide wire views — the fleet spend total and the fleet status summary."""
 
 from __future__ import annotations
 

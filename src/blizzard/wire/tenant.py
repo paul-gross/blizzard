@@ -18,8 +18,7 @@ from blizzard.wire.base import WireModel
 from blizzard.wire.graph import GraphSyncEntry
 from blizzard.wire.vocabulary import OPEN
 
-#: A tenant's name: 1 to 64 characters, no leading or trailing whitespace; inner whitespace, line breaks included, is
-#: kept.
+#: A tenant's name: non-empty, with no leading or trailing whitespace; inner whitespace, line breaks included, is kept.
 TenantName = Annotated[
     str, StringConstraints(min_length=1, max_length=TENANT_NAME_MAX_LENGTH, pattern=TENANT_NAME_PATTERN)
 ]
@@ -53,7 +52,7 @@ class TenantView(WireModel):
 
 class TenantDeletionResponse(WireModel):
     """``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or
-    ``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``)."""
+    ``deleting`` while its deletion is still in progress (``202``)."""
 
     tenant_id: str
     state: Annotated[TenantDeletionState | Unrecognized, OPEN]

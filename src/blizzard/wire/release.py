@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.wire.base import WireModel
 
-#: The reason is open vocabulary, but bounded: the hub stores it and fans it out on the feed.
+#: The longest ``reason`` a release accepts.
 RELEASE_REASON_MAX_LENGTH = 64
 
 

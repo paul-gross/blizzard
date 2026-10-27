@@ -1,9 +1,4 @@
-"""The activity feed — ``GET /api/activity``.
-
-A bounded, merged read over the same fact-derived vocabulary a live ``chunk-changed`` /
-``event-logged`` / ``runner-changed`` frame carries — shaped by
-:class:`blizzard.hub.domain.chunk.model.ActivityFeed`.
-"""
+"""The activity feed wire models — one activity entry and the bounded feed response."""
 
 from __future__ import annotations
 

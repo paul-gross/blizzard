@@ -1,9 +1,5 @@
-"""Fleet-registry wire bodies.
-
-A runner's ``runner_id`` is the hub-minted ``rn_`` id, its one identity; ``runner_name`` is the
-display name the runner declares, which nothing keys on. ``online``, ``connection`` and ``paused``
-are **derived**. :class:`RunnerAddResponse` and :class:`RunnerEnrollmentResponse` are the only
-bodies that ever carry a runner's plaintext bearer token."""
+"""Fleet-registry wire bodies: runner registration, enrollment, add, identity, and lifecycle requests and responses,
+and the runner, registry, binding, capability, and subscription-usage views."""
 
 from __future__ import annotations
 
@@ -25,8 +21,7 @@ class RunnerCapability(BaseModel):
     """One harness binding this runner can execute — the id, its observed
     version (``None`` when the binding exposes none), the tier ids it can resolve, and
     whether it is this runner's default binding. ``available`` defaults
-    ``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is
-    eligible for nothing."""
+    ``True``: a binding that does not state otherwise is available."""
 
     harness_id: str
     version: str | None = None
@@ -48,8 +43,8 @@ class ServedProjectView(WireModel):
     """One entry of the projects a runner serves: the ``entry`` as declared — a project id or slug — and the project
     it resolves to in the runner's tenant, with its palette ``color`` — a palette name or a ``#rrggbb``.
     ``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which
-    serves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the
-    runner can claim the project now."""
+    serves nothing until a project answers to it. ``claimable`` is whether the runner can claim work in the project now;
+    ``False`` when not judged."""
 
     entry: str
     project_id: str | None = None
@@ -109,8 +104,7 @@ class RunnerRegistrationRequest(BaseModel):
     name: str | None = None
     workspace_id: str
     env_capacity: int | None = None
-    #: The runner's own browser-reachable base URL — optional; a runner that
-    #: registers none cannot be an IdP-authorize ``client``.
+    #: The runner's own browser-reachable base URL; ``None`` registers none.
     url: str | None = None
     #: The allowed redirect URIs a browser may be bounced to for this runner
     #: — exact-match only (the open-redirect guard). Empty registers none.
@@ -125,8 +119,7 @@ class RunnerRegistrationRequest(BaseModel):
     #: serves none.
     projects: list[str] | None = None
     #: The projects the runner serves through its host's workspaces. Sent, it replaces ``projects`` as the served
-    #: declaration, in binding order (``[]`` serves none); ``None`` leaves ``projects`` in charge. Stored as sent,
-    #: ``None`` included, on every registration.
+    #: declaration, in binding order (``[]`` serves none); ``None`` leaves ``projects`` in charge.
     bindings: list[RunnerBinding] | None = None
     #: The slug of the host subscription every binding spends; ``None`` names none.
     subscription: str | None = None
@@ -161,8 +154,7 @@ class RunnerVersionRefusal(WireModel):
 
 class RunnerRegistrationResponse(WireModel):
     """The registered runner's hub-minted id and current name, whether this call was its first
-    registration since it was added, and the tenant it serves. Registration doubles as the
-    heartbeat, so a renamed tenant reaches the runner on its next tick."""
+    registration since it was added, and the tenant it serves, by its current name."""
 
     runner_id: str
     #: The name the registry now holds for this runner.
@@ -190,8 +182,8 @@ class RunnerRegistrationResponse(WireModel):
 class RunnerEnrollmentResponse(BaseModel):
     """A rotated bearer token for an existing runner id.
 
-    ``token`` is the plaintext, visible only here — only its sha256 hash is kept. The old
-    token stops resolving the moment this response lands."""
+    ``token`` is the plaintext, disclosed in this response only and never again. The runner's previous
+    token no longer resolves."""
 
     runner_id: str
     token: str
@@ -214,7 +206,7 @@ class RunnerAddRequest(BaseModel):
 class RunnerAddResponse(BaseModel):
     """The added runner — its hub-minted id, its initial name, and its plaintext bearer token.
 
-    ``token`` is visible only here, once — only its sha256 hash is kept. The runner is added but
+    ``token`` is the plaintext, disclosed in this response only and never again. The runner is added but
     never connected until it first registers with this token."""
 
     runner_id: str
@@ -235,7 +227,7 @@ class RunnerIdentityView(WireModel):
     #: That tenant's current name.
     tenant_name: str | None = None
     #: Every live ``fleet`` flag at the hub's resolved value, and every retired one on; empty from a hub that predates
-    #: them. A runner applies it only once the answer names the runner it is configured as.
+    #: them. The flags hold for the runner this answer names.
     fleet_flags: dict[str, bool] = {}
 
 
@@ -278,10 +270,7 @@ class SubscriptionUsageView(WireModel):
 
 
 class RunnerView(WireModel):
-    """A registered runner's own view of its registration.
-
-    The two brakes stay separate: ``hub_paused`` is claims-only, while
-    ``locally_paused`` answers "is it spawning at all?". Subscription usage is advisory."""
+    """A registered runner's own view of its registration. Subscription usage is advisory."""
 
     runner_id: str
     # The runner's latest registered display name — not unique, never a key.

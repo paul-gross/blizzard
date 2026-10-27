@@ -1,8 +1,4 @@
-"""A routine's finding trend — the `GET /api/routines/trend` read view.
-
-Every count is a fold over the window's own `finding_facts`, never a stored rollup
-(`bzh:facts-not-status`); periods are fixed-length slices of `[since, until)`, and `age`
-is the cut over the window's created findings against a caller-supplied boundary."""
+"""A routine's finding trend read view — the trend, its periods, and its age split."""
 
 from __future__ import annotations
 
@@ -20,6 +16,7 @@ class TrendPeriodView(BaseModel):
 
 
 class TrendAgeView(BaseModel):
+    #: The caller-supplied instant the window's created findings are split against.
     boundary: str
     recent: int
     older: int
@@ -31,5 +28,6 @@ class TrendView(BaseModel):
     since: str
     until: str
     period_days: int
+    #: Fixed-length slices of ``[since, until)``, each ``period_days`` long.
     periods: list[TrendPeriodView]
     age: TrendAgeView

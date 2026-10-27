@@ -1,10 +1,8 @@
 """Lease wire bodies — the runner-local lease read.
 
 ``closed_at``/``closure_reason`` are both ``None`` iff the lease is active, and ``state``
-carries ``"backing-off"`` for a lease held off between attempts. Datetimes
-are ISO-8601 strings that **always carry an explicit UTC offset**
-(``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``.
-"""
+carries ``"backing-off"`` for a lease held off between attempts. Datetimes are ISO-8601 strings
+that **always carry an explicit UTC offset** (``2026-07-16T12:00:00+00:00``) — ``bzh:utc-instants``."""
 
 from __future__ import annotations
 
@@ -34,7 +32,7 @@ class LeaseView(WireModel):
     created_at: str
     last_heartbeat_at: str | None
     state: Annotated[LeaseState | Unrecognized, OPEN]
-    #: What the panel shows: the chunk's open takeover, escalation, or ask when one outranks ``state``.
+    #: The lease's displayed status: ``state``, or the chunk's open takeover, escalation, or ask that outranks it.
     display_status: Annotated[LeaseDisplayStatus | Unrecognized, OPEN]
     #: Whether a closed lease ended healthily (``transitioned``); ``False`` for an active one.
     closure_healthy: bool

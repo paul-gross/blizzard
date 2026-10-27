@@ -1,9 +1,6 @@
-"""Chunk ingest, views, and the work-item pass-through.
-
-Ingest wraps source-native **tokens** into chunks — ``{name}:{ref}``, ``{name}#{ref}``, or the item's
-own URL, each resolved against the configured work sources; an unclaimed token is a **422** naming it,
-and a resolved pointer already held by a live chunk is a **409** carrying the existing chunk id. The
-views carry the **derived** status, never a stored column; work-item contents are never stored."""
+"""Chunk wire shapes: ingest, delete, patch, and lifecycle-verb bodies; the chunk list, detail, and
+status views with their history, migration, dependency, and usage parts; hub-advance and delivery
+results; and the pass-through work items."""
 
 from __future__ import annotations
 
@@ -73,9 +70,7 @@ class ChunkDeleteRequest(BaseModel):
 
 
 class ChunkDeleteResponse(BaseModel):
-    """The result of one ``DELETE /chunks/{id}`` — the deleted chunk's own
-    id, echoed back. Nothing richer: the chunk is gone from every read the instant this
-    returns, with no fresh status left to derive a summary from."""
+    """The result of one ``DELETE /chunks/{id}`` — the deleted chunk's own id, echoed back."""
 
     chunk_id: str
 
@@ -281,8 +276,7 @@ class TransitionView(WireModel):
 
 class MigrationView(WireModel):
     """One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto
-    ``landed_node`` in ``to_graph`` — its own step, never a transition. A transition-borne source ends
-    the attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the
+    ``landed_node`` in ``to_graph`` — its own step, never a transition. ``model`` is the
     re-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``
     records the submitting step's epoch for an authored-edge migration."""
 
@@ -338,7 +332,7 @@ class ResolutionView(WireModel):
 
 
 class RequeueView(WireModel):
-    """One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept."""
+    """One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded."""
 
     requeued_at: str
     requeued_by: str | None = None
@@ -397,16 +391,19 @@ class BounceView(BaseModel):
 
 
 class HubAdvanceResponse(WireModel):
-    """The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to
-    completion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the
-    slot was held by a different chunk and this call deferred without touching anything — not an
-    error."""
+    """The result of one advance request for a chunk parked at a hub command node."""
 
     chunk_id: str
+    #: The chunk's derived status after the call.
     status: Annotated[ChunkStatus | Unrecognized, OPEN]
+    #: Whether this call took a pass of the parked node's action, even one that only recorded a pending poll or an
+    #: escalation; ``False`` means the call deferred — not a failure, and not a promise that nothing changed.
     ran: bool
+    #: The choice the pass answered; ``None`` when there is none.
     outcome_choice: str | None = None
+    #: The node the pass routed to; ``None`` when there is none.
     to_node_name: str | None = None
+    #: Why the call deferred, or what the pass reported; empty when there is nothing to add.
     detail: str = ""
 
 
@@ -541,8 +538,8 @@ class ChunkPatchResponse(WireModel):
 
 class PauseView(BaseModel):
     """An open pause on a chunk — who set it and when, present only while ``paused=True``
-    is the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated
-    statuses in the derivation order, so this is the only carrier of a pause on a gated chunk."""
+    is the newest pause fact. Carried independently of ``status``, so it is present even when ``status``
+    reads something other than ``paused``."""
 
     by: str
     set_at: str
@@ -563,8 +560,8 @@ class BlockedView(WireModel):
 class ChunkNeighborView(WireModel):
     """One standing-edge neighbor, one hop away. ``status`` is null only for
     the residual race a neighbor's facts fail to resolve — the edge is still drawn,
-    unsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive
-    scope this shares."""
+    unsatisfied, rather than dropped. The neighbor is an immediate one only, with no transitive walk
+    beyond it."""
 
     chunk_id: str
     status: Annotated[ChunkStatus | Unrecognized, OPEN] | None = None
@@ -586,16 +583,17 @@ class ChunkDetail(WireModel):
 
     chunk_id: str
     graph_id: str
-    # The pinned graph's name and mint instant — `None` together iff the graph could not
-    # be resolved.
+    # The pinned graph's name; `None` when the graph could not be resolved.
     graph_name: str | None = None
+    # The pinned graph's mint instant; `None` when the graph could not be resolved.
     graph_created_at: str | None = None
     status: Annotated[ChunkStatus | Unrecognized, OPEN]
     current_node_id: str | None
     current_node_name: str | None = None
     latest_epoch: int | None
     work_refs: list[WorkRefView] = []
-    # The chunk's default model preference and effort — see :class:`ChunkSummary`.
+    # The chunk's default model preference and effort — what a surface declaring neither
+    # inherits. Empty/None is the minted state and means *express no preference*, not "unknown".
     default_model: list[str] = []
     default_effort: str | None = None
     # The chunk's default harness preference — the `default_model` shape.
@@ -628,8 +626,7 @@ class ChunkDetail(WireModel):
     # The chunk's blocked marking — non-None only when it both waits on an
     # unmet prerequisite and this read derives it; null otherwise, regardless of block state.
     blocked: BlockedView | None = None
-    # The chunk's standing dependency edges one hop each way — always present,
-    # unlike ``blocked``; see ChunkNeighborhoodView.
+    # The chunk's standing dependency edges one hop each way — always present, empty lists when it has none.
     neighborhood: ChunkNeighborhoodView = Field(
         default_factory=lambda: ChunkNeighborhoodView(prerequisites=[], dependents=[])
     )
@@ -697,8 +694,7 @@ class ChunkStatusView(WireModel):
     route_runner_id: str | None = None
     pause: PauseView | None = None
     latest_epoch: int | None = None
-    # The chunk's operator restarts' epochs, oldest first — mirrors
-    # ``ChunkDetail.restarts``, narrowed to the one field.
+    # The epoch of each of the chunk's operator restarts, oldest first.
     restart_epochs: list[int] = []
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     decision: ChunkDecisionStatusView | None = None

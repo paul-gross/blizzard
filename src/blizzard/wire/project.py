@@ -1,5 +1,5 @@
 """Project wire models — the ``/api/projects`` record verbs, a project's source and repository links, and the
-bodies of the refusals that name projects. Request models are ``extra="forbid"``.
+bodies of the refusals that name projects.
 
 A project is named on the wire by its id or its slug, never its display name; a response names it by all three as
 separate fields."""

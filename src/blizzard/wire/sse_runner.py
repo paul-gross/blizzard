@@ -56,10 +56,8 @@ class EnvironmentChangedPayload(SseFramePayload):
 
 
 class FactChangedPayload(RunnerScopedPayload):
-    """A hub-bound fact was enqueued or acked — mirrors the hub's own ``event-logged``
-    shape: ``chunk_id``/``lease_id`` ride as a present ``null`` rather than omitted,
-    since a runner-wide fact (e.g. a chunk-less ``event.recorded``) legitimately carries
-    neither. Never a heartbeat — those ride elsewhere, elapsed-time-derived."""
+    """A hub-bound fact was enqueued or acknowledged: its sequence and kind, and the chunk and lease it concerns —
+    each null for a fact that concerns none. A heartbeat is not a fact."""
 
     seq: int
     kind: str

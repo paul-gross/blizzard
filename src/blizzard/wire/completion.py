@@ -29,9 +29,7 @@ class SubmittedArtifact(BaseModel):
 
 
 class CheckResult(BaseModel):
-    """One deterministic check's **runner-executed** outcome.
-
-    Carries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire."""
+    """One deterministic check's runner-executed outcome: the command and whether it passed."""
 
     command: str
     passed: bool
@@ -40,7 +38,7 @@ class CheckResult(BaseModel):
 class CompletionSubmission(BaseModel):
     """A node-step's completion — judgement choice + checks + artifacts + epoch."""
 
-    choice: str  # the `<Choice>{name}</Choice>` the worker emitted
+    choice: str  # the name of the choice the node-step's judgement selected
     epoch: int  # the executing lease's fence, checked against the chunk's latest
     from_node_id: str
     # Runner-executed checks; empty when no checks are declared.

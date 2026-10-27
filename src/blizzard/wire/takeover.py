@@ -1,8 +1,4 @@
-"""``blizzard runner takeover`` — wire bodies.
-
-Behind ``POST /chunks/{id}/takeovers`` (open) and ``PATCH
-/chunks/{id}/takeovers/{tid}`` (end).
-"""
+"""Operator-takeover wire bodies: the takeover request and its open and end responses."""
 
 from __future__ import annotations
 

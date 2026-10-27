@@ -1,7 +1,4 @@
-"""``blizzard runner requeue`` — wire body.
-
-Behind ``POST /chunks/{id}/requeues``.
-"""
+"""Requeue wire body: the response to clearing a chunk's local hold."""
 
 from __future__ import annotations
 

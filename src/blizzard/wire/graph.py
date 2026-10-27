@@ -1,9 +1,5 @@
-"""Graph mint request and read views.
-
-A mint takes a YAML definition and answers with a :class:`GraphView` — the full reified
-definition — or **422** with a :class:`GraphValidationReport`. The list surface serves a
-:class:`GraphSummaryView` per minted graph, newest first, with the newest non-retired graph of
-each ``name`` marked ``effective``; the lifecycle verbs return an updated view."""
+"""Graph wire shapes: the mint, policy, and flags requests; the validation report; the graph and its node, edge,
+choice, session, and rotation views; the sync report; and the summary row."""
 
 from __future__ import annotations
 

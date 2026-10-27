@@ -24,7 +24,7 @@ class ReceiverStatus(BaseModel):
 class TraceStatusResponse(WireModel):
     """Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
     error text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.
-    ``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the
+    ``receiver`` is the span-receiver tally, ``None`` where no span receiver runs. ``replay_max_window_seconds`` is the
     widest window one replay request may cover."""
 
     state: Annotated[TracingState | Unrecognized, OPEN]

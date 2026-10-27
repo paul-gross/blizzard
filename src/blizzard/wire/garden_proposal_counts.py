@@ -1,6 +1,4 @@
-"""Garden-proposal counts — the `GET /api/routines/proposal-counts` read
-view. `created` is echoed as the sum of the four bucket counts, never carried as its own
-column (`GardenProposalCounts.created`'s own rule)."""
+"""Garden-proposal counts read views — one counts row and the counts response."""
 
 from __future__ import annotations
 
@@ -28,6 +26,7 @@ class GardenProposalCountsRowView(WireModel):
     passed: int
     accepted_with_item: int
     accepted_without_item: int
+    #: The sum of the four bucket counts.
     created: int
     #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None

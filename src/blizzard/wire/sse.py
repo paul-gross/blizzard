@@ -1,9 +1,5 @@
-"""Per-kind SSE frame wire models — the one description each frame kind's
-payload has, mirrored by the golden corpus at ``contracts/sse/``.
-
-Every model is ``extra="forbid"``. Presence-vs-null is load-bearing and not uniform, so each
-model owns its serialization (:meth:`SseFramePayload.to_payload`): an optional field is
-omitted when unset unless named in :attr:`SseFramePayload._null_when_absent`."""
+"""Per-kind SSE frame wire models — one payload model per frame kind, mirrored by the golden
+corpus at ``contracts/sse/``."""
 
 from __future__ import annotations
 
@@ -30,8 +26,6 @@ class SseFramePayload(BaseModel):
     _null_when_absent: ClassVar[frozenset[str]] = frozenset()
 
     def to_payload(self) -> dict[str, object]:
-        """Present-when-meaningful: an optional field is omitted when it is ``None``,
-        except the fields named in :attr:`_null_when_absent`, which stay present."""
         return {
             name: value
             for name, value in self.model_dump().items()
@@ -52,8 +46,7 @@ class ChunkChangedPayload(SseFramePayload):
     runner_name: str | None = None
     cause: ChunkChangeCause | None = None
     graph_id: str | None = None
-    #: Who deleted the chunk — rides the ``deleted`` cause, mirroring
-    #: :attr:`RunnerChangedPayload.by`; omitted on every other cause.
+    #: Who deleted the chunk — set on the ``deleted`` cause; omitted on every other cause.
     by: str | None = None
     key: str | None = None
     #: The releasing runner's own reason — rides the ``released`` cause; omitted on every other.

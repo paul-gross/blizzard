@@ -1,8 +1,5 @@
-"""``blizzard runner artifact commit`` — wire body.
-
-Behind ``POST /api/leases/{lease_id}/git-commits``: the ``git_commit`` artifact kind's
-channel, carrying structured identity rather than content.
-"""
+"""Git-commit declaration wire bodies: the declaration request, naming a commit by structured identity rather than
+content, and its response."""
 
 from __future__ import annotations
 
@@ -12,8 +9,8 @@ from pydantic import BaseModel
 class GitCommitDeclarationRequest(BaseModel):
     """A worker's explicit git-commit declaration for one repo it touched.
 
-    Carries no forge: the origin verified against is read from the environment's
-    repo manifest. ``environment_id`` is required once a chunk holds several."""
+    It names the repo, branch and commit, and no forge. ``environment_id`` names the environment the repo is in,
+    required once a chunk holds several."""
 
     repo: str
     branch: str

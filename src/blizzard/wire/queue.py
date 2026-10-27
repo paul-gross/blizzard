@@ -1,9 +1,5 @@
-"""The ready-queue peek and the backlog's own reordering surface.
-
-``GET /api/queue`` (and the runner's ``GET /api/fleet/queue/peek``) returns the hub-ordered
-ready queue, read-only; ``GET /api/backlog`` is its independently-ranked ``not_ready``
-counterpart. ``POST /api/fleet/queue/peek`` is a second verb on the same path — the
-matched peek, one entry for the calling principal, sharing the ``GET``'s response model."""
+"""Ready-queue and backlog wire shapes: the entries, whole-order responses, and pages; the peek, replace, and
+position requests; and the chunk group request and response."""
 
 from __future__ import annotations
 

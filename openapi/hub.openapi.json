@@ -326,7 +326,7 @@
                 "type": "null"
               }
             ],
-            "description": "The finding this add minted, or null when the delivered set predates the finding_facts.finding_set_id linkage \u2014 the add still renders from the artifact, just linked to no finding row.",
+            "description": "The finding this add minted, or null when the add is linked to no finding.",
             "title": "Finding Id"
           },
           "introduced": {
@@ -528,7 +528,7 @@
         "type": "object"
       },
       "AnalyticsDurationView": {
-        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node\nid or a graph id. Hub-observed wall-clock, not runner-measured: a parked gate\nstretches it, a delayed store-and-forward mint-report *flush* compresses it toward\nzero instead. Provenance filters: see ``docs/deployment/analytics.md``.",
+        "description": "One grouping key's step-duration rollup \u2014 ``key`` is a node id or a graph id. A duration\nis hub-observed wall-clock time, not runner-measured, so time a step spends parked counts\ntoward it. Provenance filters: see ``docs/deployment/analytics.md``.",
         "properties": {
           "avg_seconds": {
             "title": "Avg Seconds",
@@ -754,7 +754,7 @@
         "type": "object"
       },
       "AnalyticsOutcomeView": {
-        "description": "One node's judged-choice distribution and attempt-failure count,\nnever blended \u2014 a judged failure consumes no retry budget, an ended (superseded by a\nstrictly newer lease) attempt does; a still-open final attempt counts as neither, nor\ndoes a kick-back. The two counts' differing time windows are in ``docs/deployment/analytics.md``.",
+        "description": "One node's judged-choice distribution and attempt-failure count, kept separate: a judged\nfailure is a choice, while an attempt failure is an attempt ended by a strictly newer lease.\nA still-open final attempt counts as neither, nor does a kick-back. The two counts' differing\ntime windows are in ``docs/deployment/analytics.md``.",
         "properties": {
           "attempt_failures": {
             "title": "Attempt Failures",
@@ -1341,7 +1341,7 @@
         "type": "object"
       },
       "BounceEnvelope": {
-        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout. ``step`` is\nwritten ``null``; only an envelope stored before hub steps stopped running commands carries one.",
+        "description": "Why delivery did not complete: the ``cause``, a readable ``detail``, the repositories not yet landed, and the\n``action`` whose pass answered the bounce \u2014 ``null`` when the hub itself judged it, as a poll timeout. ``step`` is\ndeprecated and ``null`` unless the envelope carries a failed step.",
         "properties": {
           "action": {
             "anyOf": [
@@ -1392,7 +1392,7 @@
         "type": "object"
       },
       "BounceFailedStep": {
-        "description": "The ``run:`` step an envelope recorded before hub steps stopped running commands \u2014 one that exited non-zero.\n``output_tail`` is bounded; ``log_artifact`` names the asset holding the full log.",
+        "description": "A step that exited non-zero. ``output_tail`` is bounded; ``log_artifact`` names the asset holding the full\nlog.",
         "properties": {
           "exit_code": {
             "title": "Exit Code",
@@ -1499,7 +1499,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's **runner-executed** outcome.\n\nCarries only ``(command, passed)``; ``output_tail`` deliberately does not ride the wire.",
+        "description": "One deterministic check's runner-executed outcome: the command and whether it passed.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1888,7 +1888,7 @@
         "type": "object"
       },
       "ChunkDeleteResponse": {
-        "description": "The result of one ``DELETE /chunks/{id}`` \u2014 the deleted chunk's own\nid, echoed back. Nothing richer: the chunk is gone from every read the instant this\nreturns, with no fresh status left to derive a summary from.",
+        "description": "The result of one ``DELETE /chunks/{id}`` \u2014 the deleted chunk's own id, echoed back.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -2604,7 +2604,7 @@
         "type": "object"
       },
       "ChunkNeighborView": {
-        "description": "One standing-edge neighbor, one hop away. ``status`` is null only for\nthe residual race a neighbor's facts fail to resolve \u2014 the edge is still drawn,\nunsatisfied, rather than dropped. See BlockedView for the immediate-only, no-transitive\nscope this shares.",
+        "description": "One standing-edge neighbor, one hop away. ``status`` is null only for\nthe residual race a neighbor's facts fail to resolve \u2014 the edge is still drawn,\nunsatisfied, rather than dropped. The neighbor is an immediate one only, with no transitive walk\nbeyond it.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -5054,7 +5054,7 @@
         "type": "object"
       },
       "EventView": {
-        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
+        "description": "One operational event on the wire \u2014 a recorded event or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` and ``runner_name`` are absent for a projected escalation (``null``,\nnever ``\"\"``); ``detail`` is the event-specific JSON payload.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -6936,7 +6936,7 @@
         "type": "object"
       },
       "GraphArtifact": {
-        "description": "One graph-scoped artifact baked into the mint \u2014 the loader-inlined content of\na graph's ``artifacts:`` entry, carried alongside every envelope for that graph.",
+        "description": "One graph-scoped artifact baked into the mint \u2014 the inlined content of a graph's\n``artifacts:`` entry, carried alongside every envelope for that graph.",
         "properties": {
           "content": {
             "title": "Content",
@@ -7806,7 +7806,7 @@
         "type": "object"
       },
       "HostRecordResponse": {
-        "description": "A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired \u2014\na runner retired or released is one the host should halt.",
+        "description": "A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired.",
         "properties": {
           "host_id": {
             "title": "Host Id",
@@ -8043,7 +8043,7 @@
         "type": "object"
       },
       "HostReportRequest": {
-        "description": "What the calling host reports about itself on every tick \u2014 the host its bearer token was issued to. The\n``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its\ncontent: a ``name`` that is blank, or that another live host holds, leaves the held name.",
+        "description": "What the calling host reports about itself \u2014 the host its bearer token was issued to. The\n``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its\ncontent: a ``name`` that is blank, or that another live host holds, leaves the held name.",
         "properties": {
           "name": {
             "anyOf": [
@@ -8217,7 +8217,7 @@
         "type": "object"
       },
       "HostSubscriptionUsageView": {
-        "description": "One of a host's subscriptions with its newest reported usage \u2014 as a runner's card shows it \u2014 and the runners\nspending it.",
+        "description": "One of a host's subscriptions with its newest reported usage and the runners spending it.",
         "properties": {
           "condition": {
             "anyOf": [
@@ -8374,7 +8374,7 @@
         "type": "object"
       },
       "HubAdvanceResponse": {
-        "description": "The result of one on-demand hub-advance. A generic hub command node runs ``run:`` to\ncompletion, one call at a time, behind the fleet-wide serialization slot: ``ran=False`` means the\nslot was held by a different chunk and this call deferred without touching anything \u2014 not an\nerror.",
+        "description": "The result of one advance request for a chunk parked at a hub command node.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -8666,7 +8666,7 @@
         "type": "object"
       },
       "InvitationCreateResponse": {
-        "description": "The issued invitation and its link's token. ``token`` is visible only here, once \u2014 only its sha256 is kept;\nthe link handed to the invited person ends ``/invite/<token>``.",
+        "description": "The issued invitation and its token. The token appears in this response only, once; it cannot be\nread back later.",
         "properties": {
           "invitation": {
             "$ref": "#/components/schemas/InvitationView"
@@ -8808,7 +8808,7 @@
         "type": "object"
       },
       "LeaseTranscriptView": {
-        "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one. The fleet-plane\ncounterpart to the per-segment content read: a runner's read-back of its own shipped\nsegments. No ``final``: a segment's own closes only *that* segment.",
+        "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one. No ``final``: a\nsegment's own closes only *that* segment.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -9081,7 +9081,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. A transition-borne source ends\nthe attempt and re-queues; ``restart`` preempts it and keeps the route. ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``\nrecords the submitting step's epoch for an authored-edge migration.",
+        "description": "One cross-graph migration step: the chunk was re-pinned from ``from_graph`` onto\n``landed_node`` in ``to_graph`` \u2014 its own step, never a transition. ``model`` is the\nre-pinned model, null when the chunk kept its own. ``source`` attributes it, and ``epoch``\nrecords the submitting step's epoch for an authored-edge migration.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -9600,7 +9600,7 @@
         "type": "object"
       },
       "PauseView": {
-        "description": "An open pause on a chunk \u2014 who set it and when, present only while ``paused=True``\nis the newest pause fact. Carried independently of ``status``: PAUSED sits below the human-gated\nstatuses in the derivation order, so this is the only carrier of a pause on a gated chunk.",
+        "description": "An open pause on a chunk \u2014 who set it and when, present only while ``paused=True``\nis the newest pause fact. Carried independently of ``status``, so it is present even when ``status``\nreads something other than ``paused``.",
         "properties": {
           "by": {
             "title": "By",
@@ -10196,7 +10196,7 @@
         "type": "object"
       },
       "QuestionView": {
-        "description": "A question row with its derived answer *and delivery* state.\n\n``answered`` and the answer fields derive from the presence of the answer row;\n``delivered``/``delivered_at`` derive from the ``answer.delivered`` fact.",
+        "description": "A question row with its derived answer *and delivery* state.\n\n``answered`` and the answer fields are set once an answer is recorded;\n``delivered``/``delivered_at`` once that answer has been delivered.",
         "properties": {
           "answer": {
             "anyOf": [
@@ -11272,7 +11272,7 @@
         "type": "object"
       },
       "RequeueView": {
-        "description": "One hub requeue on the chunk. ``requeued_by`` is null on a requeue recorded before it was kept.",
+        "description": "One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded.",
         "properties": {
           "note": {
             "anyOf": [
@@ -11982,7 +11982,7 @@
         "type": "object"
       },
       "RoutineLifecycleRequest": {
-        "description": "Retire or re-enable a routine \u2014 ``by`` is recorded on the lifecycle fact; the change\nrow's actor is the authenticated caller.",
+        "description": "A request to retire or re-enable a routine; ``by`` names who the change is attributed to.",
         "properties": {
           "by": {
             "default": "operator",
@@ -12502,7 +12502,7 @@
         "type": "object"
       },
       "RunnerAddResponse": {
-        "description": "The added runner \u2014 its hub-minted id, its initial name, and its plaintext bearer token.\n\n``token`` is visible only here, once \u2014 only its sha256 hash is kept. The runner is added but\nnever connected until it first registers with this token.",
+        "description": "The added runner \u2014 its hub-minted id, its initial name, and its plaintext bearer token.\n\n``token`` is the plaintext, disclosed in this response only and never again. The runner is added but\nnever connected until it first registers with this token.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -12580,7 +12580,7 @@
         "type": "object"
       },
       "RunnerCapability": {
-        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a binding that does not state otherwise is available. A runner reporting no bindings at all is\neligible for nothing.",
+        "description": "One harness binding this runner can execute \u2014 the id, its observed\nversion (``None`` when the binding exposes none), the tier ids it can resolve, and\nwhether it is this runner's default binding. ``available`` defaults\n``True``: a binding that does not state otherwise is available.",
         "properties": {
           "available": {
             "default": true,
@@ -12814,7 +12814,7 @@
         "type": "object"
       },
       "RunnerEnrollmentResponse": {
-        "description": "A rotated bearer token for an existing runner id.\n\n``token`` is the plaintext, visible only here \u2014 only its sha256 hash is kept. The old\ntoken stops resolving the moment this response lands.",
+        "description": "A rotated bearer token for an existing runner id.\n\n``token`` is the plaintext, disclosed in this response only and never again. The runner's previous\ntoken no longer resolves.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -13193,7 +13193,7 @@
         "type": "object"
       },
       "RunnerRegistrationResponse": {
-        "description": "The registered runner's hub-minted id and current name, whether this call was its first\nregistration since it was added, and the tenant it serves. Registration doubles as the\nheartbeat, so a renamed tenant reaches the runner on its next tick.",
+        "description": "The registered runner's hub-minted id and current name, whether this call was its first\nregistration since it was added, and the tenant it serves, by its current name.",
         "properties": {
           "bindings": {
             "anyOf": [
@@ -13771,7 +13771,7 @@
         "type": "string"
       },
       "RunnerView": {
-        "description": "A registered runner's own view of its registration.\n\nThe two brakes stay separate: ``hub_paused`` is claims-only, while\n``locally_paused`` answers \"is it spawning at all?\". Subscription usage is advisory.",
+        "description": "A registered runner's own view of its registration. Subscription usage is advisory.",
         "properties": {
           "agents": {
             "anyOf": [
@@ -14303,7 +14303,7 @@
         "type": "object"
       },
       "ServedProjectView": {
-        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable``, set on the runners read, is the hub's judgment that the\nrunner can claim the project now.",
+        "description": "One entry of the projects a runner serves: the ``entry`` as declared \u2014 a project id or slug \u2014 and the project\nit resolves to in the runner's tenant, with its palette ``color`` \u2014 a palette name or a ``#rrggbb``.\n``project_id``, ``slug``, ``name`` and ``color`` are ``None`` for an entry that resolves to no project, which\nserves nothing until a project answers to it. ``claimable`` is whether the runner can claim work in the project now;\n``False`` when not judged.",
         "properties": {
           "claimable": {
             "default": false,
@@ -14821,7 +14821,7 @@
         "type": "object"
       },
       "TenantDeletionResponse": {
-        "description": "``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or\n``deleting`` while the ``tenant_teardown`` sweep carries it on (``202``).",
+        "description": "``DELETE /api/admin/tenants/{tenant_id}``: ``deleted`` with the rows its deletion removed (``200``), or\n``deleting`` while its deletion is still in progress (``202``).",
         "properties": {
           "rows_removed": {
             "anyOf": [
@@ -15138,7 +15138,7 @@
         "type": "object"
       },
       "TraceStatusResponse": {
-        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter\nerror text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.\n``receiver`` is the runner's span-receiver tally, ``None`` on the hub. ``replay_max_window_seconds`` is the\nwidest window one replay request may cover.",
+        "description": "Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter\nerror text is carried. ``lag_seconds`` is the oldest unexported item's age, ``None`` when nothing waits.\n``receiver`` is the span-receiver tally, ``None`` where no span receiver runs. ``replay_max_window_seconds`` is the\nwidest window one replay request may cover.",
         "properties": {
           "cursor_at": {
             "anyOf": [
@@ -17067,7 +17067,7 @@
         "type": "object"
       },
       "WorkSourceSummary": {
-        "description": "One work source \u2014 the ``GET /api/work-sources`` listing row and every record verb's\nview. ``readable`` is not a field: every source answers ``fetch``, so it carries no\ninformation; ``edit`` is the \"has browsable items\" signal the item routes gate on.\n``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display\nlabel. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record\nfields.",
+        "description": "One work source. ``edit`` is whether the source has browsable items.\n``work_source_id`` is what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display\nlabel. The built-in ``hub`` source is ``built_in``, has slug and name ``hub``, and carries no id or record\nfields.",
         "properties": {
           "annotate": {
             "title": "Annotate",
@@ -24815,7 +24815,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the fleet-wide serialization slot. ``ran=False`` is never an\nerror: another chunk holds the slot, the node is ``pending`` inside ``poll_interval``, the\nchunk is escalated, or it is not parked at a drivable hub node \u2014 ``detail`` names which.",
+        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the tenant's hub-execution slot. The call defers when another chunk holds the\nslot, the node is ``pending`` inside ``poll_interval``, the chunk is escalated, or it is not parked\nat a drivable hub node \u2014 ``detail`` names which.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {

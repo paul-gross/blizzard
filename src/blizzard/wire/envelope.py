@@ -40,8 +40,8 @@ class EnvelopeArtifact(WireModel):
 
 
 class GraphArtifact(BaseModel):
-    """One graph-scoped artifact baked into the mint — the loader-inlined content of
-    a graph's ``artifacts:`` entry, carried alongside every envelope for that graph."""
+    """One graph-scoped artifact baked into the mint — the inlined content of a graph's
+    ``artifacts:`` entry, carried alongside every envelope for that graph."""
 
     name: str
     kind: Annotated[ArtifactKind, ARTIFACT_CLOSED]
@@ -84,8 +84,7 @@ class NodeConfig(WireModel):
     session: Annotated[SessionMode, DISPATCH_CLOSED]
     # The session reference target; ``None`` means bare ``resume`` or ``fresh``.
     session_source: str | None = None
-    # The declared pool this node-step belongs to — ``None`` for a node that names one by
-    # node or bare, which carries no pool but still carries the chunk's defaults below.
+    # The declared pool this node-step belongs to; ``None`` for a node that names its session by node or bare.
     session_name: str | None = None
     # The prioritized model preference list and the effort, already merged — opaque preference strings
     # an adapter resolves (`bzh:pluggable-seams`). Empty / ``None`` *expresses no preference*.
@@ -114,7 +113,7 @@ class NodeEnvelope(WireModel):
 
     chunk_id: str
     graph_id: str
-    # The pinned graph's name; ``None`` from a hub that predates the field.
+    # The pinned graph's name; an envelope that names none parses as ``None``.
     graph_name: str | None = None
     epoch: int
     node: NodeConfig

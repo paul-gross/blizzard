@@ -1,8 +1,5 @@
-"""Host wire bodies.
-
-A host's ``host_id`` is the hub-minted ``hs_`` id, its one identity; ``host_name`` is the operator's label, which a
-report may replace. ``connection`` and ``online`` are **derived**. :class:`HostAddResponse` and
-:class:`HostEnrollmentResponse` are the only bodies that ever carry a host's plaintext bearer token."""
+"""Host wire bodies: the host report, add, runner-add and enrollment requests and responses, and the host record,
+registry and subscription-usage views."""
 
 from __future__ import annotations
 
@@ -25,7 +22,7 @@ class HostWorkspace(BaseModel):
 
 
 class HostReportRequest(BaseModel):
-    """What the calling host reports about itself on every tick — the host its bearer token was issued to. The
+    """What the calling host reports about itself — the host its bearer token was issued to. The
     ``workspaces`` and ``subscriptions`` replace what the hub holds, whole. A report is never refused over its
     content: a ``name`` that is blank, or that another live host holds, leaves the held name."""
 
@@ -46,8 +43,7 @@ class HostRunnerView(WireModel):
 
 
 class HostRecordResponse(WireModel):
-    """A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired —
-    a runner retired or released is one the host should halt."""
+    """A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired."""
 
     host_id: str
     tenant_id: str
@@ -88,8 +84,7 @@ class HostAddResponse(WireModel):
 
 
 class HostSubscriptionUsageView(SubscriptionUsageView):
-    """One of a host's subscriptions with its newest reported usage — as a runner's card shows it — and the runners
-    spending it."""
+    """One of a host's subscriptions with its newest reported usage and the runners spending it."""
 
     #: The ids of the live runners under the host whose registered subscription is this slug.
     runners: list[str] = Field(default_factory=list)
