@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Row, bindparam, func, or_
+from sqlalchemy import Row, Subquery, bindparam, func, or_
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.environments.repository import (
     BindingCompletion,
     EnvBinding,
@@ -56,17 +57,56 @@ class EnvironmentStore:
         rows = self._store.all(stmt)
         return self._row_to_binding(rows[0]) if rows else None
 
+    def held_bindings_for(self, chunk_ids: Iterable[str]) -> dict[str, list[EnvBinding]]:
+        keys = sorted(set(chunk_ids))
+        held: dict[str, list[EnvBinding]] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(keys):
+                stmt = (
+                    self._store.select(env_bindings)
+                    .where(env_bindings.c.chunk_id.in_(batch))
+                    .where(HELD_BINDING.clause(self._store))
+                    .order_by(env_bindings.c.bound_at)
+                )
+                for r in conn.execute(stmt):
+                    held.setdefault(str(r.chunk_id), []).append(self._row_to_binding(r))
+        return held
+
+    def newest_bindings_for(self, chunk_ids: Iterable[str]) -> dict[str, EnvBinding]:
+        keys = sorted(set(chunk_ids))
+        newest: dict[str, EnvBinding] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(keys):
+                newest_ids = self._newest_ids(batch, project_bearing=False)
+                stmt = self._store.select(env_bindings).join(newest_ids, env_bindings.c.id == newest_ids.c.id)
+                for r in conn.execute(stmt):
+                    newest[str(r.chunk_id)] = self._row_to_binding(r)
+        return newest
+
     def chunk_project_ids(self, chunk_ids: Sequence[str]) -> dict[str, str]:
-        if not chunk_ids:
-            return {}
+        keys = sorted(set(chunk_ids))
+        projects: dict[str, str] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(keys):
+                newest = self._newest_ids(batch, project_bearing=True)
+                stmt = self._store.select(env_bindings, env_bindings.c.chunk_id, env_bindings.c.project_id).join(
+                    newest, env_bindings.c.id == newest.c.id
+                )
+                for r in conn.execute(stmt):
+                    projects[str(r.chunk_id)] = str(r.project_id)
+        return projects
+
+    def _newest_ids(self, chunk_ids: Sequence[str], *, project_bearing: bool) -> Subquery:
+        """Each of ``chunk_ids``'s newest binding id — among those naming a project when ``project_bearing``,
+        so a newer project-less binding never hides an older project-bearing one."""
         stmt = (
-            self._store.select(env_bindings, env_bindings.c.chunk_id, env_bindings.c.project_id)
-            .where(env_bindings.c.chunk_id.in_(list(chunk_ids)))
-            .where(env_bindings.c.project_id.is_not(None))
-            .order_by(env_bindings.c.id)
+            self._store.select(env_bindings, func.max(env_bindings.c.id).label("id"))
+            .where(env_bindings.c.chunk_id.in_(chunk_ids))
+            .group_by(env_bindings.c.chunk_id)
         )
-        # Ascending ids, so the newest binding's project is the one left standing.
-        return {str(r.chunk_id): str(r.project_id) for r in self._store.all(stmt)}
+        if project_bearing:
+            stmt = stmt.where(env_bindings.c.project_id.is_not(None))
+        return stmt.subquery()
 
     def live_tenure_chunk_ids(self) -> list[str]:
         stmt = (

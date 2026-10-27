@@ -194,6 +194,16 @@ class IReadEnvironmentRepository(Protocol):
         once its environments may already be given back. ``None`` when the chunk was never bound here."""
         ...
 
+    def held_bindings_for(self, chunk_ids: Iterable[str]) -> dict[str, list[EnvBinding]]:
+        """Each of ``chunk_ids``'s unreleased env bindings, in ``bound_at`` order — :meth:`bindings_for_chunk` widened
+        to a chunk set. A chunk holding none is absent; no statement is issued for an empty set."""
+        ...
+
+    def newest_bindings_for(self, chunk_ids: Iterable[str]) -> dict[str, EnvBinding]:
+        """Each of ``chunk_ids``'s most recently recorded binding, released or not — :meth:`newest_binding_for_chunk`
+        widened to a chunk set. A chunk never bound here is absent; no statement is issued for an empty set."""
+        ...
+
     def chunk_project_ids(self, chunk_ids: Sequence[str]) -> dict[str, str]:
         """Each of ``chunk_ids``'s project, from its newest binding that names one, released or not — so a closed
         lease's chunk still reads its project. A chunk no binding names a project for is absent."""
