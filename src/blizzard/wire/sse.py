@@ -126,7 +126,7 @@ class EventLoggedPayload(SseFramePayload):
     #: The runner's name when supplied to the recorder; omitted if no name was supplied.
     runner_name: str | None = None
     key: str | None = None
-    #: The named chunk's project, stamped by the recorder; omitted when no chunk is named.
+    #: The id of the named chunk's project; omitted when no chunk is named.
     project_id: str | None = None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
