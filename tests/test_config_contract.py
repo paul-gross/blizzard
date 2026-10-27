@@ -100,3 +100,39 @@ def test_the_documents_name_rule_derives_what_hub_token_variable_does() -> None:
 def test_a_fixed_variable_has_no_name_rule_and_the_hub_declares_no_env() -> None:
     assert next(v for v in _host()["env"]["variables"] if v["name"] == HOST_TOKEN_VARIABLE)["name_rule"] is None
     assert document_from_registry(HUB_REGISTRY)["env"] is None
+
+
+#: The modules under ``src/blizzard`` that write ``.env`` or create ``runners/<name>``, and the verbs the contract names
+#: for them. A module that starts writing either, or a writer verb the contract drops, turns this red.
+_ENV_WRITER_MODULES = {
+    "runner/cli/runners.py": {"add"},
+    "runner/cli/runtime.py": {"init", "host"},
+    "runner/ingest.py": {"ingest"},
+    "runner/hub/bootstrap.py": {"init"},
+    "runner/hub/host_bootstrap.py": {"host"},
+}
+_ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.write(", "HubTokenFile.of(")
+_RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/ingest.py": {"ingest"}}
+
+
+def _modules_containing(markers: tuple[str, ...]) -> set[str]:
+    src = repo_root() / "src" / "blizzard"
+    return {
+        str(p.relative_to(src))
+        for p in src.rglob("*.py")
+        if "internal/token_file.py" not in str(p) and any(m in p.read_text() for m in markers)
+    }
+
+
+def test_the_env_writers_are_the_modules_that_write_the_env_file() -> None:
+    # composition.py only wires the writer into ingest and the daemon; it is not a verb of its own.
+    found = _modules_containing(_ENV_WRITE_MARKERS) - {"runner/composition.py"}
+    assert found == set(_ENV_WRITER_MODULES)
+    verbs = set().union(*_ENV_WRITER_MODULES.values())
+    assert verbs == set(_row(".env")["written_by"])
+
+
+def test_the_runner_directory_writers_are_the_modules_that_create_it() -> None:
+    found = _modules_containing(("RUNNERS_DIRNAME / ",)) - {"runner/host_layout.py"}
+    assert found == set(_RUNNER_DIR_MODULES)
+    assert set().union(*_RUNNER_DIR_MODULES.values()) == set(_row("runners/<name>")["written_by"])
