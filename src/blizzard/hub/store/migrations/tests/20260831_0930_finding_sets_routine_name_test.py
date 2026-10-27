@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_finding_sets_routine_name_column_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``finding_sets.routine_name`` — downgrades to this revision's own
-    parent by id, so the drop half is asserted rather than inferred from a revision
-    marker a no-op ``downgrade()`` would satisfy just as well."""
+    """``finding_sets.routine_name`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

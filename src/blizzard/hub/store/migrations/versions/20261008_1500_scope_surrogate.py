@@ -3,9 +3,8 @@
 ``scopes`` gains ``scope_id``, minted for each scope as a prefixed ULID: its timestamp the scope's ``created_at``, its
 random bits drawn from the scope's tenant and slug, so re-running the upgrade mints the same ids. Each of the six tables
 naming a scope by slug gains the id beside it, filled from the scope its own tenant holds under that slug. A slug a row
-names but no scope of the row's tenant holds — the hub never enforced its foreign keys on SQLite — gets a stand-in
-scope, minted as the hub mints a scope a routine names unseen: no description, revision 1; its ``created_at`` the epoch
-and its id drawn from a namespace no other scope's id is, so the id alone marks it. The stand-ins are staged in
+names but no scope of the row's tenant holds gets a stand-in scope: no description, revision 1, ``created_at`` the
+epoch, its id drawn from a namespace no other scope's id is, so the id alone marks it. The stand-ins are staged in
 ``scope_stand_ins`` until ``scopes`` is rekeyed, then added to it and their count logged. Then, in the order every
 dialect accepts: each child drops its foreign key onto ``scopes.slug`` and, except ``findings`` and ``finding_sets``
 (which keep ``scope_slug`` as their label), the slug column, its id becoming required; ``scopes`` is rekeyed —
@@ -114,19 +113,14 @@ def _index_names(bind: sa.Connection, table: str) -> set[str]:
 
 
 def _clear_stale_copy(bind: sa.Connection, table: str) -> None:
-    """Drop the copy a batch left behind when its run stopped part way.
-
-    SQLite creates the copy outside the transaction the rest of the batch runs in, so a stopped run can keep it while
-    the table itself is rolled back; the name is the one Alembic's batch gives it.
-    """
+    """Drop the copy a stopped batch left (SQLite makes it outside the batch's transaction, under Alembic's name)."""
     copy = f"_alembic_tmp_{table}"[:50]
     if sa.inspect(bind).has_table(copy):
         op.drop_table(copy)
 
 
 def _reflected(bind: sa.Connection, table: str) -> sa.Table:
-    """The table as the store holds it, the structure every copying batch starts from: a batch left to reflect for
-    itself drops an unnamed ``CHECK`` constraint from the copy."""
+    """The table as the store holds it, so a copying batch keeps the unnamed ``CHECK`` its own reflection drops."""
     return sa.Table(table, sa.MetaData(), autoload_with=bind)
 
 

@@ -18,8 +18,7 @@ down_revision: str | None = "20261003_1400_escalation_cause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``secrets`` and ``secret_lifecycle_facts`` are local literals of the hub
-# store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _secrets = sa.Table(
     "secrets",

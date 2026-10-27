@@ -1,8 +1,7 @@
-"""Pinning tests for hub decisions that were previously defended by comment alone
-(``bzh:mutation-review-selection``).
-
-Each test exists because a long comment argued for a decision no assertion covered;
-the comment at each site now points back at the test that fails on revert."""
+"""The ``20260716_1512_pm_pointer_source_ref`` reshape (``bzh:mutation-review-selection``): its
+frozen shape, the issue-URL backfill and verbatim survivors, a canonical-URL downgrade, an
+identical down-then-up round trip, and an idempotent rerun over an already reshaped store; a
+fresh store reaches the pre-reshape shape and its work-ref table keeps the ``chunk_id`` foreign key."""
 
 from __future__ import annotations
 

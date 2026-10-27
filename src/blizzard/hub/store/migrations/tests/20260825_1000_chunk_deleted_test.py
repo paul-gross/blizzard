@@ -1,9 +1,7 @@
 """The ``chunk_deleted`` table create — pure additive, no backfill.
 
-Unlike ``chunk_promoted``'s own migration, a chunk minted before this one carries no
-``chunk_deleted`` row either way, so it stays fully live and claimable after the
-upgrade with no back-fill step — this pins that, and that the fresh table is honored
-immediately."""
+A chunk minted before this revision carries no ``chunk_deleted`` row, so it stays fully
+live and claimable after the upgrade; the fresh table is honored immediately."""
 
 from __future__ import annotations
 

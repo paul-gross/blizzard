@@ -19,7 +19,7 @@ down_revision: str | None = "20260826_0930_close_intents_backfill"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (`bzh:frozen-revisions`) — no `default_harnesses`.
+# Frozen (``bzh:frozen-revisions``): no ``default_harnesses`` column.
 _frozen_metadata = sa.MetaData()
 _routines = sa.Table(
     "routines",
@@ -34,8 +34,7 @@ _routines = sa.Table(
     sa.UniqueConstraint("name", name="uq_routines_name"),
 )
 
-# Frozen (``bzh:frozen-revisions``): ``scopes`` and ``scope_lifecycle_facts`` are local literals of the hub
-# store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _scopes = sa.Table(
     "scopes",
     _frozen_metadata,

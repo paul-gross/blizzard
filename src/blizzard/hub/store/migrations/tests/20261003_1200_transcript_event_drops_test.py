@@ -17,8 +17,7 @@ _DROPS_EGRESS_ORDER = "ix_transcript_event_drops_egress_order"
 
 
 def test_transcript_event_drops_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only — downgrades to the revision's own parent, so the dropped table is asserted
-    rather than inferred from a revision marker."""
+    """Hub-only — the table, downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

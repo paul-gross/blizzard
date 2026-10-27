@@ -17,7 +17,7 @@ _CONFIG_IMPORT_FACTS_PARENT = "20261005_1000_scope_routine_revisions"
 
 
 def test_config_import_facts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``config_import_facts`` — downgraded to the revision's parent."""
+    """``config_import_facts`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
 

@@ -16,8 +16,7 @@ down_revision: str | None = "20260829_1930_fact_tables_chunk_id_index"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``work_item_runs`` is a local literal of the hub store's declared shape.
-# ``scopes`` and ``work_items`` are FK-resolution stubs: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``scopes`` and ``work_items`` are FK stubs.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "scopes",

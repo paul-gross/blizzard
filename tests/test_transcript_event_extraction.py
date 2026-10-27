@@ -253,7 +253,7 @@ _OPENCODE = "opencode-export/1"
 
 def test_opencode_task_call_mints_an_agent_spawn_event() -> None:
     """OpenCode's own child-agent-spawn tool is ``task``, its argument key
-    ``subagent_type`` (proven against the live ``contracts/opencode/1.18.33/`` capture)."""
+    ``subagent_type`` (proven against the live ``src/blizzard/runner/harness/contracts/opencode/1.18.33/`` capture)."""
     turns = [_tool_turn(0, "task", {"subagent_type": "explorer", "prompt": "find X"})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
@@ -275,7 +275,7 @@ def test_opencode_task_call_with_no_subagent_type_mints_no_event() -> None:
 
 def test_opencode_read_call_mints_a_file_read_event() -> None:
     """OpenCode's read tool is ``read``, its path key ``filePath`` (proven against the live
-    ``contracts/opencode/1.18.33/`` capture)."""
+    ``src/blizzard/runner/harness/contracts/opencode/1.18.33/`` capture)."""
     turns = [_tool_turn(0, "read", {"filePath": "/w/a.py", "offset": 1})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)
@@ -288,7 +288,7 @@ def test_opencode_read_call_mints_a_file_read_event() -> None:
 
 def test_opencode_skill_call_mints_a_skill_invocation_event() -> None:
     """OpenCode's skill tool is ``skill``, its name key ``name`` (proven against the live
-    ``contracts/opencode/1.18.33/`` capture)."""
+    ``src/blizzard/runner/harness/contracts/opencode/1.18.33/`` capture)."""
     turns = [_tool_turn(0, "skill", {"name": "wf-commit"})]
 
     events = extract_events(turns, normalizer_version=_OPENCODE)

@@ -22,9 +22,7 @@ _ROUTINE_SCOPES_JOIN = "20260906_1130_routine_scopes_join"
 
 
 def test_routine_scopes_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``routine_scopes`` — downgrades to this revision's own parent by
-    id, so the drop half is asserted rather than inferred from a revision marker a
-    no-op ``downgrade()`` would satisfy just as well."""
+    """``routine_scopes`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

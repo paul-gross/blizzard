@@ -1,5 +1,5 @@
 """runner external subscription usage misses — one refresh-in-place row per
-``(runner_id, slug)``, a sibling to ``runner_external_usage``; a frozen local literal (``bzh:frozen-revisions``).
+``(runner_id, slug)``, a sibling to ``runner_external_usage``.
 
 Revision ID: 20260922_1100_runner_external_usage_misses
 Revises: 20260922_1000_review_findings
@@ -19,7 +19,7 @@ down_revision: str | None = "20260922_1000_review_findings"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — one row per (runner_id, slug), mirroring `runner_external_usage`.
+# Frozen (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _runner_external_usage_misses = sa.Table(
     "runner_external_usage_misses",

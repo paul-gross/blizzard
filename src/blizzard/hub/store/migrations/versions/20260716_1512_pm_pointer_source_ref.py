@@ -18,8 +18,7 @@ down_revision: str | None = "20260716_1511_hub_runner_local_pause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# A local copy rather than an import: this revision must not move when the live adapter's
-# own grammar does.
+# The issue-URL grammar, restated, not imported (``bzh:frozen-revisions``).
 _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
 # downgrade() reconstructs an issue URL under this constant placeholder: the real owner
@@ -67,8 +66,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     columns = {c["name"] for c in sa.inspect(bind).get_columns("chunk_pm_pointers")}
     if "url" not in columns:
-        return  # already reshaped (0011's skip-rows trick doesn't transfer to a column
-        # reshape, so this guards the revision itself, not per-row)
+        return  # already reshaped (test_upgrade_is_idempotent_over_an_already_reshaped_store)
 
     rows = bind.execute(sa.select(_OLD_POINTERS)).all()
     backfilled = [

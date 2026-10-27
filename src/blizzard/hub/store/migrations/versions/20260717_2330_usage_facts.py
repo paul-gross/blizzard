@@ -19,8 +19,7 @@ down_revision: str | None = "20260717_2318_hub_chunk_model_selection"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``usage_facts`` is a local literal of the hub store's declared shape.
-# ``chunks`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

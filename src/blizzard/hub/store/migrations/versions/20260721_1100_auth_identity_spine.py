@@ -19,8 +19,7 @@ down_revision: str | None = "20260721_1008_hub_graph_node_session_source"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``users``, ``identities`` and ``sessions`` are local literals of the hub
-# store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _users = sa.Table(
     "users",

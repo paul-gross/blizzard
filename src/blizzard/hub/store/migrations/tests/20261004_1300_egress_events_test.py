@@ -22,7 +22,7 @@ _DROPS_BY_CHUNK = {"ix_transcript_event_drops_chunk_id_epoch", "ix_transcript_ev
 
 
 def test_egress_events_indexes_and_cursor_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only — downgrades to the revision's own parent, so each index and cursor column is asserted."""
+    """Hub-only — each index and cursor column, downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

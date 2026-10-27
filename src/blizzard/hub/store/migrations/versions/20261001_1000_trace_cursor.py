@@ -1,5 +1,5 @@
 """The trace export cursor's fact table, and a ``(recorded_at, id)`` index on
-``epoch_owners`` for the sweep's closing-fact read.
+``epoch_owners`` for a newest-first read bounded by ``recorded_at``.
 
 Revision ID: 20261001_1000_trace_cursor
 Revises: 20260930_1000_epoch_owners

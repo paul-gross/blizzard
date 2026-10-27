@@ -19,8 +19,7 @@ down_revision: str | None = "20260803_1000_hub_escalation_wrapped_takeover"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape (``bzh:frozen-revisions``). The ``chunks`` entry below
-# is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",
@@ -51,8 +50,7 @@ _transcript_segments = sa.Table(
     sa.UniqueConstraint("segment_id", "turn_range_start", name="uq_transcript_segments_segment_turn_start"),
 )
 
-# Frozen (``bzh:frozen-revisions``): ``transcript_high_water`` is a local literal of the hub store's declared
-# shape.
+# Frozen (``bzh:frozen-revisions``).
 _transcript_high_water = sa.Table(
     "transcript_high_water",
     _frozen_metadata,

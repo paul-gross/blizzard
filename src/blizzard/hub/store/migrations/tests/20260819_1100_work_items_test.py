@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_work_items_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``work_items`` + ``work_item_sequence`` — downgrades to this
-    revision's own parent by id, so the drop half is asserted rather than inferred from
-    a revision marker a no-op ``downgrade()`` would satisfy just as well."""
+    """``work_items`` + ``work_item_sequence`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

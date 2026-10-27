@@ -43,7 +43,7 @@ _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("ix_transitions_chunk_id_epoch", "transitions", ("chunk_id", "epoch")),
     ("ix_lease_facts_chunk_id_epoch", "lease_facts", ("chunk_id", "epoch")),
     ("ix_chunk_bounces_chunk_id_epoch", "chunk_bounces", ("chunk_id", "epoch")),
-    # activity_facts_since — string-pk sources: (ts, pk).
+    # Newest-first since a timestamp, string-pk sources: (ts, pk).
     ("ix_chunks_minted_at_chunk_id", "chunks", ("minted_at", "chunk_id")),
     ("ix_transitions_recorded_at_transition_id", "transitions", ("recorded_at", "transition_id")),
     ("ix_route_created_created_at_route_id", "route_created", ("created_at", "route_id")),
@@ -56,7 +56,7 @@ _CREATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
     ("ix_questions_asked_at_question_id", "questions", ("asked_at", "question_id")),
     ("ix_question_answers_answered_at_question_id", "question_answers", ("answered_at", "question_id")),
-    # activity_facts_since — integer-id sources: (ts, id). sqlite would serve the
+    # Newest-first since a timestamp, integer-id sources: (ts, id). sqlite would serve the
     # tie-break off a bare (ts) index by implicitly appending the rowid, but postgres
     # doesn't, so the id column rides explicitly for both (`bzh:sql-portable`).
     ("ix_chunk_promoted_promoted_at_id", "chunk_promoted", ("promoted_at", "id")),

@@ -21,8 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 _SEGMENTS_TABLE = "transcript_segments"
 
-# Read/write-only references, never created or dropped — the frozen shape is the narrow
-# stub of columns this revision's selects and updates name (``bzh:frozen-revisions``).
+# Narrow read/write stubs (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 
 _segments = sa.Table(

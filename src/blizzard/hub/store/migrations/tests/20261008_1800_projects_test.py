@@ -1,9 +1,7 @@
-"""Component coverage for the facts-level invariant checker (``bzh:invariant-checker``).
-
-Migrates real hub + runner stores, asserts a clean store yields no violations, then
-injects each kind of corruption and asserts the matching invariant is named. Every
-corruption is injected on a head-migrated store, the only shape the checker is
-contracted to read."""
+"""The ``20261008_1800_projects`` revision: each tenant gains one ``default`` project every carried
+record links to, keys and uniqueness move under the project, an interrupted run finishes, and the
+downgrade refuses a second project, else restores the store exactly. ``HubInvariants`` runs once,
+over the carried-over store in ``test_a_carried_over_store_keeps_every_project_invariant``."""
 
 from __future__ import annotations
 

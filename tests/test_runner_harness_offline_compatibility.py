@@ -45,7 +45,7 @@ def test_default_corpus_root_is_the_harness_packages_own_contracts_tree() -> Non
 
 
 def test_the_pinned_opencode_corpus_classifies_degraded() -> None:
-    """`contracts/opencode/1.18.25/manifest.json`'s own `live_evidence.classification`
+    """`src/blizzard/runner/harness/contracts/opencode/1.18.25/manifest.json`'s own `live_evidence.classification`
     is `"degraded"` — pinned here so a corpus edit that silently changes it is caught."""
     assert (
         classify_offline(CommittedCorpus(), "opencode", _AN_ADMITTED_OPENCODE_VERSION, ADMITTED_OPENCODE_RANGE)

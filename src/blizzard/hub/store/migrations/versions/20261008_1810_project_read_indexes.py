@@ -1,9 +1,7 @@
-"""project read indexes — the garden reads name their project, so the tenant-led garden indexes beside the project-led
-ones go.
+"""project read indexes — the tenant-led garden indexes beside the project-led ones go.
 
-Every finding, finding-set and proposal read that narrows by routine, scope or class names its project, and reads
-through the ``(tenant_id, project_id, …)`` index serving it; a read naming no project lists the whole tenant. The five
-``(tenant_id, …)`` indexes 20261008_1800_projects kept beside the project-led ones serve no read, so they are dropped.
+Drops the five ``(tenant_id, …)`` finding, finding-set and proposal indexes 20261008_1800_projects kept beside their
+``(tenant_id, project_id, …)`` counterparts.
 Each index is inspected first, so a re-run changes nothing.
 
 The downgrade restores the five indexes.

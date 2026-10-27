@@ -19,8 +19,7 @@ down_revision: str | None = "20260811_0905_hub_transcript_segment_supersedes"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape (``bzh:frozen-revisions``). The ``chunks`` entry below
-# is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

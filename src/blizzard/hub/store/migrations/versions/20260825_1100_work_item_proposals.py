@@ -1,6 +1,5 @@
 """work_item_proposals — a node completion's proposed work items, riding its transition
-or migration fact. One new table, FROZEN (``bzh:frozen-revisions``) since a later
-revision adds ``runner_id``.
+or migration fact. One new table.
 
 Revision ID: 20260825_1100_work_item_proposals
 Revises: 20260825_1050_graph_node_proposes_work_items
@@ -20,8 +19,7 @@ down_revision: str | None = "20260825_1050_graph_node_proposes_work_items"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no `runner_id` — reshaped by 20260825_1150.
-# The `chunks` entry below is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``): no ``runner_id`` column; ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table("chunks", _frozen_metadata, sa.Column("chunk_id", sa.String, primary_key=True))
 _work_item_proposals = sa.Table(

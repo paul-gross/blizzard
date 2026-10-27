@@ -19,8 +19,7 @@ down_revision: str | None = "20260913_1000_transcript_segments_content_digest"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``close_intent_attempts`` is a local literal of the hub store's declared
-# shape. ``close_intents`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``close_intents`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "close_intents",

@@ -16,11 +16,9 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sentinel(tmp_path: Path) -> None:
-    """``event_log.runner_id`` (blizzard-context:/domain/operations.md) widens to nullable
-    — a hub-authored event names no runner. Reached forward from ``base``, never by
-    downgrading from head (``test_frozen_table_lacks_a_later_revisions_columns``'s own
-    stated reason): the pre-reshape shape is ``NOT NULL``, exactly what the frozen
-    creating revision now declares."""
+    """``event_log.runner_id`` widens to nullable and the backfill nulls only hub-authored
+    kinds: a runner literally named ``hub`` keeps its id. The pre-reshape shape is reached
+    forward from ``base`` (``assert_frozen_table_lacks_a_later_revisions_columns``)."""
     url = f"sqlite:///{tmp_path / 'store.db'}"
     runner = MigrationRunner(script_location=HUB_MIGRATIONS_DIR, url=url, clock=MIGRATION_CLOCK)
 
@@ -40,10 +38,7 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
         finally:
             engine.dispose()
 
-    # The pre-reshape shape — this reshape's own parent, frozen by 20260721_1600. Forward
-    # from base, never downgrade-from-head, on the same reasoning as
-    # test_frozen_table_lacks_a_later_revisions_columns: the reshaping revision's own
-    # downgrade() could mask a freeze that wrongly declared the column already nullable.
+    # The pre-reshape shape — this reshape's own parent, frozen by 20260721_1600.
     runner.upgrade("20260907_0900_drop_node_mode")
     assert _nullable() is False
     engine = create_engine_from_url(url)
@@ -56,6 +51,13 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
                 ),
                 {"recorded_at": "2026-08-01 12:00:00"},
             )
+            conn.execute(
+                sa.text(
+                    "insert into event_log (recorded_at, severity, kind, runner_id, message) "
+                    "values (:recorded_at, 'info', 'node-started', 'hub', 'started')"
+                ),
+                {"recorded_at": "2026-08-01 12:01:00"},
+            )
     finally:
         engine.dispose()
 
@@ -63,11 +65,11 @@ def test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sen
     # there — a pre-existing hub-authored row stops naming "hub" without a rewrite.
     runner.upgrade("head")
     assert _nullable() is True
-    assert _runner_ids() == [None]
+    assert _runner_ids() == [None, "hub"]
 
     runner.downgrade("20260907_0900_drop_node_mode")
     assert _nullable() is False
-    assert _runner_ids() == ["hub"]
+    assert _runner_ids() == ["hub", "hub"]
 
     runner.upgrade("head")
     assert _nullable() is True

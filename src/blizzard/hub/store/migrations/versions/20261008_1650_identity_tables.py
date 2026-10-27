@@ -25,7 +25,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _metadata = sa.MetaData()
-# The parents the foreign keys name, declared only so the keys resolve; never created or dropped here.
+# FK stubs (``bzh:frozen-revisions``).
 _tenants = sa.Table("tenants", _metadata, sa.Column("tenant_id", sa.String, primary_key=True))
 sa.Table("users", _metadata, sa.Column("id", sa.String, primary_key=True))
 _membership_facts = sa.Table(

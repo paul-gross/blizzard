@@ -15,8 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_egress_cursor_table_and_usage_index_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only — downgrades to the revision's own parent, so the dropped table and the dropped
-    ``usage_facts`` index are each asserted rather than inferred from a revision marker."""
+    """Hub-only — the table and the ``usage_facts`` index, downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

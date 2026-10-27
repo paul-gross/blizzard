@@ -34,6 +34,8 @@ jobs:
         run: uv run pyright
       - name: structural gate (blizzard:structural-gate)
         run: uv run ast-grep scan --error=unused-suppression . && uv run ast-grep test
+      - name: repo-path pointers (blizzard:pointer-check)
+        run: uv run python scripts/repo_pointers.py check
 
   markdown-format:
     name: dprint

@@ -1,5 +1,5 @@
-"""chunk_restarts — an operator's forced move of a chunk onto a node (#370, hub store tree). One
-table, FROZEN (``bzh:frozen-revisions``) since a later revision adds ``from_graph_id`` (#371).
+"""chunk_restarts — an operator's forced move of a chunk onto a node (hub store tree). One
+table, without the ``from_graph_id`` a later revision adds.
 
 Revision ID: 20260819_0900_chunk_restarts
 Revises: 20260818_2100_chunk_completed
@@ -21,8 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 _metadata = sa.MetaData()
 
-# The FK target, declared only so ``chunk_restarts.chunk_id``'s ForeignKey resolves inside
-# this revision's own MetaData; never created or dropped here.
+# ``chunks`` is an FK stub (``bzh:frozen-revisions``).
 sa.Table("chunks", _metadata, sa.Column("chunk_id", sa.String, primary_key=True))
 
 chunk_restarts = sa.Table(

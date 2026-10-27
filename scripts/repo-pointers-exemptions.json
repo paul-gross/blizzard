@@ -1,0 +1,82 @@
+[
+  {
+    "file": "scripts/mutation.py",
+    "symbol": "<module>",
+    "target": "mutants/report.json",
+    "count": 1,
+    "kind": "generated",
+    "reason": "The report a mutation run writes into mutmut's git-ignored working copy; never tracked."
+  },
+  {
+    "file": "scripts/mutation.py",
+    "symbol": "<module>",
+    "target": "mutants/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "Section heading for the code that builds mutmut's working copy, created by a mutation run and git-ignored; never tracked."
+  },
+  {
+    "file": "scripts/mutation.py",
+    "symbol": "_load_module_by_path",
+    "target": "mutants/tests/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "The test tree mutmut copies into its git-ignored working copy at run time; never tracked."
+  },
+  {
+    "file": "scripts/mutation.py",
+    "symbol": "_load_module_by_path",
+    "target": "mutants/tests/conftest.py",
+    "count": 1,
+    "kind": "generated",
+    "reason": "The conftest mutmut copies into its git-ignored working copy at run time; never tracked."
+  },
+  {
+    "file": "scripts/mutation.py",
+    "symbol": "mutable_source_paths",
+    "target": "src/blizzard/hub/foo.py",
+    "count": 1,
+    "kind": "illustration",
+    "reason": "An example of the relative-path shape the function returns, not a reference to a real module."
+  },
+  {
+    "file": "tests/head_replay_guard.py",
+    "symbol": "upgrade",
+    "target": "mutants/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "Names mutmut's working copy, created by a mutation run and git-ignored; never tracked."
+  },
+  {
+    "file": "tests/repo_files.py",
+    "symbol": "repo_root",
+    "target": "mutants/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "Names mutmut's working copy, created by a mutation run and git-ignored; never tracked."
+  },
+  {
+    "file": "tests/test_mutation_scope.py",
+    "symbol": "<module>",
+    "target": "mutants/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "Section heading for tests of mutmut's working copy, created by a mutation run and git-ignored; never tracked."
+  },
+  {
+    "file": "tests/test_repo_files.py",
+    "symbol": "<module>",
+    "target": "mutants/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "Names mutmut's working copy, created by a mutation run and git-ignored; never tracked."
+  },
+  {
+    "file": "tests/test_push_workflow.py",
+    "symbol": "test_dev_image_puts_a_wheel_in_dist_before_building",
+    "target": "dist/",
+    "count": 1,
+    "kind": "generated",
+    "reason": "The build output directory the workflow stages a wheel into; git-ignored and absent from a bare checkout, which is the docstring's point."
+  }
+]

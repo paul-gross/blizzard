@@ -1,8 +1,6 @@
-"""transitions.to_node_id index — the delivery-materialization sweep's own candidate
-read (hub store tree).
+"""transitions.to_node_id index (hub store tree).
 
-Every sweep pass scans ``transitions`` for ``to_node_id == RESERVED_TERMINAL``,
-unindexed.
+Indexes the ``to_node_id == RESERVED_TERMINAL`` predicate over ``transitions``, unindexed before.
 Revision ID: 20260825_1250_hub_transitions_to_node_id
 Revises: 20260825_1200_work_item_materializations
 """

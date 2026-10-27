@@ -1,8 +1,6 @@
-"""Pinning tests for hub decisions that were previously defended by comment alone
-(``bzh:mutation-review-selection``).
-
-Each test exists because a long comment argued for a decision no assertion covered;
-the comment at each site now points back at the test that fails on revert."""
+"""The ``20260716_2206_pr_opened_idempotent`` revision (``bzh:mutation-review-selection``): the
+uniqueness lands only at this revision, the upgrade keeps the earliest of each duplicate and
+enforces the constraint after, and a down-then-up cycle round-trips the deduplicated rows."""
 
 from __future__ import annotations
 

@@ -72,6 +72,10 @@ run = "uv run python scripts/prose_density.py check --blocks src tests ../blizza
 description = "blizzard:restatement-sweep — fail when a fact is stated at an undeclared site (new), a declared site is no longer observed (stale), a declared non-owner site carries no reason, or a designated owner does not actually state its fact"
 run = "uv run python scripts/restated_invariants.py check --strict --owners --context-root ../blizzard-context src tests docs README.md web/projects ../blizzard-mock/src ../blizzard-context/verification/blizzard/gaps.md ../blizzard-context/verification/blizzard/manual.md ../blizzard-context/verification/blizzard.md"
 
+[tasks.pointer-check]
+description = "blizzard:pointer-check — fail when a repo-root path (src/, tests/, scripts/, docs/, …) named in the docstrings, full-line or trailing comments of a tracked .py file under src/, tests/, scripts/ or exemplars/python/ is not a tracked file or directory, or an entry in scripts/repo-pointers-exemptions.json is exceeded or stale; never checks Markdown, TypeScript or YAML, symbols or anchors, or another repo's paths"
+run = "uv run python scripts/repo_pointers.py check"
+
 [tasks.exemplar-check]
 description = "blizzard:exemplar-check — the web exemplars held to the hub app's gates: Angular strict-template type-checking against the real hub app, the hub's eslint config, the stand-in client's drift from openapi-ts over the exemplar router, their specs, and the web structural gate (the Python exemplars ride blizzard:lint, blizzard:typecheck, and the pytest tiers)"
 run = "web/scripts/exemplar-check.sh"

@@ -1,9 +1,8 @@
 """chunk recorded-at indexes — the superseded-terminal check searches one chunk's rows, not the whole tenant's.
 
-``_done_by_transition`` asks whether a chunk's terminal transition has been superseded by a newer transition, migration
-or restart. Without a ``chunk_id``-bound index over ``recorded_at`` the planner walks every newer row in the tenant per
-chunk, so status reads cost quadratic time in chunk count. ``(tenant_id, chunk_id, recorded_at)`` on the three tables
-bounds each check to one chunk. Each index is inspected first, so a re-run changes nothing.
+``(tenant_id, chunk_id, recorded_at)`` on the transition, migration and restart tables bounds a newer-row search to
+one chunk's rows over ``recorded_at`` (``src/blizzard/hub/store/internal/chunk_terminal_predicates.py``). Each index
+is inspected first, so a re-run changes nothing.
 
 The downgrade drops the three indexes.
 Revision ID: 20261011_1300_chunk_recorded_at_indexes

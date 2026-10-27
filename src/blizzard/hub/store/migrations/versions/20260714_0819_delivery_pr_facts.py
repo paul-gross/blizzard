@@ -1,5 +1,4 @@
-"""open-PR delivery facts — pr.opened / pr.closed; both tables are frozen
-local literals rather than a ``src/blizzard/hub/store/schema.py`` import (hub store tree, ``canon:no-retro``)
+"""open-PR delivery facts — pr.opened / pr.closed (hub store tree)
 
 Revision ID: 20260714_0819_hub_delivery_pr_facts
 Revises: 20260713_1947_hub_runner_registry
@@ -17,8 +16,7 @@ down_revision: str | None = "20260713_1947_hub_runner_registry"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no (chunk_id, repo) uniqueness — reshaped by 0014.
-# The `chunks` entry below is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``): no ``(chunk_id, repo)`` uniqueness; ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

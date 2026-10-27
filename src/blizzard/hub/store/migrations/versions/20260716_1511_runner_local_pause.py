@@ -19,8 +19,7 @@ down_revision: str | None = "20260715_1817_hub_chunk_promoted"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``reason`` column, added by a later revision
-# (``bzh:frozen-revisions``).
+# Frozen (``bzh:frozen-revisions``): no ``reason`` column.
 _frozen_metadata = sa.MetaData()
 _runner_local_pause_facts = sa.Table(
     "runner_local_pause_facts",

@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_graph_artifacts_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only (the graph mint's own child table) — downgrades to this revision's own
-    parent by id, so the drop half is asserted rather than inferred from a revision
-    marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    """Hub-only (the graph mint's own child table) — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

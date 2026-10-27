@@ -18,9 +18,8 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart) —
-    downgrades to this revision's own parent by id, not ``"-1"``, so a future revision
-    landing between them can't silently break this test's premise."""
+    """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart) — downgraded by id below the
+    revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

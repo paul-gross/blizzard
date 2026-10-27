@@ -1,5 +1,5 @@
-"""garden_proposal_closures(source, ref) unique index — the reverse
-read a delivered item's own pointer needs, DB-enforcing `find_by_item`'s `one_or_none()`.
+"""garden_proposal_closures(source, ref) unique index — at most one closure per
+``(source, ref)``, read back by that pair.
 
 Revision ID: 20260831_1100_gpc_item_index
 Revises: 20260831_1030_finding_exits

@@ -1,8 +1,7 @@
 """The ``finding_facts.ref`` revision against a store that already holds delivered
 findings — additive and never backfilled, so every fact recorded before it reads back a
 null ref. Seeded with literal ``sa.Table`` shapes rather than importing ``src/blizzard/hub/store/schema.py``,
-which already carries the column this revision adds — the
-``tests/test_finding_exits_migration.py`` shape."""
+which already carries the column this revision adds."""
 
 from __future__ import annotations
 

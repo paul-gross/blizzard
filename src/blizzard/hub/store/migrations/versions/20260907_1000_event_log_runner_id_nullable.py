@@ -1,5 +1,5 @@
-"""event_log.runner_id becomes nullable — a hub-authored event names no runner
-(blizzard-context:/domain/operations.md), and downgrading restores the legacy sentinel.
+"""event_log.runner_id becomes nullable — a hub-authored row stores no runner — and
+downgrading restores the legacy sentinel.
 
 Revision ID: 20260907_1000_event_log_runner_id_nullable
 Revises: 20260907_0900_drop_node_mode
@@ -26,8 +26,7 @@ _HUB_RUNNER_ID = "hub"
 # The three hub-authored kinds — restated, not imported, from
 # ``blizzard.hub.domain.work_items.closure._EVENT_CLOSED``/``_EVENT_CLOSE_FAILED`` and
 # ``blizzard.hub.delivery.hub_node._EVENT_UNROUTABLE_OUTCOME`` (``bzh:frozen-revisions``).
-# Matching on kind, not on the ``'hub'`` value alone, spares an operator-named runner
-# literally called "hub" from being nulled by this backfill.
+# Matched by kind: ``test_event_log_runner_id_becomes_nullable_and_downgrade_restores_the_hub_sentinel``.
 _HUB_AUTHORED_KINDS = ("work-item-closed", "work-item-close-failed", "hub-node-unroutable-outcome")
 
 _EVENT_LOG = sa.Table(
@@ -53,9 +52,7 @@ def upgrade() -> None:
             batch.alter_column("runner_id", nullable=True)
 
     # Backfill: every existing hub-authored row stops naming the synthetic sentinel.
-    # Idempotent — a rerun with no remaining sentinel rows updates nothing. Matched by
-    # kind, not by the ``'hub'`` value alone, so an operator-named runner called "hub"
-    # is untouched.
+    # Idempotent — a rerun with no remaining sentinel rows updates nothing.
     bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.kind.in_(_HUB_AUTHORED_KINDS)).values(runner_id=None))
 
 
@@ -64,8 +61,7 @@ def downgrade() -> None:
     if not _is_nullable(bind):
         return  # already the pre-reshape shape
 
-    # Every stored null-runner row is hub-authored: a projected row (an escalation, say)
-    # lives only in memory and is never written here, so this restore is exactly reversible.
+    # Every stored null-runner row is hub-authored, so this restore is exactly reversible.
     bind.execute(_EVENT_LOG.update().where(_EVENT_LOG.c.runner_id.is_(None)).values(runner_id=_HUB_RUNNER_ID))
 
     with op.batch_alter_table(_TABLE) as batch:

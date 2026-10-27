@@ -1,5 +1,4 @@
-"""walking-skeleton fact tables (hub store tree) — frozen local literals, not
-``src/blizzard/hub/store/schema.py`` imports, so ``base`` recreates this revision's own column shape.
+"""walking-skeleton fact tables (hub store tree).
 
 Revision ID: 20260713_1218_hub_walking_skeleton
 Revises: 20260713_1112_hub_initial
@@ -19,8 +18,7 @@ down_revision: str | None = "20260713_1112_hub_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape for every table it creates — no live ``src/blizzard/hub/store/schema.py``
-# import (``bzh:frozen-revisions``). Declared parents-before-children so FKs resolve.
+# Frozen (``bzh:frozen-revisions``); declared parents-before-children so FKs resolve.
 _frozen_metadata = sa.MetaData()
 _graphs = sa.Table(
     "graphs",
@@ -31,8 +29,6 @@ _graphs = sa.Table(
     sa.Column("definition_yaml", sa.Text, nullable=False),
     sa.Column("created_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — none of the columns later revisions add to ``graph_nodes``
-# (``bzh:frozen-revisions``); each reshape is pinned by the colocated test of the revision that makes it.
 _graph_nodes = sa.Table(
     "graph_nodes",
     _frozen_metadata,
@@ -48,7 +44,7 @@ _graph_nodes = sa.Table(
     sa.Column("retries_exhausted", sa.String, nullable=True),
     sa.Column("mode", sa.String, nullable=True),
 )
-# This revision's own frozen shape — no ``requires_checks`` column, added by a later revision.
+# Frozen (``bzh:frozen-revisions``): no ``requires_checks`` column.
 _graph_choices = sa.Table(
     "graph_choices",
     _frozen_metadata,
@@ -66,7 +62,7 @@ _graph_edges = sa.Table(
     sa.Column("to_node_name", sa.String, nullable=False),
     sa.Column("prompt_addendum", sa.Text, nullable=True),
 )
-# This revision's own frozen shape — no ``model`` column.
+# Frozen (``bzh:frozen-revisions``): no ``model`` column.
 _chunks = sa.Table(
     "chunks",
     _frozen_metadata,
@@ -82,7 +78,7 @@ _chunk_pm_pointers = sa.Table(
     sa.Column("provider", sa.String, nullable=False),
     sa.Column("url", sa.String, nullable=False),
 )
-# This revision's own frozen shape — no ``graph_id`` column.
+# Frozen (``bzh:frozen-revisions``): no ``graph_id`` column.
 _transitions = sa.Table(
     "transitions",
     _frozen_metadata,
@@ -96,7 +92,7 @@ _transitions = sa.Table(
     sa.Column("runner_id", sa.String, nullable=False),
     sa.Column("recorded_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``forge`` column, added by a later revision.
+# Frozen (``bzh:frozen-revisions``): no ``forge`` column.
 _artifacts = sa.Table(
     "artifacts",
     _frozen_metadata,
@@ -120,8 +116,7 @@ _lease_facts = sa.Table(
     sa.Column("runner_id", sa.String, nullable=False),
     sa.Column("minted_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``seq`` column — reshaped by 0014's route-event
-# tiebreak. Not imported from src/blizzard/hub/store/schema.py (see the module docstring).
+# Frozen (``bzh:frozen-revisions``): no ``seq`` column.
 _route_created = sa.Table(
     "route_created",
     _frozen_metadata,
@@ -161,7 +156,7 @@ _delivery_landed = sa.Table(
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
     sa.Column("landed_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``stopped_by`` column.
+# Frozen (``bzh:frozen-revisions``): no ``stopped_by`` column.
 _chunk_stopped = sa.Table(
     "chunk_stopped",
     _frozen_metadata,
@@ -169,8 +164,7 @@ _chunk_stopped = sa.Table(
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
     sa.Column("stopped_at", UtcDateTime, nullable=False),
 )
-# This revision's own frozen shape — no ``takeover_command``/``wrapped_takeover_command``/
-# ``decision_id`` columns, all added by later revisions.
+# Frozen (``bzh:frozen-revisions``): no ``takeover_command``/``wrapped_takeover_command``/``decision_id`` columns.
 _escalations = sa.Table(
     "escalations",
     _frozen_metadata,

@@ -1,7 +1,7 @@
 """The ``20261006_1200_runner_minted_ids`` revision against a store that already holds runners — every
 registration is keyed by a minted ``rn_`` id and named after its old id, every runner-id column follows
 it, enrolled and revoked tokens keep resolving, the hub's own executor rows and unregistered ids stay
-put, and a downgrade restores the old ids (the ``tests/test_decision_origin_migration.py`` shape)."""
+put, and a downgrade restores the old ids."""
 
 from __future__ import annotations
 
