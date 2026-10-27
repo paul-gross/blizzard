@@ -7,23 +7,21 @@ the mock hub, which then holds every backlog fact above the mark it had. Run wit
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import tomllib
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx2
 import pytest
-import sqlalchemy as sa
 
 from blizzard.foundation.runner_token_names import hub_token_variable
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
 from tests.config_inputs import init_host
 from tests.fleet_launchers import await_http, terminate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
-from tests.runner_scope_seeding import reflect
+from tests.runner_store_sql import select, utc_text
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 
@@ -42,11 +40,7 @@ def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
     tightening, its flat ``blizzard-runner.toml``, and its token under the unsuffixed variable."""
     config = init_host(root)
     migration_runner(config).downgrade(_PARENT)
-    engine = create_engine_from_url(config.db_url)
-    try:
-        _seed_store(engine)
-    finally:
-        engine.dispose()
+    _seed_store(HostLayout(root).store_path)
     layout = HostLayout(root)
     layout.store_path.rename(layout.legacy_store_path)
     layout.config_path.unlink()
@@ -75,18 +69,18 @@ def _pre_host_directory(root: Path, *, hub_url: str, port: int) -> None:
     (root / ".env").write_text(f"{_PRE_HOST_TOKEN_ENV}={_RUNNER.token}\n")
 
 
-def _seed_store(engine: sa.Engine) -> None:
+def _seed_store(store: Path) -> None:
     """The identity row, a held lease bound to an environment, a lease parked on a question, an escalated lease, and
-    an outbound lane whose first ``_ACKED`` facts were delivered and whose next ``_BACKLOG`` wait — written in the
-    shapes reflected at the parent revision."""
-    now = datetime.now(UTC)
-    shapes = reflect(engine)
-    tables = shapes.tables
-    with engine.begin() as conn:
+    an outbound lane whose first ``_ACKED`` facts were delivered and whose next ``_BACKLOG`` wait — written in SQL
+    tied to the shapes at ``_PARENT``, before any table carries a ``runner_id``."""
+    now = utc_text()
+    conn = sqlite3.connect(store)
+    try:
+        (stored,) = conn.execute("SELECT version_num FROM alembic_version").fetchone()
+        assert stored == _PARENT, stored
         conn.execute(
-            sa.insert(tables["runner_identity"]).values(
-                runner_id=_RUNNER.runner_id, runner_name=_RUNNER.runner_name, registered_at=now
-            )
+            "INSERT INTO runner_identity (runner_id, runner_name, registered_at) VALUES (?, ?, ?)",
+            (_RUNNER.runner_id, _RUNNER.runner_name, now),
         )
         for lease_id, chunk_id in (
             ("lease_held", "ch_held"),
@@ -94,48 +88,36 @@ def _seed_store(engine: sa.Engine) -> None:
             ("lease_escalated", "ch_esc"),
         ):
             conn.execute(
-                sa.insert(tables["leases"]).values(lease_id=lease_id, chunk_id=chunk_id, epoch=1, created_at=now)
+                "INSERT INTO leases (lease_id, chunk_id, epoch, created_at) VALUES (?, ?, 1, ?)",
+                (lease_id, chunk_id, now),
             )
             conn.execute(
-                sa.insert(tables["lease_context"]).values(
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    graph_id="gr_1",
-                    node_id="nd_build",
-                    node_name="build",
-                    retries_max=1,
-                    recorded_at=now,
-                )
+                "INSERT INTO lease_context (lease_id, chunk_id, graph_id, node_id, node_name, retries_max, recorded_at)"
+                " VALUES (?, ?, 'gr_1', 'nd_build', 'build', 1, ?)",
+                (lease_id, chunk_id, now),
             )
         conn.execute(
-            sa.insert(tables["env_bindings"]).values(
-                chunk_id="ch_held", environment_id="env_1", workdir="/w", bound_at=now
-            )
+            "INSERT INTO env_bindings (chunk_id, environment_id, workdir, bound_at) VALUES ('ch_held', 'env_1', '/w', ?)",
+            (now,),
         )
         conn.execute(
-            sa.insert(tables["park_facts"]).values(
-                lease_id="lease_parked", chunk_id="ch_parked", question_id="qn_1", parked_at=now
-            )
+            "INSERT INTO park_facts (lease_id, chunk_id, question_id, parked_at)"
+            " VALUES ('lease_parked', 'ch_parked', 'qn_1', ?)",
+            (now,),
         )
         conn.execute(
-            sa.insert(tables["lease_closures"]).values(
-                lease_id="lease_escalated",
-                chunk_id="ch_esc",
-                node_id="nd_build",
-                reason="escalated",
-                closed_at=now,
-                escalation_cause="retries_exhausted",
-            )
+            "INSERT INTO lease_closures (lease_id, chunk_id, node_id, reason, closed_at, escalation_cause)"
+            " VALUES ('lease_escalated', 'ch_esc', 'nd_build', 'escalated', ?, 'retries_exhausted')",
+            (now,),
         )
         for index in range(_ACKED + _BACKLOG):
-            values: dict[str, object] = {
-                "kind": "event.recorded",
-                "payload": json.dumps({"event": f"graduation-{index}"}),
-                "created_at": now,
-            }
-            if index < _ACKED:
-                values["acked_at"] = now
-            conn.execute(sa.insert(tables["outbound_buffer"]).values(values))
+            conn.execute(
+                "INSERT INTO outbound_buffer (kind, payload, created_at, acked_at) VALUES ('event.recorded', ?, ?, ?)",
+                (json.dumps({"event": f"graduation-{index}"}), now, now if index < _ACKED else None),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _graduate(root: Path) -> None:
@@ -245,15 +227,10 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
             local.close()
             terminate(proc)
 
-    engine = create_engine_from_url(f"sqlite:///{layout.store_path}")
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(sa.text("SELECT runner_id, seq, acked_at FROM outbound_buffer ORDER BY seq")).all()
-    finally:
-        engine.dispose()
+    rows = select(layout.store_path, "outbound_buffer", ["runner_id", "seq", "acked_at"], order_by="seq")
     # The backlog kept its seqs, each above the hub's mark, under the runner — and the hub applied each of them, as
     # the mark it now holds shows; whatever the host wrote since follows them.
-    assert [(runner_id, seq) for runner_id, seq, _ in rows][: _ACKED + _BACKLOG] == [
+    assert [(row["runner_id"], row["seq"]) for row in rows][: _ACKED + _BACKLOG] == [
         (_RUNNER.runner_id, seq) for seq in range(1, _ACKED + _BACKLOG + 1)
     ]
-    assert all(acked_at is not None for _, _, acked_at in rows)
+    assert all(row["acked_at"] is not None for row in rows)

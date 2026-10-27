@@ -10,23 +10,21 @@ from __future__ import annotations
 import dataclasses
 import json
 import subprocess
-from datetime import UTC, datetime
+import sys
 from pathlib import Path
 from typing import Any
 
 import httpx2
 import pytest
-import sqlalchemy as sa
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.config_inputs import load_host_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
-from tests.runner_ingest_support import invariant_violations, rows
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env
-from tests.runner_scope_seeding import reflect
+from tests.runner_store_sql import insert as insert_rows
+from tests.runner_store_sql import select, utc_text
 from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 
@@ -79,81 +77,78 @@ def _relative_prompt_file(root: Path) -> None:
     config.write_text(config.read_text().replace('prompt_file = ""', f'prompt_file = "{_PROMPT_FILE}"', 1))
 
 
+def _store_path(root: Path) -> Path:
+    return Path(load_host_config(root).db_url.removeprefix("sqlite:///"))
+
+
 def _seed(root: Path, runner: JoinedRunner, tag: str) -> None:
     """``runner``'s identity, a held lease, a lease parked on a question, an outbound lane whose first ``_ACKED``
     facts were delivered and whose next ``_BACKLOG`` wait, an acked final transcript segment at ``seq`` 1, a route
     token for ``_ROUTE_CHUNK``, and a ``_GRAPH_ID`` artifact — every key but the leases' and chunks' the same in each
     store."""
-    now = datetime.now(UTC)
-    engine = create_engine_from_url(load_host_config(root).db_url)
-    tables = reflect(engine).tables
+    now = utc_text()
+    store = _store_path(root)
+    owner = {"runner_id": runner.runner_id}
 
-    def insert(conn: sa.Connection, table: str, **values: object) -> None:
-        if "runner_id" in tables[table].c:
-            values.setdefault("runner_id", runner.runner_id)
-        conn.execute(sa.insert(tables[table]).values(values))
+    def insert(table: str, **values: object) -> None:
+        insert_rows(store, table, [values])
 
-    try:
-        with engine.begin() as conn:
-            insert(conn, "runner_identity", runner_name=runner.runner_name, registered_at=now)
-            for kind in ("held", "parked"):
-                lease_id, chunk_id = f"lease_{kind}_{tag}", f"ch_{kind}_{tag}"
-                insert(conn, "leases", lease_id=lease_id, chunk_id=chunk_id, epoch=1, created_at=now)
-                insert(
-                    conn,
-                    "lease_context",
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    graph_id=_GRAPH_ID,
-                    node_id="nd_build",
-                    node_name="build",
-                    retries_max=1,
-                    recorded_at=now,
-                )
-            insert(
-                conn,
-                "park_facts",
-                lease_id=f"lease_parked_{tag}",
-                chunk_id=f"ch_parked_{tag}",
-                question_id=f"qn_{tag}",
-                parked_at=now,
-            )
-            for seq in range(1, _ACKED + _BACKLOG + 1):
-                insert(
-                    conn,
-                    "outbound_buffer",
-                    seq=seq,
-                    kind="event.recorded",
-                    payload=json.dumps({"event": f"ingest-{tag}-{seq}"}),
-                    created_at=now,
-                    acked_at=now if seq <= _ACKED else None,
-                )
-            insert(
-                conn,
-                "transcript_outbound_buffer",
-                seq=1,
-                segment_id=f"seg_{tag}",
-                chunk_id=f"ch_held_{tag}",
-                final=True,
-                payload=json.dumps({"segment_id": f"seg_{tag}"}),
-                created_at=now,
-                acked_at=now,
-            )
-            insert(conn, "outbox_counters", lane="outbound", last_seq=_ACKED + _BACKLOG)
-            insert(conn, "outbox_counters", lane="transcript", last_seq=1)
-            insert(conn, "route_tokens", chunk_id=_ROUTE_CHUNK, token=f"route-{tag}", acquired_at=now)
-            insert(
-                conn,
-                "graph_artifacts",
-                graph_id=_GRAPH_ID,
-                name="spec",
-                ordinal=0,
-                kind="text",
-                content="the same immutable mint in both stores",
-                recorded_at=now,
-            )
-    finally:
-        engine.dispose()
+    insert("runner_identity", **owner, runner_name=runner.runner_name, registered_at=now)
+    for kind in ("held", "parked"):
+        lease_id, chunk_id = f"lease_{kind}_{tag}", f"ch_{kind}_{tag}"
+        insert("leases", **owner, lease_id=lease_id, chunk_id=chunk_id, epoch=1, created_at=now)
+        insert(
+            "lease_context",
+            **owner,
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            graph_id=_GRAPH_ID,
+            node_id="nd_build",
+            node_name="build",
+            retries_max=1,
+            recorded_at=now,
+        )
+    insert(
+        "park_facts",
+        **owner,
+        lease_id=f"lease_parked_{tag}",
+        chunk_id=f"ch_parked_{tag}",
+        question_id=f"qn_{tag}",
+        parked_at=now,
+    )
+    for seq in range(1, _ACKED + _BACKLOG + 1):
+        insert(
+            "outbound_buffer",
+            **owner,
+            seq=seq,
+            kind="event.recorded",
+            payload=json.dumps({"event": f"ingest-{tag}-{seq}"}),
+            created_at=now,
+            acked_at=now if seq <= _ACKED else None,
+        )
+    insert(
+        "transcript_outbound_buffer",
+        **owner,
+        seq=1,
+        segment_id=f"seg_{tag}",
+        chunk_id=f"ch_held_{tag}",
+        final=1,
+        payload=json.dumps({"segment_id": f"seg_{tag}"}),
+        created_at=now,
+        acked_at=now,
+    )
+    insert("outbox_counters", **owner, lane="outbound", last_seq=_ACKED + _BACKLOG)
+    insert("outbox_counters", **owner, lane="transcript", last_seq=1)
+    insert("route_tokens", **owner, chunk_id=_ROUTE_CHUNK, token=f"route-{tag}", acquired_at=now)
+    insert(
+        "graph_artifacts",
+        graph_id=_GRAPH_ID,
+        name="spec",
+        ordinal=0,
+        kind="text",
+        content="the same immutable mint in both stores",
+        recorded_at=now,
+    )
 
 
 def _hub_mark(hub: httpx2.Client, runner: JoinedRunner) -> int:
@@ -217,19 +212,21 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         carried = next(w for w in load_host_config(here).workspaces if w.id == _NEW_WORKSPACE)
         assert carried.prompt_file == str(load_host_config(there).root / _PROMPT_FILE)
         assert carried.resolved_prompt(load_host_config(here).root) == _PROMPT_FILE_TEXT
-        engine = create_engine_from_url(load_host_config(here).db_url)
-        try:
-            for table in ("outbound_buffer", "transcript_outbound_buffer"):
-                held = {(r["runner_id"], r["seq"]) for r in rows(engine, table)}
-                assert {(staying.runner_id, 1), (moving.runner_id, 1)} <= held, (table, held)
-            assert {r["runner_id"] for r in rows(engine, "route_tokens", chunk_id=_ROUTE_CHUNK)} == {
-                staying.runner_id,
-                moving.runner_id,
-            }
-            assert len(rows(engine, "graph_artifacts", graph_id=_GRAPH_ID)) == 1
-            assert invariant_violations(engine) == []
-        finally:
-            engine.dispose()
+        store = _store_path(here)
+        for table in ("outbound_buffer", "transcript_outbound_buffer"):
+            held = {(r["runner_id"], r["seq"]) for r in select(store, table, ["runner_id", "seq"])}
+            assert {(staying.runner_id, 1), (moving.runner_id, 1)} <= held, (table, held)
+        routes = select(store, "route_tokens", ["runner_id"], {"chunk_id": _ROUTE_CHUNK})
+        assert {r["runner_id"] for r in routes} == {staying.runner_id, moving.runner_id}
+        assert len(select(store, "graph_artifacts", ["name"], {"graph_id": _GRAPH_ID})) == 1
+        invariants = subprocess.run(
+            [str(Path(sys.executable).parent / "blizzard"), "dev", "check-invariants", "--runner-dir", str(here)],
+            capture_output=True,
+            text=True,
+            env=runner_spawn_env(hub_url),
+            timeout=120,
+        )
+        assert invariants.returncode == 0, invariants.stdout + invariants.stderr
 
         log = here / "daemon.log"
         proc = subprocess.Popen(
