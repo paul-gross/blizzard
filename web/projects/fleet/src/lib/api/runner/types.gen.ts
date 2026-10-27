@@ -3909,9 +3909,6 @@ export type ThrottleStatusView = {
 
 /**
  * TickPassResponse
- *
- * A finished runner or host pass: when it started and finished on the runner's clock, its outcome, and the
- * fault's message when it failed — ``null`` when it completed.
  */
 export type TickPassResponse = {
     /**

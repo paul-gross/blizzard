@@ -108,8 +108,6 @@ export const clearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPost = <Thr
 
 /**
  * Run Host Tick
- *
- * One pass of the host's own work: registration, credential renewal, usage sampling, lane drain.
  */
 export const runHostTickApiHostTicksPost = <ThrowOnError extends boolean = false>(options?: Options<RunHostTickApiHostTicksPostData, ThrowOnError>): RequestResult<RunHostTickApiHostTicksPostResponses, RunHostTickApiHostTicksPostErrors, ThrowOnError> => (options?.client ?? client).post<RunHostTickApiHostTicksPostResponses, RunHostTickApiHostTicksPostErrors, ThrowOnError>({ url: '/api/host/ticks', ...options });
 
@@ -582,9 +580,6 @@ export const listOpenTakeoversRunnersRunnerIdApiTakeoversGet = <ThrowOnError ext
 
 /**
  * Run Tick
- *
- * One tick of the runner — every phase a timed pass runs, then one trace sweep when tracing is on: ``failed``
- * with the message of the fault a pass met.
  */
 export const runTickRunnersRunnerIdApiTicksPost = <ThrowOnError extends boolean = false>(options: Options<RunTickRunnersRunnerIdApiTicksPostData, ThrowOnError>): RequestResult<RunTickRunnersRunnerIdApiTicksPostResponses, RunTickRunnersRunnerIdApiTicksPostErrors, ThrowOnError> => (options.client ?? client).post<RunTickRunnersRunnerIdApiTicksPostResponses, RunTickRunnersRunnerIdApiTicksPostErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/ticks', ...options });
 

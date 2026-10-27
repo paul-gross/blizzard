@@ -6515,7 +6515,6 @@
         "type": "object"
       },
       "TickPassResponse": {
-        "description": "A finished runner or host pass: when it started and finished on the runner's clock, its outcome, and the\nfault's message when it failed \u2014 ``null`` when it completed.",
         "properties": {
           "error": {
             "anyOf": [
@@ -7859,7 +7858,6 @@
     },
     "/api/host/ticks": {
       "post": {
-        "description": "One pass of the host's own work: registration, credential renewal, usage sampling, lane drain.",
         "operationId": "run_host_tick_api_host_ticks_post",
         "responses": {
           "200": {
@@ -10905,7 +10903,6 @@
     },
     "/runners/{runner_id}/api/ticks": {
       "post": {
-        "description": "One tick of the runner \u2014 every phase a timed pass runs, then one trace sweep when tracing is on: ``failed``\nwith the message of the fault a pass met.",
         "operationId": "run_tick_runners__runner_id__api_ticks_post",
         "parameters": [
           {
