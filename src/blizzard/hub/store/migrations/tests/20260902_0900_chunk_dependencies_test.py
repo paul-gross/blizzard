@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_chunk_dependencies_table_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``chunk_dependencies`` — one hand-written revision mints the table;
-    downgrades to its own parent by id, so the drop half is asserted rather than inferred
-    from a revision marker a no-op ``downgrade()`` would satisfy just as well."""
+    """``chunk_dependencies`` — one hand-written revision mints the table; downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

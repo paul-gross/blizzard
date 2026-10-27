@@ -17,7 +17,7 @@ _SECRETS_PARENT = "20261003_1400_escalation_cause"
 
 
 def test_secret_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``secrets``/``secret_lifecycle_facts`` — downgraded to the revision's own parent by id."""
+    """``secrets``/``secret_lifecycle_facts`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)
     runner = hub_runtime.migration_runner(config)
     tables = {"secrets", "secret_lifecycle_facts"}

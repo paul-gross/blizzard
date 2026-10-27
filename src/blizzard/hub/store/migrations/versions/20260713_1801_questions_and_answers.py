@@ -16,7 +16,7 @@ down_revision: str | None = "20260713_1716_hub_graph_node_produces_checks"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen shape: the live schema's later `harness_id` column would skip its own backfill.
+# Frozen (``bzh:frozen-revisions``): no ``harness_id`` column; ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table("chunks", _frozen_metadata, sa.Column("chunk_id", sa.String, primary_key=True))
 questions = sa.Table(

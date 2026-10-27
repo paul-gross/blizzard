@@ -1,5 +1,5 @@
 """runner external subscription usage (hub store tree) — one refresh-in-place row per runner
-holding its newest windows; frozen local literal, no ``src/blizzard/hub/store/schema.py`` import (``bzh:frozen-revisions``).
+holding its newest windows.
 
 Revision ID: 20260801_1600_hub_runner_external_usage
 Revises: 20260801_1400_hub_work_item_closures
@@ -19,8 +19,7 @@ down_revision: str | None = "20260801_1400_hub_work_item_closures"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — one row per ``runner_id``, no ``slug``/``name``,
-# added by 20260905_1100_runner_external_usage_slug.
+# Frozen (``bzh:frozen-revisions``): one row per ``runner_id``, no ``slug``/``name``.
 _frozen_metadata = sa.MetaData()
 _runner_external_usage = sa.Table(
     "runner_external_usage",

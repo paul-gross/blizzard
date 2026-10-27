@@ -21,8 +21,7 @@ down_revision: str | None = "20260826_0900_close_intents"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Read-only references, not creates — the frozen shape is the narrow stub of columns
-# this revision's selects name (``bzh:frozen-revisions``). Never created, never dropped.
+# Narrow read stubs (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 
 chunk_work_refs = sa.Table(
@@ -84,8 +83,7 @@ work_item_closures = sa.Table(
     sa.Column("outcome", sa.String, nullable=False),
 )
 
-# Frozen (``bzh:frozen-revisions``): ``close_intents`` is a local literal of the hub store's declared shape.
-# ``chunks`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``chunks`` is an FK stub.
 sa.Table(
     "chunks",
     _frozen_metadata,

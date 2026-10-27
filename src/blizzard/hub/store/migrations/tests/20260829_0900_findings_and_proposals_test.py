@@ -15,10 +15,8 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_findings_and_proposals_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``findings``, ``finding_sets``, ``finding_facts``, ``garden_proposals``,
-    ``garden_proposal_findings`` — one hand-written revision mints all
-    five; downgrades to its own parent by id, so the drop half is asserted rather than
-    inferred from a revision marker."""
+    """``findings``, ``finding_sets``, ``finding_facts``, ``garden_proposals``, ``garden_proposal_findings`` — one
+    hand-written revision mints all five; downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
     tables = ("findings", "finding_sets", "finding_facts", "garden_proposals", "garden_proposal_findings")

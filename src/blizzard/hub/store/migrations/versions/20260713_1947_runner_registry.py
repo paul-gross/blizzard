@@ -19,8 +19,7 @@ down_revision: str | None = "20260713_1946_hub_queue_shaping"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``token_hash``/``env_capacity``/``public_url``/
-# ``redirect_uris`` columns, all added by later revisions (``bzh:frozen-revisions``).
+# Frozen (``bzh:frozen-revisions``): no ``token_hash``/``env_capacity``/``public_url``/``redirect_uris`` columns.
 _frozen_metadata = sa.MetaData()
 _runner_registrations = sa.Table(
     "runner_registrations",
@@ -31,8 +30,7 @@ _runner_registrations = sa.Table(
     sa.Column("last_seen_at", UtcDateTime, nullable=False),
 )
 
-# Frozen (``bzh:frozen-revisions``): ``runner_pause_facts`` is a local literal of the hub store's declared
-# shape.
+# Frozen (``bzh:frozen-revisions``).
 _runner_pause_facts = sa.Table(
     "runner_pause_facts",
     _frozen_metadata,

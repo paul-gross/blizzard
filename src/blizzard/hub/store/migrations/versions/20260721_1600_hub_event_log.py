@@ -17,8 +17,7 @@ down_revision: str | None = "20260721_1500_hub_cli_auth_state_user"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — ``runner_id`` NOT NULL, reshaped nullable later.
-# The ``chunks`` entry below is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``): ``runner_id`` ``NOT NULL``; ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

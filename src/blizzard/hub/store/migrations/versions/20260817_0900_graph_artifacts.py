@@ -17,8 +17,7 @@ down_revision: str | None = "20260812_1300_hub_transcript_events_subject_tool"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``graph_artifacts`` is a local literal of the hub store's declared shape.
-# ``graphs`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``graphs`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "graphs",

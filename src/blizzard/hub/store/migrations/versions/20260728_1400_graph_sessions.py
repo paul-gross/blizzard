@@ -17,8 +17,7 @@ down_revision: str | None = "20260728_1230_hub_chunk_migration_source"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape, columns a later revision added excluded
-# (`bzh:frozen-revisions`); `graphs` below is an FK-resolution stub, never created/dropped.
+# Frozen (``bzh:frozen-revisions``); ``graphs`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "graphs",

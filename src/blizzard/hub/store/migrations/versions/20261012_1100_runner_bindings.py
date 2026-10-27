@@ -26,15 +26,14 @@ def _columns(bind: sa.Connection) -> set[str]:
 
 
 def _clear_stale_copy(bind: sa.Connection) -> None:
-    """Drop the copy a batch left behind when its run stopped part way (SQLite makes it outside the batch's
-    transaction); the name is the one Alembic's batch gives it."""
+    """Drop the copy a stopped batch left (SQLite makes it outside the batch's transaction, under Alembic's name)."""
     copy = f"_alembic_tmp_{_RUNNERS}"[:50]
     if sa.inspect(bind).has_table(copy):
         op.drop_table(copy)
 
 
 def _reflected(bind: sa.Connection) -> sa.Table:
-    """The table as the store holds it, so a copying batch keeps its unnamed ``CHECK`` constraints."""
+    """The table as the store holds it, so a copying batch keeps the unnamed ``CHECK`` its own reflection drops."""
     return sa.Table(_RUNNERS, sa.MetaData(), autoload_with=bind)
 
 

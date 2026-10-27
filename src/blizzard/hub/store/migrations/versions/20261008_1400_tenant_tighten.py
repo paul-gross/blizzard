@@ -1,7 +1,7 @@
 """tenant tighten — every tenant-owned table whose key stays as it is made to require its tenant.
 
 Each table in :data:`_PLAN` is brought to the shape listed there: ``tenant_id`` made ``NOT NULL`` with a named foreign
-key to ``tenants``, its listing and id-lookup indexes rebuilt led by ``tenant_id`` (a hub-wide sweep's cursor index kept
+key to ``tenants``, its listing and id-lookup indexes rebuilt led by ``tenant_id`` (a hub-wide cursor index kept
 beside the tenant-led one), and a plain ``tenant_id`` index where no other index or key leads with it. Every index and
 foreign key the revision creates carries its name; the keys and foreign keys it keeps leave as they were, unnamed ones
 included. One batch per table under ``recreate="auto"`` tightens it (SQLite copies the table; other dialects alter it in
@@ -1400,19 +1400,14 @@ def _refuse_unstamped(bind: sa.Connection, plans: tuple[_TablePlan, ...]) -> Non
 
 
 def _clear_stale_copy(bind: sa.Connection, table: str) -> None:
-    """Drop the copy a batch left behind when its run stopped part way.
-
-    SQLite creates the copy outside the transaction the rest of the batch runs in, so a stopped run can keep it while
-    the table itself is rolled back; the name is the one Alembic's batch gives it.
-    """
+    """Drop the copy a stopped batch left (SQLite makes it outside the batch's transaction, under Alembic's name)."""
     copy = f"_alembic_tmp_{table}"[:50]
     if sa.inspect(bind).has_table(copy):
         op.drop_table(copy)
 
 
 def _reflected(bind: sa.Connection, table: str) -> sa.Table:
-    """The table as the store holds it, the structure every batch copies from: the copy keeps each constraint it does
-    not touch exactly as the store holds it — an unnamed ``CHECK``, an unnamed foreign key, a named primary key."""
+    """The table as the store holds it, so a copying batch keeps the unnamed ``CHECK`` its own reflection drops."""
     return sa.Table(table, sa.MetaData(), autoload_with=bind)
 
 

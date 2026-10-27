@@ -15,8 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_trace_cursor_table_and_epoch_owner_index_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """Hub-only — downgrades to the revision's own parent, so both the dropped table and the
-    dropped ``epoch_owners`` index are asserted rather than inferred from a revision marker."""
+    """Hub-only — the table and the ``epoch_owners`` index, downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

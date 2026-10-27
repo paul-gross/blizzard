@@ -1,7 +1,6 @@
 """The ``20260929_1000_decision_imposed_by_runner`` revision against a store that already holds
 decisions — a worker-judged node's decision is backfilled with the runner that held its lease, a
-human-judged node's stays NULL, and downgrade drops both new columns (the
-``tests/test_garden_proposal_origin_migration.py`` shape)."""
+human-judged node's stays NULL, and downgrade drops both new columns."""
 
 from __future__ import annotations
 

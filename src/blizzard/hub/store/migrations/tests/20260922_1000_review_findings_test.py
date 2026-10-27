@@ -1,7 +1,6 @@
 """The ``20260922_1000_review_findings`` revision against a store that already holds a
 routine-sourced finding — backfilled to ``source = 'routine'``, ``routine_name`` becomes
-nullable, and downgrade restores the old shape without orphaning the row (the
-``tests/test_finding_facts_ref_migration.py`` shape)."""
+nullable, and downgrade restores the old shape without orphaning the row."""
 
 from __future__ import annotations
 

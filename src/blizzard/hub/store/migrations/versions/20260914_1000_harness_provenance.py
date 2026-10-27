@@ -23,7 +23,7 @@ _HARNESS_ID = "harness_id"
 # Frozen historical owner — this migration observes ownership only, never a version.
 _CLAUDE_CODE = "claude_code"
 
-# Narrow read/write stubs: these revisions add and backfill only these columns.
+# Narrow read/write stubs (``bzh:frozen-revisions``).
 _metadata = sa.MetaData()
 _questions = sa.Table(
     _QUESTIONS,

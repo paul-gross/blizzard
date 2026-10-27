@@ -18,8 +18,8 @@ down_revision: str | None = "20260905_1100_hub_runner_external_usage_slug"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape (``bzh:frozen-revisions``); ``routines`` is widened
-# past FK-resolution to the columns the seed reads. ``findings``/``finding_sets`` are read-only stubs.
+# Frozen (``bzh:frozen-revisions``); ``routines`` carries the columns the seed reads, ``findings`` and
+# ``finding_sets`` are narrow read stubs.
 _frozen_metadata = sa.MetaData()
 
 _scopes = sa.Table(

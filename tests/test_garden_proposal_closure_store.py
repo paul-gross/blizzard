@@ -2,8 +2,7 @@
 The pass and accept-declining-to-mint writes are idempotent per
 ``proposal_id`` at the store level — the second call of either writes nothing — and
 accept-with-mint atomically writes the closure, the item, and its resting chunk
-together, checked first so an already-closed proposal mints nothing a second time. The
-``tests/test_work_item_materialization_store.py`` shape."""
+together, checked first so an already-closed proposal mints nothing a second time."""
 
 from __future__ import annotations
 

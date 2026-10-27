@@ -1,7 +1,5 @@
 """findings, finding_facts, finding_sets, garden_proposals, garden_proposal_findings.
-One hand-written revision mints all five, each a frozen local literal
-(`bzh:frozen-revisions`): the first four at their as-shipped shape, each reshaped by a
-later revision, and `garden_proposal_findings` at its declared shape.
+One hand-written revision mints all five; later revisions reshape the first four.
 
 Revision ID: 20260829_0900_findings_and_proposals
 Revises: 20260828_1000_scopes_and_routines
@@ -21,7 +19,7 @@ down_revision: str | None = "20260828_1000_scopes_and_routines"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# `scopes`/`artifacts`/`chunks` are FK-resolution stubs: never created, never dropped.
+# ``scopes``, ``artifacts`` and ``chunks`` are FK stubs (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 sa.Table("scopes", _frozen_metadata, sa.Column("slug", sa.String, primary_key=True))
 sa.Table("artifacts", _frozen_metadata, sa.Column("artifact_id", sa.String, primary_key=True))
@@ -79,8 +77,7 @@ _garden_proposals = sa.Table(
 )
 sa.Index("ix_garden_proposals_routine_class", _garden_proposals.c.routine_name, _garden_proposals.c.class_)
 
-# Frozen (``bzh:frozen-revisions``): ``garden_proposal_findings`` is a local literal of the hub store's declared
-# shape.
+# Frozen (``bzh:frozen-revisions``).
 _garden_proposal_findings = sa.Table(
     "garden_proposal_findings",
     _frozen_metadata,

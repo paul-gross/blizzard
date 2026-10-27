@@ -19,9 +19,7 @@ down_revision: str | None = "20260928_1000_queue_positions_chunk_id_index"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``runner_lifecycle_facts`` and ``runner_token_revocations`` are local
-# literals of the hub store's declared shape. ``runner_registrations`` is an FK-resolution stub: never created,
-# never dropped.
+# Frozen (``bzh:frozen-revisions``); ``runner_registrations`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "runner_registrations",

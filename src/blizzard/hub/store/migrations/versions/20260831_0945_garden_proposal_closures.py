@@ -19,8 +19,7 @@ down_revision: str | None = "20260831_0930_finding_sets_routine_name"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``garden_proposal_closures`` is a local literal of the hub store's declared
-# shape. ``garden_proposals`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``garden_proposals`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "garden_proposals",

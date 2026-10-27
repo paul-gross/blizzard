@@ -1,8 +1,7 @@
 """The artifact-seq revision's per-chunk ``seq`` backfill and its round trip.
 
 Seeds pre-``seq`` rows on a store migrated to the revision just before it, via a local
-frozen literal rather than the live schema module (a revision pinned in time must not
-read a moving shape)."""
+frozen literal (``bzh:frozen-revisions``)."""
 
 from __future__ import annotations
 

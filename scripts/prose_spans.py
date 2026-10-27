@@ -36,14 +36,15 @@ def extract_spans(path: Path) -> list[ProseSpan]:
     return extract_spans_result(path)[0]
 
 
-def extract_spans_result(path: Path) -> tuple[list[ProseSpan], bool]:
+def extract_spans_result(path: Path, *, inline_comments: bool = False) -> tuple[list[ProseSpan], bool]:
     """Like `extract_spans`, plus whether the file was skipped (unreadable, or a
     `.py` file that failed to parse) rather than genuinely carrying no prose —
     callers that want a skipped-file count use this; `extract_spans` collapses
-    both cases to an empty list, as an unrecognized extension already does."""
+    both cases to an empty list, as an unrecognized extension already does.
+    `inline_comments` adds one span per trailing `#` comment in a `.py` file."""
     suffix = path.suffix
     if suffix == ".py":
-        return _extract_py_spans(path)
+        return _extract_py_spans(path, inline_comments=inline_comments)
     if suffix == ".ts":
         return _extract_ts_spans(path)
     if suffix == ".md":
@@ -56,13 +57,16 @@ def extract_spans_result(path: Path) -> tuple[list[ProseSpan], bool]:
 # --------------------------------------------------------------------------
 
 
-def _extract_py_spans(path: Path) -> tuple[list[ProseSpan], bool]:
+def _extract_py_spans(path: Path, *, inline_comments: bool = False) -> tuple[list[ProseSpan], bool]:
     rel = str(path)
     try:
         src = path.read_text(encoding="utf-8")
         tree = ast.parse(src)
         spans = _py_docstring_spans(tree, rel)
-        spans.extend(_py_comment_spans(src, tree, rel))
+        scopes = _py_scopes(tree)
+        spans.extend(_py_comment_spans(src, scopes, rel))
+        if inline_comments:
+            spans.extend(_py_inline_comment_spans(src, scopes, rel))
     except (SyntaxError, tokenize.TokenError, OSError):
         return [], True
     return spans, False
@@ -87,22 +91,27 @@ def _py_docstring_spans(tree: ast.Module, rel: str) -> list[ProseSpan]:
     return spans
 
 
-def _py_symbol_at(tree: ast.Module, lineno: int) -> str:
+def _py_scopes(tree: ast.Module) -> list[tuple[int, int, str]]:
+    """Each class/function's `(start, end, name)`, in `ast.walk` order — walked once per file."""
+    return [
+        (node.lineno, node.end_lineno or node.lineno, node.name)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)
+    ]
+
+
+def _py_symbol_at(scopes: list[tuple[int, int, str]], lineno: int) -> str:
     """The innermost class/function enclosing `lineno`, else `<module>`."""
     best: tuple[int, str] | None = None
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-            continue
-        start = node.lineno
-        end = node.end_lineno or start
+    for start, end, name in scopes:
         if start <= lineno <= end:
             width = end - start
             if best is None or width < best[0]:
-                best = (width, node.name)
+                best = (width, name)
     return best[1] if best else MODULE_SYMBOL
 
 
-def _py_comment_spans(src: str, tree: ast.Module, rel: str) -> list[ProseSpan]:
+def _py_comment_spans(src: str, scopes: list[tuple[int, int, str]], rel: str) -> list[ProseSpan]:
     """Runs of consecutive full-line `#` comments, tokenize-derived."""
     lines = src.splitlines(keepends=True)
     full_comment_lines: set[int] = set()
@@ -115,17 +124,29 @@ def _py_comment_spans(src: str, tree: ast.Module, rel: str) -> list[ProseSpan]:
     for n in sorted(full_comment_lines):
         if start is None or n != prev + 1:
             if start is not None:
-                spans.append(_make_py_comment_span(rel, tree, lines, start, prev))
+                spans.append(_make_py_comment_span(rel, scopes, lines, start, prev))
             start = n
         prev = n
     if start is not None:
-        spans.append(_make_py_comment_span(rel, tree, lines, start, prev))
+        spans.append(_make_py_comment_span(rel, scopes, lines, start, prev))
     return spans
 
 
-def _make_py_comment_span(rel: str, tree: ast.Module, lines: list[str], start: int, end: int) -> ProseSpan:
+def _py_inline_comment_spans(src: str, scopes: list[tuple[int, int, str]], rel: str) -> list[ProseSpan]:
+    """Each `#` comment trailing code on its line, tokenize-derived."""
+    lines = src.splitlines(keepends=True)
+    return [
+        ProseSpan(file=rel, symbol=_py_symbol_at(scopes, tok.start[0]), start_line=tok.start[0], text=tok.string)
+        for tok in tokenize.generate_tokens(io.StringIO(src).readline)
+        if tok.type == tokenize.COMMENT and not lines[tok.start[0] - 1].lstrip().startswith("#")
+    ]
+
+
+def _make_py_comment_span(
+    rel: str, scopes: list[tuple[int, int, str]], lines: list[str], start: int, end: int
+) -> ProseSpan:
     text = "".join(lines[start - 1 : end])
-    return ProseSpan(file=rel, symbol=_py_symbol_at(tree, start), start_line=start, text=text)
+    return ProseSpan(file=rel, symbol=_py_symbol_at(scopes, start), start_line=start, text=text)
 
 
 # --------------------------------------------------------------------------

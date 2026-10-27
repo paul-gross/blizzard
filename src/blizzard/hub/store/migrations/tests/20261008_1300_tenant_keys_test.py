@@ -1,8 +1,7 @@
-"""Store-migration behaviour for both daemon trees (unit tier).
-
-Covers the three guarantees the scaffold owes ``bzh:manual-migrations``: ``init`` is
-idempotent, ``migrate`` goes up and down, and a daemon refuses to start on a revision
-mismatch, naming its exact migrate command."""
+"""The ``20261008_1300_tenant_keys`` revision: every row stays in its tenant and each table is keyed
+by it, a part-way rerun finishes, a tenantless row or a two-tenant downgrade is refused with no
+change, and with one tenant the downgrade restores the store exactly. A legacy over-long
+derivations index name is renamed on the way to head."""
 
 from __future__ import annotations
 

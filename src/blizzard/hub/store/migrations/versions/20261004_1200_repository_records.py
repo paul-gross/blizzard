@@ -18,8 +18,7 @@ down_revision: str | None = "20261004_1100_work_source_records"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``repositories`` and ``repository_lifecycle_facts`` are local literals of
-# the hub store's declared shape. ``secrets`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``secrets`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "secrets",

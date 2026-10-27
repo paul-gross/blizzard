@@ -15,9 +15,8 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_scopes_and_routines_tables_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one
-    hand-written revision mints all three; downgrades to its own parent by id, so the
-    drop half is asserted rather than inferred from a revision marker."""
+    """``scopes``, ``scope_lifecycle_facts``, ``routines`` — one hand-written revision mints all three; downgraded by
+    id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
     tables = ("scopes", "scope_lifecycle_facts", "routines")

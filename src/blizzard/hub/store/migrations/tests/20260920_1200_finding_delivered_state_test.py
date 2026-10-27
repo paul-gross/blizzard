@@ -1,7 +1,6 @@
 """The finding-delivered-state revision's CHECK-constraint widen.
 Seeded with a literal ``sa.Table`` shape rather than importing ``src/blizzard/hub/store/schema.py``, which now
-carries the widened constraint this revision adds — the ``tests/test_finding_exits_migration.py``
-shape."""
+carries the widened constraint this revision adds."""
 
 from __future__ import annotations
 

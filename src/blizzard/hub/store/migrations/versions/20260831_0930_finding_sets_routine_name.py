@@ -1,5 +1,5 @@
 """finding_sets.routine_name — a set's own routine, by name. Non-null,
-server-defaulted; indexed alongside `scope_slug`, the pair a delta run's baseline reads by.
+server-defaulted; indexed alongside `scope_slug` for a read by routine and scope.
 
 Revision ID: 20260831_0930_finding_sets_routine_name
 Revises: 20260831_0900_work_items_routine_run

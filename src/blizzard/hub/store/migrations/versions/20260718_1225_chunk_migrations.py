@@ -1,5 +1,4 @@
-"""cross-graph migration fact table — chunk_migrations (hub store tree). A
-frozen local literal, not a ``src/blizzard/hub/store/schema.py`` import (``bzh:frozen-revisions``).
+"""cross-graph migration fact table — chunk_migrations (hub store tree).
 
 Revision ID: 20260718_1225_hub_chunk_migrations
 Revises: 20260718_1220_hub_edge_target_graph_model
@@ -19,8 +18,7 @@ down_revision: str | None = "20260718_1220_hub_edge_target_graph_model"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``source`` column, added by a later revision. The
-# ``chunks`` entry below is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``): no ``source`` column; ``chunks`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "chunks",

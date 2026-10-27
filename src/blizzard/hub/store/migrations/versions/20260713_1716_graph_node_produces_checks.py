@@ -1,6 +1,6 @@
 """graph node produces + checks (hub store tree)
 
-Adds two JSON ``list[str]`` columns, idempotently — a fresh store's create-all has both.
+Adds two JSON ``list[str]`` columns, idempotently.
 Revision ID: 20260713_1716_hub_graph_node_produces_checks
 Revises: 20260713_1635_hub_runner_high_water
 """

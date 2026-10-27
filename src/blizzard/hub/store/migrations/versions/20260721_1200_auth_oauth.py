@@ -1,5 +1,4 @@
-"""auth_state / auth_facts — the provider-login seam (hub store tree). Created ``checkfirst``;
-``auth_state`` is a frozen local literal, not a ``src/blizzard/hub/store/schema.py`` import (``bzh:frozen-revisions``).
+"""auth_state / auth_facts — the provider-login seam (hub store tree). Created ``checkfirst``.
 
 Revision ID: 20260721_1200_hub_auth_oauth
 Revises: 20260721_1100_hub_auth_identity_spine
@@ -19,7 +18,7 @@ down_revision: str | None = "20260721_1100_hub_auth_identity_spine"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — no ``user_id`` column, added by a later revision.
+# Frozen (``bzh:frozen-revisions``): no ``user_id`` column.
 _frozen_metadata = sa.MetaData()
 _auth_state = sa.Table(
     "auth_state",
@@ -33,7 +32,7 @@ _auth_state = sa.Table(
     sa.Column("expires_at", UtcDateTime, nullable=False),
 )
 
-# Frozen (``bzh:frozen-revisions``): ``auth_facts`` is a local literal of the hub store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _auth_facts = sa.Table(
     "auth_facts",
     _frozen_metadata,

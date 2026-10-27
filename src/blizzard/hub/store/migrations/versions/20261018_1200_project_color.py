@@ -106,19 +106,14 @@ def upgrade() -> None:
 
 
 def _clear_stale_copy(bind: sa.Connection) -> None:
-    """Drop the copy a batch left behind when its run stopped part way.
-
-    SQLite creates the copy outside the transaction the rest of the batch runs in, so a stopped run can keep it while
-    the table itself is rolled back; the name is the one Alembic's batch gives it.
-    """
+    """Drop the copy a stopped batch left (SQLite makes it outside the batch's transaction, under Alembic's name)."""
     copy = f"_alembic_tmp_{_PROJECTS}"[:50]
     if sa.inspect(bind).has_table(copy):
         op.drop_table(copy)
 
 
 def _reflected(bind: sa.Connection) -> sa.Table:
-    """The table as the store holds it, the structure every copying batch starts from: a batch left to reflect for
-    itself drops an unnamed ``CHECK`` constraint from the copy."""
+    """The table as the store holds it, so a copying batch keeps the unnamed ``CHECK`` its own reflection drops."""
     return sa.Table(_PROJECTS, sa.MetaData(), autoload_with=bind)
 
 

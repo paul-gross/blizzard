@@ -19,8 +19,7 @@ down_revision: str | None = "20260718_1300_hub_runner_env_capacity"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``graph_lifecycle_facts`` is a local literal of the hub store's declared
-# shape. ``graphs`` is an FK-resolution stub: never created, never dropped.
+# Frozen (``bzh:frozen-revisions``); ``graphs`` is an FK stub.
 _frozen_metadata = sa.MetaData()
 sa.Table(
     "graphs",

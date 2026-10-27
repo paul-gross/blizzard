@@ -65,7 +65,7 @@ def _conforms(x: FakeExporter) -> IOpenCodeExporter:
     return x
 
 
-# --- export fixture builders (contracts/opencode/1.18.25/child_session.json's own shapes) ---
+# --- export fixture builders (src/blizzard/runner/harness/contracts/opencode/1.18.25/child_session.json's own shapes) ---
 
 
 def _session_info(session_id: str, *, version: str = "1.18.25", parent_id: str | None = None) -> dict[str, Any]:
@@ -695,7 +695,7 @@ def test_context_tokens_is_unconditionally_none() -> None:
 
 @pytest.mark.unit
 def test_pinned_compaction_export_never_turns_the_compaction_or_step_finish_parts() -> None:
-    """The real ``contracts/opencode/1.18.25/compaction.json`` export, not a hand-built
+    """The real ``src/blizzard/runner/harness/contracts/opencode/1.18.25/compaction.json`` export, not a hand-built
     stand-in: a ``compaction`` part and a ``step-finish`` part never produce a turn on their
     own — only the message's own ``text`` part does."""
     export = parse_session_export(_load_contract("compaction.json"))

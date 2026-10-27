@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_hub_usage_facts_harness_columns_survive_migration_roundtrip(tmp_path: Path) -> None:
-    """``usage_facts.harness_id``/``harness_version`` — downgrades to this
-    revision's own parent by id, so the drop half is asserted rather than inferred from a
-    revision marker, which a ``downgrade()`` that dropped nothing would satisfy just as well."""
+    """``usage_facts.harness_id``/``harness_version`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

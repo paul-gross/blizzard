@@ -15,9 +15,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def test_hub_usage_facts_estimated_cost_column_survives_migration_roundtrip(tmp_path: Path) -> None:
-    """``usage_facts.estimated_cost_usd`` — downgrades to this revision's own parent by
-    id, so the drop half is asserted rather than inferred from a revision marker, which a
-    ``downgrade()`` that dropped nothing would satisfy just as well."""
+    """``usage_facts.estimated_cost_usd`` — downgraded by id below the revision."""
     config = init_hub(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
 

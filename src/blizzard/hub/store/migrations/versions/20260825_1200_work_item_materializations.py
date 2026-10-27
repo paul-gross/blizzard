@@ -1,5 +1,5 @@
-"""work_item_materializations — one outcome fact per proposal. One new table, FROZEN
-(``bzh:frozen-revisions``) since a later revision drops it.
+"""work_item_materializations — one outcome fact per proposal. One new table, dropped by a
+later revision.
 
 Revision ID: 20260825_1200_work_item_materializations
 Revises: 20260825_1150_work_item_proposals_runner_id
@@ -19,7 +19,7 @@ down_revision: str | None = "20260825_1150_work_item_proposals_runner_id"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# The `work_item_proposals` entry below is an FK-resolution stub: never created, never dropped.
+# ``work_item_proposals`` is an FK stub (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 sa.Table("work_item_proposals", _frozen_metadata, sa.Column("proposal_id", sa.String, primary_key=True))
 _work_item_materializations = sa.Table(

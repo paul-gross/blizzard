@@ -1,6 +1,5 @@
 """work_item_strikes — a gate resolution's refusal of a proposal, before
-materialization ever judges it. One new table, FROZEN (``bzh:frozen-revisions``) since a
-later revision drops it.
+materialization ever judges it. One new table, dropped by a later revision.
 
 Revision ID: 20260825_1300_work_item_strikes
 Revises: 20260825_1250_hub_transitions_to_node_id
@@ -20,8 +19,7 @@ down_revision: str | None = "20260825_1250_hub_transitions_to_node_id"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# The `work_item_proposals` and `decisions` entries below are FK-resolution stubs: never
-# created, never dropped.
+# ``work_item_proposals`` and ``decisions`` are FK stubs (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 sa.Table("work_item_proposals", _frozen_metadata, sa.Column("proposal_id", sa.String, primary_key=True))
 sa.Table("decisions", _frozen_metadata, sa.Column("decision_id", sa.String, primary_key=True))

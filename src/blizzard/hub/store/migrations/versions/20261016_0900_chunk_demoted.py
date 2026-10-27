@@ -1,7 +1,7 @@
 """chunk_demoted — the append-only fact that moves a promoted chunk back to ``not_ready``.
 
-Adds the tenant-keyed ``chunk_demoted`` table with the per-chunk and newest-first indexes its reads plan through. A
-chunk is currently promoted when its newest promotion is later than its newest demotion, so no existing row changes.
+Adds the tenant-keyed ``chunk_demoted`` table with its per-chunk and newest-first indexes. It starts empty, so no
+existing row changes.
 Each step inspects first and skips what a stopped run already did.
 
 The downgrade drops the indexes and the table.

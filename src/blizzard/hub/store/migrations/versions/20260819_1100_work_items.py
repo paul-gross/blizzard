@@ -20,8 +20,7 @@ down_revision: str | None = "20260819_0900_chunk_restarts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``work_items`` and ``work_item_sequence`` are local literals of the hub
-# store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _work_items = sa.Table(
     "work_items",

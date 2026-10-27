@@ -1,5 +1,5 @@
 """store-and-forward high-water mark (hub store tree) — the greatest per-runner sequence already
-applied, so a replayed fact is re-acked rather than re-applied. Creates exactly that one table.
+applied. Creates exactly that one table.
 
 Revision ID: 20260713_1635_hub_runner_high_water
 Revises: 20260713_1424_hub_escalation_takeover
@@ -19,7 +19,7 @@ down_revision: str | None = "20260713_1424_hub_escalation_takeover"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen (``bzh:frozen-revisions``): ``runner_high_water`` is a local literal of the hub store's declared shape.
+# Frozen (``bzh:frozen-revisions``).
 _frozen_metadata = sa.MetaData()
 _runner_high_water = sa.Table(
     "runner_high_water",

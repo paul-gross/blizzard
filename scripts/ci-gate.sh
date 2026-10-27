@@ -4,7 +4,7 @@
 # Runs exactly the checks the `pr` GitHub Actions workflow runs, in one command,
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · dprint check · Vale prose lint ·
-#   structural gate (ast-grep scan + test) · pytest (unit + component) · OpenAPI
+#   structural gate (ast-grep scan + test) · repo-path pointers · pytest (unit + component) · OpenAPI
 #   spec drift · compatibility against supported releases · change notes · flag lifecycle · playwright static · eslint · vitest · web
 #   structural gate · bundle composition · story render · generated-client drift
 #
@@ -42,6 +42,10 @@ uv run ast-grep scan --error=unused-suppression .
 
 step "structural gate (blizzard:structural-gate): ast-grep test"
 uv run ast-grep test
+
+# --- Repo-path pointers in Python prose (blizzard:pointer-check) -------------
+step "repo-path pointers (blizzard:pointer-check): mise run pointer-check"
+mise run pointer-check
 
 # --- Playwright package: tsc + eslint + wire-type drift (blizzard:playwright-check) ------
 step "playwright static: mise run playwright-check"
