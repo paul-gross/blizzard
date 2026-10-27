@@ -3,7 +3,7 @@ hydrated to ``StepFacts`` and selected through the window the sweep and replay s
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,7 +21,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedRouteRelease,
     TracedTransition,
 )
-from blizzard.hub.domain.observability.tracing.repository import StepHydration, TraceCheckpoint
+from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, StepHydration, TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.domain.observability.tracing.window import oldest_unsent, read_window
@@ -273,6 +273,42 @@ def test_oldest_unsent_is_the_first_key_the_drain_tells_and_reads_in_pages(tmp_p
     assert oldest is not None
     assert oldest.key == read_window(store, since, until, 1000).items[0].key
     assert reads.candidate_reads == [100]
+
+
+class _NonClosingBacklog:
+    """A backlog of ``depth`` candidates none of which closes anything, served ``limit`` at a time."""
+
+    def __init__(self, depth: int) -> None:
+        self._ids = [f"ch_{i:04d}" for i in range(depth)]
+        self.limits: list[int] = []
+        self.hydrated = 0
+
+    def closing_candidates(self, since, until, limit):  # type: ignore[no-untyped-def]
+        self.limits.append(limit)
+        served = (len(self.limits) - 1) * limit
+        page = tuple(self._ids[served : served + limit])
+        if not page:
+            return ClosingCandidates(())
+        at = since + timedelta(seconds=1)
+        if served + limit < len(self._ids):
+            return ClosingCandidates(page, frontier=at)
+        return ClosingCandidates(page, newest=at)
+
+    def step_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.hydrated += 1
+        return {}
+
+
+@pytest.mark.parametrize(("depth", "pages"), [(100, 1), (150, 2), (350, 4)])
+def test_oldest_unsent_passes_grow_by_pages_of_candidates_not_by_candidates(depth: int, pages: int) -> None:
+    backlog = _NonClosingBacklog(depth)
+    since = CursorKey.opening(datetime(2026, 1, 1, tzinfo=UTC))
+
+    assert oldest_unsent(backlog, since, since.at + timedelta(days=1)) is None  # type: ignore[arg-type]
+
+    # One read per page, then the settling read that finds the position unmoved.
+    assert backlog.limits == [100] * (pages + 1)
+    assert backlog.hydrated == pages + 1
 
 
 def test_oldest_unsent_answers_none_with_nothing_after_the_cursor_and_writes_nothing(tmp_path: Path) -> None:

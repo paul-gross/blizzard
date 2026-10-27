@@ -40,10 +40,12 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from tests.support import (
     chunk_stores,
     count_queries,
+    count_rows_read,
     hub_level_connections,
     hub_store_connections,
     migrated_hub_at,
     seed_chunk_record,
+    seed_lease,
 )
 
 pytestmark = pytest.mark.component
@@ -863,3 +865,43 @@ def test_a_failing_plural_read_reads_its_sub_batch_singly(fixture: _Fixture, mon
 
     assert sorted(row.segment_id for row in fixture.stored_events()) == ids
     assert [entry[1][0] for entry in log if entry[0] == "single"] == ids
+
+
+def _deep_fixture(tmp_path: Path, depth: int) -> _Fixture:
+    """A fixture whose chunks carry identical transitions but ``depth`` lease facts each."""
+    tmp_path.mkdir()
+    fixture = _Fixture(tmp_path)
+    fixture.mint_chunk("ch_2", node_id="nd_other")
+    for chunk_id in ("ch_1", "ch_2"):
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_{chunk_id}", chunk_id=chunk_id), byte_count=10, codec="zlib", at=_NOW
+        )
+        for epoch in range(2, 2 + depth):
+            seed_lease(fixture.engine, chunk_id, epoch=epoch, runner_id="r1", at=_NOW)
+    return fixture
+
+
+def test_graph_pins_read_only_the_movement_families_and_answer_as_the_wide_read_does(tmp_path: Path) -> None:
+    """Deeper histories in a family the pins never consume change neither the answer nor the rows read."""
+    shallow = _deep_fixture(tmp_path / "shallow", 1)
+    deep = _deep_fixture(tmp_path / "deep", 20)
+    segment_ids = ["sg_ch_1", "sg_ch_2", "sg_missing"]
+
+    def pins_of(fixture: _Fixture) -> dict[str, str | None]:
+        pins = fixture.service.graph_pins_for(segment_ids)
+        return {
+            "ch_1": pins.graph_id_for("ch_1", "nd_build", 1),
+            "ch_2": pins.graph_id_for("ch_2", "nd_other", 1),
+            "ch_2_unmatched": pins.graph_id_for("ch_2", "nd_build", 9),
+            "ch_unknown": pins.graph_id_for("ch_unknown", "nd_build", 1),
+        }
+
+    assert pins_of(shallow) == pins_of(deep)
+    shallow_rows = count_rows_read(shallow.engine, lambda: shallow.service.graph_pins_for(segment_ids))
+    deep_rows = count_rows_read(deep.engine, lambda: deep.service.graph_pins_for(segment_ids))
+    assert shallow_rows == deep_rows
+
+    chunk_ids = ["ch_1", "ch_2"]
+    narrow = count_queries(deep.engine, lambda: deep.chunks.facts.movement_facts_for(chunk_ids))
+    wide = count_queries(deep.engine, lambda: deep.chunks.facts.load_facts_for(chunk_ids))
+    assert narrow < wide
