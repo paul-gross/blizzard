@@ -19,13 +19,13 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
 from tests.runner_fakes import make_store
+from tests.service.runner_support import WORK_REF_URL, drive_ticks, seed_chunk, tick_env
 from tests.service.support import (
     mock_hub,
     poll_until,
     require_mock_fleet,
     service_gate,
 )
-from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -51,11 +51,11 @@ def _status(hub: httpx2.Client, chunk_id: str) -> str:
 def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         # Pinned at the mock hub, so the assertion names the token rather than reading one back.
         config = dataclasses.replace(
             runner_config(tmp_path / "runner", workspace, bin_dir, hub_port, join=False), hub_token=_TOKEN
@@ -92,7 +92,7 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         # while the mock hub 404'd the forwarded call.
         assert proxied.status_code == 200, f"the proxy forward failed upstream: {proxied.status_code} {proxied.text}"
         proxied_items = proxied.json()["items"]
-        assert [i["ref"] for i in proxied_items] == [_WORK_REF_URL], (
+        assert [i["ref"] for i in proxied_items] == [WORK_REF_URL], (
             f"the seeded work ref did not survive seed -> mock hub -> proxy: {proxied_items}"
         )
 
@@ -109,7 +109,7 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
     monkeypatch.delenv("BZ_HUB_TOKEN", raising=False)
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -120,7 +120,7 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
         assert not HubTokenFile.of(config.root, config.token_env).held(), "this scenario holds no token"
 
         # A couple of ticks is enough to try registering — no chunk needed.
-        _drive(config, fenced, ticks=2, pause=0.3)
+        drive_ticks(config, fenced, ticks=2, pause=0.3)
 
         requests = _captured_from_the_runner(hub)
         assert requests, "the mock hub captured no runner requests at all"
@@ -134,5 +134,5 @@ def test_a_runner_no_hub_added_sends_no_authorization_header_and_never_registers
 def _run_and_check(
     config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
 ) -> bool:
-    _drive(config, fenced, ticks=1, pause=0.3)
+    drive_ticks(config, fenced, ticks=1, pause=0.3)
     return _status(hub, chunk_id) == target

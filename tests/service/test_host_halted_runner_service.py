@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-import sqlite3
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,11 +20,21 @@ from blizzard.runner.config import DEFAULT_WORKSPACE_ID, ProjectBinding
 from blizzard.runner.host_config import RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
-from blizzard.runner.runtime import sqlite_store_file
 from tests.fleet_launchers import REPO, await_http, runner_config, terminate
-from tests.fleet_world import mint_world
-from tests.host_files import host_config_of, init_runner_environment, write_host_file
-from tests.runner_join import RUNNER_BIN, JoinedRunner, fleet_headers, runner_spawn_env, seed_pinned_runner
+from tests.host_files import host_config_of
+from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
+from tests.service.runner_support import (
+    CONFIGURED_RUNNER,
+    Added,
+    add_host,
+    add_project,
+    add_runner,
+    asserted_chunk_status,
+    host_leased,
+    host_rows,
+    mock_fleet_world,
+    single_runner_host,
+)
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
@@ -37,54 +46,11 @@ from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_CONFIGURED = JoinedRunner(runner_id="rn_01JX00000000000000000HALTA", runner_name="runner-local", token="tok_halt_a")
 _OTHER = JoinedRunner(runner_id="rn_01JX00000000000000000HALTB", runner_name="runner-other", token="tok_halt_b")
 
 
-@contextlib.contextmanager
-def _host(
-    root: Path, hub_url: str, token: str, *, subscription: str | None = None, store_names: str | None = None
-) -> Iterator[httpx2.Client]:
-    """``blizzard-runner host`` over ``root``, its one runner configured as ``_CONFIGURED`` and holding ``token``,
-    naming ``subscription`` when given and over a store whose identity row names ``store_names`` when given; yields a client to its port once it answers ``/api/health``."""
-    port = free_port()
-    config = init_runner_environment(root)
-    write_host_file(
-        dataclasses.replace(
-            config, host="127.0.0.1", port=port, hub_url=hub_url, runner_id=_CONFIGURED.runner_id, subscriptions=()
-        )
-    )
-    if subscription is not None:
-        path = HostLayout(root).config_path
-        named = f'name = "{config.name}"\n'
-        path.write_text(path.read_text().replace(named, f'{named}subscription = "{subscription}"\n', 1))
-    HubTokenFile.of(root, config.token_env).write(token)
-    if store_names is not None:
-        with contextlib.closing(sqlite3.connect(sqlite_store_file(config.db_url))) as conn, conn:
-            conn.execute(
-                "INSERT INTO runner_identity (runner_id, runner_name, registered_at) "
-                "VALUES (?, 'runner-local', '2026-10-13T00:00:00+00:00')",
-                (store_names,),
-            )
-    log = root / "daemon.log"
-    proc = subprocess.Popen(
-        [str(RUNNER_BIN), "host", "--dir", str(root)],
-        env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=10.0)
-    try:
-        await_http(proc, client, "/api/health", log=log)
-        yield client
-    finally:
-        client.close()
-        terminate(proc)
-
-
 def _identity_state(local: httpx2.Client) -> str | None:
-    view = local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner")
+    view = local.get(f"/runners/{CONFIGURED_RUNNER.runner_id}/api/runner")
     return view.json()["identity"]["state"] if view.status_code == 200 else None
 
 
@@ -105,9 +71,9 @@ def test_a_token_that_resolves_to_another_runner_halts_that_runner_while_the_hos
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        seed_pinned_runner(hub, _CONFIGURED)
+        seed_pinned_runner(hub, CONFIGURED_RUNNER)
         seed_pinned_runner(hub, _OTHER)
-        with _host(root, hub_url, _OTHER.token) as local:
+        with single_runner_host(root, hub_url, _OTHER.token) as local:
             assert poll_until(lambda: _identity_state(local) == "mismatched", timeout=30.0), read_daemon_log(
                 root / "daemon.log"
             )
@@ -127,12 +93,12 @@ def test_a_runner_only_config_error_halts_that_runner_while_the_host_serves(tmp_
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        seed_pinned_runner(hub, _CONFIGURED)
-        with _host(root, hub_url, _CONFIGURED.token, subscription="missing") as local:
+        seed_pinned_runner(hub, CONFIGURED_RUNNER)
+        with single_runner_host(root, hub_url, CONFIGURED_RUNNER.token, subscription="missing") as local:
             assert local.get("/api/health").status_code == 200
             detail = local.get("/api/ready").json()["detail"]
             assert "runner-local" in detail and "names subscription 'missing'" in detail, detail
-            assert local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner").status_code == 503
+            assert local.get(f"/runners/{CONFIGURED_RUNNER.runner_id}/api/runner").status_code == 503
             status = _status(root, hub_url)
             said = status.stdout + status.stderr
             assert status.returncode != 0
@@ -145,55 +111,20 @@ def test_a_store_that_names_another_runner_halts_that_runner_while_the_host_serv
     hub_url = f"http://127.0.0.1:{hub_port}"
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        seed_pinned_runner(hub, _CONFIGURED)
-        with _host(root, hub_url, _CONFIGURED.token, store_names=_OTHER.runner_id) as local:
+        seed_pinned_runner(hub, CONFIGURED_RUNNER)
+        with single_runner_host(root, hub_url, CONFIGURED_RUNNER.token, store_names=_OTHER.runner_id) as local:
             assert local.get("/api/health").status_code == 200
             detail = local.get("/api/ready").json()["detail"]
-            assert _OTHER.runner_id in detail and _CONFIGURED.runner_id in detail, detail
-            assert local.get(f"/runners/{_CONFIGURED.runner_id}/api/runner").status_code == 503
+            assert _OTHER.runner_id in detail and CONFIGURED_RUNNER.runner_id in detail, detail
+            assert local.get(f"/runners/{CONFIGURED_RUNNER.runner_id}/api/runner").status_code == 503
             # Nothing registered under the configured id: the store still names only the one runner.
-            unregistered = hub.get(f"/api/fleet/runners/{_CONFIGURED.runner_id}", headers=_CONFIGURED.bearer)
+            unregistered = hub.get(
+                f"/api/fleet/runners/{CONFIGURED_RUNNER.runner_id}", headers=CONFIGURED_RUNNER.bearer
+            )
             assert unregistered.status_code == 409, unregistered.text
 
 
 # --- A host holding a host token, with several runners --------------------------------------------------------------
-
-
-@dataclasses.dataclass(frozen=True)
-class _Added:
-    """A runner added at the mock hub — under a host or standalone — bound in the host file to ``project``."""
-
-    name: str
-    runner_id: str
-    token: str
-    project: str
-
-    @property
-    def bearer(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token}"}
-
-
-def _add_project(hub: httpx2.Client, slug: str) -> str:
-    added = hub.post("/_seed/projects", json={"slug": slug, "name": slug})
-    assert added.status_code == 201, added.text
-    return str(added.json()["project_id"])
-
-
-def _add_host(hub: httpx2.Client, name: str = "host-under-test") -> tuple[str, str]:
-    added = hub.post("/api/hosts", json={"name": name})
-    assert added.status_code == 201, added.text
-    return str(added.json()["host_id"]), str(added.json()["token"])
-
-
-def _add(hub: httpx2.Client, name: str, project: str, *, host_id: str | None = None) -> _Added:
-    body: dict[str, object] = {"name": name, "projects": [project]}
-    if host_id is not None:
-        body["host_id"] = host_id
-    added = hub.post("/api/runners", json=body)
-    assert added.status_code == 201, added.text
-    return _Added(
-        name=name, runner_id=str(added.json()["runner_id"]), token=str(added.json()["token"]), project=project
-    )
 
 
 def _seed_chunk(hub: httpx2.Client, project_id: str) -> str:
@@ -204,7 +135,7 @@ def _seed_chunk(hub: httpx2.Client, project_id: str) -> str:
 
 @contextlib.contextmanager
 def _token_host(
-    root: Path, bin_dir: Path, hub_port: int, workspace: Path, host_token: str, runners: tuple[_Added, ...]
+    root: Path, bin_dir: Path, hub_port: int, workspace: Path, host_token: str, runners: tuple[Added, ...]
 ) -> Iterator[httpx2.Client]:
     """``blizzard-runner host`` over ``root`` holding ``host_token``, its host file one ``[[runner]]`` per
     ``runners`` entry — each bound to its own project in the fixture workspace and holding its own token in
@@ -249,21 +180,6 @@ def _token_host(
         terminate(proc)
 
 
-def _rows(root: Path, query: str, *params: object) -> list[tuple]:
-    with contextlib.closing(sqlite3.connect(root / "data" / "host.db")) as conn:
-        return conn.execute(query, params).fetchall()
-
-
-def _leased(root: Path, runner_id: str, chunk_id: str) -> bool:
-    return bool(_rows(root, "SELECT 1 FROM leases WHERE runner_id = ? AND chunk_id = ?", runner_id, chunk_id))
-
-
-def _chunk_status(hub: httpx2.Client, chunk_id: str) -> str:
-    detail = hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub))
-    assert detail.status_code == 200, detail.text
-    return str(detail.json()["status"])
-
-
 def _registration(local: httpx2.Client) -> dict:
     answer = local.get("/api/host/registration")
     assert answer.status_code == 200, answer.text
@@ -281,30 +197,24 @@ def _host_runner(local: httpx2.Client, runner_id: str) -> dict:
     return next(item for item in listed.json()["items"] if item["runner_id"] == runner_id)
 
 
-def _own_view(hub: httpx2.Client, runner: _Added) -> dict:
+def _own_view(hub: httpx2.Client, runner: Added) -> dict:
     """The hub's read of ``runner`` as itself, once its first registration has landed."""
     url = f"/api/fleet/runners/{runner.runner_id}"
     assert poll_until(lambda: hub.get(url, headers=runner.bearer).status_code == 200, timeout=30.0)
     return hub.get(url, headers=runner.bearer).json()
 
 
-def _fixture(tmp_path: Path) -> tuple[Path, Path]:
-    bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    return bin_dir, workspace
-
-
 def test_a_host_with_a_token_reports_itself_and_records_its_identity(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        _add_project(hub, "p-a")
-        _add_project(hub, "p-b")
+        host_id, host_token = add_host(hub)
+        add_project(hub, "p-a")
+        add_project(hub, "p-b")
         runners = (
-            _add(hub, "runner-a", "p-a", host_id=host_id),
-            _add(hub, "runner-b", "p-b", host_id=host_id),
+            add_runner(hub, "runner-a", "p-a", host_id=host_id),
+            add_runner(hub, "runner-b", "p-b", host_id=host_id),
         )
         with _token_host(root, bin_dir, hub_port, workspace, host_token, runners) as local:
             assert poll_until(lambda: _registration(local)["state"] == "registered", timeout=30.0), (
@@ -314,7 +224,7 @@ def test_a_host_with_a_token_reports_itself_and_records_its_identity(tmp_path: P
             registration = _registration(local)
             assert registration["host_id"] == host_id, registration
             assert set(registration["held_runner_ids"]) == {r.runner_id for r in runners}, registration
-            identity = _rows(root, "SELECT host_id FROM host_identity")
+            identity = host_rows(root, "SELECT host_id FROM host_identity")
             assert identity == [(host_id,)], identity
             record = hub.get("/api/fleet/host", headers={"Authorization": f"Bearer {host_token}"})
             assert record.status_code == 200, record.text
@@ -333,40 +243,45 @@ def test_a_host_with_a_token_reports_itself_and_records_its_identity(tmp_path: P
 
 
 def test_two_held_runners_claim_and_lease_independently(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project_a, project_b = _add_project(hub, "p-a"), _add_project(hub, "p-b")
-        runner_a = _add(hub, "runner-a", "p-a", host_id=host_id)
-        runner_b = _add(hub, "runner-b", "p-b", host_id=host_id)
+        host_id, host_token = add_host(hub)
+        project_a, project_b = add_project(hub, "p-a"), add_project(hub, "p-b")
+        runner_a = add_runner(hub, "runner-a", "p-a", host_id=host_id)
+        runner_b = add_runner(hub, "runner-b", "p-b", host_id=host_id)
         chunk_a, chunk_b = _seed_chunk(hub, project_a), _seed_chunk(hub, project_b)
         with _token_host(root, bin_dir, hub_port, workspace, host_token, (runner_a, runner_b)):
             log = root / "daemon.log"
             assert poll_until(
-                lambda: _leased(root, runner_a.runner_id, chunk_a) and _leased(root, runner_b.runner_id, chunk_b),
+                lambda: (
+                    host_leased(root, runner_a.runner_id, chunk_a) and host_leased(root, runner_b.runner_id, chunk_b)
+                ),
                 timeout=60.0,
             ), read_daemon_log(log)
             # Each runner leased its own project's chunk, never the other's.
-            assert not _leased(root, runner_a.runner_id, chunk_b) and not _leased(root, runner_b.runner_id, chunk_a)
+            assert not host_leased(root, runner_a.runner_id, chunk_b) and not host_leased(
+                root, runner_b.runner_id, chunk_a
+            )
             assert poll_until(
-                lambda: _chunk_status(hub, chunk_a) == "done" and _chunk_status(hub, chunk_b) == "done", timeout=120.0
-            ), (_chunk_status(hub, chunk_a), _chunk_status(hub, chunk_b), read_daemon_log(log))
+                lambda: asserted_chunk_status(hub, chunk_a) == "done" and asserted_chunk_status(hub, chunk_b) == "done",
+                timeout=120.0,
+            ), (asserted_chunk_status(hub, chunk_a), asserted_chunk_status(hub, chunk_b), read_daemon_log(log))
 
 
 def test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_works(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project_a = _add_project(hub, "p-a")
-        _add_project(hub, "p-b")
-        _add_project(hub, "p-c")
-        working = _add(hub, "runner-a", "p-a", host_id=host_id)
-        refused = _add(hub, "runner-b", "p-b", host_id=host_id)
-        standalone = _add(hub, "runner-c", "p-c")
+        host_id, host_token = add_host(hub)
+        project_a = add_project(hub, "p-a")
+        add_project(hub, "p-b")
+        add_project(hub, "p-c")
+        working = add_runner(hub, "runner-a", "p-a", host_id=host_id)
+        refused = add_runner(hub, "runner-b", "p-b", host_id=host_id)
+        standalone = add_runner(hub, "runner-c", "p-c")
         revoked = hub.post(f"/_seed/runners/{refused.runner_id}/token-revocations")
         assert revoked.is_success, revoked.text
         first = _seed_chunk(hub, project_a)
@@ -388,25 +303,25 @@ def test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_works(
                 assert view["state"] == "halted" and view["served"] is True, view
                 assert len(view["halted_reasons"]) == 1, view
             assert local.get("/api/health").status_code == 200
-            assert poll_until(lambda: _chunk_status(hub, first) == "done", timeout=120.0), read_daemon_log(log)
+            assert poll_until(lambda: asserted_chunk_status(hub, first) == "done", timeout=120.0), read_daemon_log(log)
             # After the halts, the held runner keeps claiming; the halted two never lease anything.
             second = _seed_chunk(hub, project_a)
-            assert poll_until(lambda: _leased(root, working.runner_id, second), timeout=60.0), read_daemon_log(log)
+            assert poll_until(lambda: host_leased(root, working.runner_id, second), timeout=60.0), read_daemon_log(log)
             for halted in (refused, standalone):
-                assert not _rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", halted.runner_id)
+                assert not host_rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", halted.runner_id)
 
 
 def test_a_version_refused_runner_halts_alone_while_its_sibling_keeps_leasing(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     detail = "runner 0.1.4 is below hub 0.3.0's floor 0.2; upgrade it"
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project_a = _add_project(hub, "p-a")
-        _add_project(hub, "p-b")
-        working = _add(hub, "runner-a", "p-a", host_id=host_id)
-        refused = _add(hub, "runner-b", "p-b", host_id=host_id)
+        host_id, host_token = add_host(hub)
+        project_a = add_project(hub, "p-a")
+        add_project(hub, "p-b")
+        working = add_runner(hub, "runner-a", "p-a", host_id=host_id)
+        refused = add_runner(hub, "runner-b", "p-b", host_id=host_id)
         lever = hub.post(
             "/_levers/version_refused",
             json={"payload": {"runner_id": refused.runner_id, "reason": "too-old", "detail": detail}},
@@ -421,20 +336,20 @@ def test_a_version_refused_runner_halts_alone_while_its_sibling_keeps_leasing(tm
             )
             view = _host_runner(local, refused.runner_id)
             assert view["state"] == "halted" and view["halted_reasons"] == [detail], view
-            assert poll_until(lambda: _leased(root, working.runner_id, first), timeout=60.0), read_daemon_log(log)
+            assert poll_until(lambda: host_leased(root, working.runner_id, first), timeout=60.0), read_daemon_log(log)
             assert _runner_identity(local, refused.runner_id) == "version_refused"
-            assert not _rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", refused.runner_id)
+            assert not host_rows(root, "SELECT 1 FROM leases WHERE runner_id = ?", refused.runner_id)
 
 
 def test_against_a_hub_with_no_hosts_both_runners_work_and_the_host_buffers_its_facts(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project_a, project_b = _add_project(hub, "p-a"), _add_project(hub, "p-b")
-        runner_a = _add(hub, "runner-a", "p-a", host_id=host_id)
-        runner_b = _add(hub, "runner-b", "p-b", host_id=host_id)
+        host_id, host_token = add_host(hub)
+        project_a, project_b = add_project(hub, "p-a"), add_project(hub, "p-b")
+        runner_a = add_runner(hub, "runner-a", "p-a", host_id=host_id)
+        runner_b = add_runner(hub, "runner-b", "p-b", host_id=host_id)
         lever = hub.post("/_levers/host_plane_absent", json={})
         assert lever.is_success, lever.text
         chunk_a, chunk_b = _seed_chunk(hub, project_a), _seed_chunk(hub, project_b)
@@ -445,12 +360,14 @@ def test_against_a_hub_with_no_hosts_both_runners_work_and_the_host_buffers_its_
                 read_daemon_log(log),
             )
             assert poll_until(
-                lambda: _leased(root, runner_a.runner_id, chunk_a) and _leased(root, runner_b.runner_id, chunk_b),
+                lambda: (
+                    host_leased(root, runner_a.runner_id, chunk_a) and host_leased(root, runner_b.runner_id, chunk_b)
+                ),
                 timeout=60.0,
             ), read_daemon_log(log)
             assert poll_until(
-                lambda: bool(_rows(root, "SELECT 1 FROM host_outbound_buffer WHERE acked_at IS NULL")), timeout=30.0
+                lambda: bool(host_rows(root, "SELECT 1 FROM host_outbound_buffer WHERE acked_at IS NULL")), timeout=30.0
             ), read_daemon_log(log)
             registration = _registration(local)
             assert registration["state"] == "no_hosts" and registration["buffered_facts"] >= 1, registration
-            assert not _rows(root, "SELECT 1 FROM host_identity")
+            assert not host_rows(root, "SELECT 1 FROM host_identity")

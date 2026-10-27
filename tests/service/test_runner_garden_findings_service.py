@@ -13,17 +13,15 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from blizzard.runner.config import RunnerConfig
 from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
+from tests.service.runner_support import mint_lease, tick_env, worker_credential
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
-    poll_until,
     require_mock_fleet,
     service_gate,
 )
-from tests.service.test_runner_service import _tick_env, _tick_then, _worker_credential
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -43,26 +41,13 @@ def _garden_chunk_spec(work_ref: str) -> dict:
     return spec
 
 
-def _mint_lease(config: RunnerConfig, fenced: dict[str, str], runner_client: httpx2.Client, chunk_id: str) -> str:
-    """Drive ticks until the chunk's first lease mints, returning its own lease id."""
-
-    def _lease_minted() -> bool:
-        items = runner_client.get("/api/leases").json()["items"]
-        return any(item["chunk_id"] == chunk_id for item in items)
-
-    minted = poll_until(lambda: _tick_then(config, fenced, _lease_minted), timeout=60.0)
-    assert minted, "the chunk's first lease never minted"
-    items = runner_client.get("/api/leases").json()["items"]
-    return next(item["lease_id"] for item in items if item["chunk_id"] == chunk_id)
-
-
 def test_a_workers_garden_findings_read_proxies_through_to_the_mock_hubs_bucket(tmp_path: Path) -> None:
     """A worker holding only a lease reads its live finding bucket through a real
     runner, hub-proxied to a real mock hub — no `BZ_HUB_URL`, no hub credential, in the
     worker's own call at all. The bucket excludes the seeded non-live finding."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -76,8 +61,8 @@ def test_a_workers_garden_findings_read_proxies_through_to_the_mock_hubs_bucket(
         with runner_api(config):
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                lease_id = mint_lease(config, fenced, runner_client, chunk_id)
+                worker = worker_credential(config, lease_id)
 
                 # No further ticks: the loop only advances when this test calls it, so
                 # the lease found above stays active for the read below.
@@ -95,7 +80,7 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
     rather than answering an empty bucket, forwarded verbatim from the mock hub."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -109,8 +94,8 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
         with runner_api(config):
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                lease_id = mint_lease(config, fenced, runner_client, chunk_id)
+                worker = worker_credential(config, lease_id)
 
                 findings = runner_client.get(f"/api/leases/{lease_id}/garden/findings", headers=worker)
                 assert findings.status_code == 404, findings.text

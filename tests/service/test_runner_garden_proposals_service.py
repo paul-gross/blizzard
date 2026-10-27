@@ -15,14 +15,13 @@ import pytest
 
 from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
+from tests.service.runner_support import mint_lease, tick_env, worker_credential
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
     require_mock_fleet,
     service_gate,
 )
-from tests.service.test_runner_garden_findings_service import _mint_lease
-from tests.service.test_runner_service import _tick_env, _worker_credential
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -47,7 +46,7 @@ def test_a_workers_garden_proposals_read_proxies_through_to_the_mock_hubs_bucket
     credential, in the worker's own call at all."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -61,8 +60,8 @@ def test_a_workers_garden_proposals_read_proxies_through_to_the_mock_hubs_bucket
         with runner_api(config):
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                lease_id = mint_lease(config, fenced, runner_client, chunk_id)
+                worker = worker_credential(config, lease_id)
 
                 # No further ticks: the loop only advances when this test calls it, so
                 # the lease found above stays active for the read below.
@@ -82,7 +81,7 @@ def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path
     the same way — the whole wire the `bzh:wire-change-extends-mock` companion covers."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -107,8 +106,8 @@ def test_a_workers_state_flag_reaches_the_mock_hubs_closed_bucket(tmp_path: Path
         with runner_api(config):
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                lease_id = mint_lease(config, fenced, runner_client, chunk_id)
+                worker = worker_credential(config, lease_id)
 
                 proposals = runner_client.get(
                     f"/api/leases/{lease_id}/garden/proposals", params={"state": "closed"}, headers=worker
@@ -126,7 +125,7 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
     rather than answering an empty docket, forwarded verbatim from the mock hub."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -140,8 +139,8 @@ def test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_li
         with runner_api(config):
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
-                lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                lease_id = mint_lease(config, fenced, runner_client, chunk_id)
+                worker = worker_credential(config, lease_id)
 
                 proposals = runner_client.get(f"/api/leases/{lease_id}/garden/proposals", headers=worker)
                 assert proposals.status_code == 404, proposals.text

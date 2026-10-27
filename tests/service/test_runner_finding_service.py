@@ -17,6 +17,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import mint_world
+from tests.service.runner_support import tick_env, tick_then, worker_credential
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
@@ -24,7 +25,6 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
-from tests.service.test_runner_service import _tick_env, _tick_then, _worker_credential
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -54,7 +54,7 @@ def _mint_lease(config: RunnerConfig, fenced: dict[str, str], runner_client: htt
         items = runner_client.get("/api/leases").json()["items"]
         return any(item["chunk_id"] == chunk_id for item in items)
 
-    minted = poll_until(lambda: _tick_then(config, fenced, _lease_minted), timeout=60.0)
+    minted = poll_until(lambda: tick_then(config, fenced, _lease_minted), timeout=60.0)
     assert minted, "the chunk's first lease never minted"
     items = runner_client.get("/api/leases").json()["items"]
     return next(item["lease_id"] for item in items if item["chunk_id"] == chunk_id)
@@ -66,7 +66,7 @@ def test_a_workers_finding_reads_proxy_through_to_the_mock_hubs_answered_set(tmp
     hub credential, in the worker's own call at all."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -81,7 +81,7 @@ def test_a_workers_finding_reads_proxy_through_to_the_mock_hubs_answered_set(tmp
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                worker = worker_credential(config, lease_id)
 
                 findings = runner_client.get(f"/api/leases/{lease_id}/findings", headers=worker)
                 assert findings.status_code == 200, findings.text
@@ -100,7 +100,7 @@ def test_a_leases_chunk_answering_no_proposal_is_a_legible_refusal_not_an_empty_
     ``garden_answered_findings`` — refuses the read rather than answering an empty list."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -115,7 +115,7 @@ def test_a_leases_chunk_answering_no_proposal_is_a_legible_refusal_not_an_empty_
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
                 lease_id = _mint_lease(config, fenced, runner_client, chunk_id)
-                worker = _worker_credential(config, lease_id)
+                worker = worker_credential(config, lease_id)
 
                 findings = runner_client.get(f"/api/leases/{lease_id}/findings", headers=worker)
                 assert findings.status_code == 404, findings.text

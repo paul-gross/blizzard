@@ -19,10 +19,22 @@ from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.settings import BudgetSettings, ThrottleSettings
 from tests.fleet_launchers import REPO
+from tests.service.runner_support import (
+    Added,
+    add_host,
+    add_project,
+    add_runner,
+    declining_levers,
+    host_leased,
+    mock_fleet_world,
+    node_leases,
+    seed_project_chunk,
+    seed_usage_sample,
+    stays_unleased_node,
+    two_node_spec,
+    two_plan_host,
+)
 from tests.service.support import mock_hub, mock_hub_chunk_spec, poll_until, service_gate
-from tests.service.test_host_halted_runner_service import _add, _add_host, _add_project, _Added, _fixture, _leased
-from tests.service.test_subscription_floor_service import _declining, _sample, _seed, _two_plan_host
-from tests.service.test_utilization_lever_service import _node_leases, _stays_unleased_node, _two_node_spec
 from tests.support import free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -67,10 +79,10 @@ def _locally_paused(local: httpx2.Client, runner_id: str) -> bool:
     return bool(view.json()["pause"]["local"])
 
 
-def _declining_once_registered(hub: httpx2.Client, runner: _Added) -> list[str] | None:
+def _declining_once_registered(hub: httpx2.Client, runner: Added) -> list[str] | None:
     """The levers the hub holds ``runner`` declining on, or ``None`` while it has not yet registered."""
     view = hub.get(f"/api/fleet/runners/{runner.runner_id}", headers={"Authorization": f"Bearer {runner.token}"})
-    return _declining(hub, runner) if view.status_code == 200 else None
+    return declining_levers(hub, runner) if view.status_code == 200 else None
 
 
 def _plans(root: Path) -> tuple[SubscriptionDeclaration, ...]:
@@ -85,52 +97,52 @@ def _plans(root: Path) -> tuple[SubscriptionDeclaration, ...]:
 
 
 def test_a_runner_at_its_budget_waits_for_its_spend_to_age_out_then_carries_on(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     root.mkdir()
     budget = ThrottleSettings(budget=BudgetSettings(usd=_BUDGET_USD, window_hours=_WINDOW_HOURS))
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project = _add_project(hub, "p-a")
-        runner = _add(hub, "runner-a", "p-a", host_id=host_id)
+        host_id, host_token = add_host(hub)
+        project = add_project(hub, "p-a")
+        runner = add_runner(hub, "runner-a", "p-a", host_id=host_id)
         log = root / "daemon.log"
-        with _two_plan_host(
+        with two_plan_host(
             root, bin_dir, hub_port, workspace, host_token, ((runner, "anthropic"),), _plans(root), budget
         ):
-            _sample(root, "anthropic", utilization_pct=10.0, resets_at=datetime.now(UTC) + timedelta(hours=3))
+            seed_usage_sample(root, "anthropic", utilization_pct=10.0, resets_at=datetime.now(UTC) + timedelta(hours=3))
             _spend(root, runner.runner_id, _BUDGET_USD + 2.0)
-            chunk = _seed(hub, project, mock_hub_chunk_spec(f"{REPO}/issues/1"))
+            chunk = seed_project_chunk(hub, project, mock_hub_chunk_spec(f"{REPO}/issues/1"))
 
             # The spend stands inside the window: the runner is declined on the budget and mints no lease.
             assert poll_until(lambda: _declining_once_registered(hub, runner) == ["budget"], timeout=30.0), (
                 read_daemon_log(log)
             )
-            assert not _leased(root, runner.runner_id, chunk), "a runner at its budget claimed"
+            assert not host_leased(root, runner.runner_id, chunk), "a runner at its budget claimed"
 
             # The spend ages out of the window: the budget admits again and the runner carries on.
-            assert poll_until(lambda: _leased(root, runner.runner_id, chunk), timeout=120.0), read_daemon_log(log)
+            assert poll_until(lambda: host_leased(root, runner.runner_id, chunk), timeout=120.0), read_daemon_log(log)
             assert poll_until(lambda: _declining_once_registered(hub, runner) == [], timeout=30.0), read_daemon_log(log)
 
 
 def test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_tripped(tmp_path: Path) -> None:
-    bin_dir, workspace = _fixture(tmp_path)
+    bin_dir, workspace = mock_fleet_world(tmp_path)
     hub_port = free_port()
     root = tmp_path / "host"
     root.mkdir()
     budget = ThrottleSettings(budget=BudgetSettings(usd=_BUDGET_USD, window_hours=_WINDOW_HOURS))
     ceiling = {"runner_ceiling_usd": _CEILING_USD, "runner_ceiling_window_hours": _WINDOW_HOURS}
     with mock_hub(bin_dir, hub_port) as hub:
-        host_id, host_token = _add_host(hub)
-        project = _add_project(hub, "p-a")
-        runner = _add(hub, "runner-a", "p-a", host_id=host_id)
+        host_id, host_token = add_host(hub)
+        project = add_project(hub, "p-a")
+        runner = add_runner(hub, "runner-a", "p-a", host_id=host_id)
         log = root / "daemon.log"
-        with _two_plan_host(
+        with two_plan_host(
             root, bin_dir, hub_port, workspace, host_token, ((runner, "anthropic"),), _plans(root), budget, ceiling
         ) as local:
-            _sample(root, "anthropic", utilization_pct=10.0, resets_at=datetime.now(UTC) + timedelta(hours=3))
-            chunk = _seed(hub, project, _two_node_spec(f"{REPO}/issues/1"))
-            assert poll_until(lambda: _leased(root, runner.runner_id, chunk), timeout=60.0), read_daemon_log(log)
+            seed_usage_sample(root, "anthropic", utilization_pct=10.0, resets_at=datetime.now(UTC) + timedelta(hours=3))
+            chunk = seed_project_chunk(hub, project, two_node_spec(f"{REPO}/issues/1"))
+            assert poll_until(lambda: host_leased(root, runner.runner_id, chunk), timeout=60.0), read_daemon_log(log)
             assert not _locally_paused(local, runner.runner_id)
 
             # The admitted step spends through the budget and on to the ceiling: the ceiling trips.
@@ -141,5 +153,5 @@ def test_a_runner_spending_through_its_budget_trips_its_ceiling_and_stays_trippe
             assert not poll_until(
                 lambda: not _locally_paused(local, runner.runner_id), timeout=_WINDOW_HOURS * 3600 + 20
             )
-            assert _stays_unleased_node(root, chunk, "review", for_seconds=5.0), read_daemon_log(log)
-            assert _node_leases(root, chunk, "build") == 1
+            assert stays_unleased_node(root, chunk, "review", for_seconds=5.0), read_daemon_log(log)
+            assert node_leases(root, chunk, "build") == 1
