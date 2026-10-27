@@ -115,8 +115,7 @@ class SweepWindow:
 
     @classmethod
     def of(cls, since: datetime, until: datetime) -> SweepWindow:
-        # Any positive span is accepted and none is capped: comparing a routine's measurements
-        # across history needs the long span. The last-swept table stays unwindowed.
+        # No span cap, on purpose: historical comparison needs long spans.
         require_until_after_since(since, until)
         return cls(since=since, until=until)
 

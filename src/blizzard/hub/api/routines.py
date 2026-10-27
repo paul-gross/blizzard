@@ -560,8 +560,7 @@ def routine_sweeps(
     """``routine_id``'s per-scope last-swept table — the routine's declared
     set, retired scopes filtered out unless already swept while linked — and its
     measurement series over ``[since, until)``. 404 on an unknown id; 422 on a
-    malformed instant or a non-positive span. A positive span is never capped, so a
-    historical comparison can read the whole series."""
+    malformed instant or a non-positive span. Positive spans are uncapped for historical comparison."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")

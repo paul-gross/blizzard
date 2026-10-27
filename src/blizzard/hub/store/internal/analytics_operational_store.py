@@ -408,8 +408,7 @@ class AnalyticsOperationalStore:
         """No dedicated early-out: an empty admitted-group set makes both statements below's
         correlated subquery empty too, so ``fold_step_durations`` already returns ``[]``.
 
-        Reads every completed step in scope, on purpose: the rollup is a complete
-        historical operator series, and its cost grows with history unless filtered."""
+        Reads every completed step in scope, on purpose; cost grows with history."""
         with self._store.read("step_durations") as conn:
             transition_rows = conn.execute(_duration_rows_stmt(self._store, criteria)).all()
             lease_rows = conn.execute(_duration_lease_min_stmt(self._store, criteria)).all()
@@ -443,8 +442,7 @@ class AnalyticsOperationalStore:
         return ChunkSpendPage(records=[_to_spend_stats(row) for row in page_rows], next_cursor=next_cursor)
 
     def outcomes_by_node(self, criteria: OperationalCriteria) -> list[OutcomeStats]:
-        # Folds every judged choice and attempt in scope, on purpose: the distribution is a
-        # complete historical rollup, and its cost grows with history unless filtered.
+        # Folds all history in scope, on purpose; cost grows with history.
         with self._store.read("outcomes_by_node") as conn:
             judged_rows = conn.execute(_judged_distribution_stmt(self._store, criteria)).all()
             lease_rows = conn.execute(_candidate_lease_epochs_stmt(self._store, criteria)).all()
