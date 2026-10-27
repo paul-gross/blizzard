@@ -8,6 +8,7 @@ failure routes below through the same generic `executor: hub` primitive.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -651,3 +652,116 @@ def test_pr_ci_escalates_a_repository_the_forge_does_not_know_as_forge_config(tm
         _assert_nothing_merged(forge)
 
     assert git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on an unknown repo"
+
+
+def _arm_checks(forge: httpx2.Client, ref: str, checks: list[dict[str, str]]) -> None:
+    armed = forge.post("/_levers/ref_checks", json={"repo": REPO, "ref": ref, "checks": checks})
+    assert armed.status_code == 200, armed.text
+
+
+def _forge_reads(origins: Path, since: int) -> list[tuple[str, int]]:
+    """Each ``GET`` under the repository the forge served after byte ``since`` of its log, as its target and status."""
+    text = (origins.parent / "forge.log").read_bytes()[since:].decode(errors="replace")
+    reads = re.findall(r'"GET (/repos/\S+) HTTP/1\.1" (\d+)', text)
+    return [(target, int(status)) for target, status in reads]
+
+
+def test_pr_ci_waiting_on_pending_checks_reads_conditionally_one_lookup_a_pass(tmp_path: Path) -> None:
+    """A landing whose checks stay pending for ten polls spends no counted call on a landing read after its first
+    pass — every one is answered ``304`` — and its already-merged lookup is one filtered read a pass."""
+    bin_dir, workspace, origins, _ = _reset_fixture(tmp_path)
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        first = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        _arm_checks(forge, _open_pull(forge)["head"]["ref"], [{"name": "ci", "status": "pending"}])
+        # One more pass reads everything once at its armed answer, so the window below starts from kept answers.
+        seen = [first["pending"]["next_poll_at"]]
+        for _ in range(2):
+            last = seen[-1]
+            body = _drive_until(
+                config,
+                hub,
+                chunk_id,
+                fenced,
+                lambda b, last=last: bool(b.get("pending")) and b["pending"]["next_poll_at"] != last,
+            )
+            seen.append(body["pending"]["next_poll_at"])
+        start = (origins.parent / "forge.log").stat().st_size
+        for _ in range(10):
+            last = seen[-1]
+            body = _drive_until(
+                config,
+                hub,
+                chunk_id,
+                fenced,
+                lambda b, last=last: bool(b.get("pending")) and b["pending"]["next_poll_at"] != last,
+            )
+            seen.append(body["pending"]["next_poll_at"])
+        reads = _forge_reads(origins, start)
+
+        landing = [(t, s) for t, s in reads if "/issues/" not in t]
+        counted = [t for t, s in landing if s != 304]
+        assert not counted, f"landing reads counted against the hub's token: {counted}"
+        lookups = [t for t, _ in landing if "state=closed" in t and "head=blizzard:" in t]
+        assert len(lookups) >= 10, f"the already-merged lookup is not one filtered read a pass: {landing}"
+        assert not [t for t, _ in landing if "state=closed" in t and "head=" not in t], landing
+        _assert_nothing_merged(forge)
+
+
+def test_pr_ci_does_not_merge_ahead_of_a_check_that_starts_after_the_others_finish(tmp_path: Path) -> None:
+    """A revision whose one check completed green gains a second, pending one before the next pass, and is not
+    merged until that one is green."""
+    bin_dir, workspace, origins, _ = _reset_fixture(tmp_path)
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        head = _open_pull(forge)["head"]["ref"]
+        _arm_checks(forge, head, [{"name": "first", "status": "success"}, {"name": "second", "status": "pending"}])
+        # Mergeability is released while the second check is still running.
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+
+        first = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        _drive_until(
+            config,
+            hub,
+            chunk_id,
+            fenced,
+            lambda b: bool(b.get("pending")) and b["pending"]["next_poll_at"] != first["pending"]["next_poll_at"],
+        )
+        _assert_nothing_merged(forge)
+
+        _arm_checks(forge, head, [{"name": "second", "status": "success"}])
+        done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
+        assert done["status"] == "done", done["status"]
+
+
+def test_pr_ci_bounces_a_revision_with_no_check_at_its_poll_timeout(tmp_path: Path) -> None:
+    """A revision armed with no check is never green: it stays pending and bounces at the node's poll timeout."""
+    bin_dir, workspace, origins, _ = _reset_fixture(tmp_path)
+
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge, poll_timeout=4)
+        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        _arm_checks(forge, _open_pull(forge)["head"]["ref"], [])
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "poll-timeout", bounced["bounces"]
+        _assert_nothing_merged(forge)

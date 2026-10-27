@@ -219,6 +219,11 @@ def test_a_role_refuses_an_operation_its_forge_does_not_offer(tmp_path: Path, lo
         (forge.changes.merge(7, "h1", MergeMethod.SQUASH, "msg"), Capability.CHANGES_MERGE_SQUASH),
         (forge.checks.rerun_check("11"), Capability.CHECKS_RERUN),
         (forge.refs.branch_tip("main"), Capability.REFS_READ),
+        (forge.refs.advance_ref("main", "a", "b"), Capability.REFS_ADVANCE),
+        (forge.refs.merge_into("main", "b", "msg"), Capability.BRANCHES_MERGE),
+        (forge.refs.create_ref("main", "b"), Capability.REFS_CREATE),
+        (forge.refs.delete_ref("main"), Capability.REFS_DELETE),
+        (forge.checks.change_checks(7), Capability.CHECKS_READ),
     ]
     for call, capability in refusals:
         with pytest.raises(ForgeCapabilityMissing) as raised:
@@ -227,6 +232,16 @@ def test_a_role_refuses_an_operation_its_forge_does_not_offer(tmp_path: Path, lo
 
     assert forge.offered == offered
     assert len(world.transports[0].requests) == 1
+
+
+def test_recently_closed_needs_the_read_capability(tmp_path: Path, loop: ActionLoop) -> None:
+    world = _World(tmp_path, {"github": frozenset({Capability.REFS_READ})})
+    forge = world.registry.repository_forge(world.repository)
+
+    with pytest.raises(ForgeCapabilityMissing) as raised:
+        loop.submit(forge.changes.recently_closed("main", 5)).result(5)
+
+    assert raised.value.capability is Capability.CHANGES_READ
 
 
 def test_offered_answers_the_kinds_set_for_a_forge_alone_or_a_repository(tmp_path: Path) -> None:

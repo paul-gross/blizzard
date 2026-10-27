@@ -18,6 +18,7 @@ import httpx2
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
@@ -60,6 +61,22 @@ _PAGE_SIZE = 100
 _PAGE_MAX = 10
 #: GitHub's cap on a comparison's file list; a list this long may be cut short.
 _COMPARE_FILES_MAX = 300
+
+#: How each refusal is worded by GitHub and the mock, matched by prefix since both append detail.
+_STALE_PREFIXES = ("update is not a fast forward",)
+_PROTECTED_PREFIXES = (
+    "protected branch update failed",
+    "cannot update this protected ref",
+    "repository rule violations found",
+    "required status check",
+    "changes must be made through a pull request",
+)
+_EXISTS_PREFIXES = ("reference already exists",)
+_METHOD_PREFIXES = (
+    "merge commits are not allowed",
+    "squash merges are not allowed",
+    "rebase merges are not allowed",
+)
 
 _MERGEABILITY = {
     "clean": Mergeability.MERGEABLE,
@@ -116,6 +133,8 @@ class GitHubLanding:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._closing: set[asyncio.Task[None]] = set()
         self._probed: tuple[bool, datetime] | None = None
+        self._answers = KeptAnswers()
+        self._comparisons = KeptComparisons()
 
     def close(self) -> None:
         """Schedule the client's ``aclose()`` on the loop it ran on and return at once; a loop already gone drops it."""
@@ -144,6 +163,15 @@ class GitHubLanding:
         return self._text(sha, "branch tip")
 
     async def compare(self, base: str, head: str) -> Comparison:
+        fixed = is_object_id(base) and is_object_id(head)
+        if fixed and (kept := self._comparisons.get(f"{base}...{head}")) is not None:
+            return kept
+        comparison = await self._compare(base, head)
+        if fixed:
+            self._comparisons.put(f"{base}...{head}", comparison)
+        return comparison
+
+    async def _compare(self, base: str, head: str) -> Comparison:
         payload = await self._answered(
             await self._send("GET", f"{self._repo}/compare/{base}...{head}"), ForgeObject.REVISION
         )
@@ -176,6 +204,58 @@ class GitHubLanding:
         payload = await self._answered(response, ForgeObject.REVISION)
         return CommitPresence(True, _authored_at(payload))
 
+    async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+        if await self.branch_tip(branch) != expected:
+            raise ForgeRejected(ForgeRejected.STALE, f"{branch} is not at {expected}")
+        response = await self._send(
+            "PATCH", f"{self._repo}/git/refs/heads/{branch}", {"sha": revision, "force": False}, write=True
+        )
+        if response.status_code == 422:
+            self._refuse_ref(response, stale=_STALE_PREFIXES)
+        await self._answered(response, ForgeObject.BRANCH)
+
+    async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+        body = {"base": branch, "head": revision, "commit_message": message, "user": _HUB_USER}
+        response = await self._send("POST", f"{self._repo}/merges", body, write=True)
+        if response.status_code == 204:
+            return None
+        if response.status_code == 409:
+            raise ForgeRejected(ForgeRejected.CONFLICT, _message(response))
+        if response.status_code == 422:
+            self._refuse_ref(response)
+        result = await self._answered(response, ForgeObject.BRANCH)
+        return self._text(result.get("sha") if isinstance(result, dict) else None, "merge commit")
+
+    async def create_ref(self, branch: str, revision: str) -> None:
+        response = await self._send(
+            "POST", f"{self._repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": revision}, write=True
+        )
+        if response.status_code == 422:
+            if _has_prefix(_message(response), _EXISTS_PREFIXES):
+                if await self.branch_tip(branch) == revision:
+                    return
+                raise ForgeRejected(ForgeRejected.STALE, _message(response))
+            self._refuse_ref(response)
+        await self._answered(response, ForgeObject.BRANCH)
+
+    async def delete_ref(self, branch: str) -> None:
+        response = await self._send("DELETE", f"{self._repo}/git/refs/heads/{branch}", write=True)
+        if response.status_code in (404, 422) and not _has_prefix(_message(response), _PROTECTED_PREFIXES):
+            return
+        if response.status_code == 422:
+            self._refuse_ref(response)
+        await self._answered(response, ForgeObject.BRANCH)
+
+    @staticmethod
+    def _refuse_ref(response: httpx2.Response, stale: tuple[str, ...] = ()) -> NoReturn:
+        """Raise the named reason a 422's message carries, or the forge's own words."""
+        message = _message(response)
+        if _has_prefix(message, stale):
+            raise ForgeRejected(ForgeRejected.STALE, message)
+        if _has_prefix(message, _PROTECTED_PREFIXES):
+            raise ForgeRejected(ForgeRejected.PROTECTED, message)
+        raise ForgeRejected(message or "HTTP 422")
+
     # IForgeChanges
 
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
@@ -195,6 +275,13 @@ class GitHubLanding:
             if len(listed) < _PAGE_SIZE:
                 break
         return tuple(found)
+
+    async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
+        query = f"state=closed&base={base}&sort=updated&direction=desc&per_page={limit}"
+        listed = await self._read("GET", f"{self._repo}/pulls?{query}", ForgeObject.REPOSITORY)
+        if not isinstance(listed, list):
+            raise ForgeUnavailable(f"unreadable pull request list into {base}")
+        return tuple(change for change in (_change(pull) for pull in listed) if change.base == base)[:limit]
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
         body_json = {"title": title, "head": head, "base": base, "body": body, "user": _HUB_USER}
@@ -219,6 +306,8 @@ class GitHubLanding:
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
         body = {"commit_message": message, "sha": expected_head, "merge_method": str(method), "user": _HUB_USER}
         response = await self._send("PUT", f"{self._repo}/pulls/{number}/merge", body, write=True)
+        if response.status_code == 405 and _has_prefix(_message(response), _METHOD_PREFIXES):
+            raise ForgeRejected(ForgeRejected.METHOD, _message(response))
         result = await self._answered(response, ForgeObject.CHANGE)
         if isinstance(result, dict) and result.get("merged") and isinstance(result.get("sha"), str) and result["sha"]:
             return result["sha"]
@@ -243,6 +332,9 @@ class GitHubLanding:
             if len(runs) < _PAGE_SIZE:
                 break
         return tuple(found)
+
+    async def change_checks(self, number: int) -> tuple[Check, ...]:
+        return await self.checks((await self.change(number)).head_revision)
 
     async def rerun_check(self, id: str) -> bool:
         # A GitHub Actions check run's id is its job id, and a token can re-run a job; the check-run rerequest
@@ -301,6 +393,8 @@ class GitHubLanding:
                 if write:
                     async with self._binding.write_lock():
                         return await self._attempt(method, path, body)
+                if method == "GET":
+                    return await self._read_conditionally(path)
                 return await self._attempt(method, path, body)
             except ForgeRateLimited:
                 raise
@@ -310,12 +404,30 @@ class GitHubLanding:
                 await self._sleep(delay)
         raise AssertionError("unreachable")
 
-    async def _attempt(self, method: str, path: str, body: dict[str, Any] | None) -> httpx2.Response:
+    async def _read_conditionally(self, path: str) -> httpx2.Response:
+        """A ``GET`` that sends the kept answer's ``ETag``; a ``304`` is answered from what was kept, and one with
+        nothing kept to answer from is asked again unconditionally."""
+        kept = self._answers.get(path)
+        response = await self._attempt("GET", path, None, {"If-None-Match": kept.etag} if kept else None)
+        if response.status_code == 304:
+            if kept is not None:
+                return _kept_response(kept, response)
+            self._answers.drop(path)
+            response = await self._attempt("GET", path, None)
+        etag = response.headers.get("etag")
+        if response.status_code < 300 and etag:
+            self._answers.put(path, KeptAnswer(etag, response.status_code, response.content))
+        return response
+
+    async def _attempt(
+        self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str] | None = None
+    ) -> httpx2.Response:
         try:
             response = await self._http().request(
                 method,
                 path,
                 content=json.dumps(body).encode() if body is not None else None,
+                headers=headers,
                 timeout=ATTEMPT_TIMEOUT_SECONDS,
             )
         except httpx2.HTTPError as exc:
@@ -360,6 +472,15 @@ class GitHubLanding:
         if not isinstance(value, str) or not value:
             raise ForgeUnavailable(f"unreadable {what}")
         return value
+
+
+def _has_prefix(message: str, prefixes: tuple[str, ...]) -> bool:
+    return message.lower().startswith(prefixes)
+
+
+def _kept_response(kept: KeptAnswer, answered: httpx2.Response) -> httpx2.Response:
+    """The kept answer, standing in for the ``304`` that confirmed it still holds."""
+    return httpx2.Response(kept.status_code, content=kept.content, request=answered.request)
 
 
 def _body(response: httpx2.Response) -> Any:

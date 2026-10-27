@@ -172,7 +172,7 @@ nodes:
     # merge — `unstable`/`unknown`/not-yet-clean, but ALSO a `clean` head whose checks
     # haven't all finished green — so a transient forge state or in-flight CI polls in
     # place instead of bouncing validated work to pre-push.
-    poll_interval: 30
+    poll_interval: 60
     poll_timeout: 10800
     judgement:
       choices:

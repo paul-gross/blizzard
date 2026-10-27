@@ -126,7 +126,9 @@ class DoubleRepo:
     on_merge: Callable[[int], None] | None = None
 
 
-_WRITES = frozenset({"open_change", "update_from_base", "merge", "rerun_check"})
+_WRITES = frozenset(
+    {"open_change", "update_from_base", "merge", "rerun_check", "advance_ref", "merge_into", "create_ref", "delete_ref"}
+)
 
 
 class GitHubDouble:
@@ -235,6 +237,36 @@ class _Adapter:
     async def commit_exists(self, revision: str) -> CommitPresence:
         return self._double.answer("commit_exists", self._repo, lambda: CommitPresence(True), revision=revision)
 
+    async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+        def default() -> None:
+            state = self._state
+            if state.heads.get(branch) != expected:
+                raise ForgeRejected(ForgeRejected.STALE)
+            state.heads[branch] = revision
+
+        self._double.answer("advance_ref", self._repo, default, branch=branch, expected=expected, revision=revision)
+
+    async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+        return self._double.answer(
+            "merge_into", self._repo, lambda: None, branch=branch, revision=revision, message=message
+        )
+
+    async def create_ref(self, branch: str, revision: str) -> None:
+        def default() -> None:
+            self._state.heads.setdefault(branch, revision)
+
+        self._double.answer("create_ref", self._repo, default, branch=branch, revision=revision)
+
+    async def delete_ref(self, branch: str) -> None:
+        self._double.answer("delete_ref", self._repo, lambda: self._state.heads.pop(branch, None), branch=branch)
+
+    async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
+        def default() -> tuple[Change, ...]:
+            closed = (c for c in self._state.changes.values() if c.base == base and c.state is not ChangeState.OPEN)
+            return tuple(sorted(closed, key=lambda c: -c.number))[:limit]
+
+        return self._double.answer("recently_closed", self._repo, default, base=base, limit=limit)
+
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
         def default() -> tuple[Change, ...]:
             wanted = {ChangeState.OPEN} if state is ChangeListing.OPEN else {ChangeState.MERGED, ChangeState.CLOSED}
@@ -298,6 +330,15 @@ class _Adapter:
             return found
 
         return self._double.answer("checks", self._repo, default, ref=ref)
+
+    async def change_checks(self, number: int) -> tuple[Check, ...]:
+        def default() -> tuple[Check, ...]:
+            found = self._state.changes.get(number)
+            if found is None:
+                raise ForgeNotFound(ForgeObject.CHANGE)
+            return self._state.checks.get(self._live(found).head_revision, GREEN) or ()
+
+        return self._double.answer("change_checks", self._repo, default, number=number)
 
     async def rerun_check(self, id: str) -> bool:
         return self._double.answer("rerun_check", self._repo, lambda: True, id=id)

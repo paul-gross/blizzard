@@ -332,7 +332,7 @@ nodes:
     action: land
     # Outcome classification: src/blizzard/hub/delivery/actions/land.py;
     # this graph owns the outcome routes below.
-    poll_interval: 30
+    poll_interval: 60
     poll_timeout: 10800
     judgement:
       choices:

@@ -90,3 +90,10 @@ def test_default_graph_prompts_are_inlined_not_paths() -> None:
 
 def test_default_graph_yaml_is_readable_text() -> None:
     assert "entry: triage" in PACKAGED.default.text
+
+
+@pytest.mark.parametrize("name", ["bas-dwf", "adv-dwf", "bas-hwf"])
+def test_a_shipped_graphs_delivery_node_polls_once_a_minute(name: str) -> None:
+    doc = {f.doc.name: f.doc for f in PACKAGED.files}[name]
+    intervals = {n.poll_interval_seconds for n in doc.nodes if n.poll_interval_seconds is not None}
+    assert intervals == {60}
