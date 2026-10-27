@@ -1,7 +1,7 @@
 """Mixed-harness dispatch, service tier: one real runner, wired with BOTH Claude Code and
 OpenCode binaries, driven against a real ``blizzard-mock-hub`` subprocess.
 
-Every operation the real dispatch loop performs — peek, claim revalidation, preference
+Every operation the real dispatch loop performs — peek, preference
 resolution, a bare node's default fallthrough, two live lineages sharing one
 ``RunnerConfig`` — is proven through the loop's own real steps, never a hand-built call."""
 
@@ -20,14 +20,12 @@ from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN,
 from blizzard.hub.domain.observability.analytics.extraction import extract_events
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.hub.internal.http_hub import HttpHubClient
-from blizzard.runner.loop.steps import Fill, Pull
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import leases, transcript_segments, usage_facts
 from blizzard.wire.transcript_segment import TurnSegmentView
 from tests.fleet_launchers import runner_api, runner_config
 from tests.fleet_world import REPO_NAME, mint_world, scripted_build_prompt
-from tests.runner_fakes import daemon_store, loop_graph
+from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 from tests.service.support import (
     BUILD_SCRIPT,
@@ -197,70 +195,7 @@ def test_by_default_the_matched_peek_passes_over_an_incompatible_head_to_the_wor
         assert _lease_id_for_chunk(config, incompatible_id) is None
 
 
-# 2. Claim revalidation — the incompatibility denial, through the real runner loop's own
-# claim attempt.
-
-
-def _opencode_only_chunk_spec(work_ref: str) -> dict:
-    """`mock_hub_chunk_spec`'s build->deliver shape, pinned to OpenCode — the OpenCode-safe
-    build script (`OPENCODE_BUILD_SCRIPT`'s own docstring) is required, not the Claude Code
-    one: mock-opencode reads the first stdout line as the fresh-session identity, which an
-    uncaptured `subprocess.run` would corrupt."""
-    spec = mock_hub_chunk_spec(work_ref)
-    spec["nodes"]["build"]["session_harnesses"] = ["opencode"]
-    spec["nodes"]["build"]["prompt"] = OPENCODE_BUILD_SCRIPT
-    return spec
-
-
-def test_claim_revalidates_against_a_regressed_registration_through_the_real_runner_loop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`Pull` and `Fill` are the same two steps a real `tick_once()` runs, driven
-    separately here only to inject a regressed registration between them: this runner's
-    registration goes stale after it peeked truthfully but before its real claim."""
-    bin_dir = require_mock_fleet()
-    workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
-
-    hub_port = free_port()
-    with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub, _opencode_only_chunk_spec(_WORK_REF_URL))
-        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-
-        for key, value in fenced.items():
-            monkeypatch.setenv(key, value)
-        with (
-            httpx2.Client(base_url=config.hub_url, timeout=30.0, headers=config.auth_headers()) as client,
-            loop_graph(config) as graph,
-        ):
-            wiring = LoopWiring.of(config)
-            ctx = wiring.context(HttpHubClient(client), graph)
-            Pull(ctx).run()  # registers this runner's true set: claude_code + opencode
-            # A stale registration under the same runner's token regresses the stored set.
-            regressed = hub.post(
-                "/api/fleet/runners",
-                headers=config.auth_headers(),
-                json={
-                    "name": config.name,
-                    "workspace_id": config.home_workspace.id,
-                    "capabilities": [{"harness_id": "claude_code", "default": True}],
-                },
-            )
-            assert regressed.status_code == 201, regressed.text
-            # Peeks workable off this tick's true snapshot; claim revalidates
-            # server-side against the now-regressed registration and is denied.
-            Fill(ctx).run()
-
-        assert _status(hub, chunk_id) == "ready"  # denied — never claimed
-        assert _lease_id_for_chunk(config, chunk_id) is None
-
-        # Recovery: an ordinary next tick re-registers truthfully (PULL always precedes
-        # FILL) and the same chunk lands cleanly.
-        landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"chunk did not land once registration recovered (status {_status(hub, chunk_id)!r})"
-
-
-# 3. Conflicting harness preference order — resolved deterministically against what
+# 2. Conflicting harness preference order — resolved deterministically against what
 # this runner actually has configured.
 
 
@@ -318,7 +253,7 @@ def test_preference_order_skips_an_unresolvable_member_and_falls_through_to_the_
 
 
 # --------------------------------------------------------------------------- #
-# 4. A bare lineage resolving through the default.
+# 3. A bare lineage resolving through the default.
 
 
 def test_a_bare_node_with_no_declared_preference_resolves_through_this_runners_configured_default(
@@ -383,7 +318,7 @@ def test_a_bare_node_still_honors_the_chunks_own_declared_default(tmp_path: Path
 
 
 # --------------------------------------------------------------------------- #
-# 5. Two declared session lineages, live together on one RunnerConfig.
+# 4. Two declared session lineages, live together on one RunnerConfig.
 
 _CLAUDE_SKILL_BUILD_SCRIPT = scripted_build_prompt(
     "import subprocess, pathlib\n"

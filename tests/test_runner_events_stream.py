@@ -6,6 +6,7 @@ in ``tests/test_foundation_events.py``."""
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +14,9 @@ from fastapi import HTTPException
 
 from blizzard.foundation.events.broker import EventBroker
 from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS, Stream
+from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.api.events import _RESERVED_COMMENT, events_stream
+from blizzard.runner.events.broker import EventBroker as RunnerEventBroker
 from tests.config_inputs import export_runner_app
 
 pytestmark = pytest.mark.component
@@ -22,14 +25,15 @@ pytestmark = pytest.mark.component
 class _FakeRequest:
     """The minimal request surface ``events_stream`` reads (app.state, headers, query)."""
 
-    def __init__(self, broker: EventBroker | None) -> None:
+    def __init__(self, broker: EventBroker | None, *, connected: bool = False) -> None:
+        self._connected = connected
         self.app = SimpleNamespace(state=SimpleNamespace(event_broker=broker))
         self.state = SimpleNamespace()
         self.headers: dict[str, str] = {}
         self.query_params: dict[str, str] = {}
 
     async def is_disconnected(self) -> bool:
-        return True
+        return not self._connected
 
 
 async def test_stream_endpoint_returns_an_sse_response() -> None:
@@ -105,3 +109,45 @@ async def test_stream_endpoint_from_latest_joins_after_the_ring_but_resumes_a_he
     assert await first_frames(None) == [_RESERVED_COMMENT.encode()]
     resumed = await first_frames("1")
     assert [f.split(b"\n")[0] for f in resumed[1:]] == [b"id: 2", b"id: 3"]
+
+
+def _stale_cursor(first: RunnerEventBroker) -> int:
+    for cause in ("created", LeaseClosureReason.TRANSITIONED, LeaseClosureReason.RELEASED):
+        cursor = first.publish_lease_changed("ls_1", "ch_1", cause=cause, runner_id="rn_1")
+    return cursor
+
+
+async def test_runner_stream_resumes_live_after_a_restart_reset_the_broker_ids() -> None:
+    """A stale ``last-event-id`` against a restarted broker still delivers a post-open frame."""
+    stale_cursor = _stale_cursor(RunnerEventBroker())
+    second = RunnerEventBroker()
+    request = _FakeRequest(second, connected=True)
+    request.headers["last-event-id"] = str(stale_cursor)
+
+    response = await events_stream(request)  # type: ignore[arg-type]
+    frames = aiter(response.body_iterator)
+    await anext(frames)
+    live_id = second.publish_lease_changed("ls_2", "ch_2", cause="created", runner_id="rn_1")
+    assert live_id < stale_cursor
+    frame = await asyncio.wait_for(anext(frames), timeout=5.0)
+    await response.body_iterator.aclose()  # type: ignore[attr-defined]
+
+    assert bytes(frame.encode() if isinstance(frame, str) else frame).startswith(
+        f"id: {live_id}\nevent: lease-changed".encode()
+    )
+
+
+async def test_runner_stream_replays_a_restarted_brokers_buffered_tail_past_a_stale_cursor() -> None:
+    """A restarted broker's buffered tail replays past a stale ``last-event-id``."""
+    stale_cursor = _stale_cursor(RunnerEventBroker())
+    second = RunnerEventBroker()
+    second.publish_lease_changed("ls_2", "ch_2", cause="created", runner_id="rn_1")
+    second.publish_lease_changed("ls_2", "ch_2", cause=LeaseClosureReason.TRANSITIONED, runner_id="rn_1")
+    assert second.latest_id() < stale_cursor
+    request = _FakeRequest(second)
+    request.headers["last-event-id"] = str(stale_cursor)
+
+    response = await events_stream(request)  # type: ignore[arg-type]
+    body = b"".join([c.encode() if isinstance(c, str) else bytes(c) async for c in response.body_iterator])
+
+    assert body.count(b"event: lease-changed") == 2
