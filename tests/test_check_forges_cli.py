@@ -10,10 +10,14 @@ from click.testing import CliRunner, Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from tests.config_inputs import init_hub
+from blizzard.hub.config import HubConfig
+from tests.config_inputs import init_hub, migrate_hub
 from tests.forge_check_support import seed_addresses
 
 pytestmark = pytest.mark.component
+
+#: The revision before the forge migration: the store the check reads is the one the build being replaced serves.
+_BEFORE_FORGES = "20261024_0900_hub_legacy_run"
 
 _REFUSABLE_REPOSITORIES = (
     ("userful", "https://user@forge.example", "acme", "widget"),
@@ -25,6 +29,13 @@ _REFUSABLE_SOURCES = (
     ("web-one", "https://ghe.example/api/v3", "https://ghe.example"),
     ("web-two", "https://ghe.example/api/v3", "https://other.example"),
 )
+
+
+def _pre_forge_hub(root: Path) -> HubConfig:
+    """A hub store at the revision the forge migration follows, ready for the address seeds."""
+    config = init_hub(root)
+    migrate_hub(root, down=_BEFORE_FORGES)
+    return config
 
 
 def _check(directory: Path) -> Result:
@@ -42,7 +53,7 @@ def _dump(db_url: str) -> list[tuple[str, list[tuple[object, ...]]]]:
 
 
 def test_a_seeded_store_names_every_record_and_exits_one_without_writing(tmp_path: Path) -> None:
-    config = init_hub(tmp_path / "hub")
+    config = _pre_forge_hub(tmp_path / "hub")
     seed_addresses(config.db_url, repository_rows=_REFUSABLE_REPOSITORIES, work_source_rows=_REFUSABLE_SOURCES)
     before = _dump(config.db_url)
 
@@ -61,7 +72,7 @@ def test_a_seeded_store_names_every_record_and_exits_one_without_writing(tmp_pat
 
 
 def test_a_quiet_store_names_nothing_and_exits_zero(tmp_path: Path) -> None:
-    config = init_hub(tmp_path / "hub")
+    config = _pre_forge_hub(tmp_path / "hub")
     seed_addresses(
         config.db_url,
         repository_rows=(("local", "http://127.0.0.1:8123", "acme", "widget"),),
@@ -75,7 +86,7 @@ def test_a_quiet_store_names_nothing_and_exits_zero(tmp_path: Path) -> None:
 
 
 def test_a_second_tenants_records_are_kept_apart_from_the_first(tmp_path: Path) -> None:
-    config = init_hub(tmp_path / "hub")
+    config = _pre_forge_hub(tmp_path / "hub")
     engine = create_engine_from_url(config.db_url)
     try:
         with engine.begin() as conn:
@@ -111,7 +122,7 @@ def _first_tenant(db_url: str) -> str:
 
 
 def test_a_store_with_a_forges_table_has_nothing_left_to_carry(tmp_path: Path) -> None:
-    config = init_hub(tmp_path / "hub")
+    config = _pre_forge_hub(tmp_path / "hub")
     seed_addresses(config.db_url, repository_rows=_REFUSABLE_REPOSITORIES)
     engine = create_engine_from_url(config.db_url)
     try:

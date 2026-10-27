@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 
 from blizzard.foundation.project_colors import HEX_COLOR_PATTERN, HexColor, ProjectColor
-from blizzard.hub.domain.config.work_sources import ConfigFieldError
+from blizzard.hub.domain.config.errors import ConfigFieldError
 
 #: Picks one color among the candidates handed to it, which are never empty.
 ColorPick = Callable[[Sequence[ProjectColor]], ProjectColor]

@@ -9,8 +9,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields
-from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceFields
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
+from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
@@ -19,24 +20,27 @@ from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 @domain_model
 @dataclass(frozen=True)
 class DeclaredWorkSource:
-    """A work source the document names by slug: the display name it states, its create fields, and the sparse edit
-    of what it states."""
+    """A work source the document names by slug: the display name it states, its create fields but the forge, the
+    sparse edit of what it states but the forge, and what it says of its forge."""
 
     slug: str
     name: str | None
-    fields: WorkSourceFields
+    draft: WorkSourceDraft
     edit: WorkSourceEdit
+    forge: ForgeChoice
 
 
 @domain_model
 @dataclass(frozen=True)
 class DeclaredRepository:
-    """A repository the document names by slug: its create fields, and the sparse edit of what it states."""
+    """A repository the document names by slug: its create fields but the forge, the sparse edit of what it states but
+    the forge, and what it says of its forge."""
 
     slug: str
     name: str | None
-    fields: RepositoryFields
+    draft: RepositoryDraft
     edit: RepositoryEdit
+    forge: ForgeChoice
 
 
 @domain_model

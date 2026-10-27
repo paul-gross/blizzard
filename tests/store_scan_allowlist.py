@@ -319,6 +319,8 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("hub_exec_slot", 50, _HUB_EXEC_SLOT_REASON),
     TableWideAllowance("tenant_deletions", 200, _TENANT_DELETIONS_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
+    TableWideAllowance("forge_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("forges", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graph_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graph_policy_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("graphs", 200, _FLEET_CONFIG_REASON),

@@ -23,11 +23,11 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ConfiguredForge, ForgeEdit
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
+    RepositoryDraft,
     RepositoryEdit,
-    RepositoryFields,
     RepositoryId,
     RepositorySecretUnavailable,
 )
@@ -38,14 +38,20 @@ from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
-from tests.support import OP, build_hub, config_authoring, default_tenant, hub_store_connections, migrated_hub_at
+from tests.support import (
+    OP,
+    build_hub,
+    config_authoring,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_forge,
+)
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
-_FIELDS = RepositoryFields(
-    forge_api_url="http://forge.fixture", owner="acme", repo="widget", base_branch="main", secret_name="gh"
-)
+_DRAFT = RepositoryDraft(owner="acme", repo="widget", base_branch="main", secret_name="gh")
 _PULL = {
     "number": 7,
     "state": "open",
@@ -96,12 +102,14 @@ class _World:
         self.stores = build_hub_core(engine, clock=clock).open(StoreScope(default_tenant(engine)))
         self.authoring = config_authoring(engine, keys=keys, clock=clock)
         self.authoring.create_secret(SecretName.parse("gh"), "tok", OP)
-        self.repository = self.authoring.create_repository("widget", None, _FIELDS, OP).repository_id
+        self.forge_id = seed_forge(engine, "http://forge.fixture")
+        self.repository = self.authoring.create_repository("widget", None, _DRAFT.on(self.forge_id), OP).repository_id
         live = build_live_config(self.stores, cipher=secret_cipher(keys))
         self.transports: list[_Transport] = []
         self.hold_next = False
         self.registry = ForgeRegistry(
             records=self.stores.repository_records,
+            forges=self.stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             build=self._build,
@@ -120,6 +128,11 @@ class _World:
 
     def edit(self, base_branch: str) -> None:
         self.authoring.edit_repository(self.record(), RepositoryEdit(base_branch=base_branch), OP)
+
+    def forge(self) -> ConfiguredForge:
+        forge = self.stores.forge_records.get(self.forge_id)
+        assert forge is not None
+        return forge
 
 
 @pytest.fixture
@@ -155,6 +168,15 @@ def test_an_adapter_superseded_by_an_edit_closes_on_the_action_loop_after_its_pa
     assert _closed(first) == "hub-action-loop"
 
 
+def test_a_forge_edit_rebuilds_the_adapter_on_its_new_address(world: _World, loop: ActionLoop) -> None:
+    loop.submit(world.registry.changes(world.repository).change(7)).result(5)
+    world.authoring.edit_forge(world.forge(), ForgeEdit(api_base="http://forge2.fixture"), OP)
+    loop.submit(world.registry.changes(world.repository).change(7)).result(5)
+
+    assert len(world.transports) == 2
+    assert str(world.transports[1].requests[0].url).startswith("http://forge2.fixture/")
+
+
 def test_an_unchanged_record_hands_out_the_same_adapter(world: _World, loop: ActionLoop) -> None:
     loop.submit(world.registry.changes(world.repository).change(7)).result(5)
     loop.submit(world.registry.repository_forge(world.repository).changes.change(7)).result(5)
@@ -168,6 +190,7 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
     def forges(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
         return ForgeRegistry(
             records=stores.repository_records,
+            forges=stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             build=lambda binding: GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport),
@@ -210,8 +233,8 @@ def test_offered_answers_the_kinds_set_for_a_forge_alone_or_a_repository(tmp_pat
     offered = frozenset({Capability.REFS_READ, Capability.COMPARE})
     world = _World(tmp_path, {"github": offered})
 
-    assert world.registry.offered("http://forge.fixture") == offered
-    assert world.registry.offered("http://forge.fixture", RepositoryId(world.repository)) == offered
+    assert world.registry.offered(world.forge()) == offered
+    assert world.registry.offered(world.forge(), RepositoryId(world.repository)) == offered
 
 
 def test_a_secret_that_no_longer_reveals_refuses_the_build(world: _World) -> None:

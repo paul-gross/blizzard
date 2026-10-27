@@ -3640,7 +3640,7 @@
         "type": "object"
       },
       "ConfigApplyResponse": {
-        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``.\n``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run.",
+        "description": "What an apply did, or \u2014 under ``dry_run`` \u2014 would do, with the identical ``outcomes``.\n``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run. ``warnings`` names each old address\nfield an entry used and the forge it resolved to.",
         "properties": {
           "apply_id": {
             "anyOf": [
@@ -3663,12 +3663,21 @@
             },
             "title": "Outcomes",
             "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OldFieldWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
           "dry_run",
           "apply_id",
-          "outcomes"
+          "outcomes",
+          "warnings"
         ],
         "title": "ConfigApplyResponse",
         "type": "object"
@@ -8556,7 +8565,8 @@
           "inv",
           "proj",
           "repo",
-          "wsrc"
+          "wsrc",
+          "frg"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -9540,6 +9550,35 @@
           "summary"
         ],
         "title": "ObservedFindingView",
+        "type": "object"
+      },
+      "OldFieldWarning": {
+        "description": "One old address field a write used \u2014 ``forge_api_url``, ``api_base`` or ``web_base`` \u2014 and the forge it\nresolved to, by id and slug.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "forge_slug": {
+            "title": "Forge Slug",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "forge_id",
+          "forge_slug",
+          "message"
+        ],
+        "title": "OldFieldWarning",
         "type": "object"
       },
       "OpenDecisionsResponse": {
@@ -10705,11 +10744,12 @@
         "type": "object"
       },
       "RecordKind": {
-        "description": "The kind of configured record a change row names. A project's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``.",
+        "description": "The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``.",
         "enum": [
           "work_source",
           "secret",
           "repository",
+          "forge",
           "scope",
           "routine",
           "project",
@@ -10850,9 +10890,78 @@
         "title": "RepositoriesListView",
         "type": "object"
       },
+      "RepositoryCreateRequest": {
+        "additionalProperties": false,
+        "description": "The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them, naming the forge. ``forge_api_url`` is the old way to name it: alone, it is resolved to the\ntenant's forge with that API origin, made when none holds it; beside ``forge``, it is accepted only when it is that\nforge's API origin. Either way the write is answered with a warning. Naming neither is refused.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
+          },
+          "forge_api_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "title": "Forge Api Url"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "secret_name": {
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "owner",
+          "repo",
+          "base_branch",
+          "secret_name"
+        ],
+        "title": "RepositoryCreateRequest",
+        "type": "object"
+      },
       "RepositoryDocument": {
         "additionalProperties": false,
-        "description": "A repository as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label \u2014\nthe slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.",
+        "description": "A repository as a document \u2014 an entry of the version-1 configuration document, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label \u2014\nthe slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
@@ -10960,7 +11069,7 @@
       },
       "RepositoryPatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. A slug that changes keeps resolving to the repository until another claims\nit.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``\ndoes so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims\nit.",
         "properties": {
           "base_branch": {
             "anyOf": [
@@ -10973,6 +11082,17 @@
             ],
             "title": "Base Branch"
           },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
+          },
           "forge_api_url": {
             "anyOf": [
               {
@@ -10982,6 +11102,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Forge Api Url"
           },
           "name": {
@@ -11070,7 +11191,20 @@
             "title": "Created By Name"
           },
           "forge_api_url": {
+            "deprecated": true,
             "title": "Forge Api Url",
+            "type": "string"
+          },
+          "forge_id": {
+            "title": "Forge Id",
+            "type": "string"
+          },
+          "forge_name": {
+            "title": "Forge Name",
+            "type": "string"
+          },
+          "forge_slug": {
+            "title": "Forge Slug",
             "type": "string"
           },
           "name": {
@@ -11105,12 +11239,23 @@
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OldFieldWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
           "repository_id",
           "slug",
           "name",
+          "forge_id",
+          "forge_slug",
+          "forge_name",
           "forge_api_url",
           "owner",
           "repo",
@@ -11120,7 +11265,8 @@
           "created_at",
           "created_by",
           "created_by_name",
-          "retired"
+          "retired",
+          "warnings"
         ],
         "title": "RepositorySummary",
         "type": "object"
@@ -16650,9 +16796,96 @@
         "title": "WorkRefView",
         "type": "object"
       },
+      "WorkSourceCreateRequest": {
+        "additionalProperties": false,
+        "description": "The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with\nthat API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub. The\nweb origin belongs to the forge: a ``web_base`` other than the forge's is refused, and a blank one means the\nforge's.",
+        "properties": {
+          "annotate": {
+            "default": false,
+            "title": "Annotate",
+            "type": "boolean"
+          },
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "title": "Api Base"
+          },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "web_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "deprecated": true,
+            "title": "Web Base"
+          }
+        },
+        "required": [
+          "slug",
+          "provider",
+          "locator"
+        ],
+        "title": "WorkSourceCreateRequest",
+        "type": "object"
+      },
       "WorkSourceDocument": {
         "additionalProperties": false,
-        "description": "A work source as a document \u2014 the create body, and the model whose JSON Schema\n``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label \u2014 the\nslug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.\n``secret`` names a stored secret.",
+        "description": "A work source as a document \u2014 an entry of the version-1 configuration document, and the model whose JSON Schema\n``GET /api/config/schema/work-sources`` serves. ``slug`` names the source and ``name`` is its display label \u2014 the\nslug when omitted on create, left as stored on an edit. ``hub`` is never a slug: the built-in source holds it.\n``secret`` names a stored secret.",
         "properties": {
           "annotate": {
             "default": false,
@@ -16726,7 +16959,7 @@
       },
       "WorkSourcePatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` clears ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. A slug that changes keeps\nresolving to the source until another claims it.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;\n``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one\nother than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null\n``secret`` clears it. A slug that changes keeps resolving to the source until another claims it.",
         "properties": {
           "annotate": {
             "anyOf": [
@@ -16748,7 +16981,19 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Api Base"
+          },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
           },
           "locator": {
             "anyOf": [
@@ -16814,6 +17059,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Web Base"
           }
         },
@@ -16836,6 +17082,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Api Base"
           },
           "built_in": {
@@ -16879,6 +17126,39 @@
           "edit": {
             "title": "Edit",
             "type": "boolean"
+          },
+          "forge_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge Id"
+          },
+          "forge_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge Name"
+          },
+          "forge_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge Slug"
           },
           "locator": {
             "anyOf": [
@@ -16944,6 +17224,14 @@
             ],
             "title": "Slug"
           },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OldFieldWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "web_base": {
             "anyOf": [
               {
@@ -16953,6 +17241,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Web Base"
           },
           "work_source_id": {
@@ -16975,6 +17264,9 @@
           "edit",
           "provider",
           "locator",
+          "forge_id",
+          "forge_slug",
+          "forge_name",
           "api_base",
           "web_base",
           "secret",
@@ -16983,7 +17275,8 @@
           "created_by",
           "created_by_name",
           "retired",
-          "built_in"
+          "built_in",
+          "warnings"
         ],
         "title": "WorkSourceSummary",
         "type": "object"
@@ -22351,7 +22644,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged.",
+        "description": "Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is\nabsent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`\nrolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415\nunknown `Content-Type`; a refusal leaves the store unchanged. An entry's address \u2014 a work source's `api_base` and\n`web_base`, a repository's `forge_api_url` \u2014 resolves to the tenant's forge with that origin, planned in the same\ntransaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for\na stored record that states no address keeps its forge.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -29225,7 +29518,7 @@
         ]
       },
       "post": {
-        "description": "Store a new repository at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a\nmalformed `slug` or `name`, a blank field, a non-http(s) `forge_api_url`, or a missing or retired secret; 409 for\na slug some repository holds or a taken `(forge_api_url, owner, repo)`, naming the holder.",
+        "description": "Store a new repository at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted.\n`forge_api_url` names the forge the old way \u2014 the tenant's forge with that API origin, made when none holds it \u2014\nand answers a `Deprecation` header and a `warnings` entry. 422 naming the field for a malformed `slug` or `name`, a\nblank field, a non-http(s) `forge_api_url`, or a missing or retired secret, with the code `forge_required` for\nneither `forge` nor `forge_api_url`, `forge_unavailable` for an unknown or retired forge or an origin a retired\nforge holds, and `forge_conflict` for a `forge_api_url` that is not `forge`'s; 409 for a slug some repository\nholds or a taken `(forge_api_url, owner, repo)`, naming the holder.",
         "operationId": "create_repository_api_repositories_post",
         "parameters": [
           {
@@ -29249,7 +29542,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryDocument"
+                "$ref": "#/components/schemas/RepositoryCreateRequest"
               }
             }
           },
@@ -29326,7 +29619,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims\nit. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a\ntaken `(forge_api_url, owner, repo)`; 422 naming the field.",
+        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims\nit. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a\ntaken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the repository at\na forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry.",
         "operationId": "patch_repository_api_repositories__repository__patch",
         "parameters": [
           {
@@ -32227,7 +32520,7 @@
         ]
       },
       "post": {
-        "description": "Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a\nmalformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or\nretired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.",
+        "description": "Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. Naming\nno `forge` is the old way \u2014 `api_base` and `web_base`, or GitHub's API when `api_base` is left out \u2014 resolved to\nthe tenant's forge with that API origin, made when none holds it, and answers a `Deprecation` header and a\n`warnings` entry. 422 naming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's),\na bad provider or locator, or a missing or retired secret, with the code `forge_unavailable` for an unknown or\nretired forge or an origin a retired forge holds, `forge_kind_mismatch` for a forge of another kind than the\nprovider, and `forge_conflict` for an address that is not the forge's; 409 for a slug some work source holds or a\ntaken `(provider, locator)`, naming the holder.",
         "operationId": "create_work_source_api_work_sources_post",
         "parameters": [
           {
@@ -32251,7 +32544,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkSourceDocument"
+                "$ref": "#/components/schemas/WorkSourceCreateRequest"
               }
             }
           },
@@ -32328,7 +32621,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or\n`secret` (the last only where the provider needs no credential). A patch that changes\nnothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,\n409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken\n`(provider, locator)`; 422 naming the field (`hub` refused as a slug).",
+        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential), re-points the source at GitHub's forge for `api_base`, and means the forge's own web origin for\n`web_base`, which a source no longer holds: a `web_base` other than its forge's is refused `forge_conflict`, naming\nthe forge whose web origin to set instead. A patch that changes nothing writes nothing. A slug that changes keeps\nresolving to the source until another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the\ncurrent revision), a slug some work source holds, or a taken `(provider, locator)`; 422 naming the field (`hub`\nrefused as a slug), coded as on create. `forge` re-points the source at a forge; `api_base` does so the old way,\nand a cleared `api_base` re-points it at GitHub's; each old field answers a `Deprecation` header and a `warnings`\nentry.",
         "operationId": "patch_work_source_api_work_sources__source__patch",
         "parameters": [
           {

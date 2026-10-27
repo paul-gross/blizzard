@@ -18,8 +18,9 @@ from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict, WorkSourceId, is_built_in
+from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_rows import lock_keys

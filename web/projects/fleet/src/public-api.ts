@@ -115,11 +115,14 @@ export { client as hubClient } from './lib/api/hub/client.gen';
 export type { Client } from './lib/api/hub/client';
 export type {
   RepositoryDocument,
+  RepositoryCreateRequest,
   SecretCreateRequestWritable,
   SecretReplaceRequest,
   RepositoryPatchRequest,
   WorkSourceDocument,
+  WorkSourceCreateRequest,
   WorkSourcePatchRequest,
+  OldFieldWarning,
   ActivityView,
   AnswerResult,
   ConfigChangeView,

@@ -10,6 +10,10 @@ import {
 } from './work-sources.model';
 
 const WINTER: WorkSourceSummary = {
+  forge_id: 'frg_github',
+  forge_slug: 'github',
+  forge_name: 'GitHub',
+  warnings: [],
   work_source_id: 'wsrc_w',
   slug: 'winter',
   name: 'winter',
@@ -28,7 +32,7 @@ const WINTER: WorkSourceSummary = {
   web_base: null,
 };
 const OLD: WorkSourceSummary = { ...WINTER, work_source_id: 'wsrc_o', slug: 'old', name: 'Old one', annotate: false, retired: true, revision: 3 };
-const HUB: WorkSourceSummary = { name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
+const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
 
 describe('workSourceBadges', () => {
   it('badges the built-in source and a retired one', () => {

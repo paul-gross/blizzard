@@ -31,10 +31,14 @@ class CacheKey:
     revision: int
     secret_name: str | None
     secret_revision: int | None
+    #: The revision of the forge the record names, so an edit to the forge rebuilds every object built from it.
+    forge_revision: int | None = None
 
     @classmethod
     def of(cls, kind: RecordKind, key: str, revisions: ConfigRevisions) -> CacheKey:
-        return cls(kind, key, revisions.revision, revisions.secret_name, revisions.secret_revision)
+        return cls(
+            kind, key, revisions.revision, revisions.secret_name, revisions.secret_revision, revisions.forge_revision
+        )
 
 
 class ConfigObjectCache:

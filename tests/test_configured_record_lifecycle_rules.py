@@ -19,6 +19,8 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
@@ -28,8 +30,6 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.secrets import SecretMetadata, SecretName, SecretRetired, SecretRevisionConflict
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
-    ConfigFieldError,
-    ConfigRevisionConflict,
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
@@ -43,12 +43,12 @@ pytestmark = pytest.mark.unit
 _AT = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="ops", door=Door.CLI)
 _WS_FIELDS = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
+    provider="github", locator="acme/demo", forge_id=ForgeId("frg_github"), annotate=False, secret="gh"
 )
 _WS_ID = WorkSourceId("wsrc_demo")
 _REPO_ID = RepositoryId("repo_demo")
 _REPO_FIELDS = RepositoryFields(
-    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
+    forge_id=ForgeId("frg_github"), owner="acme", repo="demo", base_branch="master", secret_name="gh"
 )
 
 
@@ -153,7 +153,7 @@ def test_a_new_work_source_starts_at_revision_one_with_a_create_change_listing_e
         1,
         ChangeOp.CREATE,
     )
-    assert [c.field for c in change.diff] == ["slug", "name", "provider", "locator", "annotate", "secret"]
+    assert [c.field for c in change.diff] == ["slug", "name", "provider", "locator", "forge", "annotate", "secret"]
 
 
 def test_a_new_work_source_slugged_hub_is_refused() -> None:
@@ -170,7 +170,7 @@ def test_a_work_source_edit_moves_the_revision_and_records_the_diff() -> None:
             slug="gh",
             name="gh",
             fields=WorkSourceFields(
-                provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=True, secret="gh"
+                provider="github", locator="acme/demo", forge_id=ForgeId("frg_github"), annotate=True, secret="gh"
             ),
             revision=4,
             created_at=_AT,
@@ -196,7 +196,7 @@ def test_an_edit_that_changes_nothing_never_revalidates_the_stored_fields() -> N
         slug="gh",
         name="gh",
         fields=WorkSourceFields(
-            provider="nowhere", locator="x", api_base=None, web_base=None, annotate=False, secret=None
+            provider="nowhere", locator="x", forge_id=ForgeId("frg_github"), annotate=False, secret=None
         ),
         revision=1,
         created_at=_AT,

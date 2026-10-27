@@ -318,12 +318,13 @@ def import_legacy_config(
         target = _legacy_import_tenant(core.open_tenants(), named=tenant)
         stores = core.open(StoreScope(target))
         authoring = build_config_authoring(
-            stores, cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir))
+            stores, cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)), events=None
         )
         existing = ExistingConfig(
             secrets=frozenset(secret.name for secret in stores.secrets.list_all()),
             work_sources=tuple(stores.work_source_records.list_all(include_retired=True)),
             repositories=tuple(stores.repository_records.list_all(include_retired=True)),
+            forges=tuple(stores.forge_records.list_all(include_retired=True)),
         )
         return authoring.import_legacy(
             legacy,
@@ -576,6 +577,7 @@ def build_hosted_app(
     def work_source_registry(stores: TenantStores, live: LiveConfig) -> IWorkSourceRegistry:
         return WorkSourceEntry.registry(
             records=stores.work_source_records,
+            forges=stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             users=core.users,
@@ -589,6 +591,7 @@ def build_hosted_app(
     def forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
         return build_forge_registry(
             records=stores.repository_records,
+            forges=stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             clock=stores.clock,

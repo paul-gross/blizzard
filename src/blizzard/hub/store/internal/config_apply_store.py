@@ -18,22 +18,19 @@ from blizzard.hub.domain.config.apply import (
     PlannedWrite,
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
     RepositorySlugTaken,
 )
-from blizzard.hub.domain.config.work_sources import (
-    ConfigFieldError,
-    ConfigRevisionConflict,
-    ConfiguredWorkSource,
-    WorkSourceLocatorTaken,
-    WorkSourceSlugTaken,
-)
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.domain.garden.routines import SCOPES_FIELD, Routine, RoutineNameTakenError
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectSlugTaken
+from blizzard.hub.store.internal import forge_record_store as forge_writes
 from blizzard.hub.store.internal import project_link_store as link_writes
 from blizzard.hub.store.internal import project_store as project_writes
 from blizzard.hub.store.internal import repository_record_store as repository_writes
@@ -46,6 +43,8 @@ from blizzard.hub.store.scoped import ScopedConnections
 _REFUSALS = (
     ConfigFieldError,
     ConfigRevisionConflict,
+    ForgeSlugTaken,
+    ForgeOriginTaken,
     WorkSourceSlugTaken,
     WorkSourceLocatorTaken,
     RepositorySlugTaken,
@@ -58,6 +57,8 @@ _REFUSALS = (
 
 def _taken(record: object) -> Exception:
     """The refusal a create that lost its name to a concurrent one reads as."""
+    if isinstance(record, ConfiguredForge):
+        return ForgeSlugTaken(record.slug)
     if isinstance(record, ConfiguredWorkSource):
         return WorkSourceSlugTaken(record.slug)
     if isinstance(record, Routine):
@@ -101,7 +102,11 @@ class ConfigApplyStore:
         record, change, from_revision = write.record, write.change, write.from_revision
         lifecycle = change.op in (ChangeOp.RETIRE, ChangeOp.ENABLE)
         retired = change.op is ChangeOp.RETIRE
-        if isinstance(record, Scope):
+        if isinstance(record, ConfiguredForge):
+            # An apply only ever creates a forge, for an origin its entries name that no forge holds.
+            assert from_revision is None
+            forge_writes.insert_forge(conn, record, change)
+        elif isinstance(record, Scope):
             _run_scope(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Routine):
             _run_routine(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)

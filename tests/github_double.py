@@ -153,6 +153,7 @@ class GitHubDouble:
         def build(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
             return ForgeRegistry(
                 records=stores.repository_records,
+                forges=stores.forge_records,
                 objects=live.objects,
                 secrets=live.secrets,
                 build=self.adapter,

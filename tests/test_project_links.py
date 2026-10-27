@@ -9,8 +9,9 @@ import pytest
 
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, ConfigRevisionConflict, WorkSourceId
+from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, WorkSourceId
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project
 

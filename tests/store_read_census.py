@@ -70,6 +70,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
+from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId, ForgeSlug, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryEdit,
@@ -152,6 +153,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.garden_run_store import GardenRunStore
@@ -1203,6 +1205,8 @@ class HubWorld:
     project_id: ProjectId
     repository_id: RepositoryId
     work_source_id: WorkSourceId
+    #: The forge both name, created ``census-forge`` and renamed ``census-github``.
+    forge_id: ForgeId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -1357,20 +1361,27 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     config = ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store_connections),
         repositories=RepositoryRecordStore(store_connections),
+        forges=ForgeRecordStore(store_connections),
         secrets=secret_store,
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
         apply_writer=ConfigApplyStore(store_connections),
         import_writer=ConfigImportStore(store_connections),
+        events=None,
         clock=clock,
     )
     config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)
     retired_secret = config.create_secret(SecretName.parse("old-token"), "tok-b", operator)
     config.retire_secret(retired_secret, operator)
+    # A forge renamed ``census-forge`` -> ``census-github``, so its former slug resolves too.
+    census_forge = config.create_forge(
+        "census-forge", None, "github", ForgeFields(api_base="https://api.github.com", web_base=None), operator
+    )
+    census_forge = config.edit_forge(census_forge, ForgeEdit(slug="census-github"), operator)
     config.create_work_source(
         "census-source",
         None,
         WorkSourceFields(
-            provider="github", locator="acme/census", api_base=None, web_base=None, annotate=False, secret="gh-token"
+            provider="github", locator="acme/census", forge_id=census_forge.forge_id, annotate=False, secret="gh-token"
         ),
         operator,
     )
@@ -1378,7 +1389,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         "census-repo",
         None,
         RepositoryFields(
-            forge_api_url="https://api.github.com",
+            forge_id=census_forge.forge_id,
             owner="acme",
             repo="census",
             base_branch="master",
@@ -2146,6 +2157,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         project_id=project.project_id,
         repository_id=census_repo.repository_id,
         work_source_id=census_source.work_source_id,
+        forge_id=census_forge.forge_id,
     )
 
 
@@ -2597,6 +2609,19 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
         include_retired=True
     ),
+    (IReadForgeRepository, "get"): lambda w: w.hub.services.forge_records.get(w.forge_id),
+    (IReadForgeRepository, "get_many"): lambda w: w.hub.services.forge_records.get_many([w.forge_id]),
+    (IReadForgeRepository, "list_all"): lambda w: w.hub.services.forge_records.list_all(include_retired=True),
+    (IReadForgeRepository, "get_by_slug"): lambda w: w.hub.services.forge_records.get_by_slug(
+        ForgeSlug.parse("census-github")
+    ),
+    (IReadForgeRepository, "get_by_former_slug"): lambda w: w.hub.services.forge_records.get_by_former_slug(
+        ForgeSlug.parse("census-forge")
+    ),
+    (IReadForgeRepository, "get_by_api_base"): lambda w: w.hub.services.forge_records.get_by_api_base(
+        "https://api.github.com"
+    ),
+    (IReadForgeRepository, "resolve"): lambda w: w.hub.services.forge_records.resolve("census-forge"),
     (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
     (IReadConfigRevisions, "revisions_for"): lambda w: (
         w.config_revisions.revisions_for(RecordKind.REPOSITORY, [w.repository_id]),

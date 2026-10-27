@@ -78,6 +78,8 @@ from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
+from blizzard.hub.domain.config.forge_resolution import IEventRecorder
+from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
@@ -210,6 +212,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
@@ -340,7 +343,8 @@ class TenantServices:
     secret_catalog: ISecretCatalog
     #: The active configured records naming each secret.
     secret_references: ISecretReferences
-    #: The one writer of configured records — work sources, repositories and secrets, each write with its change row.
+    #: The one writer of configured records — forges, work sources, repositories and secrets, each write with its change
+    #: row.
     config_authoring: ConfigAuthoring
     #: The use case behind ``POST /api/config/apply``: loads what a document names, mints, plans, and applies it.
     config_application: ConfigApplication
@@ -348,6 +352,8 @@ class TenantServices:
     work_source_records: IReadWorkSourceRepository
     #: Stored repository records (the read half).
     repository_records: IReadRepositoryRecordRepository
+    #: Stored forge records (the read half).
+    forge_records: IReadForgeRepository
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: Stored projects (the read half).
@@ -533,6 +539,8 @@ class TenantStores:
     work_source_records: WorkSourceRecordStore
     #: Repository records — composition-only write half; ``HubServices`` carries the read half.
     repository_records: RepositoryRecordStore
+    #: Forge records — composition-only write half; ``HubServices`` carries the read half.
+    forge_records: ForgeRecordStore
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
@@ -582,6 +590,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         secrets=SecretStore(connections),
         work_source_records=WorkSourceRecordStore(connections),
         repository_records=RepositoryRecordStore(connections),
+        forge_records=ForgeRecordStore(connections),
         secret_referrers=SecretReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
@@ -805,15 +814,20 @@ def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveCon
     )
 
 
-def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher) -> ConfigAuthoring:
-    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher``."""
+def build_config_authoring(
+    stores: TenantStores, *, cipher: ISecretCipher, events: IEventRecorder | None
+) -> ConfigAuthoring:
+    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and recording the old
+    address fields a door's write used through ``events`` — ``None`` where no door writes."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
+        forges=stores.forge_records,
         secrets=stores.secrets,
         cipher=cipher,
         apply_writer=stores.config_apply,
         import_writer=stores.config_import,
+        events=events,
         clock=stores.clock,
     )
 
@@ -890,7 +904,11 @@ type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig], ForgeRegistry]
 def default_forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
     """A tenant's forge registry with every forge kind's adapter, uninstrumented."""
     return build_forge_registry(
-        records=stores.repository_records, objects=live.objects, secrets=live.secrets, clock=stores.clock
+        records=stores.repository_records,
+        forges=stores.forge_records,
+        objects=live.objects,
+        secrets=live.secrets,
+        clock=stores.clock,
     )
 
 
@@ -990,7 +1008,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, events=event_log)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)
@@ -1004,6 +1022,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # not the bare instance, so the garden delivery carries no dependency on the concrete class.
     commit_resolver_for = SeamCommitResolver(
         repositories=stores.repository_records,
+        forge_records=stores.forge_records,
         links=stores.project_links,
         forges=forges,
         loop=parts.action_loop,
@@ -1032,6 +1051,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         graphs=graph_store,
         clock=clock,
         repositories=stores.repository_records,
+        forge_records=stores.forge_records,
         links=stores.project_links,
         projects=stores.projects,
         actions=parts.actions,
@@ -1191,6 +1211,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             authoring=config_authoring,
             repositories=stores.repository_records,
             work_sources=stores.work_source_records,
+            forges=stores.forge_records,
             projects=stores.projects,
             links=stores.project_links,
             scopes=scope_store,
@@ -1203,6 +1224,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
+        forge_records=stores.forge_records,
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,

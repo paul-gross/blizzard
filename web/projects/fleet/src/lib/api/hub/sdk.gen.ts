@@ -732,7 +732,10 @@ export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends bo
  * Reconcile a `version: 1` document (YAML or JSON, by `Content-Type`) in one transaction: create what is
  * absent, edit only the fields an entry states, enable what is retired, leave unnamed records alone. `dry_run`
  * rolls the same transaction back, with the same `outcomes` and no `apply_id`. 422 invalid, 409 conflict, 415
- * unknown `Content-Type`; a refusal leaves the store unchanged.
+ * unknown `Content-Type`; a refusal leaves the store unchanged. An entry's address — a work source's `api_base` and
+ * `web_base`, a repository's `forge_api_url` — resolves to the tenant's forge with that origin, planned in the same
+ * transaction when none holds it; each such field answers a `warnings` entry and a `Deprecation` header. An entry for
+ * a stored record that states no address keeps its forge.
  */
 export const applyConfigApiConfigApplyPost = <ThrowOnError extends boolean = false>(options: Options<ApplyConfigApiConfigApplyPostData, ThrowOnError>): RequestResult<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError> => (options.client ?? client).post<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError>({
     url: '/api/config/apply',
@@ -2186,9 +2189,13 @@ export const listRepositoriesApiRepositoriesGet = <ThrowOnError extends boolean 
 /**
  * Create Repository
  *
- * Store a new repository at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
- * malformed `slug` or `name`, a blank field, a non-http(s) `forge_api_url`, or a missing or retired secret; 409 for
- * a slug some repository holds or a taken `(forge_api_url, owner, repo)`, naming the holder.
+ * Store a new repository at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted.
+ * `forge_api_url` names the forge the old way — the tenant's forge with that API origin, made when none holds it —
+ * and answers a `Deprecation` header and a `warnings` entry. 422 naming the field for a malformed `slug` or `name`, a
+ * blank field, a non-http(s) `forge_api_url`, or a missing or retired secret, with the code `forge_required` for
+ * neither `forge` nor `forge_api_url`, `forge_unavailable` for an unknown or retired forge or an origin a retired
+ * forge holds, and `forge_conflict` for a `forge_api_url` that is not `forge`'s; 409 for a slug some repository
+ * holds or a taken `(forge_api_url, owner, repo)`, naming the holder.
  */
 export const createRepositoryApiRepositoriesPost = <ThrowOnError extends boolean = false>(options: Options<CreateRepositoryApiRepositoriesPostData, ThrowOnError>): RequestResult<CreateRepositoryApiRepositoriesPostResponses, CreateRepositoryApiRepositoriesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateRepositoryApiRepositoriesPostResponses, CreateRepositoryApiRepositoriesPostErrors, ThrowOnError>({
     url: '/api/repositories',
@@ -2212,7 +2219,8 @@ export const getRepositoryApiRepositoriesRepositoryGet = <ThrowOnError extends b
  * Apply only the fields present; an explicit `null` is refused naming the field. A patch
  * that changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims
  * it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a
- * taken `(forge_api_url, owner, repo)`; 422 naming the field.
+ * taken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the repository at
+ * a forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry.
  */
 export const patchRepositoryApiRepositoriesRepositoryPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRepositoryApiRepositoriesRepositoryPatchData, ThrowOnError>): RequestResult<PatchRepositoryApiRepositoriesRepositoryPatchResponses, PatchRepositoryApiRepositoriesRepositoryPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRepositoryApiRepositoriesRepositoryPatchResponses, PatchRepositoryApiRepositoriesRepositoryPatchErrors, ThrowOnError>({
     url: '/api/repositories/{repository}',
@@ -2787,9 +2795,14 @@ export const listWorkSourcesApiWorkSourcesGet = <ThrowOnError extends boolean = 
 /**
  * Create Work Source
  *
- * Store a new work source at revision 1; its `name` is its `slug` when omitted. 422 naming the field for a
- * malformed `slug` or `name` (`hub` among them, the built-in source's), a bad provider or locator, or a missing or
- * retired secret; 409 for a slug some work source holds or a taken `(provider, locator)`, naming the holder.
+ * Store a new work source at revision 1 on the forge `forge` names; its `name` is its `slug` when omitted. Naming
+ * no `forge` is the old way — `api_base` and `web_base`, or GitHub's API when `api_base` is left out — resolved to
+ * the tenant's forge with that API origin, made when none holds it, and answers a `Deprecation` header and a
+ * `warnings` entry. 422 naming the field for a malformed `slug` or `name` (`hub` among them, the built-in source's),
+ * a bad provider or locator, or a missing or retired secret, with the code `forge_unavailable` for an unknown or
+ * retired forge or an origin a retired forge holds, `forge_kind_mismatch` for a forge of another kind than the
+ * provider, and `forge_conflict` for an address that is not the forge's; 409 for a slug some work source holds or a
+ * taken `(provider, locator)`, naming the holder.
  */
 export const createWorkSourceApiWorkSourcesPost = <ThrowOnError extends boolean = false>(options: Options<CreateWorkSourceApiWorkSourcesPostData, ThrowOnError>): RequestResult<CreateWorkSourceApiWorkSourcesPostResponses, CreateWorkSourceApiWorkSourcesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateWorkSourceApiWorkSourcesPostResponses, CreateWorkSourceApiWorkSourcesPostErrors, ThrowOnError>({
     url: '/api/work-sources',
@@ -2811,11 +2824,15 @@ export const getWorkSourceApiWorkSourcesSourceGet = <ThrowOnError extends boolea
 /**
  * Patch Work Source
  *
- * Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
- * `secret` (the last only where the provider needs no credential). A patch that changes
- * nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,
- * 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
- * `(provider, locator)`; 422 naming the field (`hub` refused as a slug).
+ * Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no
+ * credential), re-points the source at GitHub's forge for `api_base`, and means the forge's own web origin for
+ * `web_base`, which a source no longer holds: a `web_base` other than its forge's is refused `forge_conflict`, naming
+ * the forge whose web origin to set instead. A patch that changes nothing writes nothing. A slug that changes keeps
+ * resolving to the source until another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the
+ * current revision), a slug some work source holds, or a taken `(provider, locator)`; 422 naming the field (`hub`
+ * refused as a slug), coded as on create. `forge` re-points the source at a forge; `api_base` does so the old way,
+ * and a cleared `api_base` re-points it at GitHub's; each old field answers a `Deprecation` header and a `warnings`
+ * entry.
  */
 export const patchWorkSourceApiWorkSourcesSourcePatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkSourceApiWorkSourcesSourcePatchData, ThrowOnError>): RequestResult<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}',

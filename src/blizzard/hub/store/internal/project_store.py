@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.projects.model import (
     IWriteProjectRepository,
     Project,

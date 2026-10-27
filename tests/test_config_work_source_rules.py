@@ -8,9 +8,10 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.work_sources import (
     WORK_SOURCE_KIND,
-    ConfigFieldError,
     ConfiguredWorkSource,
     WorkSourceEdit,
     WorkSourceFields,
@@ -24,7 +25,7 @@ from blizzard.hub.domain.config.work_sources import (
 pytestmark = pytest.mark.unit
 
 _FIELDS = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base="https://gh.example", annotate=False, secret="gh"
+    provider="github", locator="acme/demo", forge_id=ForgeId("frg_github"), annotate=False, secret="gh"
 )
 _CTX = ChangeContext(actor="usr_alice", door=Door.CLI)
 _AT = datetime(2026, 10, 12, tzinfo=UTC)
@@ -124,8 +125,8 @@ def test_an_unset_edit_changes_nothing() -> None:
 
 
 def test_an_explicit_none_clears_a_nullable_field_and_an_absent_one_is_left() -> None:
-    merged = merge(_FIELDS, WorkSourceEdit(web_base=None, annotate=True))
-    assert merged.web_base is None
+    merged = merge(_FIELDS, WorkSourceEdit(secret=None, annotate=True))
+    assert merged.secret is None
     assert merged.annotate is True
     assert merged.locator == _FIELDS.locator
 
@@ -149,7 +150,7 @@ def test_a_create_diff_lists_every_set_field_against_null() -> None:
         FieldChange("name", None, "demo"),
         FieldChange("provider", None, "github"),
         FieldChange("locator", None, "acme/demo"),
-        FieldChange("web_base", None, "https://gh.example"),
+        FieldChange("forge", None, "frg_github"),
         FieldChange("annotate", None, False),
         FieldChange("secret", None, "gh"),
     )

@@ -1,5 +1,7 @@
-"""The forge pre-flight check against a real hub process: the startup log names a refusable record, and
-``blizzard hub config check-forges`` names the same one while the hub serves its store (service tier). Run with
+"""The forge pre-flight check as an operator runs it, from the build about to be installed against a store from before
+the forge migration: ``blizzard hub config check-forges`` names a refusable record, and ``blizzard hub migrate`` names
+the same record when it refuses to carry the store over, leaving it where it was (service tier). A hub of this build
+refuses to start on that store at all, so the hub that serves it while the check runs is the previous build's. Run with
 ``BLIZZARD_SERVICE=1``."""
 
 from __future__ import annotations
@@ -10,50 +12,39 @@ from pathlib import Path
 
 import pytest
 
-from tests.config_inputs import init_hub
-from tests.fleet_launchers import await_http, terminate
+from tests.config_inputs import init_hub, migrate_hub
 from tests.forge_check_support import seed_addresses
 from tests.service.support import service_gate
-from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_HUB_BIN = Path(sys.executable).parent / "blizzard-hub"
 _BLIZZARD_BIN = Path(sys.executable).parent / "blizzard"
 _REFUSED_SLUG = "userful"
+#: The chain's head before the forge migration — the store a hub before it serves.
+_BEFORE_FORGES = "20261024_0900_hub_legacy_run"
 
 
-def test_the_startup_log_and_the_command_name_the_same_refusable_record(tmp_path: Path) -> None:
-    import httpx2
+def _blizzard(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([str(_BLIZZARD_BIN), *args], capture_output=True, text=True)
 
+
+def test_the_command_and_the_migration_name_the_same_refusable_record(tmp_path: Path) -> None:
     hub_dir = tmp_path / "hub"
     config = init_hub(hub_dir)
+    migrate_hub(hub_dir, down=_BEFORE_FORGES)
     seed_addresses(
         config.db_url,
         repository_rows=((_REFUSED_SLUG, "https://user@forge.example", "acme", "widget"),),
         sealed_secret=False,
     )
-    port = free_port()
-    log = hub_dir / "daemon.log"
-    proc = subprocess.Popen(
-        [str(_HUB_BIN), "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
-    try:
-        await_http(proc, client, "/api/health", log=log)
-        warned = [line for line in read_daemon_log(log).splitlines() if "forge migration would refuse" in line]
-        assert any(_REFUSED_SLUG in line and "needs-cleaning" in line for line in warned), read_daemon_log(log)
 
-        checked = subprocess.run(
-            [str(_BLIZZARD_BIN), "hub", "config", "check-forges", "--dir", str(hub_dir)],
-            capture_output=True,
-            text=True,
-        )
-        assert checked.returncode == 1, checked.stdout + checked.stderr
-        assert _REFUSED_SLUG in checked.stdout
-    finally:
-        client.close()
-        terminate(proc)
+    checked = _blizzard("hub", "config", "check-forges", "--dir", str(hub_dir))
+    assert checked.returncode == 1, checked.stdout + checked.stderr
+    assert _REFUSED_SLUG in checked.stdout and "needs-cleaning" in checked.stdout, checked.stdout
+
+    migrated = _blizzard("hub", "migrate", "--dir", str(hub_dir))
+    assert migrated.returncode != 0, migrated.stdout + migrated.stderr
+    assert _REFUSED_SLUG in migrated.stdout + migrated.stderr
+
+    again = _blizzard("hub", "config", "check-forges", "--dir", str(hub_dir))
+    assert (again.returncode, again.stdout) == (checked.returncode, checked.stdout)

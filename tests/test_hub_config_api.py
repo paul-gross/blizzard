@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -59,6 +60,9 @@ def test_create_show_list_and_the_built_in_hub(hub: HubHarness) -> None:
         True,
     )
     assert body["created_by"] == "operator"
+    # The create named its forge the old way and is warned; a read answers no warning.
+    assert [w["field"] for w in body.pop("warnings")] == ["api_base"]
+    body["warnings"] = []
     assert hub.client.get("/api/work-sources/demo").json() == body
     assert hub.client.get(f"/api/work-sources/{body['work_source_id']}").json() == body
 
@@ -173,8 +177,12 @@ def test_patch_is_sparse_and_tells_absent_from_null(hub: HubHarness) -> None:
 
     edited = hub.client.patch("/api/work-sources/demo", json={"annotate": False}).json()
     assert (edited["revision"], edited["annotate"], edited["api_base"]) == (2, False, "https://ghe.example/api/v3")
-    cleared = hub.client.patch("/api/work-sources/demo", json={"web_base": None}).json()
-    assert (cleared["revision"], cleared["web_base"], cleared["api_base"]) == (3, None, "https://ghe.example/api/v3")
+    kept = hub.client.patch("/api/work-sources/demo", json={"web_base": None}).json()
+    assert (kept["revision"], kept["web_base"], kept["api_base"]) == (
+        2,
+        "https://ghe.example",
+        "https://ghe.example/api/v3",
+    )
 
     for body, field in (
         ({"secret": None}, "secret"),
@@ -189,7 +197,7 @@ def test_patch_is_sparse_and_tells_absent_from_null(hub: HubHarness) -> None:
         assert resp.status_code == 422, body
         assert resp.json()["detail"][0]["loc"][-1] == field
     assert hub.client.patch("/api/work-sources/nope", json={}).status_code == 404
-    assert hub.client.get("/api/work-sources/demo").json()["revision"] == 3
+    assert hub.client.get("/api/work-sources/demo").json()["revision"] == 2
 
 
 def test_if_match_is_checked_on_patch_retire_and_enable(hub: HubHarness) -> None:
@@ -239,7 +247,7 @@ def test_a_referenced_secret_cannot_be_retired_and_shows_its_references(hub: Hub
     assert hub.client.get("/api/secrets").json()[0]["references"] == shown["references"]
     refused = hub.client.post("/api/secrets/gh/retire")
     assert refused.status_code == 409
-    assert "work_source demo" in refused.json()["detail"]
+    assert "work_source demo" in refused.json()["detail"]["message"]
     assert hub.client.get("/api/secrets/gh").json()["retired"] is False
     hub.client.post("/api/work-sources/demo/retire")
     assert hub.client.get("/api/secrets/gh").json()["references"] == []
@@ -305,6 +313,7 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert [(c["record_kind"], c["op"]) for c in full["changes"]] == [
         ("work_source", "edit"),
         ("work_source", "create"),
+        ("forge", "create"),
         ("secret", "create"),
         ("project", "create"),
     ]
@@ -324,8 +333,8 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     assert len(first["changes"]) == 2
     assert first["next_before"] == first["changes"][-1]["id"]
     rest = hub.client.get("/api/config/changes", params={"limit": 2, "before": first["next_before"]}).json()
-    assert [c["op"] for c in rest["changes"]] == ["create", "create"]
-    assert rest["next_before"] is None
+    assert [(c["record_kind"], c["op"]) for c in rest["changes"]] == [("forge", "create"), ("secret", "create")]
+    assert rest["next_before"] == rest["changes"][-1]["id"]
     assert len(_changes(hub, record_key="gh")) == 1
     assert hub.client.get("/api/config/changes", params={"limit": 201}).status_code == 422
     assert hub.client.get("/api/config/changes", params={"record_kind": "bogus"}).status_code == 422
@@ -418,6 +427,9 @@ def test_a_repository_creates_shows_and_lists(hub: HubHarness) -> None:
     assert (body["revision"], body["retired"], body["created_by"]) == (1, False, "operator")
     assert body["repository_id"].startswith("repo_")
     assert body["name"] == "blizzard"
+    # The create named its forge the old way and is warned; a read answers no warning.
+    assert [w["field"] for w in body.pop("warnings")] == ["forge_api_url"]
+    body["warnings"] = []
     assert hub.client.get("/api/repositories/blizzard").json() == body
     assert hub.client.get(f"/api/repositories/{body['repository_id']}").json() == body
     assert hub.client.get("/api/repositories").json()["repositories"] == [body]
@@ -456,7 +468,9 @@ def test_a_lost_unique_race_on_a_repository_write_names_the_constraint_that_fire
 ) -> None:
     assert _create_repo(hub).status_code == 201
     assert _create_repo(hub, slug="other", repo="other").status_code == 201
-    coordinate_detail = "https://api.github.com acme/blizzard already belongs to repository blizzard; enable it instead"
+    coordinate_detail = (
+        "github (https://api.github.com) acme/blizzard already belongs to repository blizzard; enable it instead"
+    )
     for write in (
         lambda: _create_repo(hub, slug="third"),
         lambda: hub.client.patch("/api/repositories/other", json={"repo": "blizzard"}),
@@ -508,7 +522,7 @@ def test_repository_retire_and_enable_move_the_revision_and_guard_the_secret(hub
     ]
     refused = hub.client.post("/api/secrets/gh/retire")
     assert refused.status_code == 409
-    assert "repository blizzard" in refused.json()["detail"]
+    assert "repository blizzard" in refused.json()["detail"]["message"]
 
     retired = hub.client.post("/api/repositories/blizzard/retire").json()
     assert (retired["revision"], retired["retired"]) == (2, True)
@@ -578,6 +592,20 @@ def _apply_yaml(hub: HubHarness, text: str, *, dry_run: bool = False):  # type: 
     )
 
 
+def _forge_ids_masked(outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``outcomes`` with each minted forge id masked: two applies each mint their own forge for one origin."""
+    return [
+        {
+            **outcome,
+            "diff": [
+                {**change, "new": "frg_*"} if change["field"] == "forge" and change["old"] is None else change
+                for change in outcome["diff"]
+            ],
+        }
+        for outcome in outcomes
+    ]
+
+
 def test_yaml_and_json_bodies_apply_identically(hub: HubHarness, tmp_path: Path) -> None:
     (tmp_path / "other").mkdir()
     other = build_hub(tmp_path / "other")
@@ -592,8 +620,9 @@ def test_yaml_and_json_bodies_apply_identically(hub: HubHarness, tmp_path: Path)
     from_yaml = _apply_yaml(other, _YAML_DOCUMENT)
     assert from_json.status_code == 200, from_json.text
     assert from_yaml.status_code == 200, from_yaml.text
-    assert from_json.json()["outcomes"] == from_yaml.json()["outcomes"]
+    assert _forge_ids_masked(from_json.json()["outcomes"]) == _forge_ids_masked(from_yaml.json()["outcomes"])
     assert [(o["kind"], o["key"], o["op"]) for o in from_json.json()["outcomes"]] == [
+        ("forge", "github", "create"),
         ("work_source", "demo", "create"),
         ("repository", "blizzard", "create"),
     ]
@@ -608,19 +637,19 @@ def test_a_dry_run_writes_nothing_and_matches_the_real_apply(hub: HubHarness) ->
     assert _changes(hub) == before
     assert hub.client.get("/api/work-sources/demo").status_code == 404
     real = _apply_yaml(hub, _YAML_DOCUMENT)
-    assert real.json()["outcomes"] == dry.json()["outcomes"]
+    assert _forge_ids_masked(real.json()["outcomes"]) == _forge_ids_masked(dry.json()["outcomes"])
 
 
 def test_the_rows_an_apply_writes_carry_the_apply_door_and_one_apply_id(hub: HubHarness) -> None:
     applied = _apply_yaml(hub, _YAML_DOCUMENT).json()
     rows = [r for r in _changes(hub) if r["door"] == "apply"]
-    assert len(rows) == 2
+    assert [r["record_kind"] for r in rows] == ["repository", "work_source", "forge"]
     assert {r["apply_id"] for r in rows} == {applied["apply_id"]}
     assert _apply_yaml(hub, _YAML_DOCUMENT).json()["outcomes"] == [
         {"kind": "work_source", "key": "demo", "op": "unchanged", "diff": []},
         {"kind": "repository", "key": "blizzard", "op": "unchanged", "diff": []},
     ]
-    assert len([r for r in _changes(hub) if r["door"] == "apply"]) == 2
+    assert len([r for r in _changes(hub) if r["door"] == "apply"]) == 3
 
 
 def test_a_claimed_apply_door_on_another_route_still_records_api(hub: HubHarness) -> None:
@@ -805,7 +834,7 @@ def test_scopes_and_routines_create_then_stand_unchanged(hub: HubHarness) -> Non
     assert hub.client.get("/api/routines").json() == []
     assert hub.client.get("/api/scopes/core").status_code == 404
     real = _apply_json(hub, _GARDEN)
-    assert real.json()["outcomes"] == dry.json()["outcomes"]
+    assert _forge_ids_masked(real.json()["outcomes"]) == _forge_ids_masked(dry.json()["outcomes"])
     routine = _routine(hub)
     assert (routine["default_scope_slug"], routine["revision"]) == ("core", 2)
     assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["core", "edge"]

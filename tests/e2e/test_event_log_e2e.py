@@ -139,6 +139,26 @@ def _reset_fixture(bin_dir: Path, scratch: Path) -> tuple[Path, Path]:
     return workspace, fixture_root / "origins"
 
 
+_OLD_FIELD_KIND = "config-old-field-used"
+
+
+def _seeded_events(hub: httpx2.Client) -> int:
+    """The number of events already on a freshly seeded hub: the fixture's repository and work source name their forge
+    by the old address fields, and each such write records a ``config-old-field-used`` warning — the only events it
+    carries."""
+    events = hub.get("/api/events").json()["events"]
+    assert {event["kind"] for event in events} <= {_OLD_FIELD_KIND}, events
+    return len(events)
+
+
+def _seeded_activity(hub: httpx2.Client) -> int:
+    """The number of activity rows already on a freshly seeded hub, each one of the old-field events
+    :func:`_seeded_events` counts."""
+    rows = hub.get("/api/activity").json()["activity"]
+    assert {row.get("kind") for row in rows} <= {_OLD_FIELD_KIND}, rows
+    return len(rows)
+
+
 def _push_event(
     hub: httpx2.Client,
     *,
@@ -189,6 +209,7 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
         # Seed a mixed-severity feed whose newest event is deliberately neither the most nor the
         # least severe, so the render order tells recency from severity (either severity order
         # would put the critical row first; recency puts it last).
+        seeded = _seeded_events(hub)
         _push_event(hub, seq=1, severity="critical", kind="worker-lost", chunk_id=chunk_id, message="lost")
         _push_event(hub, seq=2, severity="info", kind="attempt-abandoned", chunk_id=chunk_id, message="abandoned")
         _push_event(hub, seq=3, severity="warning", kind="attempt-failed", chunk_id=chunk_id, message="retried")
@@ -203,15 +224,16 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 # Open the Events tab from the desktop nav.
                 page.get_by_test_id("nav-events").click()
                 expect(page.get_by_test_id("events-panel")).to_be_visible()
-                expect(page.get_by_test_id("events-row")).to_have_count(3)
+                expect(page.get_by_test_id("events-row")).to_have_count(seeded + 3)
                 # Newest first: the warning row leads and the critical row, the oldest, trails.
-                expect(page.get_by_test_id("events-message")).to_have_text(["retried", "abandoned", "lost"])
+                for position, message in enumerate(["retried", "abandoned", "lost"]):
+                    expect(page.get_by_test_id("events-message").nth(position)).to_have_text(message)
 
                 # The severity filter narrows the list, then restores it.
                 page.get_by_test_id("events-filter-critical").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(1)
                 page.get_by_test_id("events-filter-all").click()
-                expect(page.get_by_test_id("events-row")).to_have_count(3)
+                expect(page.get_by_test_id("events-row")).to_have_count(seeded + 3)
 
                 # One runner in the feed so far — nothing to narrow by, so the runner filter
                 # row is hidden (AC#6: the runner axis exists, but only when it discriminates).
@@ -228,7 +250,7 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                     message="other runner",
                     runner_name="runner-two",
                 )
-                expect(page.get_by_test_id("events-row")).to_have_count(4)
+                expect(page.get_by_test_id("events-row")).to_have_count(seeded + 4)
                 expect(page.get_by_test_id("events-runner-filter")).to_be_visible()
 
                 # The runner filter narrows to just the second runner's event, then restores. Its
@@ -244,7 +266,7 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 expect(page.get_by_test_id("events-message").first).to_have_text("other runner")
                 page.get_by_test_id("events-runner-filter").click()
                 page.get_by_test_id("events-runner-filter-all").click()
-                expect(page.get_by_test_id("events-row")).to_have_count(4)
+                expect(page.get_by_test_id("events-row")).to_have_count(seeded + 4)
 
                 # A row deep-links to its chunk (the board).
                 page.get_by_test_id("events-chunk").first.click()
@@ -275,6 +297,7 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
             "chunk_id"
         ]
+        seeded = _seeded_events(hub)
         _push_event(
             hub,
             seq=1,
@@ -289,7 +312,7 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
             page = browser.new_page(viewport=narrow_viewport)
             try:
                 page.goto(f"http://127.0.0.1:{hub_port}/events", wait_until="load")
-                expect(page.get_by_test_id("events-row")).to_have_count(1)
+                expect(page.get_by_test_id("events-row")).to_have_count(seeded + 1)
 
                 box = page.get_by_test_id("events-row").first.bounding_box()
                 assert box is not None, "the events row has no layout box"
@@ -327,6 +350,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
     _workspace, origins = _reset_fixture(bin_dir, tmp_path / "scratch")
     forge_port, hub_port = free_port(), free_port()
     with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        seeded = _seeded_activity(hub)
         assert hub.post("/api/graphs", json={"definition_yaml": _activity_graph_yaml()}).status_code == 201
         issue = forge.post(f"/repos/{REPO}/issues", json={"title": "activity burst", "body": "chunk"})
         chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
@@ -347,16 +371,16 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
             try:
                 page.goto(f"http://127.0.0.1:{hub_port}/board", wait_until="load")
                 # The mint and the promotion; the runner's add has no durable row, so the rail drops it live too.
-                expect(page.get_by_test_id("activity-row")).to_have_count(2)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 2)
                 assert not any("added to the fleet" in message for message in _rail_messages(page))
                 claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
                 assert claim["claimed"] is True, claim
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 3)
                 assert any("claimed" in message for message in _rail_messages(page))
 
                 completed = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
                 assert completed["response"]["outcome"] == "next", completed
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 4)
                 node_id = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
                 facts = [
                     {"seq": 3, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": 2}},
@@ -381,7 +405,7 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 assert pushed.status_code == 200, pushed.text
                 assert pushed.json()["applied"] == [3, 4], pushed.text
                 expect(page.get_by_test_id("spend-today-value")).to_have_text("$0.03")
-                expect(page.get_by_test_id("activity-row")).to_have_count(4)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 4)
 
                 asked = hub.post(
                     "/api/fleet/events",
@@ -407,11 +431,11 @@ def test_activity_rail_tracks_claim_transition_and_fact_burst_across_reload(
                 )
                 assert asked.status_code == 200, asked.text
                 assert asked.json()["applied"] == [5], asked.text
-                expect(page.get_by_test_id("activity-row")).to_have_count(5)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 5)
 
                 read = hub.get("/api/activity").json()["activity"]
                 keys = [row["key"] for row in read]
-                assert len(keys) == len(set(keys)) == 5, read
+                assert len(keys) == len(set(keys)) == seeded + 5, read
                 assert {row["cause"] for row in read if row["type"] == "chunk-changed"} == {
                     "minted",
                     "promoted",
@@ -453,6 +477,7 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
         page = browser.new_page()
         try:
             with run_hub(hub_dir, forge_port, hub_port) as hub:
+                seeded = _seeded_activity(hub)
                 issue_a = forge.post(f"/repos/{REPO}/issues", json={"title": "reload seam A", "body": "chunk a"})
                 chunk_a = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue_a.json()['number']}"]}).json()[
                     "chunk_id"
@@ -476,9 +501,9 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # Facts already landed before this subscribes; the initial activity read supplies the durable
                 # baseline. The add of the runner that pushed the event has no durable row, so it never renders.
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 3)
                 first_load_messages = _rail_messages(page)
-                assert len(first_load_messages) == 3, first_load_messages
+                assert len(first_load_messages) == seeded + 3, first_load_messages
 
             # The hub exits here; facts are durable (sqlite) but `EventBroker`'s replay
             # ring is not — the next `run_hub()` call starts a fresh, empty one over the same store.
@@ -487,7 +512,7 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
                 expect(page.get_by_test_id("activity-panel")).to_be_visible()
                 # The fresh broker's replay tail is empty — only `GET /api/activity` backfill can repopulate
                 # these rows.
-                expect(page.get_by_test_id("activity-row")).to_have_count(3)
+                expect(page.get_by_test_id("activity-row")).to_have_count(seeded + 3)
                 reload_messages = _rail_messages(page)
 
                 # The event-logged row carries the same severity/kind fields whichever
@@ -498,8 +523,10 @@ def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: 
 
                 # Live-rendered rows carry the `→` transition arrow; backfill-rendered rows
                 # are the bare chunk ref — the flip proves the backfill path, not leftover replay.
-                first_mint_rows = [m for m in first_load_messages if m != event_message]
-                reload_mint_rows = [m for m in reload_messages if m != reload_event_message]
+                first_mint_rows = [m for m in first_load_messages if m != event_message and _OLD_FIELD_KIND not in m]
+                reload_mint_rows = [
+                    m for m in reload_messages if m != reload_event_message and _OLD_FIELD_KIND not in m
+                ]
                 assert len(first_mint_rows) == len(reload_mint_rows) == 2, (first_mint_rows, reload_mint_rows)
                 assert all("→" in m for m in first_mint_rows), first_mint_rows
                 assert all("→" not in m for m in reload_mint_rows), reload_mint_rows

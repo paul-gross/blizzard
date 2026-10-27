@@ -79,6 +79,13 @@ def _schema(engine: sa.Engine) -> dict[str, object]:
 
 _ALLOWED_VALUES = re.compile(r"^\s*(\w+)\s+IN\s*\(\s*'([^']*)'")
 
+#: The forge addresses a seeded row holds: an origin each, as a store any later revision carries over holds them.
+_ADDRESSES = {
+    ("repositories", "forge_api_url"): "https://api.github.com",
+    ("work_sources", "api_base"): "https://api.github.com",
+    ("work_sources", "web_base"): "https://github.com",
+}
+
 
 def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
     """One row in every table outside the global list, built from the store's reflected shape: every
@@ -99,7 +106,7 @@ def _seed_every_tenant_owned_table(engine: sa.Engine) -> set[str]:
                 if (match := _ALLOWED_VALUES.match(check["sqltext"])) is not None
             }
             row = {
-                column.name: allowed.get(column.name, _value_for(column))
+                column.name: _ADDRESSES.get((table.name, column.name), allowed.get(column.name, _value_for(column)))
                 for column in table.columns
                 if column.server_default is None
             }

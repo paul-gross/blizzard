@@ -94,6 +94,7 @@ def _linked(hub: HubHarness, slug: str) -> tuple[list[str], list[str]]:
 def test_a_projects_entry_creates_the_project_and_its_links_with_the_apply_id(hub: HubHarness) -> None:
     applied = _apply(hub, {"work_sources": [_SOURCE], "repositories": [_REPO], "projects": [_WEB]})
     assert _rows(applied) == [
+        ("forge", "github", "create"),
         ("work_source", "demo", "create"),
         ("repository", "blizzard", "create"),
         ("project", "web", "create"),
@@ -104,6 +105,7 @@ def test_a_projects_entry_creates_the_project_and_its_links_with_the_apply_id(hu
     apply_id = applied.json()["apply_id"]
     written = [c for c in _changes(hub) if c["apply_id"] == apply_id]
     assert {(c["record_kind"], c["door"]) for c in written} == {
+        ("forge", "apply"),
         ("work_source", "apply"),
         ("repository", "apply"),
         ("project", "apply"),

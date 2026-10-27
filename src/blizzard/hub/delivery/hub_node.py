@@ -64,6 +64,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryId,
@@ -286,6 +287,7 @@ class HubNodeExecutor:
         graphs: IReadManyGraphs,
         clock: IClock,
         repositories: IReadRepositoryRecordRepository,
+        forge_records: IReadForgeRepository,
         links: IReadProjectLinks,
         projects: IReadProjectRepository,
         actions: HubActions,
@@ -310,6 +312,7 @@ class HubNodeExecutor:
         self._graphs = graphs
         self._clock = clock
         self._repositories = repositories
+        self._forge_records = forge_records
         self._links = links
         self._projects = projects
         self._actions = actions
@@ -475,7 +478,7 @@ class HubNodeExecutor:
         if requirement is None:
             return None
         for target in resolution.targets:
-            offered = self._forges.offered(target.forge_api_url, RepositoryId(target.record))
+            offered = self._forges.offered(resolution.forge_of(target), RepositoryId(target.record))
             missing = sorted(requirement(target) - offered)
             if missing:
                 return target, missing[0]
@@ -489,6 +492,7 @@ class HubNodeExecutor:
         target: ResolvedRepository,
         capability: Capability,
         *,
+        forge: ConfiguredForge,
         epoch: int,
     ) -> HubRunResult:
         """Refuse the visit before its pass: only an operator can change what a forge offers or what an action
@@ -496,7 +500,7 @@ class HubNodeExecutor:
         per visit; its event only when the escalation takes — a second visit finds the chunk escalated and
         records neither again."""
         detail = (
-            f"repository {target.slug or target.record} on {target.forge_api_url} does not offer `{capability}`, "
+            f"repository {target.slug or target.record} on forge {forge.label} does not offer `{capability}`, "
             f"which `{action_name}` requires"
         )
         self._artifacts.record_hub_artifact(
@@ -512,7 +516,7 @@ class HubNodeExecutor:
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
         outcome = self._record_escalation(chunk, escalation, epoch=epoch)
         if outcome is BounceEscalationOutcome.RECORDED:
-            self._record_capability_missing(chunk, node, target, capability, detail, epoch=epoch)
+            self._record_capability_missing(chunk, node, target, forge, capability, detail, epoch=epoch)
         return self._escalated(escalation, outcome)
 
     def _record_capability_missing(
@@ -520,6 +524,7 @@ class HubNodeExecutor:
         chunk: Chunk,
         node: Node,
         target: ResolvedRepository,
+        forge: ConfiguredForge,
         capability: Capability,
         detail: str,
         *,
@@ -537,7 +542,7 @@ class HubNodeExecutor:
                 "epoch": epoch,
                 "capability": str(capability),
                 "repository": target.record,
-                "forge": target.forge_api_url,
+                "forge": forge.fields.api_base,
             },
             at=self._clock.now(),
         )
@@ -577,6 +582,7 @@ class HubNodeExecutor:
         resolution = resolve_chunk_repositories(
             git_commits.origins(),
             self._repositories.list_all(include_retired=True),
+            self._forge_records.list_all(include_retired=True),
             minted_at=chunk.minted_at,
             linked=project.linked,
             project=project.slug,
@@ -586,7 +592,10 @@ class HubNodeExecutor:
         if refusal is None and spec.lands:
             refusal = self._ambiguity_refusal(resolution)
         if refusal is None and (missing := self._missing_capability(action_name, resolution)) is not None:
-            return self._escalate_capability_missing(chunk, node, action_name, *missing, epoch=epoch)
+            target, capability = missing
+            return self._escalate_capability_missing(
+                chunk, node, action_name, target, capability, forge=resolution.forge_of(target), epoch=epoch
+            )
         if refusal is None and spec.lands:
             forges, refusal = self._visit_forges(resolution)
         if refusal is not None:
@@ -631,9 +640,7 @@ class HubNodeExecutor:
             return self._escalate(chunk, answer.escalation, epoch=epoch)
         if answer.waits():
             return self._record_pending(chunk, node, epoch=epoch, next_poll_at=answer.next_poll_at)
-        commits = [
-            {k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution.targets)
-        ]
+        commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         choice = answer.choice or HUB_DEFAULT_FAILURE_CHOICE
         bounced = BouncedAction(name=action_name, choice=choice, log_artifact=log_artifact)
         return self._route(chunk, graph, node, epoch=epoch, choice=choice, commits=commits, action=bounced)
@@ -801,8 +808,8 @@ class HubNodeExecutor:
                 return (
                     "repository-ambiguous",
                     f"the repo {repo!r} resolves to two repository records, and so to one marker name: "
-                    f"record {first.record!r} ({first.forge_api_url}) and record {target.record!r} "
-                    f"({target.forge_api_url})",
+                    f"record {first.record!r} ({resolution.forge_of(first).fields.api_base}) and record "
+                    f"{target.record!r} ({resolution.forge_of(target).fields.api_base})",
                 )
         return None
 
@@ -872,6 +879,7 @@ class HubNodeExecutor:
         resolution = resolve_chunk_repositories(
             rows.origins(),
             self._repositories.list_all(include_retired=True),
+            self._forge_records.list_all(include_retired=True),
             minted_at=chunk.minted_at,
             linked=project.linked,
             project=project.slug,

@@ -25,15 +25,17 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryFields, RepositorySlugTaken
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
-from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceLocatorTaken, WorkSourceSlugTaken
+from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -42,19 +44,23 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
+from tests.support import (
+    RecordedEvents,
+    default_project,
+    default_tenant,
+    hub_scoped,
+    migrated_hub_at,
+    scoped_connections,
+)
 
 pytestmark = pytest.mark.component
 
 _AT = datetime(2026, 10, 8, 12, 0, 0, tzinfo=UTC)
 _SECOND = TenantId("ten_01KTENANTKEYSSECOND000000")
 _CLI = ChangeContext(actor="alice", door=Door.CLI)
-_SOURCE = WorkSourceFields(
-    provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
-)
-_REPO = RepositoryFields(
-    forge_api_url="https://api.github.com", owner="acme", repo="demo", base_branch="master", secret_name="gh"
-)
+_SOURCE = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
+_GITHUB = ForgeChoice(api_base="https://api.github.com")
+_REPO = RepositoryDraft(owner="acme", repo="demo", base_branch="master", secret_name="gh")
 
 
 @dataclass(frozen=True)
@@ -170,10 +176,12 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
     return ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
+        forges=ForgeRecordStore(store),
         secrets=SecretStore(store),
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        events=RecordedEvents(),
         clock=FixedClock(_AT),
     )
 
@@ -184,20 +192,20 @@ def test_two_tenants_each_configure_a_same_named_secret_source_and_repository_on
     for tenant in (tenants.first, tenants.second):
         authoring = _authoring(tenants, tenant)
         authoring.create_secret(SecretName.parse("gh"), f"token-of-{tenant}", _CLI)
-        authoring.create_work_source("acme", None, _SOURCE, _CLI)
-        authoring.create_repository("demo", None, _REPO, _CLI)
+        authoring.create_work_source_naming("acme", None, _SOURCE, ForgeChoice(), _CLI)
+        authoring.create_repository_naming("demo", None, _REPO, _GITHUB, _CLI)
 
     first = _authoring(tenants, tenants.first)
     with pytest.raises(SecretAlreadyExists):
         first.create_secret(SecretName.parse("gh"), "again", _CLI)
     with pytest.raises(WorkSourceSlugTaken):
-        first.create_work_source("acme", None, _SOURCE, _CLI)
+        first.create_work_source_naming("acme", None, _SOURCE, ForgeChoice(), _CLI)
     with pytest.raises(WorkSourceLocatorTaken):
-        first.create_work_source("acme-again", None, _SOURCE, _CLI)
+        first.create_work_source_naming("acme-again", None, _SOURCE, ForgeChoice(), _CLI)
     with pytest.raises(RepositorySlugTaken):
-        first.create_repository("demo", None, _REPO, _CLI)
+        first.create_repository_naming("demo", None, _REPO, _GITHUB, _CLI)
     with pytest.raises(RepositoryCoordinateTaken):
-        first.create_repository("demo-again", None, _REPO, _CLI)
+        first.create_repository_naming("demo-again", None, _REPO, _GITHUB, _CLI)
 
 
 def test_each_tenants_hub_source_numbers_its_work_items_from_one(tenants: _Tenants) -> None:

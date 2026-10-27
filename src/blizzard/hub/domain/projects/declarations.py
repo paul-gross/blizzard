@@ -28,11 +28,11 @@ from blizzard.hub.domain.config.apply import (
 )
 from blizzard.hub.domain.config.carry_over import IImportLinks, LegacyImportRefused
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import (
     WORK_SOURCE_KIND,
     BuiltInWorkSource,
-    ConfigFieldError,
     WorkSourceId,
     WorkSourceRef,
     require_configurable,

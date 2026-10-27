@@ -74,12 +74,13 @@ class GitCommits:
         return [CommitOrigin.of(row.forge, row.repo or row.name) for row in self.rows]
 
     def payload(
-        self, qualified: tuple[str, ...] = (), targets: tuple[ResolvedRepository, ...] = ()
+        self, qualified: tuple[str, ...] = (), resolution: RepositoryResolution | None = None
     ) -> list[dict[str, str | None]]:
         """The ``run:`` env's commit list: ``repo`` is the ``owner/repo`` of the repository record the
         row resolved to (``qualified``, in :attr:`rows` order); unresolved, the row's own identity.
-        Given ``targets`` (one per row), each entry also carries its own record's target: ``forge_url``,
-        ``owner``, ``base_branch`` and the ``record`` id."""
+        Given a ``resolution`` with one target per row, each entry also carries its own record's target:
+        ``forge_url`` — its forge's API origin — ``owner``, ``base_branch`` and the ``record`` id."""
+        targets: tuple[ResolvedRepository, ...] = () if resolution is None else resolution.targets
         entries: list[dict[str, str | None]] = []
         for index, row in enumerate(self.rows):
             entry: dict[str, str | None] = {
@@ -90,7 +91,7 @@ class GitCommits:
             if targets:
                 target = targets[index]
                 entry |= {
-                    "forge_url": target.forge_api_url,
+                    "forge_url": resolution.forge_of(target).fields.api_base if resolution else None,
                     "owner": target.owner,
                     "base_branch": target.base_branch,
                     "record": target.record,

@@ -2833,3 +2833,216 @@ def test_a_landing_in_a_repository_its_project_had_not_linked_is_a_violation(tmp
         f"chunk ch_home of project {home} landed acme/app in repository app-repo, which its project had not "
         "linked by then",
     ]
+
+
+def _secret(conn: sa.Connection, tenant: str) -> None:
+    conn.execute(
+        hub_scoped(insert(hub.secrets)).values(
+            tenant_id=tenant,
+            name="tok",
+            ciphertext="c",
+            nonce="n",
+            key_id="k",
+            revision=1,
+            replaced_at=_NOW,
+            replaced_by="test",
+            created_at=_NOW,
+        )
+    )
+
+
+def _forge(conn: sa.Connection, forge_id: str, *, tenant: str, api_base: str, web_base: str | None = None) -> None:
+    conn.execute(
+        hub_scoped(insert(hub.forges)).values(
+            tenant_id=tenant,
+            forge_id=forge_id,
+            slug=forge_id,
+            name=forge_id,
+            kind="github",
+            api_base=api_base,
+            web_base=web_base,
+            revision=1,
+            created_at=_NOW,
+            created_by="test",
+        )
+    )
+
+
+def _forge_repository(
+    conn: sa.Connection, repository_id: str, *, tenant: str, forge_id: str | None, forge_api_url: str
+) -> None:
+    conn.execute(
+        hub_scoped(insert(hub.repositories)).values(
+            tenant_id=tenant,
+            repository_id=repository_id,
+            slug=repository_id,
+            name=repository_id,
+            forge_api_url=forge_api_url,
+            owner="acme",
+            repo=repository_id,
+            base_branch="main",
+            secret_name="tok",
+            revision=1,
+            created_at=_NOW,
+            created_by="test",
+            forge_id=forge_id,
+        )
+    )
+
+
+def _forge_source(
+    conn: sa.Connection,
+    work_source_id: str,
+    *,
+    tenant: str,
+    forge_id: str | None,
+    api_base: str | None,
+    web_base: str | None = None,
+    provider: str = "github",
+) -> None:
+    conn.execute(
+        hub_scoped(insert(hub.work_sources)).values(
+            tenant_id=tenant,
+            work_source_id=work_source_id,
+            slug=work_source_id,
+            name=work_source_id,
+            provider=provider,
+            locator=f"acme/{work_source_id}",
+            api_base=api_base,
+            web_base=web_base,
+            annotate=False,
+            revision=1,
+            created_at=_NOW,
+            created_by="test",
+            forge_id=forge_id,
+        )
+    )
+
+
+def _retire(conn: sa.Connection, facts: sa.Table, key: str, value: str, *, tenant: str, retired: bool = True) -> None:
+    conn.execute(
+        hub_scoped(insert(facts)).values(
+            {key: value, "retired": retired, "set_at": _NOW, "set_by": "op", "tenant_id": tenant}
+        )
+    )
+
+
+def test_a_record_off_its_forge_is_a_forge_reference_standing_violation(tmp_path: Path) -> None:
+    """A record naming no forge, an enabled record on a retired forge, a source whose provider is not its forge's
+    kind, and an address column apart from its forge's are breaches; a retired record on a retired forge, a forge
+    re-enabled after retiring, and a record naming another tenant's forge (the in-tenant check's) are not."""
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    github, ghe = "https://api.github.com", "https://ghe.acme/api/v3"
+    with engine.begin() as conn:
+        _secret(conn, tenant)
+        _forge(conn, "frg_github", tenant=tenant, api_base=github)
+        _forge(conn, "frg_ghe", tenant=tenant, api_base=ghe, web_base="https://ghe.acme")
+        _forge(conn, "frg_back", tenant=tenant, api_base="https://back.example")
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_ghe", tenant=tenant)
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_back", tenant=tenant)
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_back", tenant=tenant, retired=False)
+        _forge_repository(conn, "repo_ok", tenant=tenant, forge_id="frg_github", forge_api_url=github)
+        _forge_repository(conn, "repo_back", tenant=tenant, forge_id="frg_back", forge_api_url="https://back.example")
+        _forge_repository(conn, "repo_none", tenant=tenant, forge_id=None, forge_api_url=github)
+        _forge_repository(conn, "repo_spelled", tenant=tenant, forge_id="frg_github", forge_api_url=f"{github}/")
+        _forge_repository(conn, "repo_on_retired", tenant=tenant, forge_id="frg_ghe", forge_api_url=ghe)
+        _forge_repository(conn, "repo_retired", tenant=tenant, forge_id="frg_ghe", forge_api_url=ghe)
+        _retire(conn, hub.repository_lifecycle_facts, "repository_id", "repo_retired", tenant=tenant)
+        _forge_repository(conn, "repo_elsewhere", tenant=tenant, forge_id="frg_gone", forge_api_url=github)
+        _forge_source(conn, "wsrc_ok", tenant=tenant, forge_id="frg_github", api_base=github)
+        _forge_source(conn, "wsrc_none", tenant=tenant, forge_id=None, api_base=None)
+        _forge_source(conn, "wsrc_null_api", tenant=tenant, forge_id="frg_github", api_base=None)
+        _forge_source(conn, "wsrc_web", tenant=tenant, forge_id="frg_ghe", api_base=ghe, web_base=None)
+        _retire(conn, hub.work_source_lifecycle_facts, "work_source_id", "wsrc_web", tenant=tenant)
+        _forge_source(conn, "wsrc_kind", tenant=tenant, forge_id="frg_github", api_base=github, provider="gitlab")
+
+    assert _project_breaches(engine, "hub:forge-reference-standing") == [
+        f"tenant {tenant}: repository repo_none names no forge",
+        f"tenant {tenant}: repository repo_on_retired is enabled and names retired forge frg_ghe",
+        f"tenant {tenant}: repository repo_spelled holds forge_api_url 'https://api.github.com/', not its forge "
+        "frg_github's api_base 'https://api.github.com'",
+        f"tenant {tenant}: work source wsrc_kind of provider gitlab names forge frg_github of kind github",
+        f"tenant {tenant}: work source wsrc_none names no forge",
+        f"tenant {tenant}: work source wsrc_null_api holds api_base None, not its forge frg_github's "
+        "'https://api.github.com'",
+        f"tenant {tenant}: work source wsrc_web holds web_base None, not its forge frg_ghe's 'https://ghe.acme'",
+    ]
+
+
+def test_a_forge_reference_outside_its_tenant_is_a_violation(tmp_path: Path) -> None:
+    """A record, a former slug, a lifecycle fact, or a change row naming another tenant's forge, or a forge that is not
+    stored at all, is a breach; a reference to the tenant's own forge and a record naming none are not."""
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    github = "https://api.github.com"
+    with engine.begin() as conn:
+        _secret(conn, tenant)
+        conn.execute(
+            hub_scoped(insert(hub.tenants)).values(
+                tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test"
+            )
+        )
+        _forge(conn, "frg_home", tenant=tenant, api_base=github)
+        _forge(conn, "frg_other", tenant="tnt_other", api_base=github)
+        _forge_repository(conn, "repo_home", tenant=tenant, forge_id="frg_home", forge_api_url=github)
+        _forge_repository(conn, "repo_none", tenant=tenant, forge_id=None, forge_api_url="https://x.example")
+        _forge_repository(conn, "repo_other", tenant=tenant, forge_id="frg_other", forge_api_url="https://y.example")
+        _forge_source(conn, "wsrc_home", tenant=tenant, forge_id="frg_home", api_base=github)
+        _forge_source(conn, "wsrc_gone", tenant=tenant, forge_id="frg_gone", api_base=github)
+        conn.execute(
+            hub_scoped(insert(hub.forge_former_slugs)).values(
+                tenant_id=tenant, slug="old", forge_id="frg_other", left_at=_NOW
+            )
+        )
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_home", tenant=tenant)
+        _retire(conn, hub.forge_lifecycle_facts, "forge_id", "frg_other", tenant=tenant)
+        for key in ("frg_home", "frg_other"):
+            conn.execute(
+                insert(hub.config_changes).values(
+                    stamp(
+                        hub.config_changes,
+                        tenant_id=tenant,
+                        recorded_at=_NOW,
+                        actor="op",
+                        door="cli",
+                        record_kind="forge",
+                        record_key=key,
+                        revision=1,
+                        op="create",
+                        diff="[]",
+                    )
+                )
+            )
+        changes = hub.config_changes
+        change_ids = list(
+            conn.execute(
+                hub_scoped(sa.select(changes.c.id).where(changes.c.record_kind == "forge").order_by(changes.c.id))
+            ).scalars()
+        )
+        fact_id = conn.execute(hub_scoped(sa.select(sa.func.max(hub.forge_lifecycle_facts.c.id)))).scalar_one()
+
+    assert _project_breaches(engine, "hub:forge-references-in-tenant") == [
+        f"repositories row repo_other of tenant {tenant} names forge frg_other, not a forge of its tenant",
+        f"work_sources row wsrc_gone of tenant {tenant} names forge frg_gone, not a forge of its tenant",
+        f"forge_former_slugs row old of tenant {tenant} names forge frg_other, not a forge of its tenant",
+        f"forge_lifecycle_facts row {fact_id} of tenant {tenant} names forge frg_other, not a forge of its tenant",
+        f"config_changes row {change_ids[1]} of tenant {tenant} names forge frg_other, not a forge of its tenant",
+    ]
+
+
+def test_a_forge_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    tenant = default_tenant(engine)
+    with engine.begin() as conn:
+        _forge(conn, "frg_a", tenant=tenant, api_base="https://a.example")
+        _forge(conn, "frg_b", tenant=tenant, api_base="https://b.example")
+        conn.execute(
+            hub_scoped(insert(hub.forge_former_slugs)).values(
+                tenant_id=tenant, slug="frg_a", forge_id="frg_b", left_at=_NOW
+            )
+        )
+
+    assert _project_breaches(engine, "hub:slug-not-current-and-former") == [
+        f"tenant {tenant}: slug frg_a is forge frg_a's and forge frg_b's former slug"
+    ]

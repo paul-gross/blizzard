@@ -338,6 +338,64 @@ secret_lifecycle_facts = Table(
 )
 Index("ix_secret_lifecycle_facts_tenant_id", secret_lifecycle_facts.c.tenant_id)
 
+# --- Forges (configured records: one per forge server a repository or work source names) ---
+# A forge is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant and editable,
+# and ``name`` a display label, unique nowhere and never resolved. ``api_base`` is stored canonical, one forge per
+# origin within the tenant; ``web_base`` null derives from it.
+
+forges = Table(
+    "forges",
+    metadata,
+    Column("forge_id", String, nullable=False, info={"hub_unique": True}),  # frg_<ulid>
+    Column("slug", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("api_base", String, nullable=False),
+    Column("web_base", String, nullable=True),
+    Column("revision", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_forges_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("forge_id", name="pk_forges"),
+    UniqueConstraint("tenant_id", "slug", name="uq_forges_tenant_slug"),
+    UniqueConstraint("tenant_id", "api_base", name="uq_forges_tenant_api_base"),
+)
+
+# A slug a forge moved away from; at most one forge holds a given former slug.
+forge_former_slugs = Table(
+    "forge_former_slugs",
+    metadata,
+    Column("slug", String, nullable=False),
+    Column("forge_id", String, ForeignKey("forges.forge_id", name="fk_forge_former_slugs_forges"), nullable=False),
+    Column("left_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_forge_former_slugs_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("tenant_id", "slug", name="pk_forge_former_slugs"),
+)
+
+# Forge retire/enable facts: append-only, newest wins.
+forge_lifecycle_facts = Table(
+    "forge_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("forge_id", String, nullable=False),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_forge_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(["forge_id"], ["forges.forge_id"], name="fk_forge_lifecycle_facts_forges"),
+)
+Index("ix_forge_lifecycle_facts_tenant_id", forge_lifecycle_facts.c.tenant_id)
+
 # --- Work sources (configured records; secret_name references a secret, never a value) ---
 # A work source is named by its id everywhere; ``slug`` is the handle people type, unique within the tenant, editable,
 # and never ``hub``, and ``name`` a display label, unique nowhere and never resolved.
@@ -350,14 +408,18 @@ work_sources = Table(
     Column("name", String, nullable=False),
     Column("provider", String, nullable=False),
     Column("locator", String, nullable=False),
-    Column("api_base", String, nullable=True),
-    Column("web_base", String, nullable=True),
+    # Kept equal to the named forge's addresses by the store; read by nothing but a hub walked back past the forges.
+    Column("api_base", String, nullable=True, info={"deprecated": "0.3"}),
+    Column("web_base", String, nullable=True, info={"deprecated": "0.3"}),
     Column("annotate", Boolean, nullable=False),
     Column("secret_name", String, nullable=True),
     Column("revision", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_sources_tenant_id"), nullable=False),
+    # The forge the source reads its tracker on; nullable and without a foreign key through the forge transition,
+    # ``hub:forge-reference-standing`` and ``hub:forge-references-in-tenant`` holding what the constraints would.
+    Column("forge_id", String, nullable=True),
     PrimaryKeyConstraint("work_source_id", name="pk_work_sources"),
     UniqueConstraint("tenant_id", "slug", name="uq_work_sources_tenant_slug"),
     UniqueConstraint("tenant_id", "provider", "locator", name="uq_work_sources_tenant_provider_locator"),
@@ -420,7 +482,8 @@ repositories = Table(
     Column("repository_id", String, nullable=False, info={"hub_unique": True}),  # repo_<ulid>
     Column("slug", String, nullable=False),
     Column("name", String, nullable=False),
-    Column("forge_api_url", String, nullable=False),
+    # Kept equal to the named forge's ``api_base`` by the store; read by nothing but a hub walked back past the forges.
+    Column("forge_api_url", String, nullable=False, info={"deprecated": "0.3"}),
     Column("owner", String, nullable=False),
     Column("repo", String, nullable=False),
     Column("base_branch", String, nullable=False),
@@ -429,6 +492,9 @@ repositories = Table(
     Column("created_at", UtcDateTime, nullable=False),
     Column("created_by", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_repositories_tenant_id"), nullable=False),
+    # The forge the repository lives on; nullable and without a foreign key through the forge transition, as
+    # ``work_sources.forge_id`` is.
+    Column("forge_id", String, nullable=True),
     PrimaryKeyConstraint("repository_id", name="pk_repositories"),
     UniqueConstraint("tenant_id", "slug", name="uq_repositories_tenant_slug"),
     UniqueConstraint("tenant_id", "forge_api_url", "owner", "repo", name="uq_repositories_tenant_coordinate"),

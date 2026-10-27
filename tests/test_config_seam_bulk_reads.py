@@ -30,6 +30,7 @@ from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    capture_statements,
     chunk_stores,
     count_queries,
     hub_store_connections,
@@ -360,6 +361,19 @@ def test_enabled_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hu
 # --- Call sites ----------------------------------------------------------------------------
 
 
+def _apply_statements(hub: HubHarness, document: dict[str, object]) -> tuple[list[str], int, int]:
+    """The ops a no-op apply of ``document`` answers, the statements it issues besides recording its
+    ``config-old-field-used`` events — each one ``event_log`` insert under its tenant lock, one per old address field
+    an entry states, so they grow with the entries by design — and how many events it recorded."""
+    ops: list[str] = []
+    with capture_statements(hub.engine) as statements:
+        ops.extend(_apply(hub, document))
+    texts = [statement.lstrip().upper() for statement, _ in statements]
+    events = [i for i, text in enumerate(texts) if text.startswith("INSERT INTO EVENT_LOG")]
+    recording = {*events, *(i - 1 for i in events)}
+    return ops, len(texts) - len(recording), len(events)
+
+
 def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path: Path) -> None:
     counts = []
     for n in (1, _N):
@@ -368,9 +382,10 @@ def test_config_export_and_a_no_op_apply_are_flat_across_project_counts(tmp_path
         exported = hub.client.get("/api/config/export").json()
         assert len(exported["projects"]) == n + 1
         export = count_queries(hub.engine, lambda hub=hub: hub.client.get("/api/config/export"))
-        ops: list[str] = []
-        apply = count_queries(hub.engine, lambda hub=hub, exported=exported, ops=ops: ops.extend(_apply(hub, exported)))
+        ops, apply, events = _apply_statements(hub, exported)
         assert set(ops) == {"unchanged"}
+        # Each exported source states api_base and web_base, each repository forge_api_url.
+        assert events == 3 * n
         counts.append((export, apply))
     assert counts[0] == counts[1]
 

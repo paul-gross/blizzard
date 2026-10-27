@@ -11,7 +11,7 @@ import pytest
 from blizzard.foundation.ids import Id
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, FieldChange, RecordKind
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.id_or_slug import MatchedBy
 from blizzard.hub.domain.projects.model import (
     Project,

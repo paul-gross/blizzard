@@ -190,6 +190,8 @@ class _Target:
     commit: str
     record: ResolvedRepository
     forge: RepositoryForge
+    #: How a refusal names the forge: its slug and API origin.
+    forge_label: str
 
     @property
     def base_branch(self) -> str:
@@ -201,7 +203,7 @@ class _Target:
     async def ask[T](self, call: Awaitable[T]) -> T:
         """``call``'s answer; a rejected credential or a repository the forge does not know raises
         :class:`_Escalation`, since no worker can repair either."""
-        where = f"{self.repo} on {self.record.forge_api_url}"
+        where = f"{self.repo} on forge {self.forge_label}"
         try:
             return await call
         except ForgeRejected as exc:
@@ -526,6 +528,7 @@ class Land:
                 commit=row.data.partition(":")[2],
                 record=resolution.targets[index],
                 forge=forges[RepositoryId(resolution.targets[index].record)],
+                forge_label=resolution.forge_of(resolution.targets[index]).label,
             )
             for index, row in enumerate(rows)
         ]

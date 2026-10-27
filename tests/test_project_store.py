@@ -15,14 +15,11 @@ from blizzard.foundation.project_colors import ProjectColor
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange, RecordKind
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryDraft
 from blizzard.hub.domain.config.secrets import SecretName
-from blizzard.hub.domain.config.work_sources import (
-    ConfigRevisionConflict,
-    ConfiguredWorkSource,
-    WorkSourceFields,
-    WorkSourceId,
-)
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceDraft, WorkSourceId
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId, ProjectSlug, ProjectSlugTaken
 from blizzard.hub.secrets import hub_key_provider
@@ -86,25 +83,13 @@ class _World:
         return list(reversed(page))
 
     def source(self, name: str) -> ConfiguredWorkSource:
-        fields = WorkSourceFields(
-            provider="github",
-            locator=f"acme/{name}",
-            api_base=None,
-            web_base=None,
-            annotate=False,
-            secret="forge-token",
-        )
-        return self.config().create_work_source(name, None, fields, OP)
+        draft = WorkSourceDraft(provider="github", locator=f"acme/{name}", annotate=False, secret="forge-token")
+        return self.config().create_work_source_naming(name, None, draft, ForgeChoice(), OP).record
 
     def repository(self, name: str) -> ConfiguredRepository:
-        fields = RepositoryFields(
-            forge_api_url="https://api.github.com",
-            owner="acme",
-            repo=name,
-            base_branch="main",
-            secret_name="forge-token",
-        )
-        return self.config().create_repository(name, None, fields, OP)
+        draft = RepositoryDraft(owner="acme", repo=name, base_branch="main", secret_name="forge-token")
+        choice = ForgeChoice(api_base="https://api.github.com")
+        return self.config().create_repository_naming(name, None, draft, choice, OP).record
 
 
 @pytest.fixture

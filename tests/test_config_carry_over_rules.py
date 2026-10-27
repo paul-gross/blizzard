@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.carry_over import (
     secret_name_of,
 )
 from blizzard.hub.domain.config.changes import Door, RecordKind
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
@@ -29,6 +30,23 @@ pytestmark = pytest.mark.unit
 _AT = datetime(2026, 10, 6, 9, 0, tzinfo=UTC)
 _NONE = ExistingConfig(secrets=frozenset(), work_sources=(), repositories=())
 _FORGE = {"BZ_FORGE_URL": "https://api.github.com", "BZ_FORGE_TOKEN": "forge-tok"}
+
+
+def _forge(slug: str, api_base: str) -> ConfiguredForge:
+    return ConfiguredForge(
+        forge_id=ForgeId(f"frg_{slug}"),
+        slug=slug,
+        name=slug,
+        kind="github",
+        fields=ForgeFields(api_base, None),
+        revision=1,
+        created_at=_AT,
+        created_by="op",
+    )
+
+
+_GITHUB = _forge("github", "https://api.github.com")
+_EXAMPLE = _forge("example", "https://forge.example/api")
 
 
 def _source(name: str, repo: str, token_env: str = "BZ_SHARED_TOKEN") -> WorkSourceConfig:
@@ -100,8 +118,10 @@ def test_a_bare_origin_falls_back_to_bz_forge_owner_then_blizzard() -> None:
 
 def test_a_repository_takes_the_forge_url_base_branch_and_forge_token_secret() -> None:
     plan = _plan(_legacy(), _FORGE, (CommitCoordinate(None, "widget"),))
+    [(forge, change)] = plan.forges
+    assert (forge.slug, forge.fields.api_base, change.actor) == ("github", "https://api.github.com", "migration")
     assert _repos(plan)["widget"] == RepositoryFields(
-        forge_api_url="https://api.github.com",
+        forge_id=forge.forge_id,
         owner="blizzard",
         repo="widget",
         base_branch="main",
@@ -110,6 +130,20 @@ def test_a_repository_takes_the_forge_url_base_branch_and_forge_token_secret() -
     assert [secret.name.value for secret in plan.secrets] == ["bz-forge-token"]
     with_branch = _plan(_legacy(), {**_FORGE, "BZ_FORGE_BASE_BRANCH": "trunk"}, (CommitCoordinate(None, "widget"),))
     assert _repos(with_branch)["widget"].base_branch == "trunk"
+
+
+def test_a_forge_url_spelled_otherwise_resolves_to_the_forge_holding_its_origin() -> None:
+    existing = ExistingConfig(secrets=frozenset(), work_sources=(), repositories=(), forges=(_GITHUB,))
+    values = {"BZ_FORGE_URL": "HTTPS://API.github.com/", "BZ_FORGE_TOKEN": "t"}
+    plan = _plan(
+        _legacy(_source("a", "acme/a")),
+        {**values, "BZ_SHARED_TOKEN": "s"},
+        (CommitCoordinate(None, "widget"),),
+        existing,
+    )
+    assert plan.forges == ()
+    assert _repos(plan)["widget"].forge_id == _GITHUB.forge_id
+    assert [source.fields.forge_id for source, _ in plan.work_sources] == [_GITHUB.forge_id]
 
 
 def test_two_artifacts_on_one_coordinate_collapse_to_one_repository() -> None:
@@ -135,7 +169,7 @@ def test_records_the_store_already_holds_are_skipped() -> None:
         slug="other",
         name="other",
         fields=WorkSourceFields(
-            provider="github", locator="acme/a", api_base=None, web_base=None, annotate=False, secret="x"
+            provider="github", locator="acme/a", forge_id=_GITHUB.forge_id, annotate=False, secret="x"
         ),
         revision=1,
         created_at=_AT,
@@ -146,17 +180,20 @@ def test_records_the_store_already_holds_are_skipped() -> None:
         repository_id=RepositoryId("repo_mine"),
         slug="mine",
         name="mine",
-        fields=RepositoryFields("https://api.github.com", "blizzard", "widget", "main", "x"),
+        fields=RepositoryFields(_GITHUB.forge_id, "blizzard", "widget", "main", "x"),
         revision=1,
         created_at=_AT,
         created_by="op",
     )
     existing = ExistingConfig(
-        secrets=frozenset({"bz-shared-token"}), work_sources=(held_source,), repositories=(held_repo,)
+        secrets=frozenset({"bz-shared-token"}),
+        work_sources=(held_source,),
+        repositories=(held_repo,),
+        forges=(_GITHUB,),
     )
     values = {"BZ_FORGE_URL": "https://api.github.com"}
     plan = _plan(_legacy(_source("a", "acme/a")), values, (CommitCoordinate(None, "widget"),), existing)
-    assert plan.secrets == plan.work_sources == plan.repositories == ()
+    assert plan.secrets == plan.work_sources == plan.repositories == plan.forges == ()
     assert set(plan.outcomes) == {
         ImportOutcome(RecordKind.SECRET, "bz-shared-token", created=False),
         ImportOutcome(RecordKind.WORK_SOURCE, "a", created=False),
@@ -181,7 +218,7 @@ def _held(owner: str, repo: str, slug: str) -> ConfiguredRepository:
         repository_id=RepositoryId(f"repo_{slug}"),
         slug=slug,
         name=slug,
-        fields=RepositoryFields("https://forge.example/api", owner, repo, "main", "x"),
+        fields=RepositoryFields(_EXAMPLE.forge_id, owner, repo, "main", "x"),
         revision=1,
         created_at=_AT,
         created_by="op",

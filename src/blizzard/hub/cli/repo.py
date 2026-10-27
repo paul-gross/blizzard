@@ -8,6 +8,7 @@ import click
 
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.forge_warnings import echo_warnings
 from blizzard.hub.cli.views import Listing
 
 _IF_MATCH = click.option(
@@ -49,7 +50,13 @@ def repo_group() -> None:
 @repo_group.command("create", cls=FleetCommand)
 @click.argument("slug")
 @click.option("--name", default=None, help="The repository's display name (default: SLUG).")
-@click.option("--forge-api-url", "forge_api_url", required=True, help="The forge's API origin, an http(s) URL.")
+@click.option("--forge", "forge", default=None, help="The forge the repository is on, by id or slug.")
+@click.option(
+    "--forge-api-url",
+    "forge_api_url",
+    default=None,
+    help="Deprecated — use --forge. The forge's API origin, an http(s) URL, resolved to the forge holding it.",
+)
 @click.option("--owner", required=True, help="The repository's owner on the forge.")
 @click.option("--repo", "repo", required=True, help="The repository's name on the forge.")
 @click.option("--base-branch", "base_branch", required=True, help="The branch work lands on.")
@@ -58,21 +65,28 @@ def repo_create(
     cli: CliContext,
     slug: str,
     name: str | None,
-    forge_api_url: str,
+    forge: str | None,
+    forge_api_url: str | None,
     owner: str,
     repo: str,
     base_branch: str,
     secret: str,
 ) -> None:
-    """Add repository SLUG at revision 1, named NAME (default: SLUG).
+    """Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.
+
+    Exactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge
+    holding that origin — made when none does — and warned about.
 
     Refused when SLUG is another repository's current slug, when the forge, owner and repo are already taken — a
     retired repository keeps its claim — or when the secret is missing or retired. The hub resolves a chunk's
     commits against the record on its next deliver."""
+    if (forge is None) == (forge_api_url is None):
+        raise click.UsageError("name the forge with exactly one of --forge and --forge-api-url")
+    named = {"forge": forge} if forge is not None else {"forge_api_url": forge_api_url}
     body = {
         "slug": slug,
         "name": name if name is not None else slug,
-        "forge_api_url": forge_api_url,
+        **named,
         "owner": owner,
         "repo": repo,
         "base_branch": base_branch,
@@ -80,6 +94,7 @@ def repo_create(
     }
     resp = cli.post("/api/repositories", "POST /repositories", json_body=body, on_status=_refusals(slug), door=True)
     out = resp.json()
+    echo_warnings(out)
     cli.show_lines(out, f"repository {out['slug']} created at revision 1 — id {out['repository_id']}")
 
 
@@ -108,7 +123,7 @@ def repo_show(cli: CliContext, repository: str) -> None:
         body,
         f"{body['slug']}  {body['name']}  revision {body['revision']}  {_state(body)}",
         f"id {body['repository_id']}",
-        f"forge_api_url {body['forge_api_url']}  {body['owner']}/{body['repo']}",
+        f"forge {body['forge_slug']}  {body['forge_api_url']}  {body['owner']}/{body['repo']}",
         f"base_branch {body['base_branch']}  secret {body['secret_name']}",
         f"created {body['created_at']} by {body['created_by']}",
     )
@@ -118,7 +133,10 @@ def repo_show(cli: CliContext, repository: str) -> None:
 @click.argument("repository")
 @click.option("--slug", default=None, help="The new slug; the one it leaves keeps naming the repository.")
 @click.option("--name", default=None, help="The new display name.")
-@click.option("--forge-api-url", "forge_api_url", default=None, help="The new forge API origin.")
+@click.option("--forge", "forge", default=None, help="The forge to move the repository to, by id or slug.")
+@click.option(
+    "--forge-api-url", "forge_api_url", default=None, help="Deprecated — use --forge. The new forge API origin."
+)
 @click.option("--owner", default=None, help="The new owner.")
 @click.option("--repo", "repo", default=None, help="The new repository name on the forge.")
 @click.option("--base-branch", "base_branch", default=None, help="The new base branch.")
@@ -129,6 +147,7 @@ def repo_edit(
     repository: str,
     slug: str | None,
     name: str | None,
+    forge: str | None,
     forge_api_url: str | None,
     owner: str | None,
     repo: str | None,
@@ -144,6 +163,7 @@ def repo_edit(
     given = {
         "slug": slug,
         "name": name,
+        "forge": forge,
         "forge_api_url": forge_api_url,
         "owner": owner,
         "repo": repo,
@@ -162,6 +182,7 @@ def repo_edit(
         door=True,
     )
     out = resp.json()
+    echo_warnings(out)
     cli.show_lines(out, f"repository {out['slug']} is at revision {out['revision']}")
 
 

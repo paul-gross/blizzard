@@ -19,7 +19,9 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, WorkSourceEdit, WorkSourceSlug
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.forges import ForgeEdit
+from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceId, WorkSourceSlug
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
@@ -162,6 +164,25 @@ def test_a_secret_replace_reaches_the_next_get_and_a_later_one_closes_the_replac
     assert client.put("/api/secrets/gh/value", json={"value": "tok-c"}).status_code == 200
     _adapter(services)
     assert before._client.is_closed
+
+
+def test_a_forge_edit_rebuilds_the_adapter_of_every_source_naming_it(
+    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+) -> None:
+    client, services = hub
+    source_id = _create(client, services, forge[1])
+    before = _adapter(services)
+    tenant = _tenant(services)
+    record = tenant.work_source_records.get(WorkSourceId(source_id))
+    assert record is not None
+    named = tenant.forge_records.get(record.fields.forge_id)
+    assert named is not None
+
+    tenant.config_authoring.edit_forge(named, ForgeEdit(web_base="https://code.acme.example"), OP)
+
+    after = _adapter(services)
+    assert after is not before
+    assert after._web_base == "https://code.acme.example"
 
 
 def test_a_locator_edit_reaches_the_next_resolve(

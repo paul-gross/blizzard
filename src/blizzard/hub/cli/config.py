@@ -13,11 +13,12 @@ from blizzard.cli.collaborators import Response
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
+from blizzard.hub.cli.forge_warnings import echo_warnings
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import accepted_extensions, codec_for_path
 
-_KINDS = click.Choice(["work_source", "repository", "secret", "scope", "routine", "project"])
+_KINDS = click.Choice(["work_source", "repository", "forge", "secret", "scope", "routine", "project"])
 
 
 class ChangeListing(Listing):
@@ -102,7 +103,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     """Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.
 
     Creates what is absent, edits only the fields the document states, enables what is retired, and never
-    touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome."""
+    touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. An
+    entry's address field is resolved to the forge holding that origin and warned about."""
     codec = codec_for_path(file)
     if codec is None:
         raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")
@@ -117,6 +119,7 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
         raise click.ClickException(_refusal(cli, resp))
     cli.check(resp, "POST /config/apply")
     payload = resp.json()
+    echo_warnings(payload)
     cli.show(payload, ApplyListing(payload["outcomes"]))
 
 

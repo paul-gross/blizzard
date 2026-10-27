@@ -11,7 +11,8 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import Id
-from blizzard.hub.domain.config.repositories import RepositoryEdit, RepositoryFields
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit
 from blizzard.hub.domain.config_apply.entries import DeclaredRepository, DocumentEntries
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
@@ -27,14 +28,9 @@ _ENTRIES = DocumentEntries(
         DeclaredRepository(
             slug="blizzard",
             name=None,
-            fields=RepositoryFields(
-                forge_api_url="https://api.github.com",
-                owner="acme",
-                repo="blizzard",
-                base_branch="master",
-                secret_name="gh",
-            ),
+            draft=RepositoryDraft(owner="acme", repo="blizzard", base_branch="master", secret_name="gh"),
             edit=RepositoryEdit(),
+            forge=ForgeChoice(api_base="https://api.github.com"),
         ),
     ),
     projects=(ProjectDeclaration(slug="web", edit=ProjectEdit(name="Web"), sources=None, repositories=("blizzard",)),),
@@ -54,6 +50,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         authoring=services.config_authoring,
         repositories=services.repository_records,
         work_sources=services.work_source_records,
+        forges=services.forge_records,
         projects=services.projects,
         links=services.project_links,
         scopes=services.scopes,
@@ -79,6 +76,7 @@ def test_a_real_apply_mints_its_apply_id_and_record_ids_from_the_clock(hub: HubH
         before=None, limit=50, record_kind=None, record_key=None, project_id=None
     )
     assert {change.record_kind.value for change in changes if change.apply_id == applied.apply_id} == {
+        "forge",
         "repository",
         "project",
         "project_repository_link",
@@ -93,9 +91,11 @@ def test_a_dry_run_mints_no_apply_id_and_rolls_back(hub: HubHarness) -> None:
 
     assert applied.apply_id is None
     assert [(o.kind.value, o.key, o.op.value if o.op else None) for o in applied.outcomes] == [
+        ("forge", "github", "create"),
         ("repository", "blizzard", "create"),
         ("project", "web", "create"),
         ("project_repository_link", "web/blizzard", "create"),
     ]
     assert hub.services.repository_records.list_all(include_retired=True) == []
+    assert hub.services.forge_records.list_all(include_retired=True) == []
     assert hub.services.config_changes.count(record_kind=None, record_key=None, project_id=None) == before

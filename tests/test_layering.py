@@ -3584,11 +3584,17 @@ def test_secret_plaintext_guard_catches_every_import_form(tmp_path: Path) -> Non
 
 
 _CONFIGURED_WRITE_NAMES = frozenset(
-    {"IWriteSecretRepository", "IWriteWorkSourceRepository", "IWriteRepositoryRecordRepository"}
+    {
+        "IWriteSecretRepository",
+        "IWriteWorkSourceRepository",
+        "IWriteRepositoryRecordRepository",
+        "IWriteForgeRepository",
+    }
 )
 _CONFIGURED_WRITE_HOMES = frozenset(
     {
         _HUB_DIR / "domain" / "config" / "authoring.py",
+        _HUB_DIR / "domain" / "config" / "forges.py",
         _HUB_DIR / "domain" / "config" / "work_sources.py",
         _HUB_DIR / "domain" / "config" / "repositories.py",
         _HUB_DIR / "domain" / "config" / "secrets.py",

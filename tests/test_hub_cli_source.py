@@ -93,7 +93,7 @@ def test_edit_sets_clears_and_refuses_a_stale_if_match(client: TestClient) -> No
 
     assert "revision 2" in _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"]).output
     assert "revision 3" in _source(["edit", "demo", "--clear", "api-base"]).output
-    assert json.loads(_source(["show", "demo", "--json"]).stdout)["api_base"] is None
+    assert json.loads(_source(["show", "demo", "--json"]).stdout)["api_base"] == "https://api.github.com"
     stale = _source(["edit", "demo", "--if-match", "1", "--no-annotate"])
     assert stale.exit_code != 0
     assert "revision 3" in stale.output
@@ -135,7 +135,8 @@ def test_config_changes_carry_the_cli_door_and_no_secret_value(client: TestClien
     lines = text.output.strip().splitlines()
     assert "api  work_source demo  r2  edit  annotate" in lines[0]
     assert "cli  work_source demo  r1  create" in lines[1]
-    assert "cli  secret gh-demo  r1  create" in lines[2]
+    assert "cli  forge github  r1  create" in lines[2]
+    assert "cli  secret gh-demo  r1  create" in lines[3]
     assert _SENTINEL not in text.output
 
     raw = json.loads(_cli("config", ["changes", "--json", "--kind", "secret", "--all"]).stdout)
@@ -179,7 +180,7 @@ def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> No
     (tmp_path / "c.yml").write_text(_APPLY_YAML)
     first = _config(["apply", str(tmp_path / "a.yaml")])
     assert first.exit_code == 0, first.output
-    assert len(_lines(first.output, "create")) == 2
+    assert len(_lines(first.output, "create")) == 3
     from_json = _config(["apply", str(tmp_path / "b.json")])
     assert from_json.exit_code == 0, from_json.output
     assert len(_lines(from_json.output, "create")) == 1
@@ -205,7 +206,7 @@ def test_a_dry_run_prints_the_outcome_and_writes_nothing(client: TestClient, tmp
     before = _changes_count()
     dry = _config(["apply", str(path), "--dry-run"])
     assert dry.exit_code == 0, dry.output
-    assert len(_lines(dry.output, "create")) == 2
+    assert len(_lines(dry.output, "create")) == 3
     assert _changes_count() == before
     real = _config(["apply", str(path)])
     assert _lines(real.output, "create") == _lines(dry.output, "create")
@@ -240,3 +241,34 @@ def test_a_refused_apply_reports_the_hub_s_refusal(client: TestClient, tmp_path:
     result = _config(["apply", str(path)])
     assert result.exit_code != 0
     assert "secrets.0: secret gh-demo is unknown" in result.output
+
+
+def test_forge_names_the_source_s_forge_and_the_old_flags_warn(client: TestClient) -> None:
+    _seed(client)
+    moved = _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"])
+    assert moved.exit_code == 0, moved.output
+    assert "warning: api_base is deprecated; it resolved to forge ghe-example" in moved.stderr
+    assert "forge ghe-example" in _source(["show", "demo"]).output
+
+    back = _source(["edit", "demo", "--forge", "github"])
+    assert back.exit_code == 0, back.output
+    assert "warning:" not in back.stderr
+    assert json.loads(_source(["show", "demo", "--json"]).stdout)["forge_slug"] == "github"
+
+    created = _source(
+        [
+            "create",
+            "other",
+            "--provider",
+            "github",
+            "--locator",
+            "acme/o",
+            "--secret",
+            "gh-demo",
+            "--forge",
+            "ghe-example",
+        ]
+    )
+    assert created.exit_code == 0, created.output
+    assert "warning:" not in created.stderr
+    assert json.loads(_source(["show", "other", "--json"]).stdout)["api_base"] == "https://ghe.example/api/v3"

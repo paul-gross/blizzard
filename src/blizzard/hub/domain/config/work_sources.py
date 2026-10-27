@@ -25,6 +25,8 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
     Verdict,
 )
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.forges import ForgeId, NewForge
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
@@ -43,27 +45,13 @@ PROVIDERS_NEEDING_CREDENTIAL = frozenset({"github"})
 _GITHUB_LOCATOR = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 #: The mutable fields, in the order a diff lists them.
-_FIELDS = ("provider", "locator", "api_base", "web_base", "annotate", "secret")
-_NULLABLE = frozenset({"api_base", "web_base", "secret"})
-#: Every field a diff lists: the record's own handle and label, then the mutable fields.
-_DIFF_FIELDS = ("slug", "name", *_FIELDS)
-
-
-class ConfigFieldError(ValueError):
-    """A write is invalid on one field, which it names."""
-
-    def __init__(self, field: str, message: str) -> None:
-        super().__init__(f"{field}: {message}")
-        self.field = field
-        self.message = message
-
-
-class ConfigRevisionConflict(Exception):
-    """A write read a revision the store no longer holds — names the current one."""
-
-    def __init__(self, kind: str, key: str, *, current: int) -> None:
-        super().__init__(f"{kind} {key} is at revision {current}")
-        self.current = current
+_FIELDS = ("provider", "locator", "forge_id", "annotate", "secret")
+_NULLABLE = frozenset({"secret"})
+#: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
+#: recorded by its id under ``forge``, as every reference is held.
+_DIFF_FIELDS = ("slug", "name", "provider", "locator", "forge", "annotate", "secret")
+#: The wire name a field's change is listed under, where it differs from the field's own.
+_DIFF_NAMES = {"forge": "forge_id"}
 
 
 class WorkSourceSlugTaken(Exception):
@@ -145,14 +133,29 @@ type IWorkSourceLookup = IIdOrSlugLookup[WorkSourceId, WorkSourceSlug, Configure
 @domain_model
 @dataclass(frozen=True)
 class WorkSourceFields:
-    """The mutable fields of a work source, by wire name."""
+    """The mutable fields of a work source: its provider and locator, the forge whose tracker it reads, by id — of the
+    provider's kind — and its credential."""
 
     provider: str
     locator: str
-    api_base: str | None
-    web_base: str | None
+    forge_id: ForgeId
     annotate: bool
     secret: str | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class WorkSourceDraft:
+    """A work source's fields before its forge is resolved — every field but the forge."""
+
+    provider: str
+    locator: str
+    annotate: bool
+    secret: str | None
+
+    def on(self, forge_id: ForgeId) -> WorkSourceFields:
+        """The fields of a work source reading its tracker on the forge ``forge_id``."""
+        return WorkSourceFields(self.provider, self.locator, forge_id, self.annotate, self.secret)
 
 
 @domain_model
@@ -263,8 +266,7 @@ class WorkSourceEdit:
     name: str | None | UnsetType = UNSET
     provider: str | UnsetType = UNSET
     locator: str | UnsetType = UNSET
-    api_base: str | None | UnsetType = UNSET
-    web_base: str | None | UnsetType = UNSET
+    forge_id: ForgeId | UnsetType = UNSET
     annotate: bool | UnsetType = UNSET
     secret: str | None | UnsetType = UNSET
 
@@ -280,11 +282,18 @@ def require_configurable(key: str) -> None:
         raise BuiltInWorkSource()
 
 
+def require_known_provider(provider: str) -> None:
+    """:class:`ConfigFieldError` on ``provider`` when no work-source provider grammar is ``provider`` — checked before
+    the forge a write names, whose kind the provider decides."""
+    if provider not in KNOWN_WORK_SOURCE_PROVIDERS:
+        known = sorted(KNOWN_WORK_SOURCE_PROVIDERS)
+        raise ConfigFieldError("provider", f"unknown provider {provider!r} (known: {known})")
+
+
 def validate_fields(fields: WorkSourceFields) -> None:
-    if fields.provider not in KNOWN_WORK_SOURCE_PROVIDERS:
-        raise ConfigFieldError(
-            "provider", f"unknown provider {fields.provider!r} (known: {sorted(KNOWN_WORK_SOURCE_PROVIDERS)})"
-        )
+    require_known_provider(fields.provider)
+    if not fields.forge_id or not fields.forge_id.strip():
+        raise ConfigFieldError("forge", "must not be blank")
     if fields.provider == "github" and not _GITHUB_LOCATOR.match(fields.locator):
         raise ConfigFieldError("locator", f"github locator must be owner/name, got {fields.locator!r}")
     if fields.secret is None and fields.provider in PROVIDERS_NEEDING_CREDENTIAL:
@@ -337,7 +346,7 @@ def diff(old: ConfiguredWorkSource | None, new: ConfiguredWorkSource) -> tuple[F
 
 
 def _field(record: ConfiguredWorkSource, name: str) -> object:
-    return getattr(record if name in ("slug", "name") else record.fields, name)
+    return getattr(record if name in ("slug", "name") else record.fields, _DIFF_NAMES.get(name, name))
 
 
 class IReadWorkSourceRepository(Protocol):
@@ -375,16 +384,27 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
     """Adds the work-source writes; each method commits ``change`` in the same transaction as
     the record write."""
 
-    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
-        """Insert, taking ``record.slug`` from any work source that left it. :class:`WorkSourceSlugTaken` /
-        :class:`WorkSourceLocatorTaken` on a collision; :class:`WorkSourceSecretUnavailable` when the secret is missing
-        or retired."""
+    def create(
+        self, record: ConfiguredWorkSource, *, change: ConfigChange, forge: NewForge | None = None
+    ) -> ConfiguredWorkSource:
+        """Insert, taking ``record.slug`` from any work source that left it, after creating ``forge``, when given, in
+        the same transaction. :class:`WorkSourceSlugTaken` / :class:`WorkSourceLocatorTaken` on a collision;
+        :class:`WorkSourceSecretUnavailable` when the secret is missing or retired; :class:`ForgeOriginTaken` /
+        :class:`ForgeSlugTaken` when another forge holds ``forge``'s origin or slug."""
         ...
 
     def update(
-        self, record: ConfiguredWorkSource, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredWorkSource,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        forge: NewForge | None = None,
     ) -> ConfiguredWorkSource:
-        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
+        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision — after creating ``forge``, when
+        given, in the same transaction, :class:`ForgeOriginTaken` or :class:`ForgeSlugTaken` when another forge holds
+        its origin or slug;
         :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
         the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this work
         source's former slug at ``change.recorded_at``. :class:`WorkSourceSlugTaken` when another work source holds the

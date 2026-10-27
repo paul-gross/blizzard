@@ -16,7 +16,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, FieldChange, RecordKind
-from blizzard.hub.domain.config.work_sources import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import (
     IWriteRoutineRepository,
     IWriteRoutineScopeRepository,

@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { repositoryBadges, repositoryCreate, repositoryRecordVm, repositoryRows } from './repositories.model';
 
 const BLIZZARD: RepositorySummary = {
+  forge_id: 'frg_github',
+  forge_slug: 'github',
+  forge_name: 'GitHub',
+  warnings: [],
   repository_id: 'repo_1',
   slug: 'blizzard',
   name: 'blizzard',

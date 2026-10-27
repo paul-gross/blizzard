@@ -12,7 +12,7 @@ from sqlalchemy.sql.selectable import Join
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.work_sources import ConfigRevisionConflict
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
 from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.routine_store import link_scope, move_revision

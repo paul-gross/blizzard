@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import cast
 
 import pytest
@@ -32,6 +33,7 @@ from blizzard.hub.delivery.actions.land_checks import (
     Verdict,
     first_parent_chain,
 )
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 from blizzard.hub.forge.landing import (
     Change,
@@ -58,9 +60,21 @@ _BRANCH = "feature-branch"
 _Compares = dict[tuple[str, str], Comparison]
 
 
+_FORGE = ConfiguredForge(
+    forge_id=ForgeId("frg_example"),
+    slug="example",
+    name="example",
+    kind="github",
+    fields=ForgeFields("http://forge", None),
+    revision=1,
+    created_at=datetime(2026, 10, 1, tzinfo=UTC),
+    created_by="op",
+)
+
+
 def _target(state: DoubleRepo | None = None, *, commit: str = "sha1") -> _Target:
     record = ResolvedRepository(
-        forge_api_url="http://forge", owner="acme", base_branch="main", secret_name="s", record="re_widget"
+        forge_id=_FORGE.forge_id, owner="acme", base_branch="main", secret_name="s", record="re_widget"
     )
     double = GitHubDouble({_REPO: state or DoubleRepo()})
     return _Target(
@@ -70,6 +84,7 @@ def _target(state: DoubleRepo | None = None, *, commit: str = "sha1") -> _Target
         commit=commit,
         record=record,
         forge=double.forge("re_widget", _REPO),
+        forge_label=_FORGE.label,
     )
 
 

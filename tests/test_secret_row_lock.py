@@ -1,7 +1,8 @@
 """The secret-row lock: secret retire and every referrer write lock the named secret's row first.
 
 Static proof, no live Postgres: each write body's first statement — the one right after the scoped write's own
-tenant-row lock — is compiled under both dialects and must be ``UPDATE secrets SET``."""
+tenant-row lock and, for a referrer, the lock of the forge it names (``tests/test_forge_row_lock.py``) — is compiled
+under both dialects and must be ``UPDATE secrets SET``."""
 
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from sqlalchemy.sql.dml import Update
 from structlog import get_logger
 
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, Door, RecordKind
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.store.errors import HubStoreErrorFactory
@@ -34,7 +36,7 @@ _SOURCE = ConfiguredWorkSource(
     slug="demo",
     name="demo",
     fields=WorkSourceFields(
-        provider="github", locator="acme/demo", api_base=None, web_base=None, annotate=False, secret="gh"
+        provider="github", locator="acme/demo", forge_id=ForgeId("frg_1"), annotate=False, secret="gh"
     ),
     revision=2,
     created_at=_AT,
@@ -44,7 +46,7 @@ _REPO = ConfiguredRepository(
     repository_id=RepositoryId("repo_1"),
     slug="widget",
     name="widget",
-    fields=RepositoryFields("https://api.github.com", "acme", "widget", "main", "gh"),
+    fields=RepositoryFields(ForgeId("frg_1"), "acme", "widget", "main", "gh"),
     revision=2,
     created_at=_AT,
     created_by="op",
@@ -56,15 +58,39 @@ class _Stop(Exception):
 
 
 class _FirstStatementConn:
-    """A fake ``Connection`` that records the first statement handed to ``execute`` and stops the body there."""
+    """A fake ``Connection`` that records the first statement handed to ``execute`` past the named forge's lock and
+    its read — a stand-in forge, enabled and of the source's kind — and stops the body there."""
 
     def __init__(self, scoped: Connection) -> None:
         self.statements: list[object] = []
         self.get_execution_options = scoped.get_execution_options
 
-    def execute(self, stmt: object) -> None:
+    def execute(self, stmt: object) -> object:
+        sql = str(stmt)
+        if sql.startswith("UPDATE forges SET"):
+            return None
+        if "FROM forge" in sql:
+            return _ForgeRead()
         self.statements.append(stmt)
         raise _Stop
+
+
+class _ForgeRead:
+    """The answer to a referrer's read of its forge: the forge row, and its (empty) retirement facts."""
+
+    def first(self) -> object:
+        return _ForgeRow()
+
+    def scalars(self) -> list[str]:
+        return []
+
+
+class _ForgeRow:
+    forge_id = "frg_1"
+    slug = "github"
+    kind = "github"
+    api_base = "https://api.github.com"
+    web_base = None
 
 
 @contextmanager

@@ -1,9 +1,9 @@
 """The forge registry — each repository's forge roles, built from its records on use.
 
-Every hand-out reads the repository's revisions and takes the adapter built under them from the tenant's
-:class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit reaches the next use with no restart
-(``bzh:config-read-on-use``). Only whoever builds a visit calls it, never an action; each role it hands out checks
-every call against what the forge offers."""
+Every hand-out reads the repository's revisions — its own, its secret's and its forge's — and takes the adapter built
+under them from the tenant's :class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit to any of the three
+reaches the next use with no restart (``bzh:config-read-on-use``). Only whoever builds a visit calls it, never an
+action; each role it hands out checks every call against what the forge offers."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from typing import Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryId,
@@ -42,9 +43,6 @@ from blizzard.hub.forge.landing import (
     Update,
 )
 from blizzard.hub.live_config import ConfigObjectCache
-
-#: The one forge kind a repository's forge has until forges are records of their own.
-_REPOSITORY_FORGE_KIND = "github"
 
 
 class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
@@ -71,14 +69,14 @@ class ForgeBinding:
 
 
 class WriteLocks:
-    """One write lock per (forge address, secret name), each created on the first call for its pair — made from the
+    """One write lock per (forge id, secret name), each created on the first call for its pair — made from the
     action loop, so the lock belongs to the loop every adapter runs on."""
 
     def __init__(self) -> None:
         self._locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._guard = threading.Lock()
 
-    def lock(self, forge: str, secret: str) -> asyncio.Lock:
+    def lock(self, forge: ForgeId, secret: str) -> asyncio.Lock:
         with self._guard:
             return self._locks.setdefault((forge, secret), asyncio.Lock())
 
@@ -91,21 +89,23 @@ class ForgeRegistry:
         self,
         *,
         records: IReadRepositoryRecordRepository,
+        forges: IReadForgeRepository,
         objects: ConfigObjectCache,
         secrets: ISecretReader,
         build: Callable[[ForgeBinding], IForgeAdapter],
         capabilities: Mapping[str, frozenset[Capability]],
     ) -> None:
         self._records = records
+        self._forges = forges
         self._objects = objects
         self._secrets = secrets
         self._build = build
         self._capabilities = capabilities
         self._locks = WriteLocks()
 
-    def offered(self, forge: str, repository: RepositoryId | None = None) -> frozenset[Capability]:
+    def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
         """What ``forge`` offers, for ``repository`` when one is named; every forge is its kind's set for now."""
-        return self._capabilities[_REPOSITORY_FORGE_KIND]
+        return self._capabilities[forge.kind]
 
     def refs(self, repository: RepositoryId) -> IForgeRefs:
         return _RefsHandle(self._adapter(repository), self._offered_for(repository))
@@ -130,7 +130,13 @@ class ForgeRegistry:
     def _offered_for(self, repository: RepositoryId) -> frozenset[Capability]:
         record = self._records.get(repository)
         assert record is not None
-        return self.offered(record.fields.forge_api_url, repository)
+        return self.offered(self._forge_of(record.fields.forge_id), repository)
+
+    def _forge_of(self, forge_id: ForgeId) -> ConfiguredForge:
+        forge = self._forges.get(forge_id)
+        # Every repository names a forge, and a configured record is never deleted.
+        assert forge is not None
+        return forge
 
     def _adapter(self, repository: RepositoryId) -> IForgeAdapter:
         """The adapter built under the repository's current revisions — a retired record's too, so a chunk that named
@@ -144,6 +150,7 @@ class ForgeRegistry:
         record = self._records.get(repository)
         assert record is not None
         fields = record.fields
+        forge = self._forge_of(fields.forge_id)
         try:
             token = self._secrets.reveal(SecretName.parse(fields.secret_name)).expose()
         except SecretNotFound as exc:
@@ -152,12 +159,12 @@ class ForgeRegistry:
             raise RepositorySecretUnavailable(fields.secret_name, retired=True) from exc
         return self._build(
             ForgeBinding(
-                kind=_REPOSITORY_FORGE_KIND,
-                api_url=fields.forge_api_url,
+                kind=forge.kind,
+                api_url=forge.fields.api_base,
                 owner=fields.owner,
                 repo=fields.repo,
                 token=token,
-                write_lock=partial(self._locks.lock, fields.forge_api_url, fields.secret_name),
+                write_lock=partial(self._locks.lock, forge.forge_id, fields.secret_name),
             )
         )
 
