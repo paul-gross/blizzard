@@ -115,6 +115,7 @@ class SweepWindow:
 
     @classmethod
     def of(cls, since: datetime, until: datetime) -> SweepWindow:
+        # No span cap, on purpose: historical comparison needs long spans.
         require_until_after_since(since, until)
         return cls(since=since, until=until)
 

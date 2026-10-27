@@ -118,10 +118,11 @@ class IReadAnalyticsEventQueries(Protocol):
         :class:`~blizzard.hub.domain.kernel.pagination.MalformedCursor`."""
         ...
 
-    def counts_by_file(self, criteria: EventQueryCriteria) -> list[KeyedCount]:
+    def counts_by_file(self, criteria: EventQueryCriteria, *, limit: int | None = None) -> list[KeyedCount]:
         """Occurrence counts grouped by ``subject`` among ``file_read`` events matching
         ``criteria`` — ``criteria.kind`` is honored if it further narrows the scope, but
-        this method's own ``file_read`` restriction always applies."""
+        this method's own ``file_read`` restriction always applies. ``limit`` returns only the
+        top N by count (ties by path) with complete counts; scan cost still grows with history."""
         ...
 
     def counts_by_skill(self, criteria: EventQueryCriteria) -> list[KeyedCount]:

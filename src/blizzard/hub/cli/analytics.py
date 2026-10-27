@@ -341,7 +341,7 @@ _FLAG_NAMES = {
 class _Dataset:
     """One ``summary`` choice: its route, the key its envelope carries the rows under,
     the view that renders them, and which of the shared filters it honors. Only
-    ``spend-chunks`` paginates or streams — the one rollup with a bulk-export sibling."""
+    ``spend-chunks`` paginates or streams; ``top_n`` is ``counts-files``' opt-in ``--limit``."""
 
     path: str
     response_key: str
@@ -349,6 +349,7 @@ class _Dataset:
     filters: frozenset[str]
     paginated: bool = False
     streamable: bool = False
+    top_n: bool = False
 
 
 #: Mints the eleven read rollup routes' own criteria types, mirroring each route's own
@@ -359,6 +360,7 @@ _DATASETS: dict[str, _Dataset] = {
         "counts",
         CountsListing,
         _SCOPE_FILTERS | _PROVENANCE_FILTERS | {"extractor_version", "tool", "subject_prefix", "node_id"},
+        top_n=True,
     ),
     "counts-skills": _Dataset(
         "/api/analytics/counts/skills",
@@ -417,7 +419,11 @@ _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
 @project_option(required_by_hub=False)
 @click.option("--cursor", default=None, help="Resume from a prior page's next_cursor (spend-chunks only).")
 @click.option(
-    "--limit", default=None, type=int, help="Max rows in one page (spend-chunks only). Illegal with --ndjson."
+    "--limit",
+    default=None,
+    type=int,
+    help="spend-chunks: max rows in one page (1-1000, default 200). counts-files: return only the top N "
+    "paths by count, with complete counts (no default). Illegal with --ndjson.",
 )
 @click.option(
     "--ndjson",
@@ -448,8 +454,8 @@ def analytics_summary(
     ndjson: bool,
 ) -> None:
     """Read one of the canned counts or operational-dataset rollups.
-    Only spend-chunks pages or streams; a filter DATASET's own route does not expose is
-    refused."""
+    Only spend-chunks pages or streams; counts-files alone takes --limit as a top-N, and
+    a filter DATASET's own route does not expose is refused."""
     spec = _DATASETS[dataset]
     given = {
         "graph_id": graph_id,
@@ -471,7 +477,7 @@ def analytics_summary(
             raise click.UsageError(f"{_FLAG_NAMES[name]} does not apply to dataset {dataset!r}")
     if cursor is not None and not spec.paginated:
         raise click.UsageError(f"--cursor does not apply to dataset {dataset!r}")
-    if limit is not None and not spec.paginated:
+    if limit is not None and not (spec.paginated or spec.top_n):
         raise click.UsageError(f"--limit does not apply to dataset {dataset!r}")
     if ndjson and not spec.streamable:
         raise click.UsageError(f"--ndjson does not apply to dataset {dataset!r}")
@@ -505,6 +511,10 @@ def analytics_summary(
         params["cursor"] = cursor
     if spec.paginated:
         params["limit"] = str(limit if limit is not None else 200)
+    elif spec.top_n and limit is not None:
+        params["limit"] = str(limit)
     operation = f"GET {spec.path.removeprefix('/api')}"
     body = cli.get(spec.path, operation, params=params).json()
     cli.show(body, spec.view(body[spec.response_key]))
+    if spec.top_n and limit is not None and not cli.as_json:
+        click.echo(f"top at most {limit} paths; other paths may be omitted")

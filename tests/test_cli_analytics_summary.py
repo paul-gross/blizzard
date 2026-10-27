@@ -344,6 +344,29 @@ def test_the_default_limit_is_200_for_spend_chunks_only() -> None:
     assert calls[0]["limit"] == "200"
 
 
+def test_counts_files_sends_no_limit_unless_given_and_notes_the_top_n_when_it_is() -> None:
+    fake_get, calls = _get_returning({"counts": [{"key": "src/a.py", "count": 3}]})
+    bound = bind_stubs(get=fake_get)
+
+    plain = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files"])
+    limited = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files", "--limit", "2"])
+    as_json = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files", "--limit", "2", "--json"])
+
+    assert "limit" not in calls[0]
+    assert "top at most" not in plain.output
+    assert calls[1]["limit"] == "2"
+    assert "top at most 2 paths; other paths may be omitted" in limited.output
+    assert json.loads(as_json.output) == {"counts": [{"key": "src/a.py", "count": 3}]}
+
+
+def test_counts_files_top_n_still_refuses_a_cursor_and_ndjson() -> None:
+    bound = bind_stubs(get=lambda *a, **k: pytest.fail("must not reach the hub"))
+
+    for flag in (["--cursor", "c"], ["--ndjson"]):
+        refused = bound.runner.invoke(hub_group, ["analytics", "summary", "counts-files", "--limit", "2", *flag])
+        assert f"{flag[0]} does not apply to dataset 'counts-files'" in refused.output
+
+
 def test_non_paginated_datasets_get_no_limit_param() -> None:
     fake_get, calls = _get_returning({"outcomes": []})
     bound = bind_stubs(get=fake_get)

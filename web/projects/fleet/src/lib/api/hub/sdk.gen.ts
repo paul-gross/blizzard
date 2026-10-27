@@ -136,7 +136,8 @@ export const countsByAgentTypeApiAnalyticsCountsAgentTypesGet = <ThrowOnError ex
  * Counts By File
  *
  * Occurrence counts by file path among ``file_read`` events, honoring every other
- * filter. ``kind`` is not offered: this count fixes it to ``file_read``.
+ * filter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts
+ * into the top N by count; omitted, every path returns.
  */
 export const countsByFileApiAnalyticsCountsFilesGet = <ThrowOnError extends boolean = false>(options?: Options<CountsByFileApiAnalyticsCountsFilesGetData, ThrowOnError>): RequestResult<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError> => (options?.client ?? client).get<CountsByFileApiAnalyticsCountsFilesGetResponses, CountsByFileApiAnalyticsCountsFilesGetErrors, ThrowOnError>({ url: '/api/analytics/counts/files', ...options });
 
@@ -163,7 +164,7 @@ export const countsBySkillApiAnalyticsCountsSkillsGet = <ThrowOnError extends bo
  * Durations By Graph
  *
  * The same rollup grouped by the graph the step happened in — the transition's
- * own ``graph_id``, never the chunk's current pin.
+ * own ``graph_id``, never the chunk's current pin. Complete history unless filtered.
  */
 export const durationsByGraphApiAnalyticsDurationsGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<DurationsByGraphApiAnalyticsDurationsGraphsGetData, ThrowOnError>): RequestResult<DurationsByGraphApiAnalyticsDurationsGraphsGetResponses, DurationsByGraphApiAnalyticsDurationsGraphsGetErrors, ThrowOnError> => (options?.client ?? client).get<DurationsByGraphApiAnalyticsDurationsGraphsGetResponses, DurationsByGraphApiAnalyticsDurationsGraphsGetErrors, ThrowOnError>({ url: '/api/analytics/durations/graphs', ...options });
 
@@ -171,7 +172,7 @@ export const durationsByGraphApiAnalyticsDurationsGraphsGet = <ThrowOnError exte
  * Durations By Node
  *
  * Completed-step duration rollups grouped by node — see
- * ``AnalyticsDurationView`` for the wall-clock semantics.
+ * ``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered.
  */
 export const durationsByNodeApiAnalyticsDurationsNodesGet = <ThrowOnError extends boolean = false>(options?: Options<DurationsByNodeApiAnalyticsDurationsNodesGetData, ThrowOnError>): RequestResult<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<DurationsByNodeApiAnalyticsDurationsNodesGetResponses, DurationsByNodeApiAnalyticsDurationsNodesGetErrors, ThrowOnError>({ url: '/api/analytics/durations/nodes', ...options });
 
@@ -200,7 +201,7 @@ export const streamEventsApiAnalyticsEventsNdjsonGet = <ThrowOnError extends boo
  * Judged-choice distribution and attempt-failure counts grouped by node —
  * a judged failure edge and a retry-consuming attempt failure reported separately,
  * never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
- * neither.
+ * neither. Complete history unless filtered.
  */
 export const outcomesByNodeApiAnalyticsOutcomesNodesGet = <ThrowOnError extends boolean = false>(options?: Options<OutcomesByNodeApiAnalyticsOutcomesNodesGetData, ThrowOnError>): RequestResult<OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses, OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors, ThrowOnError> => (options?.client ?? client).get<OutcomesByNodeApiAnalyticsOutcomesNodesGetResponses, OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors, ThrowOnError>({ url: '/api/analytics/outcomes/nodes', ...options });
 
@@ -2408,7 +2409,7 @@ export const linkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPut = <ThrowOnEr
  * ``routine_id``'s per-scope last-swept table — the routine's declared
  * set, retired scopes filtered out unless already swept while linked — and its
  * measurement series over ``[since, until)``. 404 on an unknown id; 422 on a
- * malformed instant or a non-positive span.
+ * malformed instant or a non-positive span. Positive spans are uncapped for historical comparison.
  */
 export const routineSweepsApiRoutinesRoutineIdSweepsGet = <ThrowOnError extends boolean = false>(options: Options<RoutineSweepsApiRoutinesRoutineIdSweepsGetData, ThrowOnError>): RequestResult<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError> => (options.client ?? client).get<RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses, RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors, ThrowOnError>({ url: '/api/routines/{routine_id}/sweeps', ...options });
 
