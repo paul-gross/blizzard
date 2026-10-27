@@ -78,7 +78,9 @@ class QuestionView(WireModel):
     delivered_at: str | None = None
     #: A restart answered this question for the system, so its answer will never be delivered.
     superseded: bool = False
-    #: The chunk's project, with its current slug and name; absent only from a hub older than the project fields.
+    #: The id of the chunk's project; absent only from a hub older than the project fields.
     project_id: str | None = None
+    #: The project's current slug; absent only from a hub older than the project fields.
     project_slug: str | None = None
+    #: The project's current display name; absent only from a hub older than the project fields.
     project_name: str | None = None

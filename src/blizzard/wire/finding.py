@@ -178,9 +178,11 @@ class FindingView(WireModel):
     raised_by_chunk_id: str | None = None
     #: How an exited finding left; `None` while it has not exited.
     exit: Annotated[FindingExit | Unrecognized, OPEN] | None = None
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 

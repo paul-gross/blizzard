@@ -59,9 +59,11 @@ class DecisionView(WireModel):
     imposed_by_runner_id: str | None = None
     #: That runner's name — not unique, never a key; ``None`` when the registry holds no such runner.
     imposed_by_runner_name: str | None = None
-    #: The chunk's project, with its current slug and name; absent only from a hub older than the project fields.
+    #: The id of the chunk's project; absent only from a hub older than the project fields.
     project_id: str | None = None
+    #: The project's current slug; absent only from a hub older than the project fields.
     project_slug: str | None = None
+    #: The project's current display name; absent only from a hub older than the project fields.
     project_name: str | None = None
     #: The checks the runner ran at the gated step's exit; empty when none ran.
     check_results: list[CheckResult] = []

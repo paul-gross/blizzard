@@ -58,7 +58,7 @@ class ChunkChangedPayload(SseFramePayload):
     key: str | None = None
     #: The releasing runner's own reason — rides the ``released`` cause; omitted on every other.
     reason: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -66,7 +66,7 @@ class QuestionAskedPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -74,7 +74,7 @@ class QuestionAnsweredPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -82,7 +82,7 @@ class DecisionOpenedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -90,7 +90,7 @@ class DecisionResolvedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -126,7 +126,7 @@ class EventLoggedPayload(SseFramePayload):
     #: The runner's name when supplied to the recorder; omitted if no name was supplied.
     runner_name: str | None = None
     key: str | None = None
-    #: The named chunk's project, stamped by the recorder; omitted when no chunk is named.
+    #: The id of the named chunk's project; omitted when no chunk is named.
     project_id: str | None = None
 
     _null_when_absent: ClassVar[frozenset[str]] = frozenset({"chunk_id", "runner_id"})
