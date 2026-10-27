@@ -139,6 +139,9 @@ A pointer matches a record by repo name, narrowed by the origin's owner and forg
 after the chunk was minted, so retiring a repository never strands work already under way. A chunk with no commits has
 nothing to resolve and lands as a no-op.
 
+The forge's unchanged answers are read conditionally, so a landing that is waiting costs at most one counted call a
+pass, and the shipped graphs poll once a minute.
+
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
 

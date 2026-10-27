@@ -112,6 +112,18 @@ class _Refs:
     async def compare(self, base: str, head: str) -> Comparison:
         raise NotImplementedError
 
+    async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+        raise NotImplementedError
+
+    async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+        raise NotImplementedError
+
+    async def create_ref(self, branch: str, revision: str) -> None:
+        raise NotImplementedError
+
+    async def delete_ref(self, branch: str) -> None:
+        raise NotImplementedError
+
     async def commit_exists(self, revision: str) -> CommitPresence:
         self.asked.append(revision)
         if self.hang:

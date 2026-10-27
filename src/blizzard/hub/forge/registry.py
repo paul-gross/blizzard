@@ -192,6 +192,22 @@ class _RefsHandle:
         _require(self.offered, "commit_exists")
         return await self.adapter.commit_exists(revision)
 
+    async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+        _require(self.offered, "advance_ref")
+        await self.adapter.advance_ref(branch, expected, revision)
+
+    async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+        _require(self.offered, "merge_into")
+        return await self.adapter.merge_into(branch, revision, message)
+
+    async def create_ref(self, branch: str, revision: str) -> None:
+        _require(self.offered, "create_ref")
+        await self.adapter.create_ref(branch, revision)
+
+    async def delete_ref(self, branch: str) -> None:
+        _require(self.offered, "delete_ref")
+        await self.adapter.delete_ref(branch)
+
 
 @dataclass(frozen=True)
 class _ChangesHandle:
@@ -201,6 +217,10 @@ class _ChangesHandle:
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
         _require(self.offered, "changes")
         return await self.adapter.changes(state, base, head)
+
+    async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
+        _require(self.offered, "recently_closed")
+        return await self.adapter.recently_closed(base, limit)
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
         _require(self.offered, "open_change")
@@ -227,6 +247,10 @@ class _ChecksHandle:
     async def checks(self, ref: str) -> tuple[Check, ...]:
         _require(self.offered, "checks")
         return await self.adapter.checks(ref)
+
+    async def change_checks(self, number: int) -> tuple[Check, ...]:
+        _require(self.offered, "change_checks")
+        return await self.adapter.change_checks(number)
 
     async def rerun_check(self, id: str) -> bool:
         _require(self.offered, "rerun_check")

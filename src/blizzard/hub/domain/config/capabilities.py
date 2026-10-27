@@ -20,3 +20,7 @@ class Capability(StrEnum):
     CHANGES_MERGE_REBASE = "changes.merge.rebase"
     CHECKS_READ = "checks.read"
     CHECKS_RERUN = "checks.rerun"
+    REFS_ADVANCE = "refs.advance"
+    BRANCHES_MERGE = "branches.merge"
+    REFS_CREATE = "refs.create"
+    REFS_DELETE = "refs.delete"

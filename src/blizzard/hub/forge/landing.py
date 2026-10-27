@@ -188,9 +188,10 @@ class ForgeRejected(ForgeError):
     CONFLICT = "conflict"
     STALE = "stale"
     PROTECTED = "protected"
+    METHOD = "method"
 
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
+    def __init__(self, reason: str, message: str = "") -> None:
+        super().__init__(f"{reason}: {message}" if message and message != reason else reason)
         self.reason = reason
 
 
@@ -228,6 +229,12 @@ OPERATION_CAPABILITY: Mapping[str, Capability] = {
     f"merge.{MergeMethod.REBASE}": Capability.CHANGES_MERGE_REBASE,
     "checks": Capability.CHECKS_READ,
     "rerun_check": Capability.CHECKS_RERUN,
+    "advance_ref": Capability.REFS_ADVANCE,
+    "merge_into": Capability.BRANCHES_MERGE,
+    "create_ref": Capability.REFS_CREATE,
+    "delete_ref": Capability.REFS_DELETE,
+    "recently_closed": Capability.CHANGES_READ,
+    "change_checks": Capability.CHECKS_READ,
 }
 
 
@@ -244,12 +251,35 @@ class IForgeRefs(Protocol):
         """:class:`ForgeUnavailable` when the forge could say neither."""
         ...
 
+    async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
+        """Fast-forward ``branch`` from ``expected`` to ``revision``; ``ForgeRejected("stale")`` when it was not at
+        ``expected``, ``ForgeRejected("protected")`` when a rule of the repository forbids it."""
+        ...
+
+    async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
+        """The merge commit on ``branch`` bringing ``revision`` in, ``None`` when ``branch`` already holds it;
+        ``ForgeRejected("conflict")`` on a conflict, ``ForgeRejected("protected")`` when a rule forbids it."""
+        ...
+
+    async def create_ref(self, branch: str, revision: str) -> None:
+        """Create ``branch`` at ``revision``; one already there is no error, one at another revision is
+        ``ForgeRejected("stale")``."""
+        ...
+
+    async def delete_ref(self, branch: str) -> None:
+        """Delete ``branch``; one already gone is no error."""
+        ...
+
 
 class IForgeChanges(Protocol):
     """The changes — pull or merge requests — that carry work into a branch."""
 
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
         """The changes into ``base`` (from ``head`` when named), newest first, bounded and paged."""
+        ...
+
+    async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
+        """The changes into ``base`` closed or merged, most recently updated first, at most ``limit``; one page."""
         ...
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change: ...
@@ -268,6 +298,10 @@ class IForgeChecks(Protocol):
 
     async def checks(self, ref: str) -> tuple[Check, ...]:
         """Each check on ``ref``, a revision or a branch whose tip the forge reads."""
+        ...
+
+    async def change_checks(self, number: int) -> tuple[Check, ...]:
+        """The checks that decide whether change ``number`` may merge, read where the forge ran them."""
         ...
 
     async def rerun_check(self, id: str) -> bool:
