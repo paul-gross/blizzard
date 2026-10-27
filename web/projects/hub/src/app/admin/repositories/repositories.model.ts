@@ -62,9 +62,9 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
     revision: repository.revision,
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,
     links: {
-       heading: 'Related records',
-       links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...secretLinks(repository.secret_name)],
-       emptyText: 'No related records.',
+      heading: 'Related records',
+      links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...secretLinks(repository.secret_name)],
+      emptyText: 'No related records.',
     },
     hasHistory: true,
   };

@@ -75,11 +75,16 @@ export function configEdit(
       field: field.label,
       old: before === '' ? null : before,
       new: next,
-      old_label: null,
-      new_label: null,
+      old_label: optionLabel(field, before),
+      new_label: optionLabel(field, next),
     });
   }
   return { body, diff };
+}
+
+function optionLabel(field: ConfigFieldDef, value: string | boolean | null): string | null {
+  if (field.kind !== 'select' || typeof value !== 'string') return null;
+  return field.options?.find((option) => option.value === value)?.label ?? null;
 }
 
 /** The labels of the required fields `form` leaves empty. */

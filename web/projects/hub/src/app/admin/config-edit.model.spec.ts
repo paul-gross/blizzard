@@ -48,6 +48,23 @@ describe('configEdit', () => {
     annotate: false,
   });
 
+  it('labels a select change with the chosen option, so the preview matches the saved revision', () => {
+    const fields: readonly ConfigFieldDef[] = [
+      {
+        key: 'forge',
+        label: 'Forge',
+        kind: 'select',
+        options: [
+          { value: 'frg_1', label: 'gh · GitHub' },
+          { value: 'frg_2', label: 'gl · GitLab' },
+        ],
+      },
+    ];
+    expect(configEdit(fields, { forge: 'frg_1' }, { forge: 'frg_2' }).diff).toEqual([
+      { field: 'Forge', old: 'frg_1', new: 'frg_2', old_label: 'gh · GitHub', new_label: 'gl · GitLab' },
+    ]);
+  });
+
   it('is empty when the form matches the record', () => {
     expect(configEdit(FIELDS, shown, shown)).toEqual({ body: {}, diff: [] });
   });

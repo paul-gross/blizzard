@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.apply import (
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
+    require_declarable_forge,
 )
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
@@ -37,7 +38,6 @@ from blizzard.hub.domain.config.forge_resolution import (
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeId,
-    ForgeKindImmutable,
     ForgeSlug,
     IReadForgeRepository,
     PlannedForges,
@@ -203,15 +203,8 @@ class ConfigApplication:
                 if entry.slug in seen:
                     raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
                 seen.add(entry.slug)
-                if entry.slug in former:
-                    raise ConfigFieldError(
-                        "slug",
-                        f"{entry.slug!r} is a slug forge {former[entry.slug].slug!r} left; "
-                        "name that forge by its current slug",
-                    )
                 stored = held.get(entry.slug)
-                if stored is not None and stored.kind != entry.kind:
-                    raise ForgeKindImmutable("kind", f"forge {entry.slug} is a {stored.kind} forge; kind is immutable")
+                require_declarable_forge(entry.slug, entry.kind, stored, former.get(entry.slug))
                 forge_id = stored.forge_id if stored else ForgeId(Id.mint(IdPrefix.FORGE, self._clock).value)
                 if stored is None:
                     record, _ = ConfiguredForge.new(
