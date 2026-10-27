@@ -1,4 +1,4 @@
-"""``blizzard hub queue`` — operator verbs over the ready queue."""
+"""``blizzard hub queue`` — operator commands over the ready queue."""
 
 from __future__ import annotations
 
@@ -23,14 +23,13 @@ class QueueListing(Listing):
 
 @click.group("queue")
 def queue_group() -> None:
-    """Operator verbs over the ready queue: show its order, replace it, move one chunk."""
+    """Read and reorder the queue of ready chunks runners claim from."""
 
 
 @queue_group.command("show", cls=FleetCommand)
 @project_option(required_by_hub=False)
 def queue_show(cli: CliContext, project: str | None) -> None:
-    """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``, drained
-    to its whole order."""
+    """Show the whole ready queue, front first."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries", params=project_query(project))
     cli.show({"entries": entries}, QueueListing(entries))
 
@@ -40,9 +39,8 @@ def queue_show(cli: CliContext, project: str | None) -> None:
 def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
     """Replace the whole ready-queue order with CHUNK_IDS, front to back.
 
-    A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement.
-    Every id must be in the ready list, not the backlog (409), and must
-    not repeat (422); a chunk not named keeps its relative order, appended last."""
+    Ready chunks not named keep their relative order after the named ones. Refused when an
+    id is not ready (a backlog chunk included) or repeats."""
     resp = cli.put(
         "/api/queue",
         "PUT /queue",
@@ -62,8 +60,7 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
 def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    Client of the fractional ``POST /api/queue/position``; 409 when CHUNK_ID
-    is not in the ready list, not the backlog."""
+    No other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries")
     rest = [entry["chunk_id"] for entry in entries if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))

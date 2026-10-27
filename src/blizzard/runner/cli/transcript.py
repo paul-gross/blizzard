@@ -109,11 +109,10 @@ def transcript_reship(ctx: click.Context, segment_id: str, directory: str, runne
 def transcript_backfill(
     ctx: click.Context, directory: str, dry_run: bool, limit: int | None, runner: str | None
 ) -> None:
-    """Import worker transcripts predating the outbound lane, best-effort.
+    """Import the transcripts of sessions this runner ran before it shipped transcripts, best-effort.
 
-    Driven from this runner's own lease records, never a sweep of the harness directory. Rerunnable:
-    an already-imported session is skipped, and one left unfinished resumes. Writes the store
-    directly, so run it as the runner's own user with its environment, and with the daemon stopped."""
+    Rerunnable: an already-imported session is skipped, and one left unfinished resumes. Run it as the
+    runner's own user with its environment; refused while the host is running."""
     if limit is not None and limit < 1:
         raise click.UsageError("--limit must be at least 1")
     with _transcript_config(

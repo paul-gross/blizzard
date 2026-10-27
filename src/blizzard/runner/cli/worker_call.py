@@ -163,10 +163,7 @@ class WorkerSession:
 @dataclass(frozen=True)
 class WorkerCall:
     """A spawned worker's ambient identity — the runner it reports to, and the lease it acts
-    under (``""`` for a verb that names its own chunk instead).
-
-    Every call lands on the runner's local API, which proxies onward to the hub as the runner
-    principal where a route needs to: a worker holds no hub credential of its own."""
+    under (``""`` for a verb that names its own chunk instead)."""
 
     verb: str
     runner_url: str

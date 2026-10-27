@@ -38,7 +38,7 @@ _DEFAULT_ITEM_SOURCE = "hub"
 
 @click.group("item")
 def item_group() -> None:
-    """Operator verbs over one work item: author, edit, or withdraw it at its source."""
+    """Author, edit, and withdraw work items at their source."""
 
 
 @item_group.command("create", cls=FleetCommand)

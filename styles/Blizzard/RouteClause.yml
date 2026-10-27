@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' narrates the HTTP route the command calls — state the observable effect instead (bzh:help-text)."
+level: error
+scope: text
+ignorecase: true
+nonword: true
+tokens:
+  - '\bclient\s+of\s+(?:the\s+hub\s+API:\s+|the\s+fractional\s+)?`*(?:GET|POST|PUT|PATCH|DELETE)\s+`*/'

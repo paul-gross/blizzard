@@ -49,7 +49,7 @@ def _refusals(source: str) -> dict[int, str]:
 
 @click.group("source")
 def source_group() -> None:
-    """Operator verbs over work-source records: create, list, show, edit, retire, enable."""
+    """Manage the tenant's work sources, where work items come from."""
 
 
 @source_group.command("create", cls=FleetCommand)

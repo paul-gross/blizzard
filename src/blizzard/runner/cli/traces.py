@@ -137,9 +137,9 @@ def traces_replay(
     runner_url: str | None,
     runner: str | None,
 ) -> None:
-    """Tell every lease that closed in [since, until) again, with the live sweep's span ids. The live cursor
-    does not move, so spans the backend already holds arrive again — it dedupes on their ids. A range over
-    replay_max_window is told in windows; a failure names the --since to resume from."""
+    """Export again the spans of every node-step run that ended in [since, until), under their original span
+    ids, so a span the trace backend already holds is not duplicated; ongoing export is unaffected. A range
+    over replay_max_window is sent in windows; a failure names the --since to resume from."""
     refuse_bad_window(since, until, CliCollaborators.of(ctx).wall_clock)
     total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
     with RunnerDaemon.reach("traces replay", directory, runner_url, Door.of(ctx), runner) as daemon:

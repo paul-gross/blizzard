@@ -12,10 +12,9 @@ from blizzard.runner.cli.worker_call import ENV_ELICITATION, WorkerCall
 
 @click.command()
 def heartbeat() -> None:
-    """Worker hook: record a lease heartbeat (identity from the environment).
+    """Worker hook: report that this worker is still alive (identity from the environment).
 
-    Fails **soft**: a hook must never break the worker's tool call, so a missing identity or an
-    unreachable runner is reported to stderr and this still exits 0."""
+    Fails **soft**: a missing identity or an unreachable runner is reported to stderr and this still exits 0."""
     worker = WorkerCall.hook("heartbeat", traced=False)
     if worker is not None:
         worker.soft_post(
@@ -40,7 +39,7 @@ def session_end() -> None:
 @click.argument("prompt")
 @click.option("--options", default=None, help="Pipe-separated answer options.")
 def ask(prompt: str, options: str | None) -> None:
-    """Worker: ask-and-exit — the ask is a durable runner-store fact before this returns."""
+    """Worker: ask a question, then exit — the question is recorded before this returns, and its id printed."""
     worker = WorkerCall.of("ask")
     body: dict[str, object] = {"question": prompt}
     if options:
@@ -102,9 +101,7 @@ def attach(ctx: click.Context, name: str) -> None:
 @click.command("work-items")
 @click.argument("chunk_id")
 def work_items(chunk_id: str) -> None:
-    """Worker: pass-through read of a chunk's work items (runner -> hub -> vendor).
-
-    The items print as JSON, one entry per pointer."""
+    """Worker: read a chunk's work items from its tracker, printed as JSON, one entry per pointer."""
     worker = WorkerCall.of("work-items", lease=False)
     resp = worker.get(f"/api/chunks/{chunk_id}/work-items", failure="could not read the work item")
     click.echo(resp.text)
@@ -116,8 +113,7 @@ def work_items(chunk_id: str) -> None:
 def pm_items(ctx: click.Context, chunk_id: str) -> None:
     """Deprecated alias for ``blizzard runner work-items``.
 
-    Kept working, hidden from ``--help`` (pinned by
-    tests/test_pin_runner_misc.py::test_the_deprecated_pm_items_cli_alias_still_reads_the_work_item)."""
+    Kept working, hidden from ``--help``: it warns on stderr and delegates with identical behavior."""
     click.echo(
         "warning: `blizzard runner pm-items` is deprecated — use `blizzard runner work-items`",
         err=True,

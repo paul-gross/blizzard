@@ -1,11 +1,5 @@
 """``blizzard runner add`` / ``retire`` / ``ingest`` — add a runner to a registered host, retire one from it, under the
-host's own credential, or take one in from another store.
-
-``add`` writes in the order that leaves no entry without its token: the hub's mint, then the token in ``.env``, then
-``runners/<name>/``, then the appended ``[[runner]]``. ``retire`` retires at the hub, then forgets the runner's identity
-row in the host's store, then removes the entry, so a crash between any two leaves an entry the hub refuses — which the
-host halts — never a runner the hub still serves with no entry naming it, nor a store naming a runner no entry
-configures, which a start would take for another host's."""
+host's own credential, or take one in from another store."""
 
 from __future__ import annotations
 
@@ -149,9 +143,8 @@ def add(
 @click.option("--force", is_flag=True, help="Retire it even while it holds chunks, releasing them.")
 @click.pass_context
 def retire(ctx: click.Context, directory: str, runner: str, force: bool) -> None:
-    """Retire one of this registered host's runners at its hub, then remove its `[[runner]]` from the host file. A
-    running host halts it at its next tick, the hub refusing its token; the host's store forgets its identity, and
-    its other rows stay there, inert.
+    """Retire one of this registered host's runners at its hub, forget its identity here, and remove its
+    `[[runner]]` from the host file. A running host stops running it shortly after.
 
     Refused, with nothing retired, on a host holding no host token, or while the runner holds chunks unless --force
     releases them."""
@@ -268,8 +261,7 @@ def _bindings(config: HostConfig, projects: tuple[str, ...], workspaces: tuple[s
 
 
 def _runner_agents(projects: tuple[str, ...], agents: tuple[int, ...]) -> int:
-    """The runner's agent count: the one --agents, or the sum of one per --project — the rule the host file's
-    loader applies to per-binding counts."""
+    """The runner's agent count: the one --agents, or the sum of one per --project."""
     if not agents:
         return SCAFFOLD_AGENTS
     if len(agents) == 1:

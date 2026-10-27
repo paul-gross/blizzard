@@ -18,10 +18,12 @@ lifecycle (`gate / flag lifecycle`, PR-only), the Playwright package's static ch
 committed wire types; no daemon starts), the `web/` frontend checks (eslint, vitest, structural gate, bundle
 composition, story render, generated-client drift), and the Vale prose lint
 (`gate / process-reference and change-history lint`, `styles/Blizzard/ProcessReference.yml`,
-`styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml` and `styles/Blizzard/ShortFormPointer.yml`
-against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown, configured Python and `src/` YAML, and
-web TypeScript/CSS; generated API clients are excluded and `.html` templates are outside Vale's configured extensions.
-The change-history rule flags the change-history phrases its own token list names, which is the one statement of what it
+`styles/Blizzard/ChangeHistory.yml`, `styles/Blizzard/VariantHolder.yml`, `styles/Blizzard/ShortFormPointer.yml` and
+`styles/Blizzard/RouteClause.yml` against `.vale.ini`). The `mise run process-ref-lint` command covers Markdown,
+configured Python and `src/` YAML, and web TypeScript/CSS, then runs `tests/test_route_clause_rule.py`, which holds
+`RouteClause` to `src/blizzard/hub/cli/` and `src/blizzard/runner/cli/` and fails, rather than skips, when Vale is
+absent; generated API clients are excluded and `.html` templates are outside Vale's configured extensions. The
+change-history rule flags the change-history phrases its own token list names, which is the one statement of what it
 catches. Every gate check is seams-mocked and token-free, needing no real forge, no tokens, and no network beyond
 package installs. `gate / playwright static` is a required check of its own; an operator adds it to branch protection
 once the job exists on `master`.
@@ -41,7 +43,7 @@ uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
-vale --output=line .
+mise run process-ref-lint
 uv run ast-grep scan --error=unused-suppression .
 uv run pytest -n auto
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code -- openapi/

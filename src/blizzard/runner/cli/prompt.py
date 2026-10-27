@@ -78,10 +78,8 @@ def prompt_show(name: str) -> None:
 @click.option("--force", is_flag=True, help="Overwrite an existing workspace-prompt.md in the runtime root.")
 @runner_option
 def prompt_install(name: str, directory: str, force: bool, runner: str | None) -> None:
-    """Copy packaged sample NAME into the runtime root and point the workspace at the copy.
-
-    The forked shape: the workspace carries `prompt_file`, never the package knob, so
-    `prompt diff` has a local file to compare. Takes effect on the next runner restart."""
+    """Copy packaged sample NAME into the runtime root and point the workspace at the copy, which
+    `prompt diff` then checks for drift. Takes effect on the next runner restart."""
     text = _packaged_sample(name)
     config = load_runner(directory, runner=runner)
     destination = config.root / WORKSPACE_PROMPT_FILENAME
@@ -106,8 +104,8 @@ def prompt_install(name: str, directory: str, force: bool, runner: str | None) -
 def prompt_diff(name: str, directory: str, runner: str | None) -> None:
     """Diff this runtime's effective workspace prompt against packaged sample NAME.
 
-    Effective means the lane a spawn reads: the store override when one stands, else the
-    configured knob. Exits 1 when they differ, so a deploy can check a forked copy for drift."""
+    Effective means the prompt a new worker starts with: the override `prompt clear` drops when one
+    stands, else the configured prompt. Exits 1 when they differ, so a deploy can check a forked copy for drift."""
     sample = _packaged_sample(name)
     config = load_runner(directory, runner=runner)
     local, source = _effective_prompt(config)
@@ -186,9 +184,8 @@ def _conforms_configured_prompts(x: _ConfiguredPrompts) -> IConfiguredWorkspaceP
 
 
 def _effective_prompt_lane(config: RunnerConfig) -> EffectiveWorkspacePrompt:
-    """The prompt a spawn would read, and the lane it came from — the one definition the
-    `prompt` verbs share, read through the same owner the host's spawn and route use. A read-only
-    store query, so a live daemon is no bar."""
+    """The prompt a spawn would read, and the lane it came from. A read-only store query, so a
+    live daemon is no bar."""
     try:
         with read_host_stores(config) as stores:
             return WorkspacePromptReader(stores.workspace_prompt, _ConfiguredPrompts(config)).effective(

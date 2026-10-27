@@ -44,7 +44,7 @@ def _refusals(repository: str) -> dict[int, str]:
 
 @click.group("repo")
 def repo_group() -> None:
-    """Operator verbs over repository records: create, list, show, edit, retire, enable."""
+    """Manage the tenant's repository records."""
 
 
 @repo_group.command("create", cls=FleetCommand)

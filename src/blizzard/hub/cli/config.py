@@ -66,7 +66,7 @@ def _refusal(cli: CliContext, resp: Response) -> str:
 
 @click.group("config")
 def config_group() -> None:
-    """Operator verbs over configuration: changes, apply, export, import-legacy, check-forges."""
+    """Read, export, and apply the tenant's configuration."""
 
 
 @config_group.command("changes", cls=FleetCommand)

@@ -54,11 +54,8 @@ _COMMANDS = {
 @click.pass_context
 def hub(ctx: click.Context) -> None:
     """Talk to — or become — the blizzard hub."""
-    # The composition root: built once, inherited as `ctx.obj` by every
-    # subcommand's own context — a `SessionService` wrapping the one `SessionFile`,
-    # so a read-only verb still narrows it to `IReadSessionStore` while login/logout pull
-    # the full service off the same object (pinned by
-    # tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root).
+    # One session service every subcommand inherits; who may write through it is pinned by
+    # tests/test_layering.py::test_iwritesessionstore_is_named_only_inside_sessions_or_the_composition_root.
     ctx.obj = SessionService(SessionFile.of())
     if ctx.invoked_subcommand is None:
         host = hub.get_command(ctx, "host")

@@ -1,8 +1,7 @@
 """The root ``blizzard`` command group.
 
-Composes the target-namespaced subgroups (``hub``, ``runner``); the hyphenated
-aliases ``blizzard-hub`` / ``blizzard-runner`` point directly at those subgroups,
-whose bare invocation defaults to the daemon ``host`` personality."""
+Composes the ``hub`` and ``runner`` subgroups; ``blizzard-hub`` and ``blizzard-runner`` are
+aliases for them, and each run bare starts its daemon."""
 
 from __future__ import annotations
 

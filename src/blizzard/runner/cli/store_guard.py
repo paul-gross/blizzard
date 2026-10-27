@@ -25,8 +25,7 @@ from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 
 def named_runners(config: IStoreLocation) -> tuple[str, ...]:
-    """The ids of the runners the store's identity rows name, oldest first — read through the cross-runner audit,
-    the one read exempt from a runner's scope."""
+    """The ids of the runners the store's identity rows name, oldest first."""
     engine = create_engine_from_url(config.db_url)
     try:
         return build_host_stores(

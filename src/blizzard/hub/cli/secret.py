@@ -28,7 +28,7 @@ class SecretListing(Listing):
 
 @click.group("secret")
 def secret_group() -> None:
-    """Operator verbs over the write-only secret store: create, set, list, show, retire, enable, rotate-key."""
+    """Manage the write-only secret store."""
 
 
 def _stdin_value() -> str:

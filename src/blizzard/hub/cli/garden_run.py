@@ -32,7 +32,7 @@ class RunListing(Listing):
 
 @click.group("run")
 def run_group() -> None:
-    """Reading routine runs: the windowed list and one run's own delta."""
+    """Read routine runs and what each one changed."""
 
 
 @run_group.command("list", cls=FleetCommand)

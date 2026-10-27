@@ -1,6 +1,4 @@
-"""``blizzard hub garden-proposal`` — read verbs over garden proposals,
-two closing verbs (``pass``/``accept``), and four
-operator-authoring verbs (``create``/``edit``/``attach``/``detach``)."""
+"""``blizzard hub garden-proposal`` — operator commands that author, read, and close garden proposals."""
 
 from __future__ import annotations
 
@@ -59,7 +57,7 @@ class GardenProposalDetail:
 
 @click.group("garden-proposal")
 def garden_proposal_group() -> None:
-    """Create, list, show, edit, attach, detach, pass, or accept a garden proposal."""
+    """Author, review, and decide garden proposals."""
 
 
 @garden_proposal_group.command("list", cls=FleetCommand)
@@ -186,8 +184,8 @@ def garden_proposal_create(
 def garden_proposal_edit(
     cli: CliContext, proposal_id: str, title: str | None, class_: str | None, body_file: str | None
 ) -> None:
-    """Edit PROPOSAL_ID in place — only the given fields change. Works on either origin
-    while open; refused with 409 once it carries a closure."""
+    """Edit PROPOSAL_ID in place — only the given fields change. Works on either origin;
+    refused once the proposal is passed or accepted."""
     json_body: dict[str, object] = {}
     if title is not None:
         json_body["title"] = title
@@ -209,8 +207,8 @@ def garden_proposal_edit(
 @click.argument("proposal_id")
 @click.argument("finding_ids", nargs=-1, required=True)
 def garden_proposal_attach(cli: CliContext, proposal_id: str, finding_ids: tuple[str, ...]) -> None:
-    """Link FINDING_IDS to PROPOSAL_ID. Works on either origin while open; refused with
-    409 once it carries a closure."""
+    """Link FINDING_IDS to PROPOSAL_ID. Works on either origin;
+    refused once the proposal is passed or accepted."""
     resp = cli.post(
         f"/api/garden-proposals/{proposal_id}/attach",
         "POST /garden-proposals/{id}/attach",
@@ -225,8 +223,8 @@ def garden_proposal_attach(cli: CliContext, proposal_id: str, finding_ids: tuple
 @click.argument("proposal_id")
 @click.argument("finding_ids", nargs=-1, required=True)
 def garden_proposal_detach(cli: CliContext, proposal_id: str, finding_ids: tuple[str, ...]) -> None:
-    """Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin while open; refused
-    with 409 once it carries a closure."""
+    """Unlink FINDING_IDS from PROPOSAL_ID. Works on either origin;
+    refused once the proposal is passed or accepted."""
     resp = cli.post(
         f"/api/garden-proposals/{proposal_id}/detach",
         "POST /garden-proposals/{id}/detach",

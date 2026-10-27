@@ -2,7 +2,6 @@
 
 Not part of the product CLI (``hub`` / ``runner``): these verbs inspect a store's raw
 facts for debugging and crash-recovery verification, so the group is ``hidden=True``.
-``check-invariants`` runs the invariant checker (``bzh:invariant-checker``); exit 1 prints each violation.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from blizzard.tools.invariants import Invariants
 
 @click.group(hidden=True)
 def dev() -> None:
-    """Developer/operator tooling — store inspection and crash-recovery checks."""
+    """Developer tools for checking a hub's or runner's stores."""
 
 
 @dev.command("check-invariants")
@@ -34,7 +33,7 @@ def dev() -> None:
     help="Proceed even if --hub-dir's config names a database outside that directory.",
 )
 def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_external_db: bool) -> None:
-    """Assert both stores' durable invariants (``bzh:invariant-checker``).
+    """Check a runner's store, a hub's store, or both for broken invariants.
 
     Point at a host directory (``--runner-dir``), a hub runtime (``--hub-dir``), or both.
     Exit 0 when every invariant holds; exit 1 listing each violation's slug and detail.
@@ -62,8 +61,7 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_exte
         raise click.ClickException(str(exc)) from exc
     hub_db = hub_config.db_url if hub_config is not None else None
 
-    # A live operator is always well past any crash-recovery window — unlike the
-    # crash sweep's own "immediately after a kill" checkpoint.
+    # An operator runs this long after any crash recovery has finished.
     violations = Invariants(runner_db_url=runner_db, hub_db_url=hub_db).run(after_recovery=True)
     if not violations:
         click.echo("invariants hold")

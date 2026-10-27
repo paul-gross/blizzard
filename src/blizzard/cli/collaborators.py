@@ -73,8 +73,7 @@ class CliCollaborators:
     def of(cls, ctx: click.Context) -> CliCollaborators:
         """The collaborators the invoker handed down the context chain, else the production ones.
 
-        The first resolution is pinned on the chain's shared ``meta``: the ``hub`` group replaces ``ctx.obj`` with its
-        session, so a later lookup would otherwise miss the invoker's carrier."""
+        The first resolution is pinned on the chain's shared ``meta``, so it survives a group replacing ``ctx.obj``."""
         pinned = ctx.meta.get(_PIN)
         if pinned is None:
             pinned = ctx.meta[_PIN] = ctx.find_object(cls) or cls.production()

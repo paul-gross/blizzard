@@ -1,0 +1,25 @@
+"""Docstrings the rule must leave alone."""
+
+
+def status_codes():
+    """Refused with 404 when unknown and 409 when held."""
+
+
+def standalone_route():
+    """Calls ``POST /api/things`` and prints the reply."""
+
+
+def local_api():
+    """A thin client of its local API."""
+
+
+def ordinary_client():
+    """A client of the hub that never prints a method."""
+
+
+def near_miss():
+    """A client offering POSTING of /api/things, and a client of GETTER /x."""
+
+
+def method_without_route():
+    """A client of POST requests."""

@@ -55,7 +55,7 @@ class StatusView:
 
 @click.group("traces")
 def traces_group() -> None:
-    """Operator verbs over fleet-trace export."""
+    """Inspect and replay the export of the fleet's traces."""
 
 
 @traces_group.command("status", cls=AdminCommand)
@@ -71,9 +71,9 @@ def traces_status(cli: CliContext) -> None:
 @until_option(required=True)
 @click.option("--dry-run", is_flag=True, default=False, help="Count what would be told; export nothing.")
 def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bool) -> None:
-    """Tell every step that closed and chunk that finished in [since, until) again, with the live sweep's span
-    ids. The live cursor does not move, so spans the backend already holds arrive again — it dedupes on their
-    ids. A range over replay_max_window is told in windows; a failure names the --since to resume from."""
+    """Export again every step that closed and chunk that finished in [since, until). Spans keep the ids they
+    were first exported with, so the trace backend can drop duplicates, and ongoing export is unaffected. A range
+    over the hub's replay_max_window is sent in windows; a failure names the --since to resume from."""
     refuse_bad_window(since, until, CliCollaborators.of(click.get_current_context()).wall_clock)
     status = cli.get("/api/traces/status", "GET /traces/status").json()
     windows = replay_windows(since, until, status.get("replay_max_window_seconds"))

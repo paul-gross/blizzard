@@ -1,6 +1,5 @@
 """``blizzard runner <cmd>`` — the registry: declares the root ``runner`` group and maps each
-concept module's commands onto it as ``"<module>:<attribute>"``, imported only when a command
-runs, so a worker verb never loads the OpenTelemetry SDK or a daemon's stack."""
+concept module's commands onto it as ``"<module>:<attribute>"``."""
 
 from __future__ import annotations
 
@@ -50,9 +49,7 @@ _COMMANDS = {
 
 
 class _RunnerGroup(OperatorGroup):
-    """The root of a runner command: it owns the process's :class:`WorkerSession`, so the one
-    HTTP client and the command's span are finished — and the span sent — as the command ends,
-    before click reports any error."""
+    """The root of a runner command: it owns the process's :class:`WorkerSession` for the command's run."""
 
     def invoke(self, ctx: click.Context) -> object:
         return WorkerSession.begin(ctx, CliCollaborators.of(ctx)).run(lambda: super(_RunnerGroup, self).invoke(ctx))

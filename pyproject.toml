@@ -209,6 +209,10 @@ also_copy = [
     "openapi",
     # The README case checks every example in the format reference against the note rules.
     "changes/README.md",
+    # The route-clause rule test runs Vale under the repo's real config against its own fixtures.
+    ".vale.ini",
+    "styles",
+    "tests/fixtures/route_clause",
     ".github/workflows/gate.yml",
     ".github/workflows/pr.yml",
     ".github/workflows/push.yml",
