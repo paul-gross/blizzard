@@ -58,7 +58,7 @@ class ChunkChangedPayload(SseFramePayload):
     key: str | None = None
     #: The releasing runner's own reason — rides the ``released`` cause; omitted on every other.
     reason: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -66,7 +66,7 @@ class QuestionAskedPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -74,7 +74,7 @@ class QuestionAnsweredPayload(SseFramePayload):
     chunk_id: str
     question_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -82,7 +82,7 @@ class DecisionOpenedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 
@@ -90,7 +90,7 @@ class DecisionResolvedPayload(SseFramePayload):
     chunk_id: str
     decision_id: str
     key: str | None = None
-    #: The chunk's project, stamped by the publisher; what a project-filtered stream selects on.
+    #: The id of the chunk's project.
     project_id: str | None = None
 
 

@@ -58,9 +58,11 @@ class ChunkIngestResponse(WireModel):
     """The minted chunk id."""
 
     chunk_id: str
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 
@@ -202,9 +204,11 @@ class ChunkSummary(WireModel):
     awaiting_external_merge: bool = False
     landed_repos: list[LandedRepoView] = []
     landed: bool = False
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 
@@ -527,9 +531,11 @@ class ChunkPatchResponse(WireModel):
     default_effort: str | None = None
     default_harnesses: list[str] = []
     intended_migration: IntendedMigrationView | None = None
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 
@@ -664,9 +670,11 @@ class ChunkDetail(WireModel):
     # a bounce is contention, not failure.
     bounces: list[BounceView] = []
     escalation: ChunkEscalationView | None = None
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 
@@ -694,9 +702,11 @@ class ChunkStatusView(WireModel):
     restart_epochs: list[int] = []
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     decision: ChunkDecisionStatusView | None = None
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 

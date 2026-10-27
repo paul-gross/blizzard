@@ -41,9 +41,11 @@ class RunRowView(WireModel):
     outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     delivered: list[DeliveredSetView]
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
 
 
@@ -95,7 +97,9 @@ class RunDeltaView(WireModel):
     outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     sets: list[DeliveredSetDeltaView]
-    #: The project this belongs to — its id, current slug and display name; ``None`` where the hub reports none.
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
     project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
