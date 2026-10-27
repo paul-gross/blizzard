@@ -49,6 +49,7 @@ _log = get_logger("blizzard.runner.loop")
 _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
 
 
+@domain_model
 @dataclass(frozen=True)
 class _ResolvedBindings:
     """One call's resolved environment bindings, per chunk: the held ones, and the newest binding of
