@@ -2,9 +2,8 @@
 
 The document lists every key the daemon reads from its toml file — path, type, whether it is required, its default, and
 whether it is deprecated and what replaces it — and every durable path under its runtime root, each sorted by path so a
-drift check over the committed output is stable. A path lists the verbs that write it and its enforced mode as a
-four-digit octal string; the ``env`` section renders the env file that holds the tokens, or is ``None`` when the daemon
-declares none."""
+drift check over the committed output is stable. A path lists its writer verbs and enforced octal mode; ``env`` renders
+the token env file, or ``None`` when the daemon declares none."""
 
 from __future__ import annotations
 
