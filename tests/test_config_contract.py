@@ -124,7 +124,7 @@ def _modules_containing(markers: tuple[str, ...]) -> set[str]:
 
 
 def test_the_env_writers_are_the_modules_that_write_the_env_file() -> None:
-    # composition.py only wires the writer into ingest and the daemon; it is not a verb of its own.
+    # src/blizzard/runner/composition.py only wires the writer into ingest and the daemon; it is not a verb of its own.
     found = _modules_containing(_ENV_WRITE_MARKERS) - {"runner/composition.py"}
     assert found == set(_ENV_WRITER_MODULES)
     verbs = set().union(*_ENV_WRITER_MODULES.values())
