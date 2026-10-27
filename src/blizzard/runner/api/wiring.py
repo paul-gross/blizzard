@@ -232,12 +232,10 @@ class RunnerWiring:
         return WorkerLease(lease=reference, active=False)
 
     def stepper(self) -> RunnerStepper:
-        """The bound runner's passes, run on request."""
         stepper: RunnerStepper | None = self._seam("stepper")
         return stepper if stepper is not None else self._refuse("runner stepper")
 
     def host_stepper(self) -> HostPassStepper:
-        """The host's own pass, run on request."""
         stepper: HostPassStepper | None = self._seam("host_stepper")
         return stepper if stepper is not None else self._refuse("host stepper")
 

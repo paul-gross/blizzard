@@ -321,20 +321,11 @@ class ResumeMarking:
 
 
 class RunnerStepper:
-    """One runner's passes, run on a timer or on request: its tick, then its trace sweep when tracing is on.
-
-    Owns the runner's :class:`LoopWiring` — resolved eagerly on the constructing (``host``) thread so a missing
-    prompt file fails startup (`tests/test_runner_loop_build.py`) — and, from the first pass, one hub client and one
-    :class:`LoopContext`, the worker-scratch sweep run once before any pass. A requested pass holds the tick lock
-    and, when tracing is on, the trace lock; a timed entry holds only its own and skips its interval while it is
-    held. A pass that raises is logged and swallowed on a timer, and answered ``failed`` on request."""
-
     def __init__(self, config: RunnerConfig, *, process_graph: RunnerProcess) -> None:
         self._wiring = LoopWiring.of(config, broker=process_graph.host.events)
         self._graph = process_graph
         self._tick_lock = StepLock()
         self._trace_lock = StepLock()
-        # Orders the one-time build of the client and context against two passes arriving at once.
         self._build = threading.Lock()
         self._client: httpx2.Client | None = None
         self._ctx: LoopContext | None = None
@@ -344,12 +335,9 @@ class RunnerStepper:
         return self._wiring
 
     def traces(self) -> bool:
-        """Whether a trace sweep follows each requested tick."""
         return self._graph.trace_sweep is not None
 
     def request(self) -> PassResult:
-        """One tick and, when tracing is on, one trace sweep, answered once both have finished: ``failed`` with
-        the first fault either met. Raises :class:`TickInProgress` while either lock is held."""
         with ExitStack() as held:
             held.enter_context(self._tick_lock.hold())
             if self.traces():
@@ -366,7 +354,6 @@ class RunnerStepper:
             return ended(clock, started_at, fault)
 
     def timed_tick(self) -> None:
-        """One tick for the timer, skipped while a pass holds the tick lock."""
         try:
             with self._tick_lock.hold():
                 self._tick()
@@ -376,7 +363,6 @@ class RunnerStepper:
             _log.error("tick failed", detail=str(exc))
 
     def timed_trace_sweep(self) -> None:
-        """One trace sweep for the timer, skipped while a pass holds the trace lock."""
         try:
             with self._trace_lock.hold():
                 self._sweep_traces()
@@ -386,7 +372,6 @@ class RunnerStepper:
             get_logger("blizzard.runner.trace_export").error("lease trace sweep failed", detail=str(exc))
 
     def quiesce(self) -> None:
-        """Wait out a tick in flight, so the shutdown marking never races one."""
         self._tick_lock.wait_idle()
 
     def close(self) -> None:
@@ -423,17 +408,13 @@ class RunnerStepper:
 
 
 def host_pass_stepper(host: HostProcess) -> HostPassStepper:
-    """The host's own pass, stepped over ``host``'s tick as it stands now."""
     return HostPassStepper(
         host.host_tick.run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick"
     )
 
 
 class PeriodicDriver:
-    """A background thread that ticks the loop on an interval (~30s), through a :class:`RunnerStepper`.
-
-    Without a ``stepper`` it builds and owns one. A tick that raises is logged and swallowed so one bad pass
-    never kills the daemon."""
+    """A background thread that ticks the loop on an interval (~30s) through a ``RunnerStepper``."""
 
     def __init__(
         self,

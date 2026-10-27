@@ -597,9 +597,7 @@ class HostedApp:
     runner_clients: tuple[httpx2.Client, ...]
     hub_http_client: httpx2.Client
     owned_host: HostProcess | None = None
-    #: One stepper per hosted runner, in the host's runner order, each the runner's passes on request or on a timer.
     steppers: tuple[RunnerStepper, ...] = ()
-    #: The host's own pass; ``None`` when the host built no runner.
     host_stepper: HostPassStepper | None = None
 
     @property

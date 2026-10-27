@@ -1,7 +1,3 @@
-"""Passes on request: one tick of a runner, or one pass of the host, answered once it has finished. Each handler is
-sync, so the pass runs off the event loop and every effect it has lands before the answer. Both serve a timed host
-too, and both are on the human lane."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -39,8 +35,6 @@ def _in_progress() -> JSONResponse:
 
 @router.post("", response_model=TickPassResponse, responses=_IN_PROGRESS)
 def run_tick(request: Request) -> TickPassResponse | JSONResponse:
-    """One tick of the runner — every phase a timed pass runs, then one trace sweep when tracing is on: ``failed``
-    with the message of the fault a pass met."""
     try:
         return _response(RunnerWiring.of(request).stepper().request())
     except TickInProgress:
@@ -49,7 +43,6 @@ def run_tick(request: Request) -> TickPassResponse | JSONResponse:
 
 @host_router.post("", response_model=TickPassResponse, responses=_IN_PROGRESS)
 def run_host_tick(request: Request) -> TickPassResponse | JSONResponse:
-    """One pass of the host's own work: registration, credential renewal, usage sampling, lane drain."""
     try:
         return _response(RunnerWiring.of(request).host_stepper().request())
     except TickInProgress:

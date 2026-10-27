@@ -1,7 +1,3 @@
-"""A runner host that steps on request (component tier): a runner's tick and the host's own pass run on request under
-a lock of their own, refuse a second pass at once, report a failed pass instead of raising, and a timed pass skips its
-interval while a requested one holds the lock. The two routes answer for them."""
-
 from __future__ import annotations
 
 import dataclasses
@@ -59,8 +55,6 @@ def _config(tmp_path: Path) -> RunnerConfig:
 
 
 class _Blocking:
-    """A pass that parks until released, so a test can hold a lock."""
-
     def __init__(self) -> None:
         self.entered = threading.Event()
         self.release = threading.Event()
@@ -112,7 +106,7 @@ def test_a_host_pass_is_refused_at_once_while_another_holds_the_lock_and_a_timed
     try:
         with pytest.raises(TickInProgress):
             stepper.request()
-        stepper.timed()  # skipped, not queued, and never raises
+        stepper.timed()
         assert blocking.calls == 1
     finally:
         blocking.release.set()
@@ -149,7 +143,7 @@ def test_a_runner_tick_that_raises_answers_failed(tmp_path: Path, monkeypatch: p
         stepper = RunnerStepper(config, process_graph=graph)
         try:
             result = stepper.request()
-            stepper.timed_tick()  # a timed tick that raises is swallowed
+            stepper.timed_tick()
         finally:
             stepper.close()
 
@@ -172,9 +166,9 @@ def test_a_requested_runner_pass_runs_one_trace_sweep_after_its_tick_when_tracin
     monkeypatch.setattr(loop_wiring, "tick", lambda _: order.append("tick"))
     config = _config(tmp_path)
     with loop_graph(config) as graph:
-        traced = dataclasses.replace(graph, trace_sweep=sweep)  # type: ignore[arg-type]
+        traced = dataclasses.replace(graph, trace_sweep=sweep)
         stepper = RunnerStepper(config, process_graph=traced)
-        sweep.sweep = lambda: order.append("sweep")  # type: ignore[method-assign]
+        sweep.sweep = lambda: order.append("sweep")
         try:
             assert stepper.traces()
             assert stepper.request().outcome is SweepPassOutcome.COMPLETED
@@ -203,7 +197,7 @@ def test_a_requested_runner_pass_is_refused_while_a_timed_tick_runs_and_the_time
             blocking.release.clear()
             blocking.entered.clear()
             requested = _hold_in_thread(stepper, blocking)
-            stepper.timed_tick()  # skipped
+            stepper.timed_tick()
             assert blocking.calls == 2
         finally:
             blocking.release.set()
@@ -264,8 +258,6 @@ def test_quiesce_waits_out_a_requested_tick(tmp_path: Path, monkeypatch: pytest.
 
 
 class _Stepper:
-    """A stepper double answering a scripted result or refusal."""
-
     def __init__(self, answer: PassResult | TickInProgress) -> None:
         self._answer = answer
         self.requests = 0
@@ -279,7 +271,6 @@ class _Stepper:
 
 @pytest.fixture
 def served(tmp_path: Path) -> Iterator[tuple[TestClient, _Stepper, _Stepper]]:
-    """A client rooted at the host, and the steppers behind the runner's route and the host's."""
     runner = _Stepper(PassResult(_NOW, _NOW, SweepPassOutcome.COMPLETED))
     host = _Stepper(PassResult(_NOW, _NOW, SweepPassOutcome.FAILED, "renewal broke"))
     app = create_runner_app(_config(tmp_path), stepper=runner, host_stepper=host)
@@ -353,8 +344,6 @@ class _Resume:
 
 
 class _ServingNothing:
-    """A server whose one run is the test's own body, in place of a socket loop."""
-
     def __init__(self, body: Callable[[], None]) -> None:
         self._body = body
 
@@ -379,8 +368,8 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     built = [BuiltRunner(FIXTURE_RUNNER_ID, config, ResolvedToken())]
     host = build_host_process(host_config_of(config), built)
     registration = _Registration()
-    host.host_tick = HostTick(registration=registration)  # type: ignore[arg-type]
-    host.listeners = SimpleNamespace(bound=lambda: [])  # type: ignore[assignment]
+    host.host_tick = HostTick(registration=cast(Any, registration))
+    cast(Any, host).listeners = SimpleNamespace(bound=lambda: [])
     resume = _Resume()
     seen: dict[str, object] = {}
 
@@ -391,9 +380,9 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
             seen["result"] = hosted.steppers[0].request()
 
     monkeypatch.setattr(runtime, "build_early_shutdown_server", lambda *_, **__: _ServingNothing(serving))
-    hosted = dataclasses.replace(build_hosted_app(config, host), resumes=(resume,))  # type: ignore[arg-type]
+    hosted = dataclasses.replace(build_hosted_app(config, host), resumes=(resume,))
     try:
-        runtime._serve_host(config, host, hosted, loop=loop)  # pyright: ignore[reportPrivateUsage]
+        cast(Any, runtime)._serve_host(config, host, hosted, loop=loop)
     finally:
         hosted.close()
         host.close()
@@ -402,7 +391,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     assert resume.shutdowns == 1
     if loop is LoopMode.TIMED:
         assert seen["threads"] == _LOOP_THREADS
-        assert seen["reports"] >= 1  # type: ignore[operator]
+        assert cast(int, seen["reports"]) >= 1
     else:
         assert seen["threads"] == set()
         assert cast(PassResult, seen["result"]).outcome is SweepPassOutcome.COMPLETED

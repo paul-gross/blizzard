@@ -297,7 +297,6 @@ class HostConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    #: Whether the host runs its passes on timers or only when one is requested.
     loop: LoopMode = LoopMode.TIMED
     hub_url: str = DEFAULT_HUB_URL
     public_urls: tuple[str, ...] = ()
@@ -796,7 +795,6 @@ class _Errors:
 
 
 def _parse_loop(value: object) -> LoopMode:
-    """``value`` as a :class:`LoopMode`; any other value than ``timed`` or ``stepped`` raises :class:`ConfigError`."""
     if isinstance(value, str) and value in set(LoopMode):
         return LoopMode(value)
     raise ConfigError(f"loop must be one of {[str(mode) for mode in LoopMode]}, got {value!r}")

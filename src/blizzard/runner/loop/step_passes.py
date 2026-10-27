@@ -1,8 +1,3 @@
-"""A pass the host runs on request: the lock that orders it against the same pass on a timer, the refusal when that
-lock is held, and the result it answers.
-
-The locks are in memory, in the host process, and end with it (``bzh:steppable-loop``)."""
-
 from __future__ import annotations
 
 import threading
@@ -19,18 +14,15 @@ from blizzard.foundation.sweep_passes import SweepPassOutcome
 
 
 class TickInProgress(Exception):
-    """The lock a pass needs is held by another pass."""
+    pass
 
 
 class StepLock:
-    """One pass's lock, taken without blocking."""
-
     def __init__(self) -> None:
         self._lock = threading.Lock()
 
     @contextmanager
     def hold(self) -> Iterator[None]:
-        """Hold the lock for the block; raises :class:`TickInProgress` at once when it is held."""
         if not self._lock.acquire(blocking=False):
             raise TickInProgress
         try:
@@ -39,7 +31,6 @@ class StepLock:
             self._lock.release()
 
     def wait_idle(self) -> None:
-        """Return once no pass holds the lock — a pass in flight is waited out, not refused."""
         with self._lock:
             pass
 
@@ -47,9 +38,6 @@ class StepLock:
 @domain_model
 @dataclass(frozen=True)
 class PassResult:
-    """How one requested pass ran: its span on the runner's clock, its outcome, and the fault's message when it
-    failed."""
-
     started_at: datetime
     finished_at: datetime
     outcome: SweepPassOutcome
@@ -57,15 +45,12 @@ class PassResult:
 
 
 def ended(clock: IClock, started_at: datetime, error: Exception | None) -> PassResult:
-    """The result of a pass that began at ``started_at``, failed with ``error`` when one is given."""
     if error is None:
         return PassResult(started_at, clock.now(), SweepPassOutcome.COMPLETED)
     return PassResult(started_at, clock.now(), SweepPassOutcome.FAILED, str(error) or type(error).__name__)
 
 
 class HostPassStepper:
-    """The host's own pass, run on its timer or on request, under a lock of its own."""
-
     def __init__(
         self, run_pass: Callable[[], None], *, clock: IClock, log: structlog.stdlib.BoundLogger, label: str
     ) -> None:
@@ -76,8 +61,6 @@ class HostPassStepper:
         self._lock = StepLock()
 
     def request(self) -> PassResult:
-        """One pass, answered once it has finished: ``failed`` with the fault a pass that raised met. Raises
-        :class:`TickInProgress` while another pass holds the lock."""
         with self._lock.hold():
             started_at = self._clock.now()
             try:
@@ -88,8 +71,6 @@ class HostPassStepper:
             return ended(self._clock, started_at, None)
 
     def timed(self) -> None:
-        """One pass for the timer: skipped, not queued, while another pass holds the lock. A pass that raises is
-        logged and swallowed, so one bad pass never kills the timer."""
         try:
             self.request()
         except TickInProgress:
