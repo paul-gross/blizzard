@@ -74,7 +74,10 @@ def test_the_applicability_table_matches_the_openapi_declared_params() -> None:
         assert declared >= _LENS_PARAMS, dataset
         table_filters = spec.filters
         assert table_filters == declared - _PAGINATION_PARAMS - _LENS_PARAMS, dataset
-        assert (declared & _PAGINATION_PARAMS) == (_PAGINATION_PARAMS if spec.paginated else set()), dataset
+        if spec.top_n:
+            assert (declared & _PAGINATION_PARAMS) == {"limit"}, dataset
+        else:
+            assert (declared & _PAGINATION_PARAMS) == (_PAGINATION_PARAMS if spec.paginated else set()), dataset
 
 
 def test_the_dataset_choice_list_matches_the_table() -> None:
