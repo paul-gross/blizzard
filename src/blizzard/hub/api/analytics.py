@@ -387,11 +387,14 @@ def counts_by_file(
     tool: Annotated[str | None, Query()] = None,
     subject_prefix: Annotated[str | None, Query()] = None,
     node_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ) -> AnalyticsCountsResponse:
     """Occurrence counts by file path among ``file_read`` events, honoring every other
-    filter. ``kind`` is not offered: this count fixes it to ``file_read``."""
+    filter. ``kind`` is not offered: this count fixes it to ``file_read``. Omitting
+    ``limit`` returns every path; ``limit`` opts into the top N by count, with complete
+    counts for the paths it returns."""
     criteria = replace(scope.criteria, tool=tool, subject_prefix=subject_prefix, node_id=node_id)
-    return counts_response(services.analytics_events.counts_by_file(criteria))
+    return counts_response(services.analytics_events.counts_by_file(criteria, limit=limit))
 
 
 @router.get(
@@ -469,7 +472,8 @@ def durations_by_node(
     services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node — see
-    ``AnalyticsDurationView`` for the wall-clock semantics."""
+    ``AnalyticsDurationView`` for the wall-clock semantics. Returns the complete
+    historical rollup unless the caller filters; its cost grows with history."""
     return _durations_response(services.operational_analytics.durations_by_node(scope.criteria))
 
 
@@ -482,7 +486,8 @@ def durations_by_graph(
     services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in — the transition's
-    own ``graph_id``, never the chunk's current pin."""
+    own ``graph_id``, never the chunk's current pin. Like the per-node rollup, it is a
+    complete historical read unless filtered, and its cost grows with history."""
     return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria))
 
 
@@ -646,5 +651,6 @@ def outcomes_by_node(
     """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
-    neither."""
+    neither. Returns the complete historical distribution unless the caller filters; its
+    cost grows with history."""
     return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria))

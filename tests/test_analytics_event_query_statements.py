@@ -106,3 +106,12 @@ def test_an_events_cursor_of_the_wrong_arity_is_malformed_naming_the_cursor() ->
     with pytest.raises(MalformedCursor) as exc_info:
         store_module._decode_cursor(cursor)  # type: ignore[attr-defined]
     assert exc_info.value.cursor == cursor
+
+
+def test_a_counts_limit_follows_the_grouping_and_ordering() -> None:
+    stmt = store_module._counts_stmt(  # type: ignore[attr-defined]
+        _STMTS, _CRITERIA, group_col=s.transcript_events.c.subject, kind="file_read", limit=5
+    )
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        sql = str(stmt.compile(dialect=dialect)).upper()
+        assert sql.index("GROUP BY") < sql.index("ORDER BY") < sql.index("LIMIT")

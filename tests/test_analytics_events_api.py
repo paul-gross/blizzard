@@ -374,6 +374,25 @@ def test_counts_by_file(tmp_path: Path) -> None:
     assert resp.json()["counts"] == [{"key": "src/a.py", "count": 1, "graph_name": None, "node_name": None}]
 
 
+def test_counts_by_file_limit_is_forwarded_and_omitting_it_changes_nothing(tmp_path: Path) -> None:
+    hub, token, _chunk_id = _seeded_hub(tmp_path)
+
+    unlimited = hub.client.get("/api/analytics/counts/files", headers=_cookie(token))
+    limited = hub.client.get("/api/analytics/counts/files", params={"limit": 1}, headers=_cookie(token))
+
+    assert limited.status_code == 200, limited.text
+    assert limited.json()["counts"] == unlimited.json()["counts"][:1]
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "x"])
+def test_counts_by_file_refuses_a_non_positive_or_malformed_limit(tmp_path: Path, limit: str) -> None:
+    hub, token, _chunk_id = _seeded_hub(tmp_path)
+
+    resp = hub.client.get("/api/analytics/counts/files", params={"limit": limit}, headers=_cookie(token))
+
+    assert resp.status_code == 422, resp.text
+
+
 def test_counts_by_skill(tmp_path: Path) -> None:
     hub, token, _chunk_id = _seeded_hub(tmp_path)
 

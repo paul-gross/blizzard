@@ -301,3 +301,18 @@ def test_a_scope_unlinks_from_a_retired_routine(tmp_path: Path) -> None:
 
     assert resp.status_code == 204, resp.text
     assert hub.client.get(f"/api/routines/{routine['routine_id']}/scopes").json() == ["blizzard"]
+
+
+def test_a_sweeps_span_longer_than_a_year_is_accepted_and_a_degenerate_one_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    routine = _create_routine(hub)
+    url = f"/api/routines/{routine['routine_id']}/sweeps"
+
+    long = hub.client.get(url, params={"since": "2020-01-01T00:00:00Z", "until": "2026-12-31T00:00:00Z"})
+    zero = hub.client.get(url, params={"since": "2026-01-01T00:00:00Z", "until": "2026-01-01T00:00:00Z"})
+    inverted = hub.client.get(url, params={"since": "2026-02-01T00:00:00Z", "until": "2026-01-01T00:00:00Z"})
+
+    assert long.status_code == 200, long.text
+    assert zero.status_code == 422
+    assert inverted.status_code == 422

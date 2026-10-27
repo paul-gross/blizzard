@@ -18,7 +18,7 @@ from blizzard.hub.domain.observability.analytics.queries import EventQueryCriter
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.support import hub_store_connections, migrated_hub_at, mint_graph, stamp
+from tests.support import count_rows_read, hub_store_connections, migrated_hub_at, mint_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -341,6 +341,56 @@ def test_a_limit_below_one_is_refused_rather_than_crashing_on_an_empty_page(
 def test_counts_by_file(store: AnalyticsEventQueryStore) -> None:
     rows = store.counts_by_file(_criteria())
     assert {(r.key, r.count) for r in rows} == {("src/a.py", 1), ("src/b.py", 1), ("src/c.py", 1)}
+
+
+def _seed_reads(insert_events: Any, counts: dict[str, int]) -> None:
+    events = [
+        _event(subject=path, turn_path=str(i), occurrence=n)
+        for i, (path, reads) in enumerate(counts.items())
+        for n in range(reads)
+    ]
+    insert_events("sg_top", *events)
+
+
+def test_counts_by_file_limit_returns_the_ordered_prefix_with_complete_counts(tmp_path: Path) -> None:
+    store, _engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {"src/e.py": 1, "src/d.py": 2, "src/c.py": 2, "src/b.py": 3, "src/a.py": 1})
+
+    everything = store.counts_by_file(_criteria())
+    top = store.counts_by_file(_criteria(), limit=3)
+
+    assert [(r.key, r.count) for r in everything] == [
+        ("src/b.py", 3),
+        ("src/c.py", 2),
+        ("src/d.py", 2),
+        ("src/a.py", 1),
+        ("src/e.py", 1),
+    ]
+    assert top == everything[:3]
+    assert store.counts_by_file(_criteria(), limit=99) == everything
+
+
+def test_counts_by_file_limit_cuts_a_tie_by_path_ascending(tmp_path: Path) -> None:
+    store, _engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {"src/z.py": 2, "src/m.py": 2, "src/a.py": 2})
+
+    assert [r.key for r in store.counts_by_file(_criteria(), limit=2)] == ["src/a.py", "src/m.py"]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_counts_by_file_refuses_a_limit_below_one(store: AnalyticsEventQueryStore, limit: int) -> None:
+    with pytest.raises(ValueError):
+        store.counts_by_file(_criteria(), limit=limit)
+
+
+def test_counts_by_file_limit_bounds_returned_rows_as_distinct_paths_grow(tmp_path: Path) -> None:
+    store, engine, insert_events = _new_store(tmp_path)
+    _seed_reads(insert_events, {f"src/f{i:03}.py": 1 for i in range(5)})
+    small = count_rows_read(engine, lambda: store.counts_by_file(_criteria(), limit=3))
+    _seed_reads(insert_events, {f"src/g{i:03}.py": 1 for i in range(60)})
+    large = count_rows_read(engine, lambda: store.counts_by_file(_criteria(), limit=3))
+
+    assert small == large == 3
 
 
 def test_counts_by_file_honors_a_combined_filter(store: AnalyticsEventQueryStore) -> None:

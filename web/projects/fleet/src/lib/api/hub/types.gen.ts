@@ -10788,6 +10788,10 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
          */
         node_id?: string | null;
         /**
+         * Limit
+         */
+        limit?: number | null;
+        /**
          * Graph Id
          */
         graph_id?: string | null;

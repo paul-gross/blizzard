@@ -38,7 +38,9 @@ usage fact recorded, one row per model, key ascending; it neither pages nor stre
 every match unbounded and unpaged); `--ndjson` is incompatible with `--json`, `--cursor`, and `--limit`, which the
 streaming route does not take. `spend-chunks` is the one operational dataset that pages or streams: `--cursor`/`--limit`
 (default 200) page the human and `--json` output, `--ndjson` streams the whole filtered set, with the same
-incompatibility as `events`' own.
+incompatibility as `events`' own. `counts-files --limit N` is a separate opt-in: it returns the top N paths by count
+(ties by path), each with its complete count, and the human output says other paths may be omitted. It takes no cursor
+and does not stream; without `--limit` every path returns.
 
 Each `summary` dataset takes only the filter subset its route exposes — the verb's `--help` is the contract — and an
 inapplicable flag is refused with a does-not-apply error, never silently dropped.
@@ -58,7 +60,8 @@ Every analytics read takes `?project=<id|slug>` to read one project's chunks; wi
 
 None of the eight operational routes defaults or requires a since/until window (unlike `/api/spend`, requiring `since`,
 or `/api/activity`, defaulting to 24h): an unfiltered call costs a full scan — acceptable at today's volumes, a
-deliberate open deferral.
+deliberate open deferral. Unfiltered durations, outcomes and sweeps reads are complete historical rollups on purpose,
+and their cost grows with history; `counts/files?limit=N` is the one read that bounds the rows it returns.
 
 ## Interpreting the numbers
 

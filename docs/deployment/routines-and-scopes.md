@@ -111,6 +111,7 @@ withdrawn roll-ups, and the introduced-age cut against `--introduced-boundary`.
 delivered finding set's instant and per-repository revisions, or `never` when the pair has recorded none — and a
 measurement series, the opaque text each delivered set records, cut to `--since`/`--until`. Unlike the last-swept table,
 the measurement series is windowed: a scope swept months ago still reads its true last-swept instant, never "never".
+The span is any positive `[since, until)` and is not capped, because comparing measurements across history needs it.
 
 `blizzard hub routine proposal-counts [<name>] --since <time> --until <time>` reports how many garden proposals landed
 in the window, broken out by routine and class into still-open, passed, accepted-with-item, and accepted-without-item
