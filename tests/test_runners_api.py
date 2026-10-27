@@ -87,8 +87,22 @@ def test_get_runner_and_list_runners_both_carry_every_registered_capability(tmp_
             "runner_id": "r1",
             "workspace_id": "w1",
             "capabilities": [
-                {"harness_id": "claude", "version": "1.2.3", "tiers": ["sonnet"], "default": True, "available": True},
-                {"harness_id": "codex", "version": None, "tiers": [], "default": False, "available": False},
+                {
+                    "harness_id": "claude",
+                    "version": "1.2.3",
+                    "tiers": ["sonnet"],
+                    "supported_models": [],
+                    "default": True,
+                    "available": True,
+                },
+                {
+                    "harness_id": "codex",
+                    "version": None,
+                    "tiers": [],
+                    "supported_models": [],
+                    "default": False,
+                    "available": False,
+                },
             ],
         },
     )
@@ -97,8 +111,22 @@ def test_get_runner_and_list_runners_both_carry_every_registered_capability(tmp_
     resp = hub.client.get("/api/runners/r1")
     assert resp.status_code == 200, resp.text
     assert resp.json()["capabilities"] == [
-        {"harness_id": "claude", "version": "1.2.3", "tiers": ["sonnet"], "default": True, "available": True},
-        {"harness_id": "codex", "version": None, "tiers": [], "default": False, "available": False},
+        {
+            "harness_id": "claude",
+            "version": "1.2.3",
+            "tiers": ["sonnet"],
+            "supported_models": [],
+            "default": True,
+            "available": True,
+        },
+        {
+            "harness_id": "codex",
+            "version": None,
+            "tiers": [],
+            "supported_models": [],
+            "default": False,
+            "available": False,
+        },
     ]
 
     listed = hub.client.get("/api/runners").json()["runners"]

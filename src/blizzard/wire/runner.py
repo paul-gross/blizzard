@@ -26,6 +26,8 @@ class RunnerCapability(BaseModel):
     harness_id: str
     version: str | None = None
     tiers: list[str] = []
+    #: Native model names or glob patterns this binding accepts; empty from a runner that predates the field.
+    supported_models: list[str] = []
     default: bool = False
     available: bool = True
 

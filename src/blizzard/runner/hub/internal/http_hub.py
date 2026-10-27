@@ -867,6 +867,7 @@ def _capability(capability: HarnessCapability) -> RunnerCapability:
         harness_id=capability.harness_id,
         version=capability.version,
         tiers=list(capability.tiers),
+        supported_models=list(capability.supported_models),
         default=capability.default,
         available=capability.available,
     )

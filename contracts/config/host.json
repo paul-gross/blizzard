@@ -530,6 +530,14 @@
     {
       "default": null,
       "deprecated": false,
+      "path": "runner[].models.supported",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
+    },
+    {
+      "default": null,
+      "deprecated": false,
       "path": "runner[].name",
       "replaced_by": null,
       "required": true,
@@ -598,6 +606,14 @@
       "replaced_by": null,
       "required": false,
       "type": "open table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "runner[].opencode.models.supported",
+      "replaced_by": null,
+      "required": false,
+      "type": "list of strings"
     },
     {
       "default": null,

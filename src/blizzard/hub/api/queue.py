@@ -199,7 +199,12 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
     carries the same shape, so it is converted the same way."""
     return tuple(
         RunnerCapability(
-            harness_id=c.harness_id, version=c.version, tiers=tuple(c.tiers), default=c.default, available=c.available
+            harness_id=c.harness_id,
+            version=c.version,
+            tiers=tuple(c.tiers),
+            supported_models=tuple(c.supported_models),
+            default=c.default,
+            available=c.available,
         )
         for c in capabilities
     )

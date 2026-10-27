@@ -244,6 +244,15 @@ optional the way Claude Code's is — an unmapped tier is a deliberately unavail
 configuration" below), never a guessed native name. Nothing substitutes downward when a tier is unmapped on either
 harness — aliases are roles, not a scale — so every degradation is authored.
 
+`[runner.models] supported` lists the native model names a Claude Code binding accepts, each an exact name or a `*` glob
+(case-sensitive; `*` crosses `/`). Absent, it defaults to `fable`, `opus`, `sonnet`, `haiku`, and `claude-*`; a declared
+list replaces that default rather than extending it, and `supported = []` accepts no native name. Only a native name is
+checked against it: an entry an alias or tier maps resolves to its target whether or not the target is listed.
+
+The runner reports each binding's list to the hub on registration, so a session that names only native names across
+several harnesses is matched to a runner whose list covers one of them. A `blizzard:` tier never matches a pattern; a
+tier is satisfied only by a mapping.
+
 The resolved tier vocabulary — the built-ins and whatever `[runner.models.aliases]` overrides or adds — is also what the
 runner advertises to the hub on registration, one binding per harness it can dispatch to: the hub never interprets a
 tier id, but it does hold this runner's own list of them to match a chunk's requirements against later.
@@ -295,7 +304,9 @@ runner's own `GET /runners/{runner_id}/api/harness-health` diagnostics; the hub 
 cause. Claude Code's own health check is the same evaluation, membership-only: an incompatible or unobserved version
 withholds availability exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted
 version is never itself a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could
-read. `[runner.opencode.models.aliases]` and `[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/
+read. `[runner.opencode.models] supported` is the same list for OpenCode, defaulting to `*/*`; each entry must contain a
+`/`, since OpenCode takes only a `provider/model` reference, and one without it fails host-config load.
+`[runner.opencode.models.aliases]` and `[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/
 `[runner.effort.aliases]` in shape but not in defaults — see "Model and effort tiers" above for why OpenCode's own table
 carries the whole mapping rather than overrides to a built-in one. `worker_config_path` names the runner-owned
 permission/plugin document that `blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project

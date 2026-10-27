@@ -88,9 +88,16 @@ def _chunk(
 
 
 def _capability(
-    harness_id: str, *, tiers: tuple[str, ...] = (), default: bool = False, available: bool = True
+    harness_id: str,
+    *,
+    tiers: tuple[str, ...] = (),
+    supported_models: tuple[str, ...] = (),
+    default: bool = False,
+    available: bool = True,
 ) -> RunnerCapability:
-    return RunnerCapability(harness_id=harness_id, tiers=tiers, default=default, available=available)
+    return RunnerCapability(
+        harness_id=harness_id, tiers=tiers, supported_models=supported_models, default=default, available=available
+    )
 
 
 # --- The reachability walk: branches, a cycle, and the two kinds of stop ---
@@ -305,6 +312,34 @@ _GATE_SCENARIOS = [
         # h1 is checked first and already resolves — harness order decides, not tier rank.
         [_capability("h1", tiers=("t_second_pref",)), _capability("h2", tiers=("t_first_pref",))],
         True,
+    ),
+    (
+        "a-native-only-multi-harness-session-matches-a-supported-pattern",
+        ["h1", "h2"],
+        ["opus", "openai/gpt-5"],
+        [_capability("h1", supported_models=("claude-*",)), _capability("h2", supported_models=("openai/*",))],
+        True,
+    ),
+    (
+        "a-native-only-multi-harness-session-matching-no-pattern-is-ineligible",
+        ["h1", "h2"],
+        ["gemini/pro"],
+        [_capability("h1", supported_models=("claude-*",)), _capability("h2", supported_models=("openai/*",))],
+        False,
+    ),
+    (
+        "a-capability-with-no-patterns-falls-back-to-tiers-only",
+        ["h1", "h2"],
+        ["opus"],
+        [_capability("h1", tiers=("t_other",)), _capability("h2")],
+        False,
+    ),
+    (
+        "a-wildcard-pattern-does-not-satisfy-an-authored-tier",
+        ["h1"],
+        ["blizzard:frontier"],
+        [_capability("h1", supported_models=("*",))],
+        False,
     ),
 ]
 

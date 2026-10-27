@@ -93,6 +93,7 @@ class OpenCodeDeclaration:
             worker_env=worker_env,
             model_aliases=section.model_aliases,
             effort_aliases=section.effort_aliases,
+            supported_models=section.supported_models,
             worker_config_path=(
                 str(snapshot / "opencode" / "opencode.json")
                 if bundled and snapshot is not None

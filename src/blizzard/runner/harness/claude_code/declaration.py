@@ -92,6 +92,7 @@ class ClaudeCodeDeclaration:
             worker_env=shared.worker_env,
             model_aliases=section.model_aliases,
             effort_aliases=section.effort_aliases,
+            supported_models=section.supported_models,
             transcript_source=transcript_source,
             process=process,
             launcher=launcher,

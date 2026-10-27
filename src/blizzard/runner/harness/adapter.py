@@ -269,6 +269,11 @@ class IHarnessModelResolution(Protocol):
         snapshot's own source; never itself a spawn-time resolution."""
         ...
 
+    def supported_models(self) -> tuple[str, ...]:
+        """The native model names or glob patterns this adapter accepts — the declared list, else the harness's
+        built-in vocabulary. The one list that gates native-name resolution and is reported to the hub."""
+        ...
+
 
 class IHarnessVerdictParsing(Protocol):
     """Parsing a worker's raw output into a verdict, a usability check, and its free-text

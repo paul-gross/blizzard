@@ -1166,6 +1166,8 @@ class FakeHarness:
         # `resolvable_tier_ids`'s scripted reply; default echoes a single
         # fake tier so a capability-snapshot test sees a non-empty list without opting in.
         self.tier_ids: tuple[str, ...] = ("fake-tier",)
+        # `supported_models`'s scripted reply: empty, so a capability report carries none unless a test opts in.
+        self.supported: tuple[str, ...] = ()
         self.resolved_effort: str | None = None
         self.resolved_compaction_window: str | None = None
         # Scriptable, not the null source; defaults to an empty
@@ -1328,6 +1330,9 @@ class FakeHarness:
 
     def resolvable_tier_ids(self) -> tuple[str, ...]:
         return self.tier_ids
+
+    def supported_models(self) -> tuple[str, ...]:
+        return self.supported
 
     def observe_version(self) -> str | None:
         self.version_probes += 1
