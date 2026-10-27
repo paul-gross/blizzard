@@ -452,7 +452,7 @@
           "short_help": "Force the standing derivation sweep's own replacement unit now, rather than waiting for its next tick \u2014 scoped to one segment, one chunk, or every candidate (neither option given)."
         },
         "summary": {
-          "help": "Read one of the canned counts or operational-dataset rollups.\nOnly spend-chunks pages or streams; a filter DATASET's own route does not expose is\nrefused.",
+          "help": "Read one of the canned counts or operational-dataset rollups.\nOnly spend-chunks pages or streams; counts-files alone takes --limit as a top-N, and\na filter DATASET's own route does not expose is refused.",
           "params": [
             {
               "hidden": false,
@@ -646,7 +646,7 @@
               "type": "text"
             },
             {
-              "help": "Max rows in one page (spend-chunks only). Illegal with --ndjson.",
+              "help": "spend-chunks: max rows in one page (1-1000, default 200). counts-files: return only the top N paths by count, with complete counts (no default). Illegal with --ndjson.",
               "hidden": false,
               "kind": "option",
               "name": "limit",
