@@ -24,7 +24,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
 from blizzard.hub.domain.observability.tracing.repository import StepHydration, TraceCheckpoint
 from blizzard.hub.domain.observability.tracing.steps import StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
-from blizzard.hub.domain.observability.tracing.window import read_window
+from blizzard.hub.domain.observability.tracing.window import oldest_unsent, read_window
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import TenantId
 from tests.hub_event_rows import hub_event_log_of
@@ -244,6 +244,46 @@ def test_statement_count_is_flat_as_the_window_grows(tmp_path: Path) -> None:
         counts[name] = count_queries(hub.engine, call)
     assert sizes == {"small": 2, "large": 8}
     assert counts["small"] == counts["large"]
+
+
+class _CountingReads:
+    def __init__(self, store: TraceStore) -> None:
+        self._store = store
+        self.candidate_reads: list[int] = []
+
+    def closing_candidates(self, since, until, limit):  # type: ignore[no-untyped-def]
+        self.candidate_reads.append(limit)
+        return self._store.closing_candidates(since, until, limit)
+
+    def step_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        return self._store.step_facts_for(chunk_ids)
+
+
+def test_oldest_unsent_is_the_first_key_the_drain_tells_and_reads_in_pages(tmp_path: Path) -> None:
+    hub, graph = trace_hub(tmp_path)
+    for i in range(3):
+        transitioned_and_stopped(hub, graph, 10 * (i + 1))
+    since = CursorKey.opening(hub.clock.now() - timedelta(hours=1))
+    until = since.at + timedelta(hours=2)
+    store = trace_store(hub)
+    reads = _CountingReads(store)
+
+    oldest = oldest_unsent(reads, since, until)  # type: ignore[arg-type]
+
+    assert oldest is not None
+    assert oldest.key == read_window(store, since, until, 1000).items[0].key
+    assert reads.candidate_reads == [100]
+
+
+def test_oldest_unsent_answers_none_with_nothing_after_the_cursor_and_writes_nothing(tmp_path: Path) -> None:
+    hub, graph = trace_hub(tmp_path)
+    transitioned_and_stopped(hub, graph, 1)
+    store = trace_store(hub)
+    newest = store.newest_cursor()
+    since = CursorKey.opening(hub.clock.now() + timedelta(hours=1))
+
+    assert oldest_unsent(store, since, since.at + timedelta(hours=1)) is None
+    assert store.newest_cursor() == newest
 
 
 def test_cursor_rows_append_and_the_newest_is_the_position(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ from structlog.contextvars import bound_contextvars
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import TransitionFact
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
@@ -211,14 +212,14 @@ class EventDerivationService:
     def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
         """Every one of ``segment_ids``' resolved chunks' graph pins, in two bulk reads
         for the whole batch: one ``segment_contexts`` call resolves the chunk ids,
-        then one ``load_facts_for`` plus one ``graph_id_of_many`` call resolves the
-        distinct chunk set's transitions and mint pins. Empty input issues neither read."""
+        then one ``movement_facts_for`` (only the transitions are consumed) plus one ``graph_id_of_many``
+        call resolves the distinct chunk set's transitions and mint pins. Empty input issues neither read."""
         if not segment_ids:
             return GraphPins()
         chunk_ids = sorted({context.chunk_id for context in self._events.segment_contexts(segment_ids).values()})
         if not chunk_ids:
             return GraphPins()
-        facts_by_id = self._facts.load_facts_for(chunk_ids)
+        facts_by_id = self._facts.movement_facts_for(chunk_ids)
         return GraphPins(
             transitions_by_chunk={chunk_id: facts.transitions for chunk_id, facts in facts_by_id.items()},
             mint_pin_by_chunk=self._record.graph_id_of_many(chunk_ids),
@@ -233,6 +234,16 @@ class EventDerivationService:
         current = self._events.segment_derivation_input(segment_id)
         if current is None:
             return False
+        return self.derive_input(segment_id, current, pins)
+
+    def derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
+        """:meth:`IReadTranscriptEvents.segment_derivation_inputs` passed through. A gone segment and a
+        corrupt one are both absent from the answer."""
+        return self._events.segment_derivation_inputs(segment_ids)
+
+    def derive_input(self, segment_id: str, current: SegmentDerivationInput, pins: GraphPins) -> bool:
+        """:meth:`derive_segment` after its read: the replacement for an input already in hand.
+        ``False``, deriving nothing, for a chunk with no resolvable graph pin."""
         graph_id = pins.graph_id_for(current.chunk_id, current.node_id, current.epoch)
         if graph_id is None:
             return False
@@ -294,16 +305,35 @@ class TenantEventDerivation:
         except Exception as exc:
             _log.warning("graph pin resolution failed, tenant skipped", fault=repr(exc))
             return False
-        for segment_id in candidates:
+        for batch in id_batches(candidates):
+            self._derive_batch(batch, pins, tally)
+        self._events.drop_segments(stale, at=self._clock.now())
+        tally.dropped += len(stale)
+        return True
+
+    def _derive_batch(self, batch: Sequence[str], pins: GraphPins, tally: DerivationTally) -> None:
+        """Derive one sub-batch in candidate order. The decoded inputs live only in this frame, so the
+        previous batch is released before the next is read. An id the plural read omits — gone or
+        corrupt — and every id of a batch whose plural read raised take the singular path, which
+        tells the two apart."""
+        try:
+            inputs = self._service.derivation_inputs(batch)
+        except Exception as exc:
+            _log.warning("segment inputs read failed, batch read singly", fault=repr(exc))
+            inputs = {}
+        for segment_id in batch:
             try:
-                if self._service.derive_segment(segment_id, pins):
+                current = inputs.pop(segment_id, None)
+                derived = (
+                    self._service.derive_input(segment_id, current, pins)
+                    if current is not None
+                    else self._service.derive_segment(segment_id, pins)
+                )
+                if derived:
                     tally.derived += 1
             except Exception as exc:
                 tally.failed += 1
                 _log.warning("segment derivation skipped", segment_id=segment_id, fault=repr(exc))
-        self._events.drop_segments(stale, at=self._clock.now())
-        tally.dropped += len(stale)
-        return True
 
 
 class EventDerivationReconciler:

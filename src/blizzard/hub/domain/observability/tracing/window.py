@@ -25,6 +25,8 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, identify_steps
 
+_OLDEST_UNSENT_PAGE = 100
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -138,10 +140,10 @@ def _assemble(item: TraceItem) -> tuple[FinishedSpan, ...]:
 
 
 def oldest_unsent(reads: IReadTraceSteps, since: CursorKey, until: datetime) -> TraceItem | None:
-    """The first item after ``since`` and at or before ``until``, or ``None``. Read an item at a
-    time, moving past closing facts that close nothing."""
+    """The first item after ``since`` and at or before ``until``, or ``None``. Read a page of
+    candidates at a time, moving past closing facts that close nothing."""
     while True:
-        window = read_window(reads, since, until, 1)
+        window = read_window(reads, since, until, _OLDEST_UNSENT_PAGE)
         if window.items:
             return window.items[0]
         if window.position == since:

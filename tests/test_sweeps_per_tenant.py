@@ -526,6 +526,7 @@ def test_segment_derivation_warning_inherits_tenant_from_its_sweep() -> None:
     def unit(tenant: TenantId) -> TenantEventDerivation:
         service = Mock(spec=EventDerivationService)
         service.graph_pins_for.return_value = Mock()
+        service.derivation_inputs.return_value = {}
         service.derive_segment.side_effect = RuntimeError("bad segment")
         return TenantEventDerivation(service=service, events=Mock(), clock=FixedClock(_NOW))
 
