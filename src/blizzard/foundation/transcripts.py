@@ -1,10 +1,10 @@
-"""The transcript vocabulary the wire carries — one definition, shared by both daemons."""
+"""The transcript vocabulary."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-#: The shared turn wire vocabulary; ``ask``/``verdict`` stay deferred.
+#: The kinds of a transcript turn.
 TurnKind = Literal["env", "asst", "tool", "thinking", "sidechain"]
 
 #: Why a transcript is unavailable — all three are ordinary states.

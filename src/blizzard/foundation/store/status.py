@@ -1,9 +1,5 @@
-"""The store-status read seam (``bzh:dependency-inversion``, ``bzh:repository-split``).
-
-A read-only seam over a daemon's store: can it be reached, and at what Alembic
-revision does it sit? Operational, never a fleet fact. The Protocol is
-dependency-free so its dependents stay free of the ORM (``bzh:domain-core``); the
-adapter under ``internal/`` is the only place the engine is touched."""
+"""The store-status read seam (``bzh:dependency-inversion``, ``bzh:repository-split``): can the store be
+reached, and at what Alembic revision does it sit? Operational, never a fleet fact."""
 
 from __future__ import annotations
 

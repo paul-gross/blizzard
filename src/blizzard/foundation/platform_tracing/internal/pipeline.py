@@ -63,9 +63,9 @@ def _stamping(stamp: SpanStamp) -> Iterator[None]:
 
 
 class _Stamping(SpanProcessor):
-    """Stamps each span with what its stamp answers as it starts, then hands it on to ``export``; a span
-    started while its stamp answers ``None`` never reaches ``export``, so it is never exported. A span's stamp is
-    the one its parent context carries — so a span inherits its parent's — else the process's own ``stamp``."""
+    """Stamps each span with its stamp's answer as it starts, then hands it on to ``export``; a span
+    whose stamp answers ``None`` never reaches ``export``. A span's stamp is the one its parent context
+    carries, else the process's own ``stamp``."""
 
     def __init__(self, stamp: SpanStamp, export: SpanProcessor) -> None:
         self._stamp = stamp

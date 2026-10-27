@@ -1,4 +1,4 @@
-"""The one platform-tracing handle a daemon process builds at its composition root.
+"""The one platform-tracing handle of a process.
 
 Off unless both switches are on: ``[tracing] platform`` and an OTLP endpoint the fleet-trace settings
 accept. The SDK pipeline and every instrumentation package are imported only on the enabled path."""
@@ -121,9 +121,8 @@ def build_platform_tracing(
     stamp: SpanStamp | None = None,
     exporter: SpanExporter | None = None,
 ) -> IPlatformTracing:
-    """The process's handle. ``stamp`` is asked for each span's attributes as the span starts, and a
-    span started while it answers ``None`` is never exported; ``exporter`` replaces the OTLP exporter —
-    tests pass an in-memory one."""
+    """The process's handle. ``stamp`` is the process's own :data:`SpanStamp`; ``exporter`` replaces the OTLP
+    exporter."""
     if not platform_tracing_enabled(config, environ):
         return DisabledPlatformTracing()
     from blizzard.foundation.platform_tracing.internal.pipeline import EnabledPlatformTracing

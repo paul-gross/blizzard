@@ -1,4 +1,4 @@
-"""The sign-in refusal vocabulary the hub and its wire share: the code `/login?refusal=<code>` carries."""
+"""The sign-in refusal vocabulary."""
 
 from __future__ import annotations
 

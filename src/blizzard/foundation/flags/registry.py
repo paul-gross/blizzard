@@ -1,8 +1,7 @@
 """The flag registry file, ``registry.toml``, and its parser.
 
-Every flag is declared in that one data file, packaged with the wheel; each process's root reads it and hands the parsed
-registry down. The parser is strict: any malformed entry fails the whole parse, so a bad declaration is found at start
-rather than read as off."""
+Every flag is declared in that one data file, packaged with the wheel. The parser is strict: any malformed
+entry fails the whole parse, so a bad declaration is found at start rather than read as off."""
 
 from __future__ import annotations
 

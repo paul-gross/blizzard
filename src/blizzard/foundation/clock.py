@@ -1,8 +1,4 @@
-"""The injected clock (``bzh:injected-clock``).
-
-All time flows through an ``IClock`` wired at the composition root — never a direct
-``datetime.now()`` / ``time.time()``, and never a SQLAlchemy column default, so that
-a bound ``FixedClock`` makes every duration deterministic."""
+"""The clock seams and their implementations (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 

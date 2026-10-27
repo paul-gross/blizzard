@@ -1,9 +1,5 @@
-"""The shared authz vocabulary both daemons import — a member of the shared kernel (``bzh:shared-kernel``).
-
-A **dependency-free** domain package — no FastAPI, no SQLAlchemy (``bzh:domain-core``).
-:class:`Role` is a total order, carried declaratively as :data:`ROLE_PERMISSIONS`: a
-**static, code-only map**, never DB-stored. :class:`Permission` is a string enum.
-"""
+"""The authz vocabulary shared by both daemons: :class:`Role`, :class:`Permission`, and the code-only
+:data:`ROLE_PERMISSIONS` map from each role to its permissions (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
@@ -23,15 +19,13 @@ class Role(StrEnum):
 class Permission(StrEnum):
     """One grantable capability; a role expands to a fixed set of them."""
 
-    #: Fleet-state reads, including the streaming one (``GET /api/events/stream``); reused across
-    #: more than one route family. Belongs to ``guest``+.
+    #: Read fleet state, including the live event stream.
     FLEET_VIEW = "fleet:view"
-    #: Ingest a chunk (``POST /chunks``).
+    #: Ingest a chunk.
     CHUNK_INGEST = "chunk:ingest"
-    #: Every other chunk-scoped control write — promote/detach/pause/resume/stop/requeue/
-    #: patch/hub-marker — plus a write outside chunk scope that reuses this same tier.
+    #: Control a chunk's lifecycle: promote, detach, pause, resume, stop, requeue, patch, mark.
     CHUNK_CONTROL = "chunk:control"
-    #: Answer a question (``POST /questions/{id}/answers``, and the durable ask that lands it).
+    #: Answer a question.
     QUESTION_ANSWER = "question:answer"
     #: Resolve an open gate decision.
     GATE_RESOLVE = "gate:resolve"
@@ -41,23 +35,19 @@ class Permission(StrEnum):
     RUNNER_PAUSE = "runner:pause"
     #: Retire/reinstate a runner, or revoke its token.
     RUNNER_RETIRE = "runner:retire"
-    #: Add a runner, or rotate its token (enroll) — both mint a credential. Held by ``admin``+.
+    #: Add a runner, or rotate its token; both mint a credential.
     RUNNER_ADD = "runner:add"
-    #: Mint, edit (retire/enable), or otherwise author a workflow graph — also scope and
-    #: routine authoring, the same authoring tier.
+    #: Author a workflow graph, including its scope and routines.
     GRAPH_EDIT = "graph:edit"
-    #: Administer users and their roles. Held by ``admin``+ (pinned by
-    #: tests/test_auth_core.py::test_user_manage_is_admin_and_above).
+    #: Administer users and their roles.
     USER_MANAGE = "user:manage"
-    #: Read a chunk's stored transcript segments — above ``fleet:view``,
-    #: since a transcript carries everything a worker saw, not just the fleet's state.
+    #: Read a chunk's stored transcript segments, which carry everything a worker saw.
     TRANSCRIPT_READ = "transcript:read"
-    #: Force a transcript-event re-derivation, or replay a window of fleet traces — mutations
-    #: or re-sends, so above the read-only :attr:`TRANSCRIPT_READ`.
+    #: Force a transcript-event re-derivation, or replay a window of fleet traces.
     ANALYTICS_ADMIN = "analytics:admin"
-    #: Write a configured record — today the secret store. Held by ``admin``+.
+    #: Write a configured record, such as a secret.
     CONFIG_EDIT = "config:edit"
-    #: Create, list, rename, and delete tenants. Hub-level (``blizzard.hub.auth.permissions``).
+    #: Create, list, rename, and delete tenants. Hub-level.
     TENANT_ADMIN = "tenant:admin"
     #: Grant or revoke a membership, and its invitations, in any tenant. Hub-level.
     MEMBERSHIP_GRANT_ANY = "membership:grant-any"
@@ -67,7 +57,7 @@ class Permission(StrEnum):
     EXPORT_ADMIN = "export:admin"
 
 
-#: ``guest`` — read everything, mutate nothing.
+#: ``guest`` holds only the read permission.
 _GUEST_PERMISSIONS: frozenset[Permission] = frozenset({Permission.FLEET_VIEW})
 
 #: Every permission a ``contributor`` (or higher) holds.
@@ -82,8 +72,7 @@ _CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset
     }
 )
 
-#: ``admin`` adds fleet-identity/runner writes, graph-authoring, and user
-#: administration (the admin page, ``user:manage``) on top of ``contributor``.
+#: ``admin`` holds the ``contributor`` permissions plus those listed here.
 _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset(
     {
         Permission.RUNNER_PAUSE,

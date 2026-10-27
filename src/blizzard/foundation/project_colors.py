@@ -1,4 +1,4 @@
-"""The project color vocabulary the hub and its wire share."""
+"""The project color vocabulary."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Annotated
 
 from pydantic import StringConstraints
 
-#: The one grammar of a custom project color: a lowercase ``#rrggbb``. The hub's parse lowercases before it applies it.
+#: The one grammar of a custom project color: a lowercase ``#rrggbb``.
 HEX_COLOR_PATTERN = r"^#[0-9a-f]{6}$"
 
 #: A project's custom color, a lowercase ``#rrggbb`` string beside the palette names.

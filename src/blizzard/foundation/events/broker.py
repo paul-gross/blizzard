@@ -1,10 +1,9 @@
-"""The kind-agnostic SSE event broker — the live re-broadcast seam both daemons bind.
+"""The kind-agnostic SSE event broker.
 Every published event carries a **monotonic id** and reaches every open connection live,
 with a bounded tail (``history``) a reconnect replays from its ``Last-Event-ID``.
 Publishers run on worker threads, subscribers on the event loop, so :meth:`publish`
 crosses over with ``loop.call_soon_threadsafe``. A closed broker ends every connection it
-holds. A daemon's own broker wraps this one with its own ``publish_*`` helpers; nothing here
-knows an event's kind."""
+holds. Nothing here knows an event's kind."""
 
 from __future__ import annotations
 
@@ -64,7 +63,7 @@ class EventBroker:
         self._next_id = 0
         self._closed = False
 
-    # --- publish (called from the sync route handlers) ----------------------
+    # --- publish -------------------------------------------------------------
 
     def publish(self, event_type: str, payload: dict[str, object]) -> int:
         """Record a typed event and fan it out live to every open connection.
@@ -84,7 +83,7 @@ class EventBroker:
                 sub.loop.call_soon_threadsafe(sub.queue.put_nowait, event)
         return event.id
 
-    # --- subscription (called from the async SSE handler) -------------------
+    # --- subscription --------------------------------------------------------
 
     def subscribe(self, owner: str | None = None) -> Subscriber:
         """Register a live connection opened for ``owner``, capturing the running loop for the handoff. A
@@ -115,8 +114,7 @@ class EventBroker:
 
     def end_subscriber(self, owner: str) -> None:
         """End every open connection of ``owner`` as :meth:`close` ends them all — each sends what it already
-        holds, then returns — leaving every other connection and the broker open. Called from a worker
-        thread, once the write that ends ``owner``'s access has committed."""
+        holds, then returns — leaving every other connection and the broker open."""
         with self._lock:
             ended = [sub for sub in self._subscribers if sub.owner == owner]
             self._subscribers.difference_update(ended)
