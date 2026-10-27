@@ -6,7 +6,7 @@ from enum import StrEnum
 
 
 class HarnessTelemetryOutcome(StrEnum):
-    """The outcome for one of a harness binding's telemetry signals."""
+    """What the runner does with one of a harness binding's telemetry signals."""
 
     OFF = "off"
     CAPTURED = "captured"
