@@ -20,6 +20,7 @@ from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.fleet_launchers import runner_config
 from tests.fleet_world import mint_world
+from tests.service.runner_support import WORK_REF_URL, fleet_chunk_status, tick_env
 from tests.service.support import (
     mock_hub,
     mock_hub_chunk_spec,
@@ -27,7 +28,6 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
-from tests.service.test_runner_service import _WORK_REF_URL, _status, _tick_env
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -36,7 +36,7 @@ pytestmark = [pytest.mark.service, service_gate]
 def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     marker = tmp_path / "operator-hook.log"
     beats = tmp_path / "heartbeats.log"
@@ -54,7 +54,7 @@ def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        spec = mock_hub_chunk_spec(_WORK_REF_URL)
+        spec = mock_hub_chunk_spec(WORK_REF_URL)
         # The scripted build makes no tool call of its own, and only a tool call fires the PostToolUse hooks.
         spec["nodes"]["build"]["prompt"] = 'tool_call("Bash", {"command": "true"})\n' + spec["nodes"]["build"]["prompt"]
         resp = hub.post("/_seed/chunk", json=spec)
@@ -66,8 +66,8 @@ def test_a_bundled_runners_mock_worker_runs_the_operators_and_the_runners_hooks(
         # What a bundled `tick` builds: the published snapshot reaches the adapter through the wiring.
         wiring = LoopWiring.of(config, bundle=publish_harness_bundle(bundle, config.root))
 
-        landed = poll_until(lambda: _tick(wiring, fenced) or _status(hub, chunk_id) == "done", timeout=90.0)
-        assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+        landed = poll_until(lambda: _tick(wiring, fenced) or fleet_chunk_status(hub, chunk_id) == "done", timeout=90.0)
+        assert landed, f"chunk did not land (status {fleet_chunk_status(hub, chunk_id)!r})"
 
     assert marker.exists(), "the operator's hook never fired: the composed settings did not reach the worker"
     assert "runner heartbeat" in beats.read_text(), "the runner's heartbeat hook was lost in composition"

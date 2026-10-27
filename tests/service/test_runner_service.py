@@ -19,7 +19,6 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx2
@@ -35,15 +34,23 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.runner.composition import RunnerProcess, build_host_stores, build_runner_process
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.leases.lease_auth import LeaseToken
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store.schema import escalation_closures, outbound_buffer
 from blizzard.runner.throttle.usage_limits import UsageLimitMark
-from tests.fleet_launchers import REPO, await_http, git_bare, runner_api, runner_config, terminate
+from tests.fleet_launchers import await_http, git_bare, runner_api, runner_config, terminate
 from tests.fleet_world import BUILD_BRANCH, REPO_NAME, mint_world
 from tests.host_files import init_runner_environment, write_host_file
 from tests.runner_fakes import daemon_store, runner_store_errors
 from tests.runner_join import fleet_headers, pin_runner, runner_spawn_env, seed_pinned_runner
+from tests.service.runner_support import (
+    WORK_REF_URL,
+    drive_ticks,
+    fleet_chunk_status,
+    seed_chunk,
+    tick_env,
+    tick_then,
+    worker_credential,
+)
 from tests.service.support import (
     JUDGEMENT_SCRIPT,
     SseTap,
@@ -63,32 +70,6 @@ from tests.support import daemon_log_sink, free_port, parse_sse_frames, read_dae
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_WORK_REF_URL = f"{REPO}/issues/1"
-
-
-def _tick_env() -> dict[str, str]:
-    fenced = dict(os.environ)
-    fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
-    return fenced
-
-
-def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: float = 0.5) -> None:
-    """Run ``ticks`` synchronous reconciliation passes with the harness fence set."""
-    prior = dict(os.environ)
-    os.environ.update(fenced)
-    try:
-        for _ in range(ticks):
-            LoopWiring.of(config).tick_once()
-            time.sleep(pause)
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
-
-
-def _status(hub: httpx2.Client, chunk_id: str) -> str:
-    """The mock hub's own status read."""
-    return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
-
 
 def _pending_outbound(config: RunnerConfig) -> int:
     """The depth of the runner's store-and-forward buffer."""
@@ -99,38 +80,32 @@ def _pending_outbound(config: RunnerConfig) -> int:
         engine.dispose()
 
 
-def _seed(hub: httpx2.Client) -> str:
-    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
-    assert resp.status_code == 201, resp.text
-    return resp.json()["chunk_id"]
-
-
 def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drive (hub up) until the mock worker has committed, exited, and ADVANCE has
         # *buffered* the completion — the tick boundary just before PULL would flush it.
-        buffered = poll_until(lambda: _tick_then(config, fenced, lambda: _pending_outbound(config) >= 1), timeout=60.0)
+        buffered = poll_until(lambda: tick_then(config, fenced, lambda: _pending_outbound(config) >= 1), timeout=60.0)
         assert buffered, "the completion never buffered (the worker did not run to completion)"
-        assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
+        assert fleet_chunk_status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
 
         # Now the hub goes unreachable: every flush attempt fails, so the completion stays
         # store-and-forward buffered — the buffer depth is the proof it did not flush.
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
-        _drive(config, fenced, ticks=4)
+        drive_ticks(config, fenced, ticks=4)
         assert _pending_outbound(config) >= 1, "the completion did not stay buffered during the outage"
 
         # Heal the hub; the buffered completion flushes and the chunk lands.
         assert hub.post("/_levers/reset").status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=60.0)
-        assert landed, f"chunk did not land after recovery (status {_status(hub, chunk_id)!r})"
+        assert landed, f"chunk did not land after recovery (status {fleet_chunk_status(hub, chunk_id)!r})"
         assert _pending_outbound(config) == 0, "the outbound buffer did not drain after recovery"
 
     # The runner pushed the mock harness's commit to the bare origin, on the work branch —
@@ -142,20 +117,20 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
 def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Drop the very first completion ack: the hub advances build -> deliver but answers
         # 503, so the runner re-flushes; the hub's epoch-idempotent apply advances it once.
         assert hub.post("/_levers/drop_ack", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"chunk did not land after the dropped ack (status {_status(hub, chunk_id)!r})"
+        assert landed, f"chunk did not land after the dropped ack (status {fleet_chunk_status(hub, chunk_id)!r})"
         # done is reached once — a double apply would have errored or re-run the deliver node.
-        assert _status(hub, chunk_id) == "done"
+        assert fleet_chunk_status(hub, chunk_id) == "done"
 
 
 def _subscription_mark(config: RunnerConfig) -> UsageLimitMark | None:
@@ -184,11 +159,11 @@ def test_usage_limit_marks_the_subscription_and_parks_without_braking_or_failing
     place — the runner's brake never engages, and the chunk stays running, unescalated, on its first epoch."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        resp = hub.post("/_seed/chunk", json=mock_hub_usage_limited_chunk_spec(_WORK_REF_URL))
+        resp = hub.post("/_seed/chunk", json=mock_hub_usage_limited_chunk_spec(WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
@@ -196,7 +171,7 @@ def test_usage_limit_marks_the_subscription_and_parks_without_braking_or_failing
         config = dataclasses.replace(config, transcripts_root=str(workspace / ".blizzard-mock-harness" / "transcripts"))
 
         marked = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _subscription_mark(config) is not None), timeout=60.0
+            lambda: tick_then(config, fenced, lambda: _subscription_mark(config) is not None), timeout=60.0
         )
         assert marked, "the usage limit was never marked"
 
@@ -206,7 +181,7 @@ def test_usage_limit_marks_the_subscription_and_parks_without_braking_or_failing
         assert locally_paused is False, "a usage limit engaged the runner's brake"
         assert parked == {mark.lease_id}
 
-        _drive(config, fenced, ticks=1, pause=0.3)
+        drive_ticks(config, fenced, ticks=1, pause=0.3)
         assert runner_fleet_view(hub, config).get("locally_paused_reason") is None
 
         # Parked in place, not failed: the lease kept its claim — no escalation, no epoch
@@ -223,11 +198,11 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
     unclaimed while the lever stands, and lands once the prerequisite is cleared."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         assert (
@@ -237,12 +212,12 @@ def test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears(tmp_path: P
             ).status_code
             == 200
         )
-        _drive(config, fenced, ticks=2, pause=0.3)
-        assert _status(hub, chunk_id) == "ready"  # denied outright — FILL never claimed it
+        drive_ticks(config, fenced, ticks=2, pause=0.3)
+        assert fleet_chunk_status(hub, chunk_id) == "ready"  # denied outright — FILL never claimed it
 
         assert hub.delete("/_levers/dependency_unmet", params={"chunk_id": chunk_id}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"chunk did not land once the dependency cleared (status {_status(hub, chunk_id)!r})"
+        assert landed, f"chunk did not land once the dependency cleared (status {fleet_chunk_status(hub, chunk_id)!r})"
 
 
 def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_path: Path) -> None:
@@ -251,12 +226,12 @@ def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_
     marked head and claims the unmarked one — the marked one stays ``ready``."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        blocked_id = _seed(hub)  # seeded first — the peek's marked head
-        open_id = _seed(hub)
+        blocked_id = seed_chunk(hub)  # seeded first — the peek's marked head
+        open_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         assert (
@@ -267,8 +242,8 @@ def test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub(tmp_
             == 200
         )
         reached = poll_until(lambda: _run_and_check(config, fenced, hub, open_id, "running"), timeout=60.0)
-        assert reached, f"the unmarked entry was never claimed (status {_status(hub, open_id)!r})"
-        assert _status(hub, blocked_id) == "ready"  # never even attempted — no denial to absorb
+        assert reached, f"the unmarked entry was never claimed (status {fleet_chunk_status(hub, open_id)!r})"
+        assert fleet_chunk_status(hub, blocked_id) == "ready"  # never even attempted — no denial to absorb
 
 
 def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Path) -> None:
@@ -277,12 +252,12 @@ def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Pa
     rather than reaching past it."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        blocked_id = _seed(hub)  # seeded first — the peek's marked head
-        open_id = _seed(hub)
+        blocked_id = seed_chunk(hub)  # seeded first — the peek's marked head
+        open_id = seed_chunk(hub)
         config = dataclasses.replace(
             runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), queue_strict=True
         )
@@ -294,9 +269,9 @@ def test_fill_strict_holds_at_a_marked_head_against_a_real_mock_hub(tmp_path: Pa
             ).status_code
             == 200
         )
-        _drive(config, fenced, ticks=2, pause=0.3)
-        assert _status(hub, blocked_id) == "ready"  # held at the marked head
-        assert _status(hub, open_id) == "ready"  # never reached — strict does not fall through
+        drive_ticks(config, fenced, ticks=2, pause=0.3)
+        assert fleet_chunk_status(hub, blocked_id) == "ready"  # held at the marked head
+        assert fleet_chunk_status(hub, open_id) == "ready"  # never reached — strict does not fall through
 
 
 def _pending_transcript_outbound(config: RunnerConfig) -> int:
@@ -314,12 +289,12 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
-    fenced = _tick_env()
+    fenced = tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, transcripts_root=str(transcripts_root), transcripts_ship=True)
 
@@ -327,7 +302,9 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
 
         # The fact lane is unaffected by the transcript route's outage: the chunk lands.
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"the chunk did not land while the transcript route failed (status {_status(hub, chunk_id)!r})"
+        assert landed, (
+            f"the chunk did not land while the transcript route failed (status {fleet_chunk_status(hub, chunk_id)!r})"
+        )
         # The transcript lane, meanwhile, buffered rather than silently dropping its facts —
         # at minimum the closed lease's own final marker, enqueued regardless of the outage.
         backlog = _pending_transcript_outbound(config)
@@ -335,11 +312,11 @@ def test_transcript_route_failure_never_blocks_the_fact_lane(tmp_path: Path) -> 
 
         assert hub.post("/_levers/reset").status_code == 200  # clears levers only, not seeded chunk state
         drained = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _pending_transcript_outbound(config) == 0), timeout=60.0
+            lambda: tick_then(config, fenced, lambda: _pending_transcript_outbound(config) == 0), timeout=60.0
         )
         assert drained, "the transcript backlog never flushed after the route recovered"
         # Still done, not re-driven past it — the recovery flush touched no chunk state.
-        assert _status(hub, chunk_id) == "done"
+        assert fleet_chunk_status(hub, chunk_id) == "done"
 
 
 def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> None:
@@ -348,12 +325,12 @@ def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> Non
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
-    fenced = _tick_env()
+    fenced = tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, transcripts_root=str(transcripts_root), transcripts_ship=True)
 
@@ -362,30 +339,32 @@ def test_transcript_route_slow_never_blocks_the_fact_lane(tmp_path: Path) -> Non
         assert hub.post("/_levers/delay_transcripts", json={"payload": {"ms": 300}}).status_code == 200
 
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"the chunk did not land while the transcript route was slow (status {_status(hub, chunk_id)!r})"
+        assert landed, (
+            f"the chunk did not land while the transcript route was slow (status {fleet_chunk_status(hub, chunk_id)!r})"
+        )
 
         drained = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _pending_transcript_outbound(config) == 0), timeout=60.0
+            lambda: tick_then(config, fenced, lambda: _pending_transcript_outbound(config) == 0), timeout=60.0
         )
         assert drained, "the transcript backlog never fully flushed despite the route staying up (just slow)"
-        assert _status(hub, chunk_id) == "done"
+        assert fleet_chunk_status(hub, chunk_id) == "done"
 
 
 def test_stale_envelope_is_tolerated_and_the_chunk_still_lands(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         # Serve a stale-epoch envelope on the re-read: the runner fences its completion on
         # its own lease epoch, not the envelope's, so a stale envelope is benign.
         assert hub.post("/_levers/stale_envelope", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-        assert landed, f"chunk did not land despite a stale envelope (status {_status(hub, chunk_id)!r})"
+        assert landed, f"chunk did not land despite a stale envelope (status {fleet_chunk_status(hub, chunk_id)!r})"
 
 
 def _open_escalation_chunk_ids(config: RunnerConfig) -> list[str]:
@@ -443,7 +422,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
     rather than joined by an init that registers a host."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
     root = tmp_path / "runner"
     standalone = pin_runner(root, runner_id="rn_01JX0000000000000000000ROST", name="runner-local")
 
@@ -455,7 +434,7 @@ def test_a_real_runners_registration_carries_every_declared_subscription(tmp_pat
             config, subscriptions=(SubscriptionDeclaration(slug="probe", name="Probe", provider="none-such"),)
         )
 
-        _drive(config, fenced, ticks=1)
+        drive_ticks(config, fenced, ticks=1)
 
         view = runner_fleet_view(hub, config)["subscriptions"]
         assert [s["slug"] for s in view] == ["probe"]
@@ -465,7 +444,7 @@ def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path
     """The mock hub's view echoes the node names the real runner's config gates."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
@@ -473,7 +452,7 @@ def test_a_real_runners_registration_carries_the_gates_it_imposes(tmp_path: Path
             runner_config(tmp_path / "runner", workspace, bin_dir, hub_port), gates=("build", "review")
         )
 
-        _drive(config, fenced, ticks=1)
+        drive_ticks(config, fenced, ticks=1)
 
         assert runner_fleet_view(hub, config)["gates"] == ["build", "review"]
 
@@ -482,21 +461,21 @@ def test_pull_abandons_the_active_lease_when_the_hub_reports_the_chunk_stopped(t
     """The stopped-chunk lease-abandon backstop, driven over a real hub response rather than ``FakeHub``."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        chunk_id = _seed(hub)
+        chunk_id = seed_chunk(hub)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
-        _drive(config, fenced, ticks=1)
+        drive_ticks(config, fenced, ticks=1)
         lease_id = _lease_id_for_chunk(config, chunk_id)
         assert lease_id is not None, "lease never went active"
 
         assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
 
         closed = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _lease_closure_reason(config, lease_id) is not None),
+            lambda: tick_then(config, fenced, lambda: _lease_closure_reason(config, lease_id) is not None),
             timeout=60.0,
         )
         assert closed, "lease never closed after the hub reported the chunk stopped"
@@ -509,25 +488,25 @@ def test_pull_closes_the_local_escalation_when_the_hub_reports_the_chunk_stopped
     """The stopped-chunk escalation-closure sweep, driven over a real hub response."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        resp = hub.post("/_seed/chunk", json=mock_hub_escalating_chunk_spec(_WORK_REF_URL))
+        resp = hub.post("/_seed/chunk", json=mock_hub_escalating_chunk_spec(WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
 
         escalated = poll_until(
-            lambda: _tick_then(config, fenced, lambda: chunk_id in _open_escalation_chunk_ids(config)),
+            lambda: tick_then(config, fenced, lambda: chunk_id in _open_escalation_chunk_ids(config)),
             timeout=60.0,
         )
-        assert escalated, f"chunk never escalated (hub status {_status(hub, chunk_id)!r})"
+        assert escalated, f"chunk never escalated (hub status {fleet_chunk_status(hub, chunk_id)!r})"
 
         assert hub.post("/_seed/stop", json={"chunk_id": chunk_id}).status_code == 200
 
         closed = poll_until(
-            lambda: _tick_then(config, fenced, lambda: _escalation_closure_reason(config, chunk_id) is not None),
+            lambda: tick_then(config, fenced, lambda: _escalation_closure_reason(config, chunk_id) is not None),
             timeout=60.0,
         )
         assert closed, "escalation closure never recorded after the hub reported the chunk stopped"
@@ -620,12 +599,12 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     bin_dir = require_mock_fleet()
     workspace, _origins, origin_bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
-    fenced = _tick_env()
+    fenced = tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
+        seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
@@ -634,7 +613,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
 
         with runner_api(config):
             landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
-            assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+            assert landed, f"chunk did not land (status {fleet_chunk_status(hub, chunk_id)!r})"
 
             runner_client = httpx2.Client(base_url=config.local_api_url, timeout=10.0)
             try:
@@ -696,20 +675,6 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
     assert "the mock harness committed the change; checks are green" in asst_turn["text"]
 
 
-def _worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
-    """The lease-token header a worker presents, minted here rather than intercepted: the
-    plaintext handed to the spawn lives only in that process's environment, and
-    ``record_lease_token`` is overwrite-safe by contract — a re-mint per lease id is what
-    resume and takeover already do."""
-    token, token_hash = LeaseToken.mint()
-    engine = create_engine_from_url(config.db_url)
-    try:
-        daemon_store(engine).record_lease_token(lease_id, token_hash, datetime.now(UTC))
-    finally:
-        engine.dispose()
-    return {"X-Blizzard-Lease-Token": token}
-
-
 def _graph_artifact_chunk_spec(work_ref: str) -> dict:
     """``mock_hub_chunk_spec`` plus one graph-scoped declaration — the seed
     lever a real runner mints and pins into its own store before the node even starts."""
@@ -724,11 +689,11 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
     half — still hub-dependent — fails the same call would otherwise take."""
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        seeded = hub.post("/_seed/chunk", json=_graph_artifact_chunk_spec(_WORK_REF_URL))
+        seeded = hub.post("/_seed/chunk", json=_graph_artifact_chunk_spec(WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 
@@ -746,11 +711,11 @@ def test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unrea
                     items = runner_client.get("/api/leases").json()["items"]
                     return any(item["chunk_id"] == chunk_id for item in items)
 
-                minted = poll_until(lambda: _tick_then(config, fenced, _lease_minted), timeout=60.0)
+                minted = poll_until(lambda: tick_then(config, fenced, _lease_minted), timeout=60.0)
                 assert minted, "the chunk's first lease never minted"
                 items = runner_client.get("/api/leases").json()["items"]
                 lease_id = next(item["lease_id"] for item in items if item["chunk_id"] == chunk_id)
-                worker = _worker_credential(config, lease_id)
+                worker = worker_credential(config, lease_id)
 
                 # No further ticks run past this point: the loop only advances when this
                 # test calls it, so the lease found above stays active for every read below.
@@ -792,7 +757,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
     transcripts_root = tmp_path / "transcripts"
-    fenced = _tick_env()
+    fenced = tick_env()
     fenced["BZ_TRANSCRIPTS_ROOT"] = str(transcripts_root)
 
     hub_port = free_port()
@@ -808,7 +773,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
         try:
             with mock_hub(bin_dir, hub_port) as hub:
                 seed_pinned_runner(hub, runner)
-                seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
+                seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(WORK_REF_URL))
                 assert seeded.status_code == 201, seeded.text
                 chunk_id = seeded.json()["chunk_id"]
 
@@ -823,7 +788,7 @@ def test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api(t
                 assert open_read["hub_unreachable"] is False, open_read
 
                 landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=120.0)
-                assert landed, f"chunk did not land (status {_status(hub, chunk_id)!r})"
+                assert landed, f"chunk did not land (status {fleet_chunk_status(hub, chunk_id)!r})"
                 lease = _sole_lease(panel, chunk_id)
                 lease_id = lease["lease_id"]
 
@@ -892,7 +857,7 @@ def _sole_lease(panel: httpx2.Client, chunk_id: str) -> dict:
 
 def _panel_read_while_open(config: RunnerConfig, fenced: dict[str, str], panel: httpx2.Client, chunk_id: str) -> dict:
     """One tick, then the panel's transcript read for the chunk's lease if it has one yet."""
-    _drive(config, fenced, ticks=1, pause=0.3)
+    drive_ticks(config, fenced, ticks=1, pause=0.3)
     matches = [item for item in panel.get("/api/leases").json()["items"] if item["chunk_id"] == chunk_id]
     if not matches:
         return {}
@@ -904,14 +869,8 @@ def _run_and_check(
     config: RunnerConfig, fenced: dict[str, str], hub: httpx2.Client, chunk_id: str, target: str
 ) -> bool:
     """One tick + a status read — the poll predicate the scenarios share."""
-    _drive(config, fenced, ticks=1, pause=0.3)
-    return _status(hub, chunk_id) == target
-
-
-def _tick_then(config: RunnerConfig, fenced: dict[str, str], check) -> bool:
-    """One tick, then evaluate ``check`` — the buffered-completion poll predicate."""
-    _drive(config, fenced, ticks=1, pause=0.3)
-    return bool(check())
+    drive_ticks(config, fenced, ticks=1, pause=0.3)
+    return fleet_chunk_status(hub, chunk_id) == target
 
 
 # --- The runner's SSE stream: no mock fleet needed, a bare
@@ -1151,7 +1110,7 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
     with mock_hub(bin_dir, hub_port) as hub, _hung_otlp_sink() as (endpoint, accepted):
         config = _traced(runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
         env = {
-            **_tick_env(),
+            **tick_env(),
             "BZ_RUNNER_TICK_SECONDS": "0.5",
             "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": endpoint,
             "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT": "120",
@@ -1162,8 +1121,8 @@ def test_a_hung_trace_export_never_delays_a_tick_or_holds_shutdown(tmp_path: Pat
         try:
             await_http(proc, client, "/api/health", log=log)
             # A closed lease is what the sweep tells: run one chunk to done.
-            chunk_id = _seed(hub)
-            assert poll_until(lambda: _status(hub, chunk_id) == "done", timeout=120.0), read_daemon_log(log)
+            chunk_id = seed_chunk(hub)
+            assert poll_until(lambda: fleet_chunk_status(hub, chunk_id) == "done", timeout=120.0), read_daemon_log(log)
             assert poll_until(lambda: bool(accepted), timeout=15.0), "the sweep never opened an export"
 
             ticks = read_daemon_log(log).count('"tick end"')
@@ -1206,7 +1165,7 @@ def test_a_grpc_protocol_serves_with_tracing_off_and_one_rejection_reaches_the_h
     with mock_hub(bin_dir, hub_port) as hub:
         config = _traced(runner_config(tmp_path / "runner", workspace, bin_dir, hub_port))
         env = {
-            **_tick_env(),
+            **tick_env(),
             "BZ_RUNNER_TICK_SECONDS": "0.5",
             "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
             "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
@@ -1249,7 +1208,7 @@ default = "off"
 def test_the_runner_reads_a_fleet_flag_as_its_hub_answers_it_each_tick(tmp_path: Path) -> None:
     bin_dir = require_mock_fleet()
     workspace, _origins, _bare = mint_world(bin_dir, tmp_path / "scratch")
-    fenced = _tick_env()
+    fenced = tick_env()
 
     hub_port = free_port()
     with mock_hub(bin_dir, hub_port) as hub:
