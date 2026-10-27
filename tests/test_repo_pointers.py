@@ -1,5 +1,3 @@
-"""``scripts/repo_pointers.py`` driven against scratch git repositories under ``tmp_path``."""
-
 from __future__ import annotations
 
 import importlib.util
