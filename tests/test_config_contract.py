@@ -102,8 +102,7 @@ def test_a_fixed_variable_has_no_name_rule_and_the_hub_declares_no_env() -> None
     assert document_from_registry(HUB_REGISTRY)["env"] is None
 
 
-#: The modules under ``src/blizzard`` that write ``.env`` or create ``runners/<name>``, and the verbs the contract names
-#: for them. A module that starts writing either, or a writer verb the contract drops, turns this red.
+#: Modules under ``src/blizzard`` that write ``.env`` or create ``runners/<name>``, with the verbs the contract names.
 _ENV_WRITER_MODULES = {
     "runner/cli/runners.py": {"add"},
     "runner/cli/runtime.py": {"init", "host"},
