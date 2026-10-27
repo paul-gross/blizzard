@@ -21,7 +21,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import (
     EnvBinding,
     IReadEnvironmentRepository,
-    group_bindings_by_chunk,
 )
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.harness.identity import SessionReference
@@ -48,6 +47,16 @@ from blizzard.runner.transcripts.shipping import PumpOutcome, after_window, plan
 _log = get_logger("blizzard.runner.loop")
 
 _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-dropped"
+
+
+@domain_model
+@dataclass(frozen=True)
+class _ResolvedBindings:
+    """One call's resolved environment bindings, per chunk: the held ones, and the newest binding of
+    each chunk holding none."""
+
+    held: dict[str, list[EnvBinding]]
+    newest: dict[str, EnvBinding]
 
 
 class TranscriptPumpStores(OutboundStores, Protocol):
@@ -201,7 +210,7 @@ class TranscriptPump:
         incomplete_reason: TruncationReason = TruncationReason.LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
-        bindings_by_chunk: dict[str, list[EnvBinding]] | None = None,
+        bindings_by_chunk: _ResolvedBindings | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
@@ -250,13 +259,17 @@ class TranscriptPump:
         totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(chunk_ids)
         return _ShippedBytesMirror(totals)
 
-    def _bindings_by_chunk(self, segments: list[TranscriptSegmentState]) -> dict[str, list[EnvBinding]]:
-        """Every held binding this call's segments could need, grouped by chunk — skipped
-        entirely with no segments to pump, the same short-circuit an empty chunk set already
-        gets :meth:`_shipped_bytes_mirror`'s own read for free."""
-        if not segments:
-            return {}
-        return group_bindings_by_chunk(self.ctx.stores.environments.held_bindings())
+    def _bindings_by_chunk(self, segments: list[TranscriptSegmentState]) -> _ResolvedBindings:
+        """The bindings this call's segments could need, read once for their chunk set: the held
+        ones, plus the newest of each chunk holding none (the workspace a released chunk reads in).
+        Skipped entirely with no segments to pump."""
+        chunk_ids = sorted({segment.chunk_id for segment in segments})
+        if not chunk_ids:
+            return _ResolvedBindings({}, {})
+        environments = self.ctx.stores.environments
+        held = environments.held_bindings_for(chunk_ids)
+        newest = environments.newest_bindings_for([c for c in chunk_ids if not held.get(c)])
+        return _ResolvedBindings(held, newest)
 
     def _pump_one_safe(
         self,
@@ -264,7 +277,7 @@ class TranscriptPump:
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: dict[str, list[EnvBinding]],
+        bindings_by_chunk: _ResolvedBindings,
     ) -> PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``"not_attempted"`` on a caught exception — a raising segment must
@@ -286,7 +299,7 @@ class TranscriptPump:
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: dict[str, list[EnvBinding]],
+        bindings_by_chunk: _ResolvedBindings,
     ) -> PumpOutcome:
         """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
@@ -306,9 +319,9 @@ class TranscriptPump:
             assert gate.outcome is not None
             return gate.outcome
 
-        held = bindings_by_chunk.get(segment.chunk_id, [])
+        held = bindings_by_chunk.held.get(segment.chunk_id, [])
         # A segment outliving its lease's release still reads in the workspace its newest binding named.
-        binding = held[0] if held else self.ctx.stores.environments.newest_binding_for_chunk(segment.chunk_id)
+        binding = held[0] if held else bindings_by_chunk.newest.get(segment.chunk_id)
         spawn_cwd = SpawnCwd(
             self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
             held[0].workdir if held else None,
