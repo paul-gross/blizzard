@@ -12,9 +12,8 @@ from pathlib import Path
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.hub.bootstrap import ITokenWriter
 from blizzard.runner.hub.held_token import IHubTokenFile
-from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token, without_token
+from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME, assigned_token, with_token, without_token
 
-_OWNER_ONLY = 0o600
 _OTHERS_ACCESS = stat.S_IRWXG | stat.S_IRWXO
 
 
@@ -62,6 +61,7 @@ class HubTokenFile:
                 handle.write(text)
                 handle.flush()
                 os.fsync(handle.fileno())
+            os.chmod(pending, ENV_FILE_MODE)
             os.replace(pending, self.path)
         except BaseException:
             Path(pending).unlink(missing_ok=True)
@@ -77,7 +77,7 @@ class HubTokenFile:
             return False
         if not mode & _OTHERS_ACCESS or not self.held():
             return False
-        self.path.chmod(_OWNER_ONLY)
+        self.path.chmod(ENV_FILE_MODE)
         return True
 
 

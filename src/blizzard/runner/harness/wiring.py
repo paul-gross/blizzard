@@ -18,7 +18,7 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, WORKER_SETTINGS_FILENAME
 from blizzard.runner.harness.declaration import (
     HarnessSection,
     IHarnessDeclaration,
@@ -29,7 +29,8 @@ from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
-from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
+from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME
+from blizzard.runner.harness.opencode.section import OPENCODE_SECTION, OPENCODE_WORKER_CONFIG_FILENAME
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import IChildProcesses
@@ -37,6 +38,17 @@ from blizzard.runner.process.probe import IProcessProbe
 
 #: The catalog order: Claude Code first.
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
+
+#: Each file ``scaffold_runtime`` writes under the host root — its path there and what it holds — across the catalog.
+HARNESS_RUNTIME_FILES: tuple[tuple[str, str], ...] = (
+    (WORKER_SETTINGS_FILENAME, "the claude-code harness's worker settings"),
+    (f"{PLUGIN_DIRNAME}/{PLUGIN_FILENAME}", "the opencode harness's heartbeat plugin"),
+    (
+        OPENCODE_WORKER_CONFIG_FILENAME,
+        "the opencode harness's worker config, the default location that the opencode section's "
+        "`worker_config_path` overrides",
+    ),
+)
 
 
 @domain_model
@@ -269,6 +281,7 @@ def published_harness_snapshot(runtime_root: Path) -> Path | None:
 
 
 __all__ = [
+    "HARNESS_RUNTIME_FILES",
     "HARNESS_SECTION_KINDS",
     "HarnessSections",
     "HarnessSettings",
