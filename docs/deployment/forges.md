@@ -44,8 +44,7 @@ forge.
   or enabled work source names is refused `409 forge_in_use`, listing those records. A retired forge keeps its slug and
   API origin, so no other forge takes either.
 - `enable <forge>` lifts the retirement. Enabling a repository or work source whose forge is retired is refused
-  `422
-  forge_retired`, naming the forge, so enable the forge first.
+  `422 forge_retired`, naming the forge, so enable the forge first.
 
 `show`, `edit`, `retire` and `enable` take the forge's id or its slug. `show` lists the repositories and work sources
 that name the forge. A renamed forge remains addressable by its former slug until another forge takes it, but a
