@@ -69,10 +69,10 @@ from blizzard.runner.process.probe import IProcessProbe
 
 _log = get_logger("blizzard.runner.harness")
 
-# The well-known effort ordinal; outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
 # The native names recognized when the runner declares no `[opencode.models] supported` list: any `provider/model`.
 DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
 
+# The well-known effort ordinal; outside it needs an explicit `[opencode.effort.aliases]`, never a guess.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 # How often a fresh mint's pending handle re-reads the stdout capture while awaiting identity.
