@@ -10,6 +10,9 @@ from __future__ import annotations
 #: The file in a runner runtime dir that holds its hub token.
 ENV_FILENAME = ".env"
 
+#: The mode of that file: owner-only.
+ENV_FILE_MODE = 0o600
+
 _COMMENT_PREFIXES = ("#", ";")
 _QUOTES = ('"', "'")
 

@@ -1,5 +1,27 @@
 {
   "daemon": "host",
+  "env": {
+    "atomic": true,
+    "file": ".env",
+    "mode": "0600",
+    "variables": [
+      {
+        "holds": "the host's one host token",
+        "name": "BZ_HOST_TOKEN",
+        "name_rule": null
+      },
+      {
+        "holds": "one runner's hub token, by runner name",
+        "name": "BZ_HUB_TOKEN_<NAME>",
+        "name_rule": {
+          "prefix": "BZ_HUB_TOKEN_",
+          "replace_pattern": "[^A-Z0-9]",
+          "replacement": "_",
+          "upper_case": true
+        }
+      }
+    ]
+  },
   "keys": [
     {
       "default": null,
@@ -1351,31 +1373,83 @@
   "paths": [
     {
       "holds": "the hub tokens the host reads when the environment holds none",
-      "path": ".env"
+      "mode": "0600",
+      "path": ".env",
+      "written_by": [
+        "add",
+        "host",
+        "ingest",
+        "init"
+      ]
     },
     {
       "holds": "the host's configuration",
-      "path": "blizzard-host.toml"
+      "mode": null,
+      "path": "blizzard-host.toml",
+      "written_by": []
     },
     {
       "holds": "the host's data directory",
-      "path": "data"
+      "mode": null,
+      "path": "data",
+      "written_by": []
     },
     {
       "holds": "the host's default store",
-      "path": "data/host.db"
+      "mode": null,
+      "path": "data/host.db",
+      "written_by": []
     },
     {
       "holds": "the lock that keeps one host process on the directory",
-      "path": "data/host.lock"
+      "mode": null,
+      "path": "data/host.lock",
+      "written_by": []
     },
     {
       "holds": "the host's local API socket",
-      "path": "host.sock"
+      "mode": null,
+      "path": "host.sock",
+      "written_by": []
+    },
+    {
+      "holds": "the opencode harness's worker config, the default location that the opencode section's `worker_config_path` overrides",
+      "mode": null,
+      "path": "opencode-worker-config.json",
+      "written_by": [
+        "init"
+      ]
+    },
+    {
+      "holds": "the opencode harness's heartbeat plugin",
+      "mode": null,
+      "path": "plugins/blizzard-heartbeat.ts",
+      "written_by": [
+        "init"
+      ]
     },
     {
       "holds": "each runner's own files, by runner name",
-      "path": "runners"
+      "mode": null,
+      "path": "runners",
+      "written_by": []
+    },
+    {
+      "holds": "one runner's own directory, named for the runner",
+      "mode": null,
+      "path": "runners/<name>",
+      "written_by": [
+        "add",
+        "ingest"
+      ]
+    },
+    {
+      "holds": "the claude-code harness's worker settings",
+      "mode": null,
+      "path": "worker-settings.json",
+      "written_by": [
+        "init"
+      ]
     }
   ]
 }

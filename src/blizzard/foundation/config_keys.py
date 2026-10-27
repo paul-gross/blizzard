@@ -69,6 +69,45 @@ class DurablePath:
 
     path: str
     holds: str
+    #: The ``blizzard-runner`` verbs that write it; empty when the contract names no writer.
+    written_by: tuple[str, ...] = ()
+    #: The permission bits the daemon enforces on it, or ``None`` when it enforces none.
+    mode: int | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class VariableNameRule:
+    """How a variable's name derives from a name: ``prefix``, then the name — upper-cased when ``upper_case`` — with
+    every match of the regular expression ``replace_pattern`` replaced by ``replacement``."""
+
+    prefix: str
+    upper_case: bool
+    replace_pattern: str
+    replacement: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class EnvVariable:
+    """A variable an env file holds. ``name_rule`` is ``None`` for a fixed ``name``; otherwise ``name`` is the
+    placeholder form and the rule derives the real one."""
+
+    name: str
+    holds: str
+    name_rule: VariableNameRule | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class EnvFile:
+    """The env file under the runtime root that holds the daemon's tokens: its ``file`` name, its ``mode``, whether it
+    is rewritten ``atomic``ally, and the ``variables`` it holds."""
+
+    file: str
+    mode: int
+    atomic: bool
+    variables: tuple[EnvVariable, ...]
 
 
 @domain_model
@@ -79,6 +118,7 @@ class ConfigRegistry:
     name: str
     keys: tuple[ConfigKey, ...]
     paths: tuple[DurablePath, ...] = ()
+    env: EnvFile | None = None
     _declared: frozenset[str] = field(init=False, repr=False, compare=False)
     _open: frozenset[str] = field(init=False, repr=False, compare=False)
     _by_path: Mapping[str, ConfigKey] = field(init=False, repr=False, compare=False)
@@ -105,7 +145,7 @@ class ConfigRegistry:
 
     def merged(self, name: str, keys: tuple[ConfigKey, ...], paths: tuple[DurablePath, ...] = ()) -> ConfigRegistry:
         """A registry of ``name`` holding these keys and paths after this one's."""
-        return ConfigRegistry(name, (*self.keys, *keys), (*self.paths, *paths))
+        return ConfigRegistry(name, (*self.keys, *keys), (*self.paths, *paths), self.env)
 
 
 SCALAR_TYPES: Final = (STRING, INTEGER, NUMBER, BOOLEAN, STRING_LIST, STRING_OR_LIST)

@@ -1,5 +1,6 @@
 {
   "daemon": "hub",
+  "env": null,
   "keys": [
     {
       "default": 300,
@@ -649,23 +650,33 @@
   "paths": [
     {
       "holds": "the hub's configuration",
-      "path": "blizzard-hub.toml"
+      "mode": null,
+      "path": "blizzard-hub.toml",
+      "written_by": []
     },
     {
       "holds": "the keys that seal every stored secret",
-      "path": "data/auth/secret-keys"
+      "mode": null,
+      "path": "data/auth/secret-keys",
+      "written_by": []
     },
     {
       "holds": "the IdP signing keypairs and their meta.json",
-      "path": "data/auth/signing-keys"
+      "mode": null,
+      "path": "data/auth/signing-keys",
+      "written_by": []
     },
     {
       "holds": "the default store, with its -wal sidecar when one exists",
-      "path": "data/hub.db"
+      "mode": null,
+      "path": "data/hub.db",
+      "written_by": []
     },
     {
       "holds": "deprecated: scratch clones a hub `run:` step used; no hub step writes it any more, so it is reclaimable",
-      "path": "data/hub_workdirs"
+      "mode": null,
+      "path": "data/hub_workdirs",
+      "written_by": []
     }
   ]
 }

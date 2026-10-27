@@ -22,6 +22,15 @@ from blizzard.foundation.config_keys import (
     ConfigKey,
     ConfigRegistry,
     DurablePath,
+    EnvFile,
+    EnvVariable,
+    VariableNameRule,
+)
+from blizzard.foundation.runner_token_names import (
+    HOST_TOKEN_VARIABLE,
+    HUB_TOKEN_VARIABLE_PREFIX,
+    NAME_REPLACE_PATTERN,
+    NAME_REPLACEMENT,
 )
 from blizzard.foundation.trace_export.config import TRACING_KEYS
 from blizzard.runner.config import (
@@ -40,7 +49,7 @@ from blizzard.runner.config import (
     DEFAULT_TRANSCRIPTS_SHIP,
     DEFAULT_WORKER_STDOUT_RETENTION_DAYS,
 )
-from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
+from blizzard.runner.harness.wiring import HARNESS_RUNTIME_FILES, HARNESS_SECTION_KINDS
 from blizzard.runner.host_layout import (
     DATA_DIRNAME,
     HOST_CONFIG_FILENAME,
@@ -49,7 +58,7 @@ from blizzard.runner.host_layout import (
     HOST_STORE_FILENAME,
     RUNNERS_DIRNAME,
 )
-from blizzard.runner.hub.token_file import ENV_FILENAME
+from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME
 from blizzard.runner.throttle.settings import DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT, HoldOrRelease
 from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
@@ -240,11 +249,35 @@ HOST_REGISTRY = ConfigRegistry(
     _distinct(_HOST_KEYS),
     (
         DurablePath(HOST_CONFIG_FILENAME, "the host's configuration"),
-        DurablePath(ENV_FILENAME, "the hub tokens the host reads when the environment holds none"),
+        DurablePath(
+            ENV_FILENAME,
+            "the hub tokens the host reads when the environment holds none",
+            written_by=("add", "host", "ingest", "init"),
+            mode=ENV_FILE_MODE,
+        ),
         DurablePath(DATA_DIRNAME, "the host's data directory"),
         DurablePath(f"{DATA_DIRNAME}/{HOST_STORE_FILENAME}", "the host's default store"),
         DurablePath(f"{DATA_DIRNAME}/{HOST_LOCK_FILENAME}", "the lock that keeps one host process on the directory"),
         DurablePath(HOST_SOCKET_FILENAME, "the host's local API socket"),
         DurablePath(RUNNERS_DIRNAME, "each runner's own files, by runner name"),
+        DurablePath(
+            f"{RUNNERS_DIRNAME}/<name>",
+            "one runner's own directory, named for the runner",
+            written_by=("add", "ingest"),
+        ),
+        *(DurablePath(path, holds, written_by=("init",)) for path, holds in HARNESS_RUNTIME_FILES),
+    ),
+    EnvFile(
+        ENV_FILENAME,
+        ENV_FILE_MODE,
+        atomic=True,
+        variables=(
+            EnvVariable(HOST_TOKEN_VARIABLE, "the host's one host token"),
+            EnvVariable(
+                f"{HUB_TOKEN_VARIABLE_PREFIX}<NAME>",
+                "one runner's hub token, by runner name",
+                VariableNameRule(HUB_TOKEN_VARIABLE_PREFIX, True, NAME_REPLACE_PATTERN, NAME_REPLACEMENT),
+            ),
+        ),
     ),
 )
