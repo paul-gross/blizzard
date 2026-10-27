@@ -23,6 +23,8 @@ import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { WORK_SOURCE_FIELDS, workSourceCliName, workSourceRecordVm } from './work-sources.model';
 import { injectWorkSourceQuery } from './work-sources.query';
+import { forgePickerFields } from '../forges/forges.model';
+import { injectForgesQuery } from '../forges/forges.query';
 
 /**
  * The selected work source's detail — the right-hand child of `/admin/work-sources`,
@@ -67,7 +69,8 @@ export class WorkSourceDetail {
   protected readonly editMutation = injectEditWorkSourceMutation();
   private readonly lifecycleMutation = injectWorkSourceLifecycleMutation();
 
-  protected readonly fields = WORK_SOURCE_FIELDS;
+  private readonly forgesQuery = injectForgesQuery(() => false);
+  protected readonly fields = computed(() => forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []));
   protected readonly editOpen = signal(false);
   protected readonly editError = signal<string | null>(null);
   private readonly pendingKey = signal<string | null>(null);
@@ -76,7 +79,10 @@ export class WorkSourceDetail {
   protected readonly actions = computed(() =>
     configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.sourceQuery.data()),
   );
-  protected readonly shown = computed(() => shownFormValues(this.fields, this.sourceQuery.data()));
+  protected readonly shown = computed(() => {
+    const record = this.sourceQuery.data();
+    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id });
+  });
   protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
   protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
@@ -110,7 +116,7 @@ export class WorkSourceDetail {
       {
         workSourceId: id,
         revision: record.revision,
-        body: configEdit(this.fields, shown, values).body,
+        body: configEdit(this.fields(), shown, values).body,
       },
       {
         onSuccess: () => this.editOpen.set(false),

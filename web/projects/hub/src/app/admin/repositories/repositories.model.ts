@@ -1,8 +1,8 @@
-import type { RepositoryCreateRequest, RepositorySummary } from 'fleet';
+import { RecordKind, type RepositoryCreateRequest, type RepositorySummary } from 'fleet';
 
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
-import { factText, secretLinks } from '../config-links.model';
+import { factText, recordLink, secretLinks } from '../config-links.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
 
@@ -13,7 +13,7 @@ export function repositoryCreate(body: Readonly<Record<string, string | boolean>
   return {
     slug: text('slug'),
     ...(name === '' ? {} : { name }),
-    forge_api_url: text('forge_api_url'),
+    forge: text('forge'),
     owner: text('owner'),
     repo: text('repo'),
     base_branch: text('base_branch'),
@@ -53,7 +53,7 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
     badges: repositoryBadges(repository),
     facts: [
       { label: 'Name', value: factText(repository.name) },
-      { label: 'Forge API', value: factText(repository.forge_api_url) },
+      { label: 'Forge', value: factText(repository.forge_name ?? repository.forge_slug) },
       { label: 'Owner', value: factText(repository.owner) },
       { label: 'Repository', value: factText(repository.repo) },
       { label: 'Base branch', value: factText(repository.base_branch) },
@@ -62,9 +62,9 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
     revision: repository.revision,
     note: repository.retired ? 'Retired — nothing new lands in it.' : null,
     links: {
-      heading: 'Token',
-      links: secretLinks(repository.secret_name),
-      emptyText: 'No token secret.',
+       heading: 'Related records',
+       links: [recordLink({ kind: RecordKind.FORGE, key: repository.forge_id, label: repository.forge_slug }), ...secretLinks(repository.secret_name)],
+       emptyText: 'No related records.',
     },
     hasHistory: true,
   };
@@ -75,7 +75,7 @@ export function repositoryRecordVm(repository: RepositorySummary | undefined): C
 export const REPOSITORY_FIELDS: readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] = [
   { key: 'slug', label: 'Slug', kind: 'text', required: true },
   { key: 'name', label: 'Name', kind: 'text' },
-  { key: 'forge_api_url', label: 'Forge API', kind: 'text', required: true },
+  { key: 'forge', label: 'Forge', kind: 'select', required: true },
   { key: 'owner', label: 'Owner', kind: 'text', required: true },
   { key: 'repo', label: 'Repository', kind: 'text', required: true },
   { key: 'base_branch', label: 'Base branch', kind: 'text', required: true },

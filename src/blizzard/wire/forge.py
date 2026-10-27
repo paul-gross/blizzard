@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import BaseModel, ConfigDict
 from pydantic.config import JsonDict
 
 from blizzard.wire.base import WireModel
@@ -18,3 +19,52 @@ class OldFieldWarning(WireModel):
     forge_id: str
     forge_slug: str
     message: str
+
+
+class ForgeCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    kind: str
+    api_base: str
+    web_base: str | None = None
+
+
+class ForgePatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str | None = None
+    name: str | None = None
+    api_base: str | None = None
+    web_base: str | None = None
+
+
+class ForgeReferenceView(WireModel):
+    kind: str
+    key: str
+    label: str | None = None
+
+
+class ForgeSummary(WireModel):
+    forge_id: str
+    slug: str
+    name: str
+    kind: str
+    api_base: str
+    web_base: str | None
+    web_origin: str
+    revision: int
+    created_at: str
+    created_by: str
+    created_by_name: str | None = None
+    retired: bool
+
+
+class ForgeDetail(ForgeSummary):
+    repositories: list[ForgeReferenceView]
+    work_sources: list[ForgeReferenceView]
+
+
+class ForgesListView(WireModel):
+    forges: list[ForgeSummary]

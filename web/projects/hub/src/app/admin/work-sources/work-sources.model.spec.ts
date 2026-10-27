@@ -74,10 +74,13 @@ describe('workSourceRecordVm', () => {
   it('shows a configured source with its fields, token link, and history', () => {
     const vm = workSourceRecordVm(WINTER)!;
     expect(vm.facts.find((f) => f.label === 'Provider')?.value).toBe('github');
-    expect(vm.facts.find((f) => f.label === 'API base')?.value).toBe('—');
+    expect(vm.facts.find((f) => f.label === 'Forge')?.value).toBe('GitHub');
     expect(vm.facts.find((f) => f.label === 'Annotates')?.value).toBe('yes');
     expect(vm.revision).toBe(2);
-    expect(vm.links?.links).toEqual([{ kind: 'secret', name: 'gh-winter', route: ['/admin', 'secrets', 'gh-winter'] }]);
+    expect(vm.links?.links).toEqual([
+      { kind: 'forge', name: 'github', route: ['/admin', 'forges', 'frg_github'] },
+      { kind: 'secret', name: 'gh-winter', route: ['/admin', 'secrets', 'gh-winter'] },
+    ]);
     expect(vm.hasHistory).toBe(true);
     expect(vm.note).toBeNull();
   });
@@ -116,11 +119,12 @@ describe('workSourceCliName', () => {
   });
 
   it('creates a work source from the form, carrying the checkbox as a boolean and leaving empty text out', () => {
-    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', api_base: '', web_base: '', secret: '', annotate: true };
+    const body = { slug: 'winter', name: '', provider: 'github', locator: 'paul-gross/winter', forge: 'frg_github', secret: '', annotate: true };
     expect(workSourceCreate(body)).toEqual({
       slug: 'winter',
       provider: 'github',
       locator: 'paul-gross/winter',
+      forge: 'frg_github',
       annotate: true,
     });
     expect(workSourceCreate({ ...body, annotate: false, secret: 'gh-winter' })).toMatchObject({

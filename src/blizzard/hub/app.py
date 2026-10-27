@@ -61,6 +61,7 @@ from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_host import router as fleet_host_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
+from blizzard.hub.api.forges import router as forges_router
 from blizzard.hub.api.garden_proposals import project_router as project_garden_proposals_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
 from blizzard.hub.api.garden_runs import project_router as project_garden_runs_router
@@ -509,6 +510,7 @@ def create_app(
     app.include_router(admin_sweeps_router)
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
+    app.include_router(forges_router)
     app.include_router(projects_router)
     # A project's gardening, nested under `/api/projects/{project}` after the project routes themselves.
     app.include_router(project_scopes_router)

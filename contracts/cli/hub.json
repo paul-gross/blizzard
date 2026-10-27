@@ -2307,6 +2307,18 @@
           "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it.",
           "params": [
             {
+              "help": "Configuration document version to print.",
+              "hidden": false,
+              "kind": "option",
+              "name": "version",
+              "opts": [
+                "--version"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
+            },
+            {
               "help": "The document format to print.",
               "hidden": false,
               "kind": "option",
@@ -3407,6 +3419,483 @@
       "params": [],
       "path": "hub finding",
       "short_help": "Read findings, and close or reopen them."
+    },
+    "forge": {
+      "commands": {
+        "create": {
+          "help": "Add forge SLUG at revision 1.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge's display name (default: SLUG).",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge kind (github).",
+              "hidden": false,
+              "kind": "option",
+              "name": "kind",
+              "opts": [
+                "--kind"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge's HTTP API origin.",
+              "hidden": false,
+              "kind": "option",
+              "name": "api_base",
+              "opts": [
+                "--api-base"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The forge's web origin (default: derived from its API origin).",
+              "hidden": false,
+              "kind": "option",
+              "name": "web_base",
+              "opts": [
+                "--web-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge create",
+          "short_help": "Add forge SLUG at revision 1."
+        },
+        "edit": {
+          "help": "Change only the stated fields of FORGE; a no-op keeps its revision.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "forge",
+              "opts": [
+                "forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new slug; the former one keeps resolving until claimed.",
+              "hidden": false,
+              "kind": "option",
+              "name": "slug",
+              "opts": [
+                "--slug"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new API origin.",
+              "hidden": false,
+              "kind": "option",
+              "name": "api_base",
+              "opts": [
+                "--api-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The new web origin.",
+              "hidden": false,
+              "kind": "option",
+              "name": "web_base",
+              "opts": [
+                "--web-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Derive the web origin from the API origin.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear_web_base",
+              "opts": [
+                "--clear-web-base"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Refuse the change unless the forge is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge edit",
+          "short_help": "Change only the stated fields of FORGE; a no-op keeps its revision."
+        },
+        "enable": {
+          "help": "Re-enable FORGE.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "forge",
+              "opts": [
+                "forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the forge is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge enable",
+          "short_help": "Re-enable FORGE."
+        },
+        "list": {
+          "help": "List forges by slug with their id, revision, state and API origin.",
+          "params": [
+            {
+              "help": "Also list retired forges.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge list",
+          "short_help": "List forges by slug with their id, revision, state and API origin."
+        },
+        "retire": {
+          "help": "Retire FORGE, refusing while an enabled record names it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "forge",
+              "opts": [
+                "forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Refuse the change unless the forge is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge retire",
+          "short_help": "Retire FORGE, refusing while an enabled record names it."
+        },
+        "show": {
+          "help": "Show FORGE by id, current slug or former slug, with its linked records.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "forge",
+              "opts": [
+                "forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge show",
+          "short_help": "Show FORGE by id, current slug or former slug, with its linked records."
+        }
+      },
+      "help": "Create, list, show, edit, retire and enable forges.",
+      "params": [],
+      "path": "hub forge",
+      "short_help": "Create, list, show, edit, retire and enable forges."
     },
     "garden-proposal": {
       "commands": {

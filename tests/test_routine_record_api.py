@@ -87,7 +87,9 @@ def test_a_sparse_patch_sets_only_its_field_and_moves_the_revision_by_one(hub: H
     assert (body["default_effort"], body["default_model"], body["revision"]) == ("high", ["blizzard:advanced"], 2)
     row = _changes(hub)[-1]
     assert (row["op"], row["revision"]) == ("edit", 2)
-    assert row["diff"] == [{"field": "default_effort", "old": None, "new": "high"}]
+    assert row["diff"] == [
+        {"field": "default_effort", "old": None, "new": "high", "old_label": None, "new_label": None}
+    ]
 
 
 def test_a_patch_restating_a_since_retired_graph_applies_the_other_fields(hub: HubHarness) -> None:
@@ -197,7 +199,9 @@ def test_link_and_unlink_are_edits_of_scopes_and_a_repeat_writes_nothing(hub: Hu
 
     rows = _changes(hub)[1:]
     assert [(r["op"], r["revision"]) for r in rows] == [("edit", 2), ("edit", 3)]
-    assert rows[0]["diff"] == [{"field": "scopes", "old": ["blizzard"], "new": ["blizzard", "other"]}]
+    assert rows[0]["diff"] == [
+        {"field": "scopes", "old": ["blizzard"], "new": ["blizzard", "other"], "old_label": None, "new_label": None}
+    ]
     assert hub.client.get(f"/api/routines/{rid}").json()["revision"] == 3
 
 

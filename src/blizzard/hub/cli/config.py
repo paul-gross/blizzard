@@ -125,6 +125,13 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 
 @config_group.command("export", cls=FleetCommand)
 @click.option(
+    "--version",
+    type=click.Choice(["1", "2"]),
+    default="2",
+    show_default=True,
+    help="Configuration document version to print.",
+)
+@click.option(
     "--format",
     "fmt",
     type=click.Choice(["yaml", "json"]),
@@ -132,13 +139,13 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     show_default=True,
     help="The document format to print.",
 )
-def config_export(cli: CliContext, fmt: str) -> None:
+def config_export(cli: CliContext, fmt: str, version: str) -> None:
     """Print every active work source, repository and secret name as a document that applies back unchanged.
 
     Retired records are left out, since applying one would enable it."""
     codec = codec_for_path(f"export.{fmt}")
     assert codec is not None
-    document = cli.get("/api/config/export", "GET /config/export").json()
+    document = cli.get("/api/config/export", "GET /config/export", params={"version": version}).json()
     click.echo(codec.encode(document).decode("utf-8"), nl=False)
 
 

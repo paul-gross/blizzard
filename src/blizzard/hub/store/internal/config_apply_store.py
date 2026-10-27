@@ -103,9 +103,21 @@ class ConfigApplyStore:
         lifecycle = change.op in (ChangeOp.RETIRE, ChangeOp.ENABLE)
         retired = change.op is ChangeOp.RETIRE
         if isinstance(record, ConfiguredForge):
-            # An apply only ever creates a forge, for an origin its entries name that no forge holds.
-            assert from_revision is None
-            forge_writes.insert_forge(conn, record, change)
+            if from_revision is None:
+                forge_writes.insert_forge(conn, record, change)
+            elif lifecycle:
+                forge_writes.record_forge_lifecycle(
+                    conn,
+                    record,
+                    retired=retired,
+                    from_revision=from_revision,
+                    at=change.recorded_at,
+                    by=change.actor,
+                    change=change,
+                )
+            else:
+                old_slug = next((d.old for d in change.diff if d.field == "slug" and isinstance(d.old, str)), None)
+                forge_writes.update_forge(conn, record, from_revision, old_slug, change)
         elif isinstance(record, Scope):
             _run_scope(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Routine):

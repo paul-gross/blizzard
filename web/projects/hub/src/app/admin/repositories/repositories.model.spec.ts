@@ -56,14 +56,14 @@ describe('repositoryRecordVm', () => {
     const vm = repositoryRecordVm(BLIZZARD)!;
     expect(vm.facts.map((f) => [f.label, f.value])).toEqual([
       ['Name', 'blizzard'],
-      ['Forge API', 'https://api.github.com'],
+       ['Forge', 'GitHub'],
       ['Owner', 'paul-gross'],
       ['Repository', 'blizzard'],
       ['Base branch', 'master'],
       ['Created by', 'pgross'],
     ]);
     expect(vm.revision).toBe(2);
-    expect(vm.links?.links.map((l) => l.name)).toEqual(['gh-blizzard']);
+    expect(vm.links?.links.map((l) => l.name)).toEqual(['github', 'gh-blizzard']);
     expect(vm.hasHistory).toBe(true);
   });
 
@@ -85,7 +85,7 @@ describe('repositoryRecordVm', () => {
     const body = {
       slug: 'blizzard',
       name: '',
-      forge_api_url: 'https://api.github.com',
+       forge: 'frg_github',
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',
@@ -93,7 +93,7 @@ describe('repositoryRecordVm', () => {
     };
     expect(repositoryCreate(body)).toEqual({
       slug: 'blizzard',
-      forge_api_url: 'https://api.github.com',
+       forge: 'frg_github',
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',

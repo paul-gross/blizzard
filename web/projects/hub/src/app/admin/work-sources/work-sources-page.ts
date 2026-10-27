@@ -21,6 +21,8 @@ import type { ConfigRowVm } from '../config-record-list';
 import { WORK_SOURCE_FIELDS, workSourceCreate, workSourceKey, workSourceRows } from './work-sources.model';
 import { injectWorkSourcesQuery } from './work-sources.query';
 import { ProjectLens } from '../../core/project-lens';
+import { forgePickerFields } from '../forges/forges.model';
+import { injectForgesQuery } from '../forges/forges.query';
 
 /**
  * `/admin/work-sources` — the work source list beside a `<router-outlet>` holding the
@@ -84,7 +86,8 @@ export class WorkSourcesPage {
 
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateWorkSourceMutation();
-  protected readonly fields = WORK_SOURCE_FIELDS;
+  private readonly forgesQuery = injectForgesQuery(() => false);
+  protected readonly fields = computed(() => forgePickerFields(WORK_SOURCE_FIELDS, this.forgesQuery.data() ?? []));
   protected readonly createOpen = signal(false);
   protected readonly createError = signal<string | null>(null);
 
@@ -97,7 +100,7 @@ export class WorkSourcesPage {
   }
 
   protected onCreate(values: ConfigFormValues): void {
-    const body = workSourceCreate(createBody(this.fields, values));
+    const body = workSourceCreate(createBody(this.fields(), values));
     this.createError.set(null);
     this.createMutation.mutate(body, {
       onSuccess: () => {

@@ -1,7 +1,7 @@
-import type { WorkSourceCreateRequest, WorkSourceSummary } from 'fleet';
+import { RecordKind, type WorkSourceCreateRequest, type WorkSourceSummary } from 'fleet';
 
 import { type ConfigFieldDef, createText } from '../config-edit.model';
-import { factText, secretLinks } from '../config-links.model';
+import { factText, recordLink, secretLinks } from '../config-links.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
 import type { ConfigBadgeVm, ConfigRowVm } from '../config-record-list';
 import type { ConfigRecordVm } from '../config-record-panel';
@@ -10,15 +10,14 @@ import type { ConfigRecordVm } from '../config-record-panel';
  * `annotate` is the form's one checkbox. */
 export function workSourceCreate(body: Readonly<Record<string, string | boolean>>): WorkSourceCreateRequest {
   const text = (key: string): string => createText(body, key);
-  const optional = (key: 'name' | 'api_base' | 'web_base' | 'secret'): Partial<WorkSourceCreateRequest> =>
+  const optional = (key: 'name' | 'secret'): Partial<WorkSourceCreateRequest> =>
     text(key) === '' ? {} : { [key]: text(key) };
   return {
     slug: text('slug'),
     provider: text('provider'),
     locator: text('locator'),
     ...optional('name'),
-    ...optional('api_base'),
-    ...optional('web_base'),
+    forge: text('forge'),
     ...optional('secret'),
     ...(typeof body['annotate'] === 'boolean' ? { annotate: body['annotate'] } : {}),
   };
@@ -85,8 +84,7 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
       { label: 'Name', value: factText(source.name) },
       { label: 'Provider', value: factText(source.provider) },
       { label: 'Locator', value: factText(source.locator) },
-      { label: 'API base', value: factText(source.api_base) },
-      { label: 'Web base', value: factText(source.web_base) },
+      { label: 'Forge', value: factText(source.forge_name ?? source.forge_slug) },
       { label: 'Annotates', value: source.annotate ? 'yes' : 'no' },
       { label: 'Edits items', value: source.edit ? 'yes' : 'no' },
       { label: 'Created by', value: factText(source.created_by_name ?? source.created_by) },
@@ -94,9 +92,9 @@ export function workSourceRecordVm(source: WorkSourceSummary | undefined): Confi
     revision: source.revision ?? null,
     note: source.retired ? 'Retired — no new items ingest from it.' : null,
     links: {
-      heading: 'Token',
-      links: secretLinks(source.secret),
-      emptyText: 'No token secret.',
+       heading: 'Related records',
+       links: [recordLink({ kind: RecordKind.FORGE, key: source.forge_id!, label: source.forge_slug }), ...secretLinks(source.secret)],
+       emptyText: 'No related records.',
     },
     hasHistory: true,
   };
@@ -109,8 +107,7 @@ export const WORK_SOURCE_FIELDS: readonly ConfigFieldDef<keyof WorkSourceCreateR
   { key: 'name', label: 'Name', kind: 'text' },
   { key: 'provider', label: 'Provider', kind: 'text', required: true },
   { key: 'locator', label: 'Locator', kind: 'text', required: true },
-  { key: 'api_base', label: 'API base', kind: 'text' },
-  { key: 'web_base', label: 'Web base', kind: 'text' },
+  { key: 'forge', label: 'Forge', kind: 'select', required: true, filterBy: 'provider' },
   { key: 'secret', label: 'Token secret', kind: 'text' },
   { key: 'annotate', label: 'Annotates', kind: 'checkbox' },
 ];

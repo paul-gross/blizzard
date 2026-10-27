@@ -21,6 +21,8 @@ class FieldChangeView(WireModel):
     field: str
     old: object = None
     new: object = None
+    old_label: str | None = None
+    new_label: str | None = None
 
 
 class ConfigChangeView(WireModel):
@@ -101,6 +103,61 @@ class ConfigDocument(BaseModel):
     secrets: list[str] = []
     work_sources: list[WorkSourceDocument] = []
     repositories: list[RepositoryDocument] = []
+    scopes: list[ScopeEntry] = []
+    routines: list[RoutineEntry] = []
+
+
+class ForgeEntry(BaseModel):
+    """A forge declared by slug; an omitted mutable field stays as stored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    kind: str
+    api_base: str
+    web_base: str | None = None
+
+
+class RepositoryEntry(BaseModel):
+    """A version-2 repository entry, naming its forge instead of an address."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    forge: str
+    owner: str
+    repo: str
+    base_branch: str
+    secret_name: str
+
+
+class WorkSourceEntry(BaseModel):
+    """A version-2 work source entry, naming its forge instead of addresses."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    provider: str
+    locator: str
+    forge: str
+    annotate: bool = False
+    secret: str | None = None
+
+
+class ConfigDocumentV2(BaseModel):
+    """A declarative document whose forge records and references are explicit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[2]
+    projects: list[ProjectDocument] = []
+    forges: list[ForgeEntry] = []
+    secrets: list[str] = []
+    work_sources: list[WorkSourceEntry] = []
+    repositories: list[RepositoryEntry] = []
     scopes: list[ScopeEntry] = []
     routines: list[RoutineEntry] = []
 
