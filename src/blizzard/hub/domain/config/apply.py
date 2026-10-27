@@ -432,9 +432,7 @@ class _ForgeSection(_SlugSection[ForgeDeclaration, ConfiguredForge]):
     kind = RecordKind.FORGE
 
     def guard(self, entry: ForgeDeclaration, record: ConfiguredForge | None) -> None:
-        _require_unclaimed("forge", entry.slug, record, self._stored.former_forges.get(entry.slug))
-        if record is not None and entry.kind != record.kind:
-            raise ForgeKindImmutable("kind", f"forge {entry.slug} is a {record.kind} forge; kind is immutable")
+        require_declarable_forge(entry.slug, entry.kind, record, self._stored.former_forges.get(entry.slug))
 
     def create(self, entry: ForgeDeclaration) -> tuple[ConfiguredForge, ConfigChange]:
         return ConfiguredForge.new(
@@ -587,6 +585,15 @@ def _require_unclaimed(
             f"{slug!r} is a slug {kind} {left.slug!r} ({left_id}) left; "
             f"name that {kind} by its current slug, or choose another",
         )
+
+
+def require_declarable_forge(
+    slug: str, kind: str, record: ConfiguredForge | None, left: ConfiguredForge | None
+) -> None:
+    """The refusals a declared forge entry meets before any write: a slug another forge left, and a changed kind."""
+    _require_unclaimed("forge", slug, record, left)
+    if record is not None and kind != record.kind:
+        raise ForgeKindImmutable("kind", f"forge {slug} is a {record.kind} forge; kind is immutable")
 
 
 def _settle[K: Hashable, D, R: WrittenRecord](

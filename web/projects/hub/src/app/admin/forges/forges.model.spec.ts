@@ -25,7 +25,7 @@ describe('forge admin models', () => {
 
   it('lists only enabled forges, matching a source provider when requested', () => {
     expect(forgeOptions([GITHUB, GITLAB, RETIRED]).map((option) => option.value)).toEqual(['frg_1', 'frg_2']);
-    expect(forgeOptions([GITHUB, GITLAB, RETIRED], 'github')).toEqual([{ value: 'frg_1', label: 'github · GitHub' }]);
+    expect(forgeOptions([GITHUB, GITLAB, RETIRED], 'github')).toEqual([{ value: 'frg_1', label: 'github · GitHub', kind: 'github' }]);
     expect(forgePickerFields([{ key: 'forge', label: 'Forge', kind: 'select' }], [GITHUB, GITLAB])[0].options)
       .toEqual([{ value: 'frg_1', label: 'github · GitHub', kind: 'github' }, { value: 'frg_2', label: 'gitlab · GitLab', kind: 'gitlab' }]);
   });

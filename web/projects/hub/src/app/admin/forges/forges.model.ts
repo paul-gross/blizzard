@@ -58,15 +58,15 @@ export function forgeRecordVm(forge: ForgeDetail | undefined): ConfigRecordVm | 
 }
 
 /** Only enabled forges are offered. A source's provider must match the forge's kind. */
-export function forgeOptions(forges: readonly ForgeSummary[], provider?: string): readonly { value: string; label: string }[] {
-  return forges.filter((forge) => !forge.retired && (provider === undefined || forge.kind === provider))
-    .map((forge) => ({ value: forge.forge_id, label: `${forge.slug} · ${forge.name}` }));
+export function forgeOptions(
+  forges: readonly ForgeSummary[],
+  provider?: string,
+): readonly { value: string; label: string; kind: string }[] {
+  return forges
+    .filter((forge) => !forge.retired && (provider === undefined || forge.kind === provider))
+    .map((forge) => ({ value: forge.forge_id, label: `${forge.slug} · ${forge.name}`, kind: forge.kind }));
 }
 
 export function forgePickerFields<K extends string>(fields: readonly ConfigFieldDef<K>[], forges: readonly ForgeSummary[], provider?: string): readonly ConfigFieldDef<K>[] {
-  return fields.map((field) => field.key === 'forge' ? {
-    ...field,
-    options: forges.filter((forge) => !forge.retired && (provider === undefined || forge.kind === provider))
-      .map((forge) => ({ value: forge.forge_id, label: `${forge.slug} · ${forge.name}`, kind: forge.kind })),
-  } : field);
+  return fields.map((field) => field.key === 'forge' ? { ...field, options: forgeOptions(forges, provider) } : field);
 }
