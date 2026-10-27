@@ -77,17 +77,21 @@ def _relative_prompt_file(root: Path) -> None:
     config.write_text(config.read_text().replace('prompt_file = ""', f'prompt_file = "{_PROMPT_FILE}"', 1))
 
 
+def _store_path(root: Path) -> Path:
+    return Path(load_host_config(root).db_url.removeprefix("sqlite:///"))
+
+
 def _seed(root: Path, runner: JoinedRunner, tag: str) -> None:
     """``runner``'s identity, a held lease, a lease parked on a question, an outbound lane whose first ``_ACKED``
     facts were delivered and whose next ``_BACKLOG`` wait, an acked final transcript segment at ``seq`` 1, a route
     token for ``_ROUTE_CHUNK``, and a ``_GRAPH_ID`` artifact — every key but the leases' and chunks' the same in each
     store."""
     now = utc_text()
-    store = load_host_config(root).db_url.removeprefix("sqlite:///")
+    store = _store_path(root)
     owner = {"runner_id": runner.runner_id}
 
     def insert(table: str, **values: object) -> None:
-        insert_rows(Path(store), table, [values])
+        insert_rows(store, table, [values])
 
     insert("runner_identity", **owner, runner_name=runner.runner_name, registered_at=now)
     for kind in ("held", "parked"):
@@ -208,7 +212,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         carried = next(w for w in load_host_config(here).workspaces if w.id == _NEW_WORKSPACE)
         assert carried.prompt_file == str(load_host_config(there).root / _PROMPT_FILE)
         assert carried.resolved_prompt(load_host_config(here).root) == _PROMPT_FILE_TEXT
-        store = Path(load_host_config(here).db_url.removeprefix("sqlite:///"))
+        store = _store_path(here)
         for table in ("outbound_buffer", "transcript_outbound_buffer"):
             held = {(r["runner_id"], r["seq"]) for r in select(store, table, ["runner_id", "seq"])}
             assert {(staying.runner_id, 1), (moving.runner_id, 1)} <= held, (table, held)

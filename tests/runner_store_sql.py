@@ -27,7 +27,8 @@ def utc_text(moment: datetime | None = None) -> str:
     )
 
 
-def _contract() -> dict[str, Any]:
+def load_contract() -> dict[str, Any]:
+    """The pinned runner-store contract."""
     loaded: dict[str, Any] = json.loads((repo_root() / CONTRACT_PATH).read_text())
     return loaded
 
@@ -52,7 +53,7 @@ def _stored_revision(conn: sqlite3.Connection) -> str | None:
 
 @contextmanager
 def _open(store: Path) -> Iterator[tuple[sqlite3.Connection, dict[str, Any]]]:
-    contract = _contract()
+    contract = load_contract()
     conn = sqlite3.connect(store)
     try:
         revision = _stored_revision(conn)

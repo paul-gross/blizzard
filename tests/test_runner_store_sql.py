@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from tests import runner_store_sql
-from tests.runner_store_sql import insert, select, utc_text
+from tests.runner_store_sql import insert, load_contract, select, utc_text
 
 pytestmark = pytest.mark.unit
 
 
 def _store(path: Path, revision: str | None = None) -> Path:
-    head = json.loads((Path(runner_store_sql.__file__).parent.parent / runner_store_sql.CONTRACT_PATH).read_text())
     conn = sqlite3.connect(path)
     conn.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-    conn.execute("INSERT INTO alembic_version VALUES (?)", (revision or head["head_revision"],))
+    conn.execute("INSERT INTO alembic_version VALUES (?)", (revision or load_contract()["head_revision"],))
     conn.execute(
         "CREATE TABLE outbound_buffer (runner_id TEXT, seq INTEGER, kind TEXT, payload TEXT, created_at DATETIME)"
     )
