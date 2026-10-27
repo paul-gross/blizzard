@@ -229,9 +229,10 @@ def test_an_exported_document_applies_back_as_all_unchanged(client: TestClient, 
         replay = _config(["apply", str(out)])
         assert replay.exit_code == 0, replay.output
         unchanged = _lines(replay.output, "unchanged")
-        assert len(unchanged) == 3 and not _lines(replay.output, "create")
+        assert len(unchanged) == 4 and not _lines(replay.output, "create")
         assert any(line.split()[1:] == ["project", "default"] for line in unchanged)
-    assert json.loads(_config(["export", "--format", "json"]).stdout)["version"] == 1
+        assert any(line.split()[1:] == ["forge", "github"] for line in unchanged)
+    assert json.loads(_config(["export", "--format", "json"]).stdout)["version"] == 2
     assert _changes_count() == before
 
 
