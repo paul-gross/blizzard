@@ -123,10 +123,8 @@ class HostEnrollmentService:
         return self._runner_enrollment.add(name, by=by, projects=projects, host_id=host.host_id)
 
     def _runners_named(self, runner_ids: Sequence[str]) -> list[RunnerRegistration]:
-        runners = []
+        found = self._runners.get_runners(runner_ids)
         for runner_id in runner_ids:
-            runner = self._runners.get_runner(runner_id)
-            if runner is None:
+            if runner_id not in found:
                 raise UnknownRunner(runner_id)
-            runners.append(runner)
-        return runners
+        return [found[runner_id] for runner_id in runner_ids]
