@@ -104,7 +104,7 @@ test('an unexpected 5xx fails the call, naming it and attaching the mock hub log
   const fleet = mockHub.fleet(runner.body.token);
   await mockHub.levers.arm('unreachable');
   await expect(fleet.get(IDENTITY)).rejects.toThrow(new RegExp(`GET .*${IDENTITY} answered 503, a server error`));
-  expect(testInfo.attachments.some((attachment) => attachment.name.startsWith('log around GET'))).toBe(true);
+  expect(testInfo.attachments.some((attachment) => attachment.name.startsWith('mock hub log around GET'))).toBe(true);
   expect((await fleet.expecting(503).get(IDENTITY)).status).toBe(503);
   // The control plane is exempt from the transport levers, so clearing never trips the diagnostic.
   expect((await mockHub.levers.reset()).ok).toBe(true);

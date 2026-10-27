@@ -176,7 +176,7 @@ test('a 5xx fails the call with the host log attached, unless expected', async (
     const host = runnerHost(stub.url, { logContext: () => 'host log line' });
     const runner = host.runner(RUNNER);
     await expect(runner.status()).rejects.toThrow(new RegExp(`GET .*${PREFIX}/api/runner answered 500, a server error`));
-    expect(testInfo.attachments.some((attachment) => attachment.name.startsWith('log around GET'))).toBe(true);
+    expect(testInfo.attachments.some((attachment) => attachment.name.startsWith('runner host log around GET'))).toBe(true);
     await expect(runner.bufferDepth()).rejects.toThrow(/answered 500/);
     expect((await runner.expecting(500).status()).status).toBe(500);
     expect((await host.expecting(500).runner(RUNNER).status()).status).toBe(500);

@@ -71,6 +71,7 @@ export function runnerHostApi(options: {
     headers: options.headers ?? {},
     ledger: options.ledger,
     logContext: options.logContext,
+    logName: 'runner host',
   };
   const under = (prefix: string): Verbs => {
     const inner = options.expected === undefined ? verbs(engine, false) : expecting(engine, false, options.expected);

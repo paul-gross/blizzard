@@ -68,6 +68,7 @@ export function mockHubApi(options: { context: APIRequestContext; testInfo: Test
     headers: {},
     ledger: options.ledger,
     logContext: options.logContext,
+    logName: 'mock hub',
   };
   const call = <T = Json>(method: string, route: string, data?: unknown, params?: Record<string, string | number | boolean>): Promise<ApiResponse<T>> =>
     send(engine, method, `${options.url}${route}`, { data, params }, false) as Promise<ApiResponse<T>>;

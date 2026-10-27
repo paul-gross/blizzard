@@ -42,8 +42,10 @@ export interface Engine {
   /** Headers every call carries: the tenant, or a runner's bearer token. */
   headers: Record<string, string>;
   ledger: Ledger;
-  /** Hub-side log lines around a failure, attached with the response. */
+  /** Log lines around a failure, attached with the response. */
   logContext: LogContext;
+  /** What the log is of, in its attachment's name: the hub's unless a client of another process says otherwise. */
+  logName?: string;
 }
 
 /** The route as recorded: no query, and no origin on a call that names its full URL. */
@@ -78,7 +80,7 @@ export async function send(engine: Engine, method: string, route: string, option
   if (response.status() >= 500 && response.status() !== expected) {
     await engine.testInfo.attach(`${call} → ${response.status()}`, { body: text, contentType: 'text/plain' });
     const log = engine.logContext();
-    if (log !== '') await engine.testInfo.attach(`log around ${call}`, { body: log, contentType: 'text/plain' });
+    if (log !== '') await engine.testInfo.attach(`${engine.logName ?? 'hub'} log around ${call}`, { body: log, contentType: 'text/plain' });
     throw new Error(`${call} answered ${response.status()}, a server error: ${text.slice(0, 500)}`);
   }
   const routeKey = `${method} ${route.split('?')[0]}`;
