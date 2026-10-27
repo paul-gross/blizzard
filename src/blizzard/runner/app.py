@@ -77,6 +77,8 @@ from blizzard.runner.api.scope import router as scope_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
+from blizzard.runner.api.ticks import host_router as host_ticks_router
+from blizzard.runner.api.ticks import router as ticks_router
 from blizzard.runner.api.traces import router as traces_router
 from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
@@ -108,7 +110,8 @@ from blizzard.runner.lifecycle.identity_check import ProxyIdentityCheck
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.takeover import TakeoverService
-from blizzard.runner.loop_wiring import ResumeMarking
+from blizzard.runner.loop.step_passes import HostPassStepper
+from blizzard.runner.loop_wiring import ResumeMarking, RunnerStepper, host_pass_stepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.process.child_processes import IChildProcesses
@@ -160,7 +163,7 @@ _HUMAN_GATE = (Depends(require_human_api),)
 # The host's own routes, at the root. Ungated: liveness and the SSO bounce.
 _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 # The host's human web lane: its own reads, the workspace prompts, and the one event stream.
-_HOST_HUMAN = (host_router, workspace_prompt_router, host_floor_router, events_router)
+_HOST_HUMAN = (host_router, workspace_prompt_router, host_floor_router, host_ticks_router, events_router)
 # Each runner's ungated routes, in mount order: the worker hooks. `asks_router` is the one mixed router — its
 # POST is ungated, its GET carries the human gate at the route.
 _RUNNER_UNGATED = (
@@ -190,6 +193,7 @@ _RUNNER_HUMAN = (
     selftests_router,
     fleet_summary_router,
     control_router,
+    ticks_router,
     runner_floor_router,
     escalations_router,
     facts_router,
@@ -241,6 +245,7 @@ def runner_seams(
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
     identity: ICurrentRunnerIdentity | None = None,
+    stepper: RunnerStepper | None = None,
 ) -> ServedRunner:
     """One runner's seams, served under :attr:`RunnerConfig.served_id()`. Every store-backed seam is optional, so a
     store-free runner is possible; its routes then answer 503. ``selftests`` is always wired. ``identity_check`` gates
@@ -254,6 +259,7 @@ def runner_seams(
     seams = State()
     seams.config = config
     seams.identity = identity
+    seams.stepper = stepper
     seams.identity_verdict = identity_verdict
     seams.identity_check = identity_check
     seams.token_identity = token_identity
@@ -354,6 +360,8 @@ def create_app(
     token_identity: ITokenIdentityReader | None = None,
     hub_token: ICurrentHubToken | None = None,
     binding: IRunnerBinding | None = None,
+    stepper: RunnerStepper | None = None,
+    host_stepper: HostPassStepper | None = None,
     flags: Flags,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
@@ -403,6 +411,7 @@ def create_app(
                 hub_token=hub_token,
                 binding=binding,
                 identity=identity,
+                stepper=stepper,
             ),
         )
     if workspaces is None:
@@ -418,6 +427,7 @@ def create_app(
         else DISABLED_TELEMETRY,
     )
     app.state.config = config
+    app.state.host_stepper = host_stepper
     app.state.flags = flags
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
@@ -587,6 +597,10 @@ class HostedApp:
     runner_clients: tuple[httpx2.Client, ...]
     hub_http_client: httpx2.Client
     owned_host: HostProcess | None = None
+    #: One stepper per hosted runner, in the host's runner order, each the runner's passes on request or on a timer.
+    steppers: tuple[RunnerStepper, ...] = ()
+    #: The host's own pass; ``None`` when the host built no runner.
+    host_stepper: HostPassStepper | None = None
 
     @property
     def resume(self) -> ResumeMarking:
@@ -598,6 +612,8 @@ class HostedApp:
         with contextlib.ExitStack() as closing:
             if self.owned_host is not None:
                 closing.callback(self.owned_host.close)
+            for stepper in self.steppers:
+                closing.callback(stepper.close)
             for client in self.runner_clients:
                 closing.callback(client.close)
             closing.callback(self.hub_http_client.close)
@@ -641,6 +657,7 @@ def _wire_hosted_app(
         for index, graph in enumerate(host.runners)
     ]
     first = host.runners[0]
+    host_stepper = host_pass_stepper(host)
     # The real, network-reaching hub client — only `host` wires one.
     hub_http_client = startup.enter_context(httpx2.Client(base_url=config.hub_url, timeout=5.0))
     host.platform_tracing.instrument_client(hub_http_client)
@@ -661,6 +678,7 @@ def _wire_hosted_app(
         events=host.events,
         clock=host.clock,
         process=host.process,
+        host_stepper=host_stepper,
         flags=host.flags,
     )
     resumes = tuple(ResumeMarking(runner.stores, host.host_stores, host.clock, host.process) for runner in host.runners)
@@ -672,6 +690,8 @@ def _wire_hosted_app(
         tuple(client for runner in wired for client in runner.clients),
         hub_http_client,
         owned_host,
+        tuple(runner.stepper for runner in wired),
+        host_stepper,
     )
 
 
@@ -680,6 +700,7 @@ class _WiredRunner:
     """One hosted runner's served seams, its harness health, and the hub clients it owns."""
 
     served: ServedRunner
+    stepper: RunnerStepper
     harness_health: HarnessHealthCache
     clients: tuple[httpx2.Client, ...]
 
@@ -801,6 +822,7 @@ def _wire_runner(
         environments=runner_stores.environments,
         outbound=runner_stores.outbound,
     )
+    stepper = RunnerStepper(graph.config, process_graph=graph)
     served = runner_seams(
         config,
         clock=clock,
@@ -837,8 +859,9 @@ def _wire_runner(
         harness_health=harness_health,
         hub_proxy_client=hub_proxy_client,
         identity=graph.identity,
+        stepper=stepper,
     )
-    return _WiredRunner(served, harness_health, (archived_transcript_client, hub_proxy_client))
+    return _WiredRunner(served, stepper, harness_health, (archived_transcript_client, hub_proxy_client))
 
 
 def _wire_runnerless_app(

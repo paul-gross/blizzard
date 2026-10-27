@@ -204,6 +204,25 @@ braked runner still shows its floor answer. The runner panel's `/host` rows show
 clear control; follow a runner's name to `/machine/<runner-id>` to inspect it and clear a held floor. The confirmation
 names every runner spending a subscription, or the sole runner when it names no subscription.
 
+### Stepping a host
+
+A host started with `loop = "stepped"` in `blizzard-host.toml`, or with `blizzard-runner host --loop stepped` for one
+run, starts no timer: no runner ticks, the host's own pass does not run, and no trace sweep runs. Everything else is as
+on a timed host. The local API is served, startup marks the sessions a crash left behind and reports the host once,
+workers a pass spawned keep running between passes, and shutdown marks the in-flight leases as before. A pass runs only
+when you ask for one:
+
+- `POST /runners/{runner_id}/api/ticks` runs one tick of that runner, every phase a timed tick runs, then one trace
+  sweep when tracing is on.
+- `POST /api/host/ticks` runs one pass of the host's own work: registration, credential renewal, usage sampling and the
+  lane drain.
+
+Each answers `200` once the pass has finished, with its `started_at`, `finished_at` and `outcome` — `completed`, or
+`failed` with the fault's `error`. A second request that arrives while a pass of the same runner is running, timed or
+requested, answers `409` with `{"code": "tick_in_progress"}` at once; the host's own pass has a lock of its own. Both
+routes serve a timed host too. They are free over `host.sock` and gated over TCP when the hub offers an IdP, as the
+runner's brake is.
+
 ### Retire and reinstate
 
 `blizzard hub runner retire <runner_id>` takes a runner out of service for good: it revokes the runner's token, hides it

@@ -10,13 +10,21 @@ from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import HostConfig
+from blizzard.runner.loop.mode import LoopMode
 
 
-def load_host(directory: str, *, host: str | None = None, port: int | None = None) -> HostConfig:
+def load_host(
+    directory: str, *, host: str | None = None, port: int | None = None, loop: LoopMode | None = None
+) -> HostConfig:
     """``directory``'s host file, or the error that refuses it."""
     try:
         return HostConfig.load_for_store(
-            Path(directory), host=host, port=port, flag_registry=packaged_flag_registry(), strict=strict_config()
+            Path(directory),
+            host=host,
+            port=port,
+            loop=loop,
+            flag_registry=packaged_flag_registry(),
+            strict=strict_config(),
         )
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc

@@ -222,3 +222,18 @@ def test_a_store_naming_the_configured_runner_and_another_is_refused_by_check_an
         assert "stop and restore the right store" in result.output
         assert "store reset" not in result.output
     _nothing_started(root)
+
+
+def test_a_loop_the_file_names_wrongly_fails_the_check_naming_the_key_and_the_flag_overrides_it(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _joined(tmp_path, fake_init_hub)
+    layout = HostLayout(root)
+    layout.config_path.write_text('loop = "invalid"\n' + layout.config_path.read_text())
+
+    refused = _check(fake_init_hub, root)
+    overridden = _check(fake_init_hub, root, "--loop", "stepped")
+
+    assert refused.exit_code != 0 and "host: loop: loop must be one of" in refused.output
+    assert overridden.exit_code == 0, overridden.output
+    _nothing_started(root)

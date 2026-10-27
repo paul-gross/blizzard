@@ -200,6 +200,14 @@
       "type": "string"
     },
     {
+      "default": "timed",
+      "deprecated": false,
+      "path": "loop",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
       "default": null,
       "deprecated": true,
       "path": "max_agents",

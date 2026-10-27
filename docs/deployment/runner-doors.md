@@ -14,14 +14,16 @@ The host serves one origin. What belongs to the host answers at the root:
 - `/api/host/*` — the host's own reads: `runners` (each runner's brake, bindings, and agents in use, or a halted one's
   reasons), `workspaces`, `environments` (grouped by workspace, each held one naming its runner and project), and
   `subscriptions` (each naming the runners that spend it); and `workspaces/{workspace_id}/prompt`, the runtime
-  workspace-prompt override (`GET`, `PUT`, `DELETE`), which answers `404` for a workspace the host does not declare.
+  workspace-prompt override (`GET`, `PUT`, `DELETE`), which answers `404` for a workspace the host does not declare; and
+  `POST /api/host/ticks`, which runs one pass of the host's own work and answers once it has finished
+  ([Stepping a host](./control-verbs.md#stepping-a-host)).
 
-Everything that belongs to one runner — its leases, dashboard, asks, control verbs, takeovers, traces, worker hooks, and
-OTLP receiver — answers under `/runners/{runner_id}/`, keyed by the hub-minted id: `/runners/{runner_id}/api/...` and
-`/runners/{runner_id}/v1/{traces,metrics,logs}`. An id the host does not hold answers `404`; a runner it holds halted
-answers `503` naming its reasons. Nothing answers at the unprefixed paths a lone runner once served: an API path no
-route matches answers a JSON `404`, never the panel. `openapi/runner.openapi.json` documents both halves in one
-document, with `runner_id` a path parameter on every runner operation.
+Everything that belongs to one runner — its leases, dashboard, asks, control verbs, `ticks` route, takeovers, traces,
+worker hooks, and OTLP receiver — answers under `/runners/{runner_id}/`, keyed by the hub-minted id:
+`/runners/{runner_id}/api/...` and `/runners/{runner_id}/v1/{traces,metrics,logs}`. An id the host does not hold answers
+`404`; a runner it holds halted answers `503` naming its reasons. Nothing answers at the unprefixed paths a lone runner
+once served: an API path no route matches answers a JSON `404`, never the panel. `openapi/runner.openapi.json` documents
+both halves in one document, with `runner_id` a path parameter on every runner operation.
 
 ## The two listeners
 
