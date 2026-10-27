@@ -1,4 +1,4 @@
-"""The platform-span seam loop and domain code open spans through — never OpenTelemetry directly."""
+"""The platform-span seam: spans are opened through it, never through OpenTelemetry directly."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class IPlatformTracer(Protocol):
 
 
 class NoopPlatformTracer:
-    """What every consumer holds while platform tracing is off."""
+    """The tracer while platform tracing is off; every call is a no-op."""
 
     def root(self, name: str, attributes: Attributes | None = None) -> AbstractContextManager[None]:
         return _nothing()

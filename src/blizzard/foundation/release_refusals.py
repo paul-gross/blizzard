@@ -1,4 +1,4 @@
-"""Why the hub answers a runner's release ``409`` — the vocabulary the hub and its runners share."""
+"""The reasons a release is refused with ``409``."""
 
 from __future__ import annotations
 

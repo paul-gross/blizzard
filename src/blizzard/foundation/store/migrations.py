@@ -1,10 +1,9 @@
 """The Alembic migration runner and the revision-mismatch guard.
 
-Schema change is Alembic, applied manually through the CLI, never at daemon startup
-(``bzh:manual-migrations``). The runner drives *one* migration tree, pointed at a ``script_location``
-and a store ``url``; the guard refuses to run on a revision mismatch, naming the migrate command.
-A revision that stamps a time reads it from the clock the runner was given (``migration_clock``),
-never the wall clock (``bzh:injected-clock``)."""
+Schema change is Alembic (``bzh:manual-migrations``). The runner drives *one* migration tree, pointed at a
+``script_location`` and a store ``url``; the guard refuses to run on a revision mismatch. A revision that stamps a
+time reads it from the clock the runner was given (``migration_clock``), never the wall clock
+(``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
@@ -62,13 +61,12 @@ def _revision_warnings_surfaced() -> Iterator[None]:
 
 
 class MigrationConnectionError(RuntimeError):
-    """Raised when a migration cannot reach the store — the domain-level fault a daemon's
-    runtime should catch, not sqlalchemy's own driver-specific ``OperationalError``."""
+    """Raised when a migration cannot reach the store, in place of the driver's own ``OperationalError``."""
 
 
 class MigrationRefused(RuntimeError):
     """Raised by a revision that refuses a store it cannot carry across safely, leaving the store as it was; the
-    message tells the operator what to repair or restore, so a CLI shows it as the error, not as a traceback."""
+    message says what to repair or restore."""
 
 
 class MigrationClockMissingError(RuntimeError):
@@ -77,7 +75,7 @@ class MigrationClockMissingError(RuntimeError):
 
 class RevisionMismatchError(RuntimeError):
     """Raised when a store's applied revision differs from the code's expected head; the message names
-    the command to run, so a skew fails loud instead of a schema being rewritten under running data."""
+    the command that reconciles them."""
 
     def __init__(self, *, store: str, current: str | None, expected: str | None, remedy: str) -> None:
         self.store = store

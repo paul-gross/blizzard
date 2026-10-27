@@ -1,5 +1,4 @@
-"""What a graph choice's ``to:`` points at — the vocabulary the hub's graph model and the
-wire's graph view share."""
+"""What a graph choice's ``to:`` points at."""
 
 from __future__ import annotations
 

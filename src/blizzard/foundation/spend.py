@@ -1,8 +1,7 @@
-"""The one dollar figure a spend total reads as — one definition, shared by both daemons.
+"""The one dollar figure a spend total reads as, shared by both daemons.
 
-Billed and estimated cost stay apart in every column; their sum exists only here, where every
-cap compares it and every surface renders it. The markers are owned by
-``docs/deployment/spend.md``."""
+Billed and estimated cost stay apart in every column; their sum exists only here. The markers are
+owned by ``docs/deployment/spend.md``."""
 
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ class SpendFigure:
     partial: bool
 
     def amount(self) -> float:
-        """Billed plus estimated — the one amount a cap compares and a surface renders."""
+        """Billed plus estimated."""
         return self.cost_usd + (self.estimated_cost_usd or 0.0)
 
     def rendered(self) -> str:

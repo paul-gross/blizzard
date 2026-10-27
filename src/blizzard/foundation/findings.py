@@ -1,4 +1,4 @@
-"""The finding vocabularies the hub's fold and the wire share — one definition each.
+"""The finding fact-kind and state vocabularies.
 
 What each fact kind and state means is blizzard-context:/domain/findings-and-proposals.md's own."""
 

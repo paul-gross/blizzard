@@ -1,7 +1,7 @@
-"""A daemon's readiness rule (``bzh:domain-core``) — one owner for the hub and the runner.
+"""A daemon's readiness rule (``bzh:domain-core``).
 
 A daemon is *ready* when its store is reachable **and** migrated to exactly the revision this
-build expects (``bzh:manual-migrations`` — a skew fails loud, it never serves on a mismatch)."""
+build expects (``bzh:manual-migrations``)."""
 
 from __future__ import annotations
 

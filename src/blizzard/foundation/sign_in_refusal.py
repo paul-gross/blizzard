@@ -1,4 +1,4 @@
-"""The sign-in refusal vocabulary the hub and its wire share: the code `/login?refusal=<code>` carries."""
+"""The sign-in refusal vocabulary."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from enum import StrEnum
 
 
 class SignInRefusal(StrEnum):
-    """Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
+    """Why a sign-in admitted nobody. Every refusal writes
     nothing: no user, identity link, membership, invitation fact or session."""
 
     #: A first sign-in with no invitation, by an identity the hub does not know or whose provider does not vouch.

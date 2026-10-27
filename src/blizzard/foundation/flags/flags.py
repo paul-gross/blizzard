@@ -15,14 +15,14 @@ import structlog
 from blizzard.foundation.flags.registry import FlagRegistry, FlagScope
 from blizzard.foundation.roles import domain_model
 
-#: Which daemon resolves: the hub answers ``hub`` and ``fleet`` flags, a runner (its host) answers ``runner`` flags.
+#: Which side resolves: ``hub`` answers ``hub`` and ``fleet`` flags, ``runner`` answers ``runner`` flags.
 type FlagSide = Literal["hub", "runner"]
 
 _HUB_ANSWERS: frozenset[FlagScope] = frozenset({"hub", "fleet"})
 
 
 def side_answers(side: FlagSide, scope: FlagScope) -> bool:
-    """Whether ``side``'s daemon answers a flag of ``scope`` at all."""
+    """Whether ``side`` answers a flag of ``scope`` at all."""
     return scope in (_HUB_ANSWERS if side == "hub" else frozenset({"runner"}))
 
 

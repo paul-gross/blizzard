@@ -9,10 +9,9 @@ from blizzard.foundation.roles import domain_model
 @domain_model
 @dataclass(frozen=True)
 class TracingConfig:
-    """Resolved ``[tracing]`` config every daemon shares — the trace sweep's own knobs, each an integer
+    """Resolved ``[tracing]`` config — the trace sweep's own knobs, each an integer
     of seconds or a count with a working default — plus the platform-span switch and its root
-    sample ratio. An OTLP endpoint in OpenTelemetry's own environment variables is the other switch. The keys only
-    the runner acts on live on its :class:`~blizzard.runner.tracing.config.RunnerTracingConfig`."""
+    sample ratio. An OTLP endpoint in OpenTelemetry's own environment variables is the other switch."""
 
     sweep_seconds: int = 60
     #: How long a closed unit must have been closed before it is exported; 0 exports at once.
@@ -73,7 +72,7 @@ class TracingConfig:
 
     @staticmethod
     def banner(unit: str, notes: str = "") -> str:
-        """The comment block above ``[tracing]``; ``notes`` is a daemon's own lines on the keys only it acts on."""
+        """The comment block above ``[tracing]``; ``notes`` is extra lines appended after the shared keys."""
         return (
             "\n# Trace knobs. Tracing turns on only through OpenTelemetry's own variables\n"
             "# (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT); the\n"
@@ -108,8 +107,7 @@ SHARED_KEYS = (
 
 _DEFAULTS = TracingConfig()
 
-#: Every ``[tracing]`` key every daemon shares, declared here beside the parser that reads it; each daemon's registry
-#: includes them.
+#: Every ``[tracing]`` key of the shared config, declared beside the parser that reads it.
 TRACING_KEYS: tuple[ConfigKey, ...] = (
     ConfigKey("tracing", TABLE),
     ConfigKey("tracing.sweep_seconds", INTEGER, default=_DEFAULTS.sweep_seconds),

@@ -123,8 +123,8 @@ class ReceivedDataPoint:
 @domain_model
 @dataclass(frozen=True)
 class ReceivedMetrics:
-    """A decoded metrics export: its ``points``, and how many points it carried of an unsupported kind
-    (a summary) — refused, never silently lost."""
+    """A decoded metrics export: its sum, gauge, histogram and exponential histogram ``points``, and the
+    count of summary data points, a kind that is not decoded, in ``unsupported``."""
 
     points: list[ReceivedDataPoint]
     unsupported: int = 0

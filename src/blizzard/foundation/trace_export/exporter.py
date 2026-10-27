@@ -1,4 +1,4 @@
-"""The trace export seam — where finished span records leave a daemon.
+"""The trace export seam for finished span records.
 
 Contract: ``blizzard-product:/delivered/tracing/fleet-spans/spec/emission.md`` §Building spans. The
 domain hands :class:`FinishedSpan` batches across; only the binding knows OpenTelemetry."""

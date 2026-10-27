@@ -1,10 +1,8 @@
 """The portable SQLAlchemy engine factory (``bzh:sql-portable``).
 
-Both stores run on sqlite (the fast local default and what tests use) or postgres,
-selected only by the configured URL — the schema stays inside SQLAlchemy's
-portable surface, so postgres is a URL change, not a second test matrix. A sqlite
-engine runs in WAL mode, so the store's ``.db`` file alone is a complete copy of the
-data only right after a clean shutdown — a live store also has a ``-wal`` sidecar.
+The engine is sqlite or postgres, selected only by the configured URL; the schema stays inside
+SQLAlchemy's portable surface. A sqlite engine runs in WAL mode, so a live store also has a
+``-wal`` sidecar.
 """
 
 from __future__ import annotations

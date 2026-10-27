@@ -26,7 +26,7 @@ class LeaseClosureReason(StrEnum):
 
 
 class LeaseDisplayStatus(StrEnum):
-    """What the panel shows for a lease: a takeover, escalation, or ask open on its chunk
+    """What a lease reads as: a takeover, escalation, or ask open on its chunk
     outranks the lease's own state, which shows otherwise. Derived at read time, never stored."""
 
     HUMAN_IN_SESSION = "human-in-session"

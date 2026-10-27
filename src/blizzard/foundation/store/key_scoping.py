@@ -1,19 +1,10 @@
 """The key-scoping core: statement builders that confine every keyed table they name to one key value.
 
-A store whose tables are partitioned by an owning key — the hub's ``tenant_id`` — describes that partition once as a
+A store whose tables are partitioned by an owning key describes that partition once as a
 :class:`KeyScoping`: the key column, which tables are keyed by it, the execution option that exempts a statement from
 the error a builder raises when a caller supplies the key itself. :mod:`blizzard.foundation.store.statement_guard`
 checks executed statements against the same configuration.
-:class:`KeyedStatements` is the builder set bound to one key value under that configuration:
-
-- ``select(from_, *cols)`` puts ``<key> = <value>`` in ``WHERE`` for each keyed table whose rows the read returns
-  unconditionally — the table itself, or each side of an inner join and the preserved side of an outer one;
-- ``scope_join(left, right, onclause, isouter=...)`` puts the right side's predicate in the join's ``ON``, so an outer
-  join stays outer; the left side is scoped by the read selecting from it;
-- ``exists(from_, *criteria)`` is a scoped, correlatable ``EXISTS``;
-- ``insert(table)`` stamps the key into its values; ``insert_rows(table, rows)`` stamps each row of a multi-row
-  ``VALUES`` and ``insert_from_select(table, names, select)`` each selected row, as a literal column; a caller never
-  supplies the key itself. ``update``/``delete`` are confined to the key's rows.
+:class:`KeyedStatements` is the builder set bound to one key value under that configuration.
 
 A table is keyed when it has the key column and the configuration's ownership test admits it; any other table passes
 through every builder untouched. An alias is scoped like the table it names."""

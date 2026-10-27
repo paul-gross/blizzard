@@ -1,5 +1,4 @@
-"""The hub's SSE frame vocabulary, its frame kinds and the causes a frame names —
-one definition, shared by both daemons."""
+"""The hub's SSE frame kinds and the causes a frame names."""
 
 from __future__ import annotations
 
@@ -21,10 +20,10 @@ class HubEventType(StrEnum):
     EVENT_LOGGED = "event-logged"
 
 
-#: The frame types with a row of their own type in ``GET /api/activity`` — the only frames the feed lists, live or not.
+#: The frame types that have a durable activity row of their own type.
 ActivityHubEventType = Literal["chunk-changed", "event-logged", "runner-changed"]
 
-#: The causes the activity read backfills from a durable chunk fact: all but ``edited``, which records none.
+#: The causes backed by a durable chunk fact: all but ``edited``, which records none.
 ActivityChunkChangeCause = Literal[
     "minted",
     "promoted",
@@ -50,12 +49,10 @@ ActivityChunkChangeCause = Literal[
     "deleted",
 ]
 
-#: What fact family drove a ``chunk-changed`` frame — each emit site names
-#: its own cause statically. ``edited`` is the one cause with no durable fact behind it.
+#: What fact family drove a ``chunk-changed`` frame. ``edited`` is the one cause with no durable fact behind it.
 ChunkChangeCause = Literal[ActivityChunkChangeCause, "edited"]
 
-#: The runner kinds the activity read backfills from a durable pause fact — the only
-#: ``runner-changed`` frames the feed lists, live or reconstructed.
+#: The runner kinds backed by a durable pause fact.
 ActivityRunnerChangeKind = Literal[
     "paused",
     "resumed",
@@ -63,8 +60,7 @@ ActivityRunnerChangeKind = Literal[
     "locally-resumed",
 ]
 
-#: What a ``runner-changed`` frame reports — see
-#: the hub event broker's ``publish_runner_changed``.
+#: What a ``runner-changed`` frame reports.
 RunnerChangeKind = Literal[
     ActivityRunnerChangeKind,
     "added",
@@ -76,7 +72,7 @@ RunnerChangeKind = Literal[
     "token-revoked",
 ]
 
-#: What a ``host-changed`` frame reports — see the hub event broker's ``publish_host_changed``.
+#: What a ``host-changed`` frame reports.
 HostChangeKind = Literal[
     "added",
     "reported",
