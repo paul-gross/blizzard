@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -38,10 +40,12 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from tests.support import (
     chunk_stores,
     count_queries,
+    count_rows_read,
     hub_level_connections,
     hub_store_connections,
     migrated_hub_at,
     seed_chunk_record,
+    seed_lease,
 )
 
 pytestmark = pytest.mark.component
@@ -226,6 +230,7 @@ class _CountingFactsStore(ChunkFactsStore):
         super().__init__(store, clock)
         self.load_facts_calls = 0
         self.load_facts_for_calls = 0
+        self.movement_facts_for_calls = 0
 
     def load_facts(self, chunk_id: str):  # type: ignore[no-untyped-def]
         self.load_facts_calls += 1
@@ -234,6 +239,10 @@ class _CountingFactsStore(ChunkFactsStore):
     def load_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
+
+    def movement_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
+        self.movement_facts_for_calls += 1
+        return super().movement_facts_for(chunk_ids)
 
 
 class _CountingRecordStore(ChunkRecordStore):
@@ -251,11 +260,11 @@ class _CountingRecordStore(ChunkRecordStore):
         return super().graph_id_of_many(chunk_ids)
 
 
-def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_many_call(
+def test_sweep_resolves_graph_pins_with_one_movement_facts_for_and_one_graph_id_of_many_call(
     fixture: _Fixture,
 ) -> None:
     """A pass over several segments spanning several chunks — including two on the same
-    chunk — resolves every graph pin through one bulk `load_facts_for` call and one bulk
+    chunk — resolves every graph pin through one bulk `movement_facts_for` call and one bulk
     `graph_id_of_many` call, never the per-chunk `load_facts`/`record.get`."""
     for i in range(3):
         fixture.mint_chunk(f"ch_multi_{i}")
@@ -276,7 +285,8 @@ def test_sweep_resolves_graph_pins_with_one_load_facts_for_and_one_graph_id_of_m
     reconciler.sweep()
 
     assert len(fixture.stored_events()) == 4
-    assert counting_facts.load_facts_for_calls == 1
+    assert counting_facts.movement_facts_for_calls == 1
+    assert counting_facts.load_facts_for_calls == 0
     assert counting_record.graph_id_of_many_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_record.get_calls == 0
@@ -514,6 +524,11 @@ class _PoisonedService(EventDerivationService):
             raise RuntimeError("underivable")
         return super().derive_segment(segment_id, pins)
 
+    def derive_input(self, segment_id: str, current: Any, pins: GraphPins) -> bool:
+        if segment_id == self._poison:
+            raise RuntimeError("underivable")
+        return super().derive_input(segment_id, current, pins)
+
 
 def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fixture) -> None:
     """A segment that raises is stepped over, not fatal — every later candidate still
@@ -743,3 +758,150 @@ def test_the_forced_floor_runs_a_full_pass_after_ten_minutes_despite_an_unchange
     fixture.clock.advance(timedelta(minutes=10))
     fixture.reconciler.sweep()  # unchanged signature, but the floor is now due
     assert calls == 1
+
+
+# --- batched input decoding -----------------
+
+
+class _SpyEvents(TranscriptEventStore):
+    """Records, in one ordered log, every input read and every replacement write."""
+
+    def __init__(self, store: Any, log: list[tuple[str, tuple[str, ...]]], *, fail_plural: bool = False) -> None:
+        super().__init__(store)
+        self.log = log
+        self._fail_plural = fail_plural
+
+    def segment_derivation_inputs(self, segment_ids: Sequence[str]):  # type: ignore[no-untyped-def]
+        self.log.append(("plural", tuple(segment_ids)))
+        if self._fail_plural:
+            raise RuntimeError("plural read down")
+        return super().segment_derivation_inputs(segment_ids)
+
+    def segment_derivation_input(self, segment_id: str):  # type: ignore[no-untyped-def]
+        self.log.append(("single", (segment_id,)))
+        return super().segment_derivation_input(segment_id)
+
+    def replace_segment_events(self, segment_id: str, *args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
+        self.log.append(("write", (segment_id,)))
+        return super().replace_segment_events(segment_id, *args, **kwargs)
+
+
+def _spied_reconciler(
+    fixture: _Fixture, *, fail_plural: bool = False
+) -> tuple[EventDerivationReconciler, list[tuple[str, tuple[str, ...]]]]:
+    log: list[tuple[str, tuple[str, ...]]] = []
+    spy = _SpyEvents(hub_store_connections(fixture.engine), log, fail_plural=fail_plural)
+    service = EventDerivationService(
+        events=spy, facts=fixture.chunks.facts, record=fixture.chunks.record, clock=fixture.clock
+    )
+    tenant = TenantEventDerivation(service=service, events=spy, clock=fixture.clock)
+    reconciler = EventDerivationReconciler(
+        corpus=fixture.corpus,
+        tenant=lambda _t: tenant,
+        clock=fixture.clock,
+        extractor_version=service.extractor_version,
+    )
+    return reconciler, log
+
+
+def _seed_ids(fixture: _Fixture, ids: Sequence[str]) -> None:
+    for segment_id in ids:
+        fixture.segments.insert_accepted(_segment_record(segment_id=segment_id), byte_count=10, codec="zlib", at=_NOW)
+
+
+def test_convergence_reads_inputs_one_bounded_sub_batch_at_a_time(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Candidates spanning more than two sub-batches take one plural read per sub-batch, no read
+    exceeds the batch size, each sub-batch's writes precede the next read, and no good segment is re-read."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    ids = [f"sg_{i}" for i in range(1, 6)]
+    _seed_ids(fixture, ids[1:])
+    fixture.segments.insert_accepted(_segment_record(), byte_count=10, codec="zlib", at=_NOW)
+    reconciler, log = _spied_reconciler(fixture)
+
+    reconciler.sweep()
+
+    reads = [entry for entry in log if entry[0] == "plural"]
+    assert len(reads) == 3
+    assert all(len(ids_) <= 2 for _, ids_ in reads)
+    assert not [entry for entry in log if entry[0] == "single"]
+    kinds = [kind for kind, _ in log]
+    assert kinds == ["plural", "write", "write", "plural", "write", "write", "plural", "write"]
+    assert sorted(row.segment_id for row in fixture.stored_events()) == sorted(ids)
+
+
+def test_a_missing_input_falls_back_to_the_singular_read_without_costing_neighbours(
+    fixture: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A corrupt segment is counted failed through the singular path; a vanished one is not; good
+    ids after the bad one and across a boundary still derive."""
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    _seed_ids(fixture, ["sg_a", "sg_b", "sg_c", "sg_d"])
+    with fixture.engine.begin() as conn:
+        conn.execute(
+            hub_store_connections(fixture.engine)
+            .update(s.transcript_segments)
+            .where(s.transcript_segments.c.segment_id == "sg_a")
+            .values(content=b"not zlib")
+        )
+    reconciler, log = _spied_reconciler(fixture)
+
+    with capture_logs() as logs:
+        reconciler.sweep()
+
+    assert sorted(row.segment_id for row in fixture.stored_events()) == ["sg_b", "sg_c", "sg_d"]
+    assert [entry["segment_id"] for entry in logs if entry["event"] == "segment derivation skipped"] == ["sg_a"]
+    assert [entry for entry in log if entry[0] == "single"] == [("single", ("sg_a",))]
+
+
+def test_a_failing_plural_read_reads_its_sub_batch_singly(fixture: _Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    ids = ["sg_a", "sg_b", "sg_c"]
+    _seed_ids(fixture, ids)
+    reconciler, log = _spied_reconciler(fixture, fail_plural=True)
+
+    reconciler.sweep()
+
+    assert sorted(row.segment_id for row in fixture.stored_events()) == ids
+    assert [entry[1][0] for entry in log if entry[0] == "single"] == ids
+
+
+def _deep_fixture(tmp_path: Path, depth: int) -> _Fixture:
+    """A fixture whose chunks carry identical transitions but ``depth`` lease facts each."""
+    tmp_path.mkdir()
+    fixture = _Fixture(tmp_path)
+    fixture.mint_chunk("ch_2", node_id="nd_other")
+    for chunk_id in ("ch_1", "ch_2"):
+        fixture.segments.insert_accepted(
+            _segment_record(segment_id=f"sg_{chunk_id}", chunk_id=chunk_id), byte_count=10, codec="zlib", at=_NOW
+        )
+        for epoch in range(2, 2 + depth):
+            seed_lease(fixture.engine, chunk_id, epoch=epoch, runner_id="r1", at=_NOW)
+    return fixture
+
+
+def test_graph_pins_read_only_the_movement_families_and_answer_as_the_wide_read_does(tmp_path: Path) -> None:
+    """Deeper histories in a family the pins never consume change neither the answer nor the rows read."""
+    shallow = _deep_fixture(tmp_path / "shallow", 1)
+    deep = _deep_fixture(tmp_path / "deep", 20)
+    segment_ids = ["sg_ch_1", "sg_ch_2", "sg_missing"]
+
+    def pins_of(fixture: _Fixture) -> dict[str, str | None]:
+        pins = fixture.service.graph_pins_for(segment_ids)
+        return {
+            "ch_1": pins.graph_id_for("ch_1", "nd_build", 1),
+            "ch_2": pins.graph_id_for("ch_2", "nd_other", 1),
+            "ch_2_unmatched": pins.graph_id_for("ch_2", "nd_build", 9),
+            "ch_unknown": pins.graph_id_for("ch_unknown", "nd_build", 1),
+        }
+
+    assert pins_of(shallow) == pins_of(deep)
+    shallow_rows = count_rows_read(shallow.engine, lambda: shallow.service.graph_pins_for(segment_ids))
+    deep_rows = count_rows_read(deep.engine, lambda: deep.service.graph_pins_for(segment_ids))
+    assert shallow_rows == deep_rows
+
+    chunk_ids = ["ch_1", "ch_2"]
+    narrow = count_queries(deep.engine, lambda: deep.chunks.facts.movement_facts_for(chunk_ids))
+    wide = count_queries(deep.engine, lambda: deep.chunks.facts.load_facts_for(chunk_ids))
+    assert narrow < wide

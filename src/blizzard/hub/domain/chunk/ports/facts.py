@@ -35,7 +35,8 @@ class IReadChunkFactsRepository(Protocol):
         ...
 
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
-        """The movement families needed by :meth:`ChunkFacts.current_node_id`, for the named chunks."""
+        """The movement families — transitions, migrations and restarts — needed by :meth:`ChunkFacts.current_node_id`,
+        for the named chunks; every other family is left empty."""
         ...
 
     def load_live_statuses(self) -> dict[str, ChunkStatus]:
