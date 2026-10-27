@@ -17776,7 +17776,7 @@
     },
     "/api/analytics/counts/files": {
       "get": {
-        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter. ``kind`` is not offered: this count fixes it to ``file_read``. Omitting\n``limit`` returns every path; ``limit`` opts into the top N by count, with complete\ncounts for the paths it returns.",
+        "description": "Occurrence counts by file path among ``file_read`` events, honoring every other\nfilter. ``kind`` is not offered: this count fixes it to ``file_read``. ``limit`` opts\ninto the top N by count; omitted, every path returns.",
         "operationId": "counts_by_file_api_analytics_counts_files_get",
         "parameters": [
           {
@@ -18503,7 +18503,7 @@
     },
     "/api/analytics/durations/graphs": {
       "get": {
-        "description": "The same rollup grouped by the graph the step happened in \u2014 the transition's\nown ``graph_id``, never the chunk's current pin. Like the per-node rollup, it is a\ncomplete historical read unless filtered, and its cost grows with history.",
+        "description": "The same rollup grouped by the graph the step happened in \u2014 the transition's\nown ``graph_id``, never the chunk's current pin. Complete history unless filtered.",
         "operationId": "durations_by_graph_api_analytics_durations_graphs_get",
         "parameters": [
           {
@@ -18667,7 +18667,7 @@
     },
     "/api/analytics/durations/nodes": {
       "get": {
-        "description": "Completed-step duration rollups grouped by node \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics. Returns the complete\nhistorical rollup unless the caller filters; its cost grows with history.",
+        "description": "Completed-step duration rollups grouped by node \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered.",
         "operationId": "durations_by_node_api_analytics_durations_nodes_get",
         "parameters": [
           {
@@ -19379,7 +19379,7 @@
     },
     "/api/analytics/outcomes/nodes": {
       "get": {
-        "description": "Judged-choice distribution and attempt-failure counts grouped by node \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither. Returns the complete historical distribution unless the caller filters; its\ncost grows with history.",
+        "description": "Judged-choice distribution and attempt-failure counts grouped by node \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither. Complete history unless filtered.",
         "operationId": "outcomes_by_node_api_analytics_outcomes_nodes_get",
         "parameters": [
           {
@@ -30475,7 +30475,7 @@
     },
     "/api/routines/{routine_id}/sweeps": {
       "get": {
-        "description": "``routine_id``'s per-scope last-swept table \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span. A positive span is never capped, so a\nhistorical comparison can read the whole series.",
+        "description": "``routine_id``'s per-scope last-swept table \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span. Positive spans are uncapped for historical comparison.",
         "operationId": "routine_sweeps_api_routines__routine_id__sweeps_get",
         "parameters": [
           {
