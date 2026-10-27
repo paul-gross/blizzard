@@ -59,8 +59,18 @@ def source_group() -> None:
 @click.option("--locator", required=True, help="Where the items live; for github, owner/name.")
 @click.option("--secret", "secret", default=None, help="The stored secret holding the provider credential.")
 @click.option("--forge", "forge", default=None, help="The forge the source reads from, by id or slug.")
-@click.option("--api-base", "api_base", default=None, help="Deprecated — use --forge. Provider API origin override.")
-@click.option("--web-base", "web_base", default=None, help="Deprecated — use --forge. Web origin override.")
+@click.option(
+    "--api-base",
+    "api_base",
+    default=None,
+    help="Deprecated — use --forge. Puts the source on the forge holding this API origin, made when none does.",
+)
+@click.option(
+    "--web-base",
+    "web_base",
+    default=None,
+    help="Deprecated — use --forge. Must be that forge's web origin, or the create is refused; it sets nothing.",
+)
 @click.option(
     "--annotate/--no-annotate", "annotate", default=False, help="Whether the hub annotates items on the forge."
 )
@@ -140,15 +150,28 @@ def source_show(cli: CliContext, source: str) -> None:
 @click.option("--locator", default=None, help="The new locator.")
 @click.option("--secret", default=None, help="The new credential secret.")
 @click.option("--forge", "forge", default=None, help="The forge to move the source to, by id or slug.")
-@click.option("--api-base", "api_base", default=None, help="Deprecated — use --forge. The new API origin override.")
-@click.option("--web-base", "web_base", default=None, help="Deprecated — use --forge. The new web origin override.")
+@click.option(
+    "--api-base",
+    "api_base",
+    default=None,
+    help="Deprecated — use --forge. Moves the source to the forge holding this API origin, made when none does.",
+)
+@click.option(
+    "--web-base",
+    "web_base",
+    default=None,
+    help="Deprecated — use --forge. Must be the source's forge's web origin, or the edit is refused; it sets nothing.",
+)
 @click.option("--annotate/--no-annotate", "annotate", default=None, help="Turn forge annotation on or off.")
 @click.option(
     "--clear",
     "clear",
     multiple=True,
     type=_CLEARABLE,
-    help="Clear a field back to unset; repeatable. Clearing api-base moves the source to GitHub's forge.",
+    help=(
+        "Clear a field; repeatable. Clearing secret unsets it; clearing api-base moves the source to GitHub's forge; "
+        "clearing web-base changes nothing, since the web origin is the forge's, and is warned about."
+    ),
 )
 @_IF_MATCH
 def source_edit(

@@ -9863,7 +9863,7 @@
               "type": "text"
             },
             {
-              "help": "Deprecated \u2014 use --forge. Provider API origin override.",
+              "help": "Deprecated \u2014 use --forge. Puts the source on the forge holding this API origin, made when none does.",
               "hidden": false,
               "kind": "option",
               "name": "api_base",
@@ -9875,7 +9875,7 @@
               "type": "text"
             },
             {
-              "help": "Deprecated \u2014 use --forge. Web origin override.",
+              "help": "Deprecated \u2014 use --forge. Must be that forge's web origin, or the create is refused; it sets nothing.",
               "hidden": false,
               "kind": "option",
               "name": "web_base",
@@ -10027,7 +10027,7 @@
               "type": "text"
             },
             {
-              "help": "Deprecated \u2014 use --forge. The new API origin override.",
+              "help": "Deprecated \u2014 use --forge. Moves the source to the forge holding this API origin, made when none does.",
               "hidden": false,
               "kind": "option",
               "name": "api_base",
@@ -10039,7 +10039,7 @@
               "type": "text"
             },
             {
-              "help": "Deprecated \u2014 use --forge. The new web origin override.",
+              "help": "Deprecated \u2014 use --forge. Must be the source's forge's web origin, or the edit is refused; it sets nothing.",
               "hidden": false,
               "kind": "option",
               "name": "web_base",
@@ -10065,7 +10065,7 @@
               "type": "boolean"
             },
             {
-              "help": "Clear a field back to unset; repeatable. Clearing api-base moves the source to GitHub's forge.",
+              "help": "Clear a field; repeatable. Clearing secret unsets it; clearing api-base moves the source to GitHub's forge; clearing web-base changes nothing, since the web origin is the forge's, and is warned about.",
               "hidden": false,
               "kind": "option",
               "name": "clear",
