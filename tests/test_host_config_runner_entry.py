@@ -164,8 +164,8 @@ def test_a_runner_serving_nothing_with_no_count_has_none(tmp_path: Path) -> None
 def test_both_harness_sections_parse_their_supported_models(tmp_path: Path) -> None:
     host = _agents_host(
         tmp_path,
-        'agents = 1\nprojects = []\n[models]\nsupported = ["opus", "claude-*"]\n'
-        '[opencode.models]\nsupported = ["openai/*"]\n',
+        'agents = 1\nprojects = []\n[runner.models]\nsupported = ["opus", "claude-*"]\n'
+        '[runner.opencode.models]\nsupported = ["openai/*"]\n',
     )
     config = host.runner_config(_TOKEN)
     assert harness_sections.claude_code(config).supported_models == ("opus", "claude-*")
@@ -180,6 +180,6 @@ def test_an_unset_supported_list_parses_as_the_harness_default(tmp_path: Path) -
 
 
 def test_an_opencode_supported_entry_without_a_slash_halts_the_runner_naming_it(tmp_path: Path) -> None:
-    host = _agents_host(tmp_path, 'agents = 1\nprojects = []\n[opencode.models]\nsupported = ["sol"]\n')
-    errors = "; ".join(host.runners[0].errors)
-    assert "r-claude" in errors and "'sol'" in errors
+    host = _agents_host(tmp_path, 'agents = 1\nprojects = []\n[runner.opencode.models]\nsupported = ["sol"]\n')
+    with pytest.raises(HostConfigError, match=r"runner r-claude: .*'sol'"):
+        host.runner_config(_TOKEN)

@@ -305,6 +305,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "workspace[].id": "ws",
     "runner[].harness.autonomy": "dangerous",
     "runner[].harness.config_dir": "/opt/harness",
+    "runner[].opencode.models.supported": ["openai/*"],
     "runner[].worker.path_prepend": ["/opt/bin"],
     "runner[].throttle.budget.usd": 0.25,
     "runner[].throttle.schedule.days": ["mon"],
