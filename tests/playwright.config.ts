@@ -57,8 +57,8 @@ export default defineConfig({
       // The harness's own proof runs on the default profile's setup and is selected by name, never by `service-*`.
       name: 'harness',
       testDir: 'harness/checks',
-      // The auth checks run under their own project, on the auth profile's hubs.
-      testIgnore: '**/checks/auth/**',
+      // The auth checks run under their own project, on the auth profile's hubs; the runner checks under theirs, on no hub.
+      testIgnore: ['**/checks/auth/**', '**/checks/runner/**'],
       dependencies: ['setup-service-hub'],
     },
     {
@@ -66,6 +66,12 @@ export default defineConfig({
       testDir: 'harness/checks/auth',
       dependencies: ['setup-service-hub-auth'],
       workers: 1,
+    },
+    {
+      // A runner-only test owns its mock hub and starts no real hub, so this project has no setup and no dependencies:
+      // a check that reached a hub-world fixture would fail for want of a hubs file.
+      name: 'harness-runner',
+      testDir: 'harness/checks/runner',
     },
   ],
 });

@@ -30,6 +30,17 @@ const onlyFixtures = {
   ],
 };
 
+// The runner world rests on `base` alone: nothing it is built from may import the hub world, which owns the shared hub,
+// the shared reset, and the sweeps.
+const noHubWorld = {
+  patterns: [
+    {
+      regex: '(^|/)(tenancy|hubs|factories|people)(\\.ts)?$|(^|/)client/clients(\\.ts)?$',
+      message: 'The runner world imports nothing from the hub world (tenancy, hubs, factories, people, client/clients).',
+    },
+  ],
+};
+
 export default tseslint.config(
   { ignores: ['node_modules/**', 'test-results/**', 'playwright-report/**', '.run/**', 'harness/client/wire/**'] },
   eslint.configs.recommended,
@@ -52,5 +63,17 @@ export default tseslint.config(
   {
     files: ['service/**/*.spec.ts'],
     rules: { 'no-restricted-imports': ['error', onlyFixtures] },
+  },
+  {
+    files: [
+      'harness/base.ts',
+      'harness/mock-world.ts',
+      'harness/auth-stub.ts',
+      'harness/daemons/mock-hub.ts',
+      'harness/client/engine.ts',
+      'harness/client/mock-hub.ts',
+      'harness/client/runner.ts',
+    ],
+    rules: { 'no-restricted-imports': ['error', noHubWorld] },
   },
 );

@@ -2,7 +2,7 @@ import { TextDecoder } from 'node:util';
 import { SESSION_COOKIE, sessionOf } from './auth';
 import type { Ledger } from './client/ledger';
 import type { Person } from './people';
-import type { Json } from './client/clients';
+import type { Json } from './client/engine';
 
 /** One frame of the stream, as `contracts/sse/` defines them: an `id`, an `event` kind, and a JSON payload. */
 export interface Frame {
@@ -95,11 +95,22 @@ export interface Events extends EventStream {
 const DEFAULT_WAIT_MS = 15_000;
 const RECONNECT_DELAY_MS = 100;
 
-/** The barrier chunk a reader waits on, and the act that makes it publish. */
-interface Barrier {
-  chunkId: string;
-  /** Edits the barrier chunk, with a value no earlier edit used. */
-  edit: () => Promise<void>;
+/**
+ * A marker a reader waits on to know every frame an earlier act caused has arrived: the act that makes the stream publish
+ * it, how to recognise it, and which frames are its own and stay out of the test's view. The stream is ordered, so the
+ * frames before the marker are the whole of what came before.
+ */
+export interface Barrier {
+  /** Makes the stream publish the marker, with a value no earlier act used. */
+  act: () => Promise<void>;
+  /** Whether the frame is the marker this act caused. */
+  reached: (frame: Frame) => boolean;
+  /** Whether the frame belongs to the barrier and is withheld from the test. */
+  hides: (frame: Frame) => boolean;
+  /** The barrier's own chunk, when it has one: what `barrierChunkId` answers. */
+  chunkId?: string;
+  /** What a failure says is missing when the marker never arrives. */
+  describe: string;
 }
 
 interface Reader {
@@ -115,6 +126,18 @@ interface Reader {
 }
 
 const namesChunk = (frame: Frame, chunkId: string): boolean => Object.values(frame.data ?? {}).some((value) => value === chunkId);
+
+/** The hub's barrier: edits a chunk of the test's own and waits for the `chunk-changed` (`edited`) that names it. */
+function chunkBarrier(chunkId: string, edit: (effort: string) => Promise<void>): Barrier {
+  let edits = 0;
+  return {
+    act: () => edit(`barrier-${++edits}`),
+    reached: (frame) => frame.event === 'chunk-changed' && frame.data?.chunk_id === chunkId && frame.data?.cause === 'edited',
+    hides: (frame) => namesChunk(frame, chunkId),
+    chunkId,
+    describe: `no chunk-changed (edited) for the barrier chunk ${chunkId} arrived`,
+  };
+}
 
 class StreamReader implements BarrierSubscription {
   /** Every frame the stream delivered; `frames` is what the test may see of them. */
@@ -140,7 +163,7 @@ class StreamReader implements BarrierSubscription {
   /** Whether the test may see the frame: the reader admits it, and it does not name the barrier chunk. */
   private visible(frame: Frame): boolean {
     const barrier = this.reader.barrier;
-    return this.reader.admits(frame) && (barrier === undefined || !namesChunk(frame, barrier.chunkId));
+    return this.reader.admits(frame) && (barrier === undefined || !barrier.hides(frame));
   }
 
   /**
@@ -292,15 +315,14 @@ class StreamReader implements BarrierSubscription {
   async barrier(): Promise<Frame[]> {
     const barrier = this.reader.barrier;
     if (barrier === undefined) throw new Error('this subscription was not opened with { barrier: true }');
-    await barrier.edit();
-    const edited = (frame: Frame): boolean => frame.event === 'chunk-changed' && frame.data?.chunk_id === barrier.chunkId && frame.data?.cause === 'edited';
+    await barrier.act();
     const at = await this.until(
       () => {
-        const index = this.delivered.findIndex((frame, position) => position >= this.windowStart && edited(frame));
+        const index = this.delivered.findIndex((frame, position) => position >= this.windowStart && barrier.reached(frame));
         return index === -1 ? undefined : index;
       },
       DEFAULT_WAIT_MS,
-      () => `no chunk-changed (edited) for the barrier chunk ${barrier.chunkId} arrived`,
+      () => barrier.describe,
     );
     const answer = this.delivered.slice(this.windowStart, at).filter((frame) => this.visible(frame));
     this.windowStart = at + 1;
@@ -339,8 +361,7 @@ export function eventStream(options: {
       let barrier: Barrier | undefined;
       if (openOptions?.barrier === true) {
         const chunkId = await options.barrier.file();
-        let edits = 0;
-        barrier = { chunkId, edit: () => options.barrier.edit(chunkId, `barrier-${++edits}`) };
+        barrier = chunkBarrier(chunkId, (effort) => options.barrier.edit(chunkId, effort));
       }
       const subscription = new StreamReader({
         url: `${options.hubUrl}/api/events/stream`,
@@ -373,5 +394,34 @@ async function sessionHeaders(person: Person | undefined, superuser: () => Promi
 export async function openStream(reader: Reader): Promise<Subscription> {
   const subscription = new StreamReader(reader);
   await subscription.start();
+  return subscription;
+}
+
+/**
+ * A runner host's event stream (`/api/events/stream` on the host's own URL), read through the same `StreamReader` as
+ * the hub's: one cursor (`Last-Event-ID` resume, `from=latest`), the same `waitFor` and `waitForAll`, and a barrier the
+ * caller supplies. `headers` carry a session when the runner is under hub authentication.
+ */
+export async function openRunnerStream(options: {
+  /** The runner host's URL. */
+  hostUrl: string;
+  headers?: Record<string, string>;
+  /** Whether the first connect joins from now. */
+  fromNow?: boolean;
+  reconnect?: boolean;
+  barrier?: Barrier;
+  /** Subscriptions the test opened; each is closed when it ends. */
+  opened?: Subscription[];
+}): Promise<BarrierSubscription> {
+  const subscription = new StreamReader({
+    url: `${options.hostUrl}/api/events/stream`,
+    headers: options.headers ?? {},
+    admits: () => true,
+    fromNow: options.fromNow,
+    reconnect: options.reconnect,
+    barrier: options.barrier,
+  });
+  await subscription.start();
+  options.opened?.push(subscription);
   return subscription;
 }
