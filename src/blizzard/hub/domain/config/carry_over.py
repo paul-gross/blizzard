@@ -21,7 +21,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import secret_lifecycle
-from blizzard.hub.domain.config.apply import LinkRecord
+from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION, LinkRecord
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import (
@@ -225,6 +225,10 @@ def _work_sources(
     locators = {(record.fields.provider, record.fields.locator) for record in existing.work_sources}
     planned: list[tuple[ConfiguredWorkSource, ConfigChange]] = []
     for source in legacy.sources:
+        forges.foresee(
+            ForgeChoice(api_base=source.api_base, web_base=source.web_base), WORK_SOURCE_FORGE_RULES, creating=True
+        )
+    for source in legacy.sources:
         # The block's name becomes the source's display name, and the slug derived from it its handle.
         slug = derive_slug(source.name, fallback="source")
         if slug in slugs or (source.provider, source.repo) in locators:
@@ -238,7 +242,14 @@ def _work_sources(
         )
         choice = ForgeChoice(api_base=source.api_base, web_base=source.web_base)
         try:
-            resolved = forges.decide(choice, WORK_SOURCE_FORGE_RULES, provider=source.provider, current=None, index=0)
+            resolved = forges.decide(
+                choice,
+                WORK_SOURCE_FORGE_RULES,
+                provider=source.provider,
+                current=None,
+                section=WORK_SOURCES_SECTION,
+                index=0,
+            )
             assert resolved is not None
             fields = draft.on(resolved.forge.forge_id)
             planned.append(
@@ -290,7 +301,12 @@ def _repositories(
     base_branch = values.get(ENV_FORGE_BASE_BRANCH, "").strip() or DEFAULT_BASE_BRANCH
     try:
         resolved = forges.decide(
-            ForgeChoice(api_base=forge_api_url), REPOSITORY_FORGE_RULES, provider=None, current=None, index=0
+            ForgeChoice(api_base=forge_api_url),
+            REPOSITORY_FORGE_RULES,
+            provider=None,
+            current=None,
+            section=REPOSITORIES_SECTION,
+            index=0,
         )
     except ConfigFieldError as exc:
         raise LegacyImportRefused(f"{ENV_FORGE_URL}: {exc.message}") from exc
@@ -370,7 +386,7 @@ def plan_import(
     """The writes that carry ``legacy`` into records, skipping what the store already holds.
     :class:`LegacyImportRefused` names the first variable or block the import cannot carry."""
     record_outcomes: list[ImportOutcome] = []
-    forges = ForgePlanner(existing.forges, ctx, at=at, resolve=lambda _: None)
+    forges = ForgePlanner(existing.forges, ctx, at=at)
     work_sources = _work_sources(legacy, existing, forges, ctx, at, record_outcomes)
     repositories = _repositories(commits, values, existing, forges, ctx, at, record_outcomes)
     forge_token = bool(repositories) or ENV_FORGE_TOKEN in values
@@ -386,7 +402,7 @@ def plan_import(
     )
     return ImportPlan(
         secrets=secrets,
-        forges=tuple((forge, change) for forge, change, _ in forges.planned),
+        forges=tuple((planned.record, planned.change) for planned in forges.planned),
         work_sources=work_sources,
         repositories=repositories,
         fact=fact,

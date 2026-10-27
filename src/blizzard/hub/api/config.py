@@ -368,13 +368,7 @@ def _apply(
         dry_run=dry_run,
         apply_id=applied.apply_id,
         outcomes=[_outcome(o) for o in applied.outcomes],
-        warnings=warned(
-            response,
-            services,
-            applied.warnings,
-            record=f"config apply {applied.apply_id}",
-            recorded=not dry_run,
-        ),
+        warnings=warned(response, applied.warnings),
     )
 
 

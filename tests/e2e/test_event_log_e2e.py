@@ -143,14 +143,20 @@ _OLD_FIELD_KIND = "config-old-field-used"
 
 
 def _seeded_events(hub: httpx2.Client) -> int:
-    """The events already on a freshly seeded hub: the fixture's repository and work source name their forge by the
-    old address fields, and each such write records a ``config-old-field-used`` warning."""
-    return len(hub.get("/api/events").json()["events"])
+    """The number of events already on a freshly seeded hub: the fixture's repository and work source name their forge
+    by the old address fields, and each such write records a ``config-old-field-used`` warning — the only events it
+    carries."""
+    events = hub.get("/api/events").json()["events"]
+    assert {event["kind"] for event in events} <= {_OLD_FIELD_KIND}, events
+    return len(events)
 
 
 def _seeded_activity(hub: httpx2.Client) -> int:
-    """The activity rows already on a freshly seeded hub, from the same old-field writes as :func:`_seeded_events`."""
-    return len(hub.get("/api/activity").json()["activity"])
+    """The number of activity rows already on a freshly seeded hub, each one of the old-field events
+    :func:`_seeded_events` counts."""
+    rows = hub.get("/api/activity").json()["activity"]
+    assert {row.get("kind") for row in rows} <= {_OLD_FIELD_KIND}, rows
+    return len(rows)
 
 
 def _push_event(
@@ -220,7 +226,8 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 expect(page.get_by_test_id("events-panel")).to_be_visible()
                 expect(page.get_by_test_id("events-row")).to_have_count(seeded + 3)
                 # Newest first: the warning row leads and the critical row, the oldest, trails.
-                assert page.get_by_test_id("events-message").all_text_contents()[:3] == ["retried", "abandoned", "lost"]
+                for position, message in enumerate(["retried", "abandoned", "lost"]):
+                    expect(page.get_by_test_id("events-message").nth(position)).to_have_text(message)
 
                 # The severity filter narrows the list, then restores it.
                 page.get_by_test_id("events-filter-critical").click()

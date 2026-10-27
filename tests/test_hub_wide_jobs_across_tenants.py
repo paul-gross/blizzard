@@ -88,7 +88,7 @@ class _Hub:
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
-        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys))
+        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys), events=None)
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""

@@ -4,8 +4,10 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 ``forge_lifecycle_facts`` table, newest-fact-wins per id (``bzh:facts-not-status``). Every write commits its change row
 in the same transaction, and every address it stores is canonical.
 
-A forge's row is locked as a secret's is (:func:`lock_forge_row`): its retire and enable, and every repository or work
-source write naming it, take the lock first, so a retire and an enable racing on one forge wait for each other's commit.
+A forge an old address field names is created in the transaction of the repository or work-source write that names it
+(:func:`insert_new_forge`). A forge's row is locked as a secret's is (:func:`lock_forge_row`): its retire and enable,
+and every repository or work-source write naming it, take the lock first, so a retire and an enable racing on one forge
+wait for each other's commit.
 Through the forge transition every record naming a forge keeps its deprecated address columns equal to the forge's, so
 a forge edit rewrites them on each referrer in the same transaction."""
 
@@ -32,7 +34,9 @@ from blizzard.hub.domain.config.forges import (
     ForgeSlugTaken,
     ForgeUnavailable,
     IWriteForgeRepository,
+    NewForge,
     canonical_origin,
+    require_unused,
     resolve_forge_reference,
 )
 from blizzard.hub.store.internal.config_change_store import append_change
@@ -199,9 +203,7 @@ def record_forge_lifecycle(
     :class:`ForgeInUse` while an enabled record names the forge."""
     lock_forge_row(conn, record.forge_id)
     if retired:
-        referrers = active_referrers(conn, [record.forge_id])[record.forge_id]
-        if referrers:
-            raise ForgeInUse(record.slug, referrers)
+        require_unused(record.slug, active_referrers(conn, [record.forge_id])[record.forge_id])
     moved = conn.execute(
         statements_of(conn)
         .update(forges)
@@ -230,23 +232,19 @@ def forge_holding(conn: Connection, api_base: str) -> ConfiguredForge | None:
     return None if row is None else _reconstituted(conn, row)
 
 
-def find_or_insert_forge(conn: Connection, record: ConfiguredForge, change: ConfigChange) -> ConfiguredForge:
-    """The forge holding ``record``'s API origin, inside the caller's transaction — ``record`` itself, inserted, when
-    none does. The insert runs in its own savepoint, as a racing insert must on Postgres, so the loser of a race on the
-    origin keeps a usable transaction to read the winner's forge from. :class:`ForgeSlugTaken` when another origin's
-    forge holds the slug."""
-    held = forge_holding(conn, record.fields.api_base)
-    if held is not None:
-        return held
+def insert_new_forge(conn: Connection, forge: NewForge) -> None:
+    """Create the forge a repository or work-source write makes, inside that write's transaction and in a savepoint of
+    its own, so a refused insert leaves the write's transaction usable on Postgres. :class:`ForgeOriginTaken` or
+    :class:`ForgeSlugTaken` when another forge holds its origin or slug — the caller decides the write again."""
+    record, change = forge
     try:
         with conn.begin_nested():
             insert_forge(conn, record, change)
     except IntegrityError as exc:
-        winner = forge_holding(conn, record.fields.api_base)
-        if winner is None:
-            raise ForgeSlugTaken(record.slug) from exc
-        return winner
-    return record
+        holder = _origin_holder(conn, record)
+        if holder is not None:
+            raise ForgeOriginTaken(record.fields.api_base, holder=holder) from exc
+        raise ForgeSlugTaken(record.slug) from exc
 
 
 class ForgeRecordStore:
@@ -262,10 +260,6 @@ class ForgeRecordStore:
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
         return record
-
-    def find_or_create(self, record: ConfiguredForge, *, change: ConfigChange) -> ConfiguredForge:
-        with self._store.write("find_or_create", expect=(ForgeSlugTaken,)) as conn:
-            return find_or_insert_forge(conn, record, change)
 
     def update(
         self, record: ConfiguredForge, *, from_revision: int, left_slug: str | None, change: ConfigChange

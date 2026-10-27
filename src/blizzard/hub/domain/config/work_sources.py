@@ -26,7 +26,7 @@ from blizzard.hub.domain.config.changes import (
     Verdict,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.forges import ForgeId, NewForge
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
@@ -384,16 +384,27 @@ class IWriteWorkSourceRepository(IReadWorkSourceRepository, Protocol):
     """Adds the work-source writes; each method commits ``change`` in the same transaction as
     the record write."""
 
-    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
-        """Insert, taking ``record.slug`` from any work source that left it. :class:`WorkSourceSlugTaken` /
-        :class:`WorkSourceLocatorTaken` on a collision; :class:`WorkSourceSecretUnavailable` when the secret is missing
-        or retired."""
+    def create(
+        self, record: ConfiguredWorkSource, *, change: ConfigChange, forge: NewForge | None = None
+    ) -> ConfiguredWorkSource:
+        """Insert, taking ``record.slug`` from any work source that left it, after creating ``forge``, when given, in
+        the same transaction. :class:`WorkSourceSlugTaken` / :class:`WorkSourceLocatorTaken` on a collision;
+        :class:`WorkSourceSecretUnavailable` when the secret is missing or retired; :class:`ForgeOriginTaken` /
+        :class:`ForgeSlugTaken` when another forge holds ``forge``'s origin or slug."""
         ...
 
     def update(
-        self, record: ConfiguredWorkSource, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredWorkSource,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        forge: NewForge | None = None,
     ) -> ConfiguredWorkSource:
-        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision;
+        """Compare-and-set ``from_revision``, writing ``record``'s fields and revision — after creating ``forge``, when
+        given, in the same transaction, :class:`ForgeOriginTaken` or :class:`ForgeSlugTaken` when another forge holds
+        its origin or slug;
         :class:`ConfigRevisionConflict` when the stored revision has moved. When ``left_slug`` is set the slug moves in
         the same transaction: the former-slug row holding the new slug is removed and ``left_slug`` becomes this work
         source's former slug at ``change.recorded_at``. :class:`WorkSourceSlugTaken` when another work source holds the

@@ -253,6 +253,12 @@ class ForgeInUse(Exception):
         self.referrers = referrers
 
 
+def require_unused(slug: str, referrers: list[RecordRef]) -> None:
+    """A forge an enabled record still names cannot be retired."""
+    if referrers:
+        raise ForgeInUse(slug, referrers)
+
+
 class ForgeRetired(ConfigFieldError):
     """A record is enabled while the forge it names is retired."""
 
@@ -426,6 +432,10 @@ class ConfiguredForge:
         return ConfigChange.of(ctx, RecordKind.FORGE, self.forge_id, self.revision, op, changes, at)
 
 
+#: A forge a repository or work-source write creates in its own transaction, with the change that records it.
+type NewForge = tuple[ConfiguredForge, ConfigChange]
+
+
 def forge_for_origin(
     api_base: str,
     web_base: str | None,
@@ -562,12 +572,6 @@ class IWriteForgeRepository(IReadForgeRepository, Protocol):
     def create(self, record: ConfiguredForge, *, change: ConfigChange) -> ConfiguredForge:
         """Insert, taking ``record.slug`` from any forge that left it. :class:`ForgeSlugTaken` /
         :class:`ForgeOriginTaken` on a collision."""
-        ...
-
-    def find_or_create(self, record: ConfiguredForge, *, change: ConfigChange) -> ConfiguredForge:
-        """The forge holding ``record``'s API origin — ``record`` itself, inserted, when none does. Two writes racing
-        on one origin both answer the one forge that won. :class:`ForgeSlugTaken` when another origin's forge holds
-        the slug."""
         ...
 
     def update(

@@ -44,7 +44,14 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
+from tests.support import (
+    RecordedEvents,
+    default_project,
+    default_tenant,
+    hub_scoped,
+    migrated_hub_at,
+    scoped_connections,
+)
 
 pytestmark = pytest.mark.component
 
@@ -174,6 +181,7 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        events=RecordedEvents(),
         clock=FixedClock(_AT),
     )
 

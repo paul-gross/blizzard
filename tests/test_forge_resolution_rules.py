@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import (
@@ -15,6 +16,8 @@ from blizzard.hub.domain.config.forge_resolution import (
     WORK_SOURCE_FORGE_RULES,
     ForgeChoice,
     ForgeConflict,
+    ForgeDecision,
+    ForgeFound,
     ForgePlanner,
     ForgeRequired,
     ForgeRules,
@@ -63,43 +66,47 @@ def _decide(
     rules: ForgeRules = WORK_SOURCE_FORGE_RULES,
     *,
     current: ConfiguredForge | None = None,
-    named: ConfiguredForge | None = None,
-):  # type: ignore[no-untyped-def]
-    return decide_forge(choice, rules, provider="github", current=current, named=named, holder_of=_HELD.get)
+) -> ForgeDecision | None:
+    return decide_forge(choice, rules, provider="github", current=current, holder_of=_HELD.get)
+
+
+def _found(decision: ForgeDecision | None) -> ForgeFound:
+    assert isinstance(decision, ForgeFound), decision
+    return decision
 
 
 def test_a_named_forge_is_used_and_no_field_warned_of() -> None:
-    decision = _decide(ForgeChoice(forge="ghe"), named=_ENTERPRISE)
-    assert decision is not None and (decision.forge, decision.old_fields) == (_ENTERPRISE, ())
+    decision = _found(_decide(ForgeChoice(forge="ghe", named=_ENTERPRISE)))
+    assert (decision.forge, decision.old_fields) == (_ENTERPRISE, ())
 
 
 @pytest.mark.parametrize("named", [None, _forge("old", "https://old.example", retired=True)])
 def test_an_unknown_or_retired_named_forge_is_unavailable(named: ConfiguredForge | None) -> None:
     with pytest.raises(ForgeUnavailable):
-        _decide(ForgeChoice(forge="old"), named=named)
+        _decide(ForgeChoice(forge="old", named=named))
 
 
 def test_an_old_field_agreeing_with_the_named_forge_is_warned_of() -> None:
-    decision = _decide(ForgeChoice(forge="ghe", api_base=f"{_GHE}/"), named=_ENTERPRISE)
-    assert decision is not None and decision.old_fields == ("api_base",)
+    decision = _found(_decide(ForgeChoice(forge="ghe", api_base=f"{_GHE}/", named=_ENTERPRISE)))
+    assert decision.old_fields == ("api_base",)
 
 
 def test_an_old_field_disagreeing_with_the_named_forge_conflicts() -> None:
     with pytest.raises(ForgeConflict) as caught:
-        _decide(ForgeChoice(forge="ghe", api_base=GITHUB_API_BASE), named=_ENTERPRISE)
+        _decide(ForgeChoice(forge="ghe", api_base=GITHUB_API_BASE, named=_ENTERPRISE))
     assert caught.value.field == "api_base"
 
 
 def test_an_old_field_resolves_to_its_origins_forge_compared_canonical() -> None:
-    decision = _decide(ForgeChoice(api_base="HTTPS://ghe.acme.internal:443/api/v3/"))
-    assert decision is not None and decision.forge == _ENTERPRISE and decision.old_fields == ("api_base",)
+    decision = _found(_decide(ForgeChoice(api_base="HTTPS://ghe.acme.internal:443/api/v3/")))
+    assert decision.forge == _ENTERPRISE and decision.old_fields == ("api_base",)
 
 
 def test_an_origin_no_forge_holds_is_wanted_with_the_web_origin_it_declares() -> None:
     decision = _decide(ForgeChoice(api_base="http://127.0.0.1:8123/", web_base="http://127.0.0.1:8124"))
-    assert decision is not None
-    assert decision.wanted == ForgeWanted("http://127.0.0.1:8123", "http://127.0.0.1:8124", "github")
-    assert decision.old_fields == ("api_base", "web_base")
+    assert decision == ForgeWanted(
+        "http://127.0.0.1:8123", "http://127.0.0.1:8124", "github", old_fields=("api_base", "web_base")
+    )
 
 
 def test_an_origin_a_retired_forge_holds_is_unavailable_naming_it() -> None:
@@ -110,20 +117,19 @@ def test_an_origin_a_retired_forge_holds_is_unavailable_naming_it() -> None:
             WORK_SOURCE_FORGE_RULES,
             provider="github",
             current=None,
-            named=None,
             holder_of={"https://gone.example": retired}.get,
         )
 
 
 @pytest.mark.parametrize("api_base", [None, "", "  "])
 def test_a_work_source_given_no_address_is_on_github(api_base: str | None) -> None:
-    decision = _decide(ForgeChoice(api_base=api_base), current=_ENTERPRISE)
-    assert decision is not None and decision.forge == _GITHUB and decision.old_fields == ("api_base",)
+    decision = _found(_decide(ForgeChoice(api_base=api_base), current=_ENTERPRISE))
+    assert decision.forge == _GITHUB and decision.old_fields == ("api_base",)
 
 
 def test_a_work_source_created_naming_nothing_is_on_github_with_a_warning() -> None:
-    decision = _decide(ForgeChoice())
-    assert decision is not None and decision.forge == _GITHUB and decision.old_fields == ("api_base",)
+    decision = _found(_decide(ForgeChoice()))
+    assert decision.forge == _GITHUB and decision.old_fields == ("api_base",)
 
 
 def test_an_edit_naming_nothing_keeps_the_forge_silently() -> None:
@@ -151,34 +157,79 @@ def test_an_address_that_is_not_an_origin_is_refused_on_its_field() -> None:
 def test_a_web_base_disagreeing_with_the_forges_web_origin_conflicts_and_an_empty_one_is_the_forges() -> None:
     with pytest.raises(ForgeConflict, match=re.escape("https://ghe.acme.internal")):
         _decide(ForgeChoice(web_base="https://elsewhere.example"), current=_ENTERPRISE)
-    agreeing = _decide(ForgeChoice(web_base="https://ghe.acme.internal/"), current=_ENTERPRISE)
-    empty = _decide(ForgeChoice(web_base=""), current=_ENTERPRISE)
-    assert agreeing is not None and empty is not None
+    agreeing = _found(_decide(ForgeChoice(web_base="https://ghe.acme.internal/"), current=_ENTERPRISE))
+    empty = _found(_decide(ForgeChoice(web_base=""), current=_ENTERPRISE))
     assert (agreeing.forge, empty.forge, empty.old_fields) == (_ENTERPRISE, _ENTERPRISE, ("web_base",))
 
 
 def test_a_forge_of_another_kind_than_the_provider_mismatches() -> None:
     with pytest.raises(ForgeKindMismatch):
         decide_forge(
-            ForgeChoice(forge="ghe"),
+            ForgeChoice(forge="ghe", named=_ENTERPRISE),
             WORK_SOURCE_FORGE_RULES,
             provider="gitlab",
             current=None,
-            named=_ENTERPRISE,
             holder_of=_HELD.get,
         )
 
 
 def test_a_planner_makes_one_forge_per_origin_however_it_is_spelled() -> None:
-    planner = ForgePlanner([_GITHUB], _CTX, at=_AT, resolve=lambda _: None)
+    planner = ForgePlanner([_GITHUB], _CTX, at=_AT)
     first = planner.decide(
-        ForgeChoice(api_base="https://new.example/"), WORK_SOURCE_FORGE_RULES, provider="github", current=None, index=0
+        ForgeChoice(api_base="https://new.example/"),
+        WORK_SOURCE_FORGE_RULES,
+        provider="github",
+        current=None,
+        section=WORK_SOURCES_SECTION,
+        index=0,
     )
     second = planner.decide(
-        ForgeChoice(api_base="https://NEW.example"), REPOSITORY_FORGE_RULES, provider=None, current=None, index=3
+        ForgeChoice(api_base="https://NEW.example"),
+        REPOSITORY_FORGE_RULES,
+        provider=None,
+        current=None,
+        section=REPOSITORIES_SECTION,
+        index=3,
     )
     assert first is not None and second is not None and first.forge == second.forge
-    assert [(forge.slug, index) for forge, _, index in planner.planned] == [("new-example", 0)]
+    assert [(p.record.slug, p.section, p.index) for p in planner.planned] == [("new-example", WORK_SOURCES_SECTION, 0)]
+
+
+@pytest.mark.parametrize("bare_first", [True, False])
+def test_a_planned_forge_takes_the_web_origin_an_entry_declares_whichever_entry_comes_first(bare_first: bool) -> None:
+    bare = ForgeChoice(api_base="https://api.acme.example")
+    declared = ForgeChoice(api_base="https://api.acme.example", web_base="https://code.acme.example/")
+    entries = [bare, declared] if bare_first else [declared, bare]
+    planner = ForgePlanner([_GITHUB], _CTX, at=_AT)
+    for entry in entries:
+        planner.foresee(entry, WORK_SOURCE_FORGE_RULES, creating=True)
+    resolved = [
+        planner.decide(
+            entry, WORK_SOURCE_FORGE_RULES, provider="github", current=None, section=WORK_SOURCES_SECTION, index=index
+        )
+        for index, entry in enumerate(entries)
+    ]
+    (planned,) = planner.planned
+    assert planned.record.fields.web_base == "https://code.acme.example"
+    assert planned.record.slug == "code-acme-example"
+    assert all(r is not None and r.forge == planned.record for r in resolved)
+
+
+def test_a_second_web_origin_declared_for_one_planned_forge_conflicts() -> None:
+    planner = ForgePlanner([_GITHUB], _CTX, at=_AT)
+    entries = [
+        ForgeChoice(api_base="https://api.acme.example", web_base="https://code.acme.example"),
+        ForgeChoice(api_base="https://api.acme.example", web_base="https://elsewhere.example"),
+    ]
+    for entry in entries:
+        planner.foresee(entry, WORK_SOURCE_FORGE_RULES, creating=True)
+    planner.decide(
+        entries[0], WORK_SOURCE_FORGE_RULES, provider="github", current=None, section=WORK_SOURCES_SECTION, index=0
+    )
+    with pytest.raises(ForgeConflict, match=re.escape("https://code.acme.example")):
+        planner.decide(
+            entries[1], WORK_SOURCE_FORGE_RULES, provider="github", current=None, section=WORK_SOURCES_SECTION, index=1
+        )
 
 
 def test_an_origins_slug_and_name_are_derived_as_the_migration_derives_them() -> None:

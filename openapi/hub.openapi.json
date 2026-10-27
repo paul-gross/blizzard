@@ -10892,7 +10892,7 @@
       },
       "RepositoryCreateRequest": {
         "additionalProperties": false,
-        "description": "The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them. Exactly one of ``forge`` and ``forge_api_url`` names the forge; ``forge_api_url`` alone is\nresolved to the tenant's forge with that API origin, made when none holds it, and answered with a warning.",
+        "description": "The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them, naming the forge. ``forge_api_url`` is the old way to name it: alone, it is resolved to the\ntenant's forge with that API origin, made when none holds it; beside ``forge``, it is accepted only when it is that\nforge's API origin. Either way the write is answered with a warning. Naming neither is refused.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
@@ -16798,7 +16798,7 @@
       },
       "WorkSourceCreateRequest": {
         "additionalProperties": false,
-        "description": "The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with\nthat API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub.",
+        "description": "The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with\nthat API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub. The\nweb origin belongs to the forge: a ``web_base`` other than the forge's is refused, and a blank one means the\nforge's.",
         "properties": {
           "annotate": {
             "default": false,
@@ -16959,7 +16959,7 @@
       },
       "WorkSourcePatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` clears\n``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. ``forge`` re-points the source at a forge by id\nor slug; ``api_base`` does so the old way, with a warning, and cleared means GitHub's. A slug that changes keeps\nresolving to the source until another claims it.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;\n``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one\nother than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null\n``secret`` clears it. A slug that changes keeps resolving to the source until another claims it.",
         "properties": {
           "annotate": {
             "anyOf": [
@@ -32604,7 +32604,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or\n`secret` (the last only where the provider needs no credential). A patch that changes\nnothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,\n409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken\n`(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create. `forge` re-points the\nsource at a forge; `api_base` does so the old way, and a cleared `api_base` re-points it at GitHub's, each with a\n`Deprecation` header and a `warnings` entry.",
+        "description": "Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no\ncredential), re-points the source at GitHub's forge for `api_base`, and means the forge's own web origin for\n`web_base`, which a source no longer holds: a `web_base` other than its forge's is refused `forge_conflict`, naming\nthe forge whose web origin to set instead. A patch that changes nothing writes nothing. A slug that changes keeps\nresolving to the source until another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the\ncurrent revision), a slug some work source holds, or a taken `(provider, locator)`; 422 naming the field (`hub`\nrefused as a slug), coded as on create. `forge` re-points the source at a forge; `api_base` does so the old way,\nand a cleared `api_base` re-points it at GitHub's; each old field answers a `Deprecation` header and a `warnings`\nentry.",
         "operationId": "patch_work_source_api_work_sources__source__patch",
         "parameters": [
           {

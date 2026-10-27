@@ -6251,8 +6251,9 @@ export type RepositoriesListView = {
  * RepositoryCreateRequest
  *
  * The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` — a forge's id
- * or slug — beside them. Exactly one of ``forge`` and ``forge_api_url`` names the forge; ``forge_api_url`` alone is
- * resolved to the tenant's forge with that API origin, made when none holds it, and answered with a warning.
+ * or slug — beside them, naming the forge. ``forge_api_url`` is the old way to name it: alone, it is resolved to the
+ * tenant's forge with that API origin, made when none holds it; beside ``forge``, it is accepted only when it is that
+ * forge's API origin. Either way the write is answered with a warning. Naming neither is refused.
  */
 export type RepositoryCreateRequest = {
     /**
@@ -9681,7 +9682,9 @@ export type WorkRefView = {
  *
  * The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` — a forge's id
  * or slug — beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with
- * that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub.
+ * that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub. The
+ * web origin belongs to the forge: a ``web_base`` other than the forge's is refused, and a blank one means the
+ * forge's.
  */
 export type WorkSourceCreateRequest = {
     /**
@@ -9772,10 +9775,11 @@ export type WorkSourceDocument = {
 /**
  * WorkSourcePatchRequest
  *
- * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` clears
- * ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. ``forge`` re-points the source at a forge by id
- * or slug; ``api_base`` does so the old way, with a warning, and cleared means GitHub's. A slug that changes keeps
- * resolving to the source until another claims it.
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
+ * field but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;
+ * ``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one
+ * other than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null
+ * ``secret`` clears it. A slug that changes keeps resolving to the source until another claims it.
  */
 export type WorkSourcePatchRequest = {
     /**

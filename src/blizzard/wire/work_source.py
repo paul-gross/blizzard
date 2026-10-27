@@ -72,7 +72,9 @@ class WorkSourceDocument(BaseModel):
 class WorkSourceCreateRequest(BaseModel):
     """The ``POST /api/work-sources`` body: every field of a work source's document entry, with ``forge`` — a forge's id
     or slug — beside them. ``api_base`` and ``web_base`` are the old way to name it, resolved to the tenant's forge with
-    that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub."""
+    that API origin and answered with a warning; a source naming neither ``forge`` nor ``api_base`` is on GitHub. The
+    web origin belongs to the forge: a ``web_base`` other than the forge's is refused, and a blank one means the
+    forge's."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -88,10 +90,11 @@ class WorkSourceCreateRequest(BaseModel):
 
 
 class WorkSourcePatchRequest(BaseModel):
-    """A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` clears
-    ``api_base``, ``web_base``, or ``secret`` and is refused elsewhere. ``forge`` re-points the source at a forge by id
-    or slug; ``api_base`` does so the old way, with a warning, and cleared means GitHub's. A slug that changes keeps
-    resolving to the source until another claims it."""
+    """A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
+    field but ``api_base``, ``web_base``, and ``secret``. ``forge`` re-points the source at a forge by id or slug;
+    ``api_base`` does so the old way, with a warning, and a null one means GitHub's. ``web_base`` changes nothing: one
+    other than the forge's web origin is refused, and a null one, the forge's, is accepted with a warning. A null
+    ``secret`` clears it. A slug that changes keeps resolving to the source until another claims it."""
 
     model_config = ConfigDict(extra="forbid")
 

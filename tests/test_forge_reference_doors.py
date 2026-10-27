@@ -201,3 +201,31 @@ def test_an_apply_naming_no_address_answers_no_warning(hub: HubHarness) -> None:
     assert applied.status_code == 200, applied.text
     assert (applied.json()["warnings"], _HEADER in applied.headers) == ([], False)
     assert hub.client.get("/api/work-sources/issues").json()["forge_slug"] == "ghe-acme-internal"
+
+
+def test_the_deprecation_header_is_a_structured_date() -> None:
+    assert (_HEADER, _DEPRECATED) == ("Deprecation", "@1792886400")
+
+
+def test_an_apply_naming_a_new_origin_bare_then_with_a_web_origin_makes_one_forge_with_it(hub: HubHarness) -> None:
+    document = {
+        "version": 1,
+        "work_sources": [
+            _source("bare", api_base="https://api.acme.example"),
+            _source("declared", api_base="https://api.acme.example", web_base="https://code.acme.example"),
+        ],
+    }
+    applied = hub.client.post("/api/config/apply", json=document)
+    assert applied.status_code == 200, applied.text
+    sources = [hub.client.get(f"/api/work-sources/{slug}").json() for slug in ("bare", "declared")]
+    assert {(s["forge_slug"], s["web_base"]) for s in sources} == {("code-acme-example", "https://code.acme.example")}
+
+
+def test_a_refused_create_naming_a_new_origin_leaves_no_forge(hub: HubHarness) -> None:
+    refused = hub.client.post("/api/repositories", json={**_repository(forge_api_url=_GHE), "secret_name": "missing"})
+    assert refused.status_code == 422, refused.text
+    scoped = hub_store_connections(hub.engine)
+    with scoped.read("forges") as conn:
+        origins = list(conn.execute(scoped.select(schema.forges, schema.forges.c.api_base)).scalars())
+    assert _GHE not in origins
+    assert _old_field_events(hub) == []

@@ -4,19 +4,23 @@ Every verb takes the record the edge resolved (``bzh:domain-takes-objects``), as
 and hands it to the write repository with the record write. A write that changes nothing writes nothing. Secrets
 and forges route through here too.
 
-A repository or work-source write that names its forge the old way — by address — goes through the ``…_naming`` verbs:
-the forge is resolved first (:func:`~blizzard.hub.domain.config.forge_resolution.decide_forge`), and a forge made for an
-origin no forge holds is committed on its own before the record write, recorded under the same change context. A forge
-left unnamed by a crash between the two writes is a valid, standalone record."""
+A repository or work-source write from a door goes through the ``…_naming`` verbs, which take the forge the write names
+as the edge resolved it, or the old address fields: the forge is decided first
+(:class:`~blizzard.hub.domain.config.forge_resolution.ForgePlanner`), the record is built and validated on it, and a
+forge made for an origin no forge holds commits in the record write's own transaction, recorded under the same change
+context — a refused write leaves no forge behind. Each old field the write used records a ``config-old-field-used``
+event once the write commits."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import (
+    REPOSITORIES_SECTION,
+    WORK_SOURCES_SECTION,
     ConfigDeclaration,
     EntryOutcome,
     IConfigApplyWriter,
@@ -41,17 +45,19 @@ from blizzard.hub.domain.config.forge_resolution import (
     WORK_SOURCE_FORGE_RULES,
     Authored,
     ForgeChoice,
-    ForgeRules,
-    ResolvedForge,
-    decide_forge,
+    ForgePlanner,
+    IEventRecorder,
+    OldFieldUsed,
+    record_old_fields,
 )
 from blizzard.hub.domain.config.forges import (
     ConfiguredForge,
     ForgeEdit,
     ForgeFields,
-    ForgeId,
+    ForgeOriginTaken,
+    ForgeSlugTaken,
     IWriteForgeRepository,
-    forge_for_origin,
+    NewForge,
 )
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys
 from blizzard.hub.domain.config.repositories import (
@@ -76,7 +82,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceFields,
     require_known_provider,
 )
-from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.kernel.unset import UnsetType
 
 
 class ConfigAuthoring:
@@ -90,8 +96,11 @@ class ConfigAuthoring:
         cipher: ISecretCipher,
         apply_writer: IConfigApplyWriter,
         import_writer: IConfigImportWriter,
+        events: IEventRecorder | None,
         clock: IClock,
     ) -> None:
+        """``events`` records each old address field a door's write used; ``None`` only where no door writes — the
+        offline legacy import."""
         self._work_sources = work_sources
         self._repositories = repositories
         self._forges = forges
@@ -99,6 +108,7 @@ class ConfigAuthoring:
         self._cipher = cipher
         self._apply_writer = apply_writer
         self._import_writer = import_writer
+        self._events = events
         self._clock = clock
 
     # --- Forges ------------------------------------------------------------------
@@ -144,52 +154,60 @@ class ConfigAuthoring:
             moved, retired=retired, from_revision=record.revision, at=now, by=ctx.actor, change=change
         )
 
-    def resolve_forge(
+    def record_old_fields(self, used: Sequence[OldFieldUsed], *, record: str) -> None:
+        """One ``config-old-field-used`` event per old field the committed write naming ``record`` used."""
+        if not used:
+            return
+        assert self._events is not None, "a door's write needs the event log"
+        record_old_fields(self._events, used, record=record, at=self._clock.now())
+
+    def _naming[R](
         self,
-        choice: ForgeChoice,
-        rules: ForgeRules,
         ctx: ChangeContext,
-        *,
-        provider: str | None = None,
-        current: ForgeId | None = None,
-    ) -> ResolvedForge | None:
-        """The forge ``choice`` names for a record of ``provider`` — one found, or one made for an origin no forge holds
-        and committed on its own — with a warning per old field used. ``current`` is the forge an edited record names;
-        ``None`` when an edit names nothing, leaving it as stored. The refusals of
-        :func:`~blizzard.hub.domain.config.forge_resolution.decide_forge`."""
-        named = self._forges.resolve(choice.forge) if choice.forge is not UNSET else None
-        decision = decide_forge(
-            choice,
-            rules,
-            provider=provider,
-            current=None if current is None else self._forges.get(current),
-            named=named,
-            holder_of=self._forges.get_by_api_base,
-        )
-        if decision is None:
-            return None
-        forge = decision.forge
-        if forge is None:
-            assert decision.wanted is not None
-            wanted = decision.wanted
-            taken = {held.slug for held in self._forges.list_all(include_retired=True)}
-            record, change = forge_for_origin(
-                wanted.api_base, wanted.web_base, taken, ctx, at=self._clock.now(), kind=wanted.kind
-            )
-            forge = self._forges.find_or_create(record, change=change)
-        return ResolvedForge(forge, decision.warnings(forge))
+        write: Callable[[ForgePlanner], tuple[R, tuple[OldFieldUsed, ...]]],
+        label: Callable[[R], str],
+    ) -> Authored[R]:
+        """``write`` the record on the forge it decides against the tenant's forges, committing the forge its decision
+        planned, if any, in the record's transaction. When another write committed a forge for the same origin, or took
+        the planned slug, first, the write is decided once more, onto that forge."""
+        for attempt in range(2):
+            planner = ForgePlanner(self._forges.list_all(include_retired=True), ctx, at=self._clock.now())
+            try:
+                record, warnings = write(planner)
+            except (ForgeOriginTaken, ForgeSlugTaken):
+                if not planner.planned or attempt:
+                    raise
+                continue
+            self.record_old_fields(warnings, record=label(record))
+            return Authored(record, warnings)
+        raise AssertionError("a write is decided at most twice")
 
     # --- Work sources ------------------------------------------------------------
 
     def create_work_source_naming(
         self, slug: str, name: str | None, draft: WorkSourceDraft, choice: ForgeChoice, ctx: ChangeContext
     ) -> Authored[ConfiguredWorkSource]:
-        """Create a work source on the forge ``choice`` names (:meth:`resolve_forge`)."""
+        """Create a work source on the forge ``choice`` names — one the tenant holds, or one made for an origin no
+        forge holds, committed with it. The refusals of
+        :func:`~blizzard.hub.domain.config.forge_resolution.decide_forge`, and the record's own."""
         require_known_provider(draft.provider)
-        resolved = self.resolve_forge(choice, WORK_SOURCE_FORGE_RULES, ctx, provider=draft.provider)
-        assert resolved is not None
-        record = self.create_work_source(slug, name, draft.on(resolved.forge.forge_id), ctx)
-        return Authored(record, resolved.warnings)
+
+        def write(planner: ForgePlanner) -> tuple[ConfiguredWorkSource, tuple[OldFieldUsed, ...]]:
+            resolved = planner.decide(
+                choice,
+                WORK_SOURCE_FORGE_RULES,
+                provider=draft.provider,
+                current=None,
+                section=WORK_SOURCES_SECTION,
+                index=0,
+            )
+            assert resolved is not None
+            record, change = ConfiguredWorkSource.new(
+                slug, name, draft.on(resolved.forge.forge_id), ctx, at=self._clock.now()
+            )
+            return self._work_sources.create(record, change=change, forge=_made(planner)), resolved.warnings
+
+        return self._naming(ctx, write, lambda record: f"work source {record.slug}")
 
     def edit_work_source_naming(
         self,
@@ -200,17 +218,28 @@ class ConfigAuthoring:
         *,
         if_match: int | None = None,
     ) -> Authored[ConfiguredWorkSource]:
-        """Edit a work source, re-pointing it at the forge ``choice`` names, if any (:meth:`resolve_forge`)."""
+        """Edit a work source, re-pointing it at the forge ``choice`` names, if any, as
+        :meth:`create_work_source_naming` names one."""
         record.require_revision(if_match)
         provider = record.fields.provider if isinstance(edit.provider, UnsetType) else edit.provider
         require_known_provider(provider)
-        resolved = self.resolve_forge(
-            choice, WORK_SOURCE_FORGE_RULES, ctx, provider=provider, current=record.fields.forge_id
-        )
-        if resolved is not None:
-            edit = replace(edit, forge_id=resolved.forge.forge_id)
-        edited = self.edit_work_source(record, edit, ctx, if_match=if_match)
-        return Authored(edited, () if resolved is None else resolved.warnings)
+
+        def write(planner: ForgePlanner) -> tuple[ConfiguredWorkSource, tuple[OldFieldUsed, ...]]:
+            resolved = planner.decide(
+                choice,
+                WORK_SOURCE_FORGE_RULES,
+                provider=provider,
+                current=record.fields.forge_id,
+                section=WORK_SOURCES_SECTION,
+                index=0,
+            )
+            if resolved is None:
+                return self.edit_work_source(record, edit, ctx, if_match=if_match), ()
+            moved = replace(edit, forge_id=resolved.forge.forge_id)
+            edited = self._edit_work_source(record, moved, ctx, if_match=if_match, forge=_made(planner))
+            return edited, resolved.warnings
+
+        return self._naming(ctx, write, lambda edited: f"work source {edited.slug}")
 
     def create_work_source(
         self, slug: str, name: str | None, fields: WorkSourceFields, ctx: ChangeContext
@@ -221,12 +250,23 @@ class ConfigAuthoring:
     def edit_work_source(
         self, record: ConfiguredWorkSource, edit: WorkSourceEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredWorkSource:
+        return self._edit_work_source(record, edit, ctx, if_match=if_match, forge=None)
+
+    def _edit_work_source(
+        self,
+        record: ConfiguredWorkSource,
+        edit: WorkSourceEdit,
+        ctx: ChangeContext,
+        *,
+        if_match: int | None,
+        forge: NewForge | None,
+    ) -> ConfiguredWorkSource:
         decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
             return record
         edited, change = decided
         return self._work_sources.update(
-            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
+            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change, forge=forge
         )
 
     def retire_work_source(
@@ -256,11 +296,19 @@ class ConfigAuthoring:
     def create_repository_naming(
         self, slug: str, name: str | None, draft: RepositoryDraft, choice: ForgeChoice, ctx: ChangeContext
     ) -> Authored[ConfiguredRepository]:
-        """Create a repository on the forge ``choice`` names (:meth:`resolve_forge`)."""
-        resolved = self.resolve_forge(choice, REPOSITORY_FORGE_RULES, ctx)
-        assert resolved is not None
-        record = self.create_repository(slug, name, draft.on(resolved.forge.forge_id), ctx)
-        return Authored(record, resolved.warnings)
+        """Create a repository on the forge ``choice`` names, as :meth:`create_work_source_naming` names one."""
+
+        def write(planner: ForgePlanner) -> tuple[ConfiguredRepository, tuple[OldFieldUsed, ...]]:
+            resolved = planner.decide(
+                choice, REPOSITORY_FORGE_RULES, provider=None, current=None, section=REPOSITORIES_SECTION, index=0
+            )
+            assert resolved is not None
+            record, change = ConfiguredRepository.new(
+                slug, name, draft.on(resolved.forge.forge_id), ctx, at=self._clock.now()
+            )
+            return self._repositories.create(record, change=change, forge=_made(planner)), resolved.warnings
+
+        return self._naming(ctx, write, lambda record: f"repository {record.slug}")
 
     def edit_repository_naming(
         self,
@@ -271,13 +319,26 @@ class ConfigAuthoring:
         *,
         if_match: int | None = None,
     ) -> Authored[ConfiguredRepository]:
-        """Edit a repository, re-pointing it at the forge ``choice`` names, if any (:meth:`resolve_forge`)."""
+        """Edit a repository, re-pointing it at the forge ``choice`` names, if any, as
+        :meth:`create_work_source_naming` names one."""
         record.require_revision(if_match)
-        resolved = self.resolve_forge(choice, REPOSITORY_FORGE_RULES, ctx, current=record.fields.forge_id)
-        if resolved is not None:
-            edit = replace(edit, forge_id=resolved.forge.forge_id)
-        edited = self.edit_repository(record, edit, ctx, if_match=if_match)
-        return Authored(edited, () if resolved is None else resolved.warnings)
+
+        def write(planner: ForgePlanner) -> tuple[ConfiguredRepository, tuple[OldFieldUsed, ...]]:
+            resolved = planner.decide(
+                choice,
+                REPOSITORY_FORGE_RULES,
+                provider=None,
+                current=record.fields.forge_id,
+                section=REPOSITORIES_SECTION,
+                index=0,
+            )
+            if resolved is None:
+                return self.edit_repository(record, edit, ctx, if_match=if_match), ()
+            moved = replace(edit, forge_id=resolved.forge.forge_id)
+            edited = self._edit_repository(record, moved, ctx, if_match=if_match, forge=_made(planner))
+            return edited, resolved.warnings
+
+        return self._naming(ctx, write, lambda edited: f"repository {edited.slug}")
 
     def create_repository(
         self, slug: str, name: str | None, fields: RepositoryFields, ctx: ChangeContext
@@ -288,12 +349,23 @@ class ConfigAuthoring:
     def edit_repository(
         self, record: ConfiguredRepository, edit: RepositoryEdit, ctx: ChangeContext, *, if_match: int | None = None
     ) -> ConfiguredRepository:
+        return self._edit_repository(record, edit, ctx, if_match=if_match, forge=None)
+
+    def _edit_repository(
+        self,
+        record: ConfiguredRepository,
+        edit: RepositoryEdit,
+        ctx: ChangeContext,
+        *,
+        if_match: int | None,
+        forge: NewForge | None,
+    ) -> ConfiguredRepository:
         decided = record.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
             return record
         edited, change = decided
         return self._repositories.update(
-            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change
+            edited, from_revision=record.revision, left_slug=record.slug_left_for(edited), change=change, forge=forge
         )
 
     def retire_repository(
@@ -414,3 +486,8 @@ class ConfigAuthoring:
             return False
         self._secrets.record_lifecycle(record.name, retired=retired, at=now, by=ctx.actor, change=change)
         return True
+
+
+def _made(planner: ForgePlanner) -> NewForge | None:
+    """The forge a single write's decision planned, with its change; ``None`` when it named a forge the tenant holds."""
+    return next(((planned.record, planned.change) for planned in planner.planned), None)

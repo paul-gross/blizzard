@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.forges import ForgeId, ForgeOriginTaken, ForgeSlugTaken, NewForge
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
@@ -30,12 +30,20 @@ from blizzard.hub.domain.config.repositories import (
     resolve_repository_reference,
 )
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.forge_record_store import StandingForge, referred_forge, standing_forge
+from blizzard.hub.store.internal.forge_record_store import (
+    StandingForge,
+    insert_new_forge,
+    referred_forge,
+    standing_forge,
+)
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+
+#: What creating the forge a write names refuses when another forge holds its origin or slug.
+_FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
@@ -187,24 +195,41 @@ class RepositoryRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
+    def create(
+        self, record: ConfiguredRepository, *, change: ConfigChange, forge: NewForge | None = None
+    ) -> ConfiguredRepository:
         try:
             with self._store.write(
                 "create",
-                expect=(ConfigFieldError, RepositorySlugTaken, RepositoryCoordinateTaken, IntegrityError),
+                expect=(
+                    ConfigFieldError,
+                    RepositorySlugTaken,
+                    RepositoryCoordinateTaken,
+                    IntegrityError,
+                    *_FORGE_REFUSALS,
+                ),
             ) as conn:
+                if forge is not None:
+                    insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
         return record
 
     def update(
-        self, record: ConfiguredRepository, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredRepository,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        forge: NewForge | None = None,
     ) -> ConfiguredRepository:
         try:
             with self._store.write(
                 "update",
                 expect=(
+                    *_FORGE_REFUSALS,
                     ConfigFieldError,
                     RepositoryCoordinateTaken,
                     RepositorySlugTaken,
@@ -212,6 +237,8 @@ class RepositoryRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
+                if forge is not None:
+                    insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc

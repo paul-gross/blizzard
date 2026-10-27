@@ -37,6 +37,7 @@ from sqlalchemy.sql.base import Executable
 from blizzard import __version__
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock, IClock
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
@@ -82,7 +83,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
-from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forge_resolution import ForgeChoice, IEventRecorder
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId, canonical_origin, forge_for_origin
 from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
@@ -431,8 +432,34 @@ OP = ChangeContext(actor="op", door=Door.API)
 MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 
 
-def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) -> ConfigAuthoring:
-    """The one configured-record writer over ``engine``, sealing under ``keys``."""
+class RecordedEvents:
+    """An event recorder that keeps every event it is handed, in order, as ``(kind, message, detail)``."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict[str, str] | None]] = []
+
+    def record(
+        self,
+        *,
+        kind: EventLogKind,
+        runner_id: None,
+        chunk_id: None,
+        project_id: None,
+        lease_id: None,
+        node_name: None,
+        message: str,
+        detail: dict[str, str] | None,
+        at: datetime,
+    ) -> int:
+        self.events.append((kind, message, detail))
+        return len(self.events)
+
+
+def config_authoring(
+    engine: Engine, *, keys: IHubKeyProvider, clock: IClock, events: IEventRecorder | None = None
+) -> ConfigAuthoring:
+    """The one configured-record writer over ``engine``, sealing under ``keys`` and recording old-field events to
+    ``events`` — a fresh :class:`RecordedEvents` when none is given."""
     store = hub_store_connections(engine)
     return ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store),
@@ -442,6 +469,7 @@ def config_authoring(engine: Engine, *, keys: IHubKeyProvider, clock: IClock) ->
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
+        events=RecordedEvents() if events is None else events,
         clock=clock,
     )
 
@@ -1197,7 +1225,7 @@ def seed_forge(engine: Engine, api_base: str = FIXTURE_FORGE_URL) -> ForgeId:
         return held.forge_id
     taken = {forge.slug for forge in forges.list_all(include_retired=True)}
     record, change = forge_for_origin(origin, None, taken, OP, at=datetime(2026, 7, 12, tzinfo=UTC))
-    return forges.find_or_create(record, change=change).forge_id
+    return forges.create(record, change=change).forge_id
 
 
 #: The repository every hub built without an explicit ``repositories`` carries — the ``acme/widget``

@@ -81,15 +81,20 @@ def _shown(
     return summary.model_copy(update={"warnings": warnings or []})
 
 
-def _forge_choice(request: RepositoryCreateRequest | RepositoryPatchRequest) -> ForgeChoice:
-    """What ``request`` states of its forge: ``forge``, which is never null, and the old ``forge_api_url``."""
+def _forge_choice(request: RepositoryCreateRequest | RepositoryPatchRequest, services: TenantServices) -> ForgeChoice:
+    """What ``request`` states of its forge: ``forge``, which is never null, with the forge it names, and the old
+    ``forge_api_url``."""
     present = request.model_fields_set
     forge: str | UnsetType = UNSET
     if FORGE_FIELD in present:
         if request.forge is None:
             raise ConfigFieldError(FORGE_FIELD, "must not be null")
         forge = request.forge
-    return ForgeChoice(forge=forge, api_base=request.forge_api_url if _ADDRESS in present else UNSET)
+    return ForgeChoice(
+        forge=forge,
+        api_base=request.forge_api_url if _ADDRESS in present else UNSET,
+        named=None if forge is UNSET else services.forge_records.resolve(forge),
+    )
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -134,14 +139,14 @@ def create_repository(
     )
     try:
         authored = services.config_authoring.create_repository_naming(
-            request.slug, request.name, draft, _forge_choice(request), change_context(identity, door)
+            request.slug, request.name, draft, _forge_choice(request, services), change_context(identity, door)
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except (RepositorySlugTaken, RepositoryCoordinateTaken, ForgeSlugTaken, ForgeOriginTaken) as exc:
         raise _conflict(exc) from exc
     record = authored.record
-    return _shown(record, services, warned(response, services, authored.warnings, record=f"repository {record.slug}"))
+    return _shown(record, services, warned(response, authored.warnings))
 
 
 @router.get(
@@ -175,7 +180,7 @@ def patch_repository(
     )
     try:
         authored = services.config_authoring.edit_repository_naming(
-            record, edit, _forge_choice(request), change_context(identity, door), if_match=if_match
+            record, edit, _forge_choice(request, services), change_context(identity, door), if_match=if_match
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
@@ -188,7 +193,7 @@ def patch_repository(
     ) as exc:
         raise _conflict(exc) from exc
     edited = authored.record
-    return _shown(edited, services, warned(response, services, authored.warnings, record=f"repository {edited.slug}"))
+    return _shown(edited, services, warned(response, authored.warnings))
 
 
 @router.post("/repositories/{repository}/retire", response_model=RepositorySummary)

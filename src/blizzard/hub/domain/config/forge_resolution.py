@@ -2,19 +2,23 @@
 
 Through the forge transition every door still takes the old address fields — ``forge_api_url`` on a repository,
 ``api_base`` and ``web_base`` on a work source — and reads ``forge`` first. :func:`decide_forge` is the one rule: it
-answers the forge a write names, or the origin no forge holds yet, which the caller finds or creates, and every old
-field the write used, each of which the write is warned about. What an omitted field means differs between creating a
+answers the forge a write names, or the origin no forge holds yet, which :class:`ForgePlanner` plans a forge for, and
+every old field the write used, each of which the write is warned about and records a ``config-old-field-used`` event
+for (:func:`record_old_fields`). What an omitted field means differs between creating a
 record and editing one: a work source created with no address is on GitHub, while an edit that names nothing keeps the
 forge the record already names."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
+from blizzard.hub.domain.config.apply import PlannedForge
+from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import (
     GITHUB_API_BASE,
@@ -46,12 +50,14 @@ class ForgeRequired(ConfigFieldError):
 @domain_model
 @dataclass(frozen=True)
 class ForgeChoice:
-    """What a write says about its forge: ``forge`` names one by id or slug; ``api_base`` and ``web_base`` are the old
-    address fields, :data:`UNSET` when the write left them out and ``None`` when it sent them null."""
+    """What a write says about its forge: ``forge`` names one by id or slug, and ``named`` is the forge the edge
+    resolved that reference to — ``None`` when it names none; ``api_base`` and ``web_base`` are the old address fields,
+    :data:`UNSET` when the write left them out and ``None`` when it sent them null."""
 
     forge: str | UnsetType = UNSET
     api_base: str | None | UnsetType = UNSET
     web_base: str | None | UnsetType = UNSET
+    named: ConfiguredForge | None = None
 
 
 @domain_model
@@ -86,38 +92,92 @@ class OldFieldUsed:
     message: str
 
 
+#: The event each old field a write used records.
+OLD_FIELD_USED: EventLogKind = "config-old-field-used"
+
+
+class IEventRecorder(Protocol):
+    """Records one operational event, naming no runner, chunk, project, lease, or node."""
+
+    def record(
+        self,
+        *,
+        kind: EventLogKind,
+        runner_id: None,
+        chunk_id: None,
+        project_id: None,
+        lease_id: None,
+        node_name: None,
+        message: str,
+        detail: dict[str, str] | None,
+        at: datetime,
+    ) -> int: ...
+
+
+def record_old_fields(events: IEventRecorder, used: Sequence[OldFieldUsed], *, record: str, at: datetime) -> None:
+    """One ``config-old-field-used`` event per old field in ``used``, which the write naming ``record`` leaned on."""
+    for warning in used:
+        events.record(
+            kind=OLD_FIELD_USED,
+            runner_id=None,
+            chunk_id=None,
+            project_id=None,
+            lease_id=None,
+            node_name=None,
+            message=f"{record}: {warning.message}",
+            detail={
+                "record": record,
+                "field": warning.field,
+                "forge_id": warning.forge_id,
+                "forge_slug": warning.forge_slug,
+            },
+            at=at,
+        )
+
+
+def _old_field_warnings(old_fields: tuple[str, ...], forge: ConfiguredForge) -> tuple[OldFieldUsed, ...]:
+    return tuple(
+        OldFieldUsed(
+            field=field,
+            forge_id=forge.forge_id,
+            forge_slug=forge.slug,
+            message=f"{field} is deprecated; it resolved to forge {forge.slug} — name it as `forge` instead",
+        )
+        for field in old_fields
+    )
+
+
+@domain_model
+@dataclass(frozen=True)
+class ForgeFound:
+    """A write names ``forge``, a forge the tenant holds, having used ``old_fields`` to say so."""
+
+    forge: ConfiguredForge
+    old_fields: tuple[str, ...] = ()
+
+    def warnings(self) -> tuple[OldFieldUsed, ...]:
+        """One warning per old field used, naming the forge."""
+        return _old_field_warnings(self.old_fields, self.forge)
+
+
 @domain_model
 @dataclass(frozen=True)
 class ForgeWanted:
-    """An API origin no forge of the tenant holds, which the write's forge is made for — with the web origin the write
-    declared for it, if any."""
+    """A write names an API origin no forge of the tenant holds, which its forge is made for — with the web origin the
+    write declared for it, if any — having used ``old_fields`` to say so."""
 
     api_base: str
     web_base: str | None
     kind: str
-
-
-@domain_model
-@dataclass(frozen=True)
-class ForgeDecision:
-    """The forge a write names — ``forge``, or ``wanted`` when none holds its origin yet — and the old fields it
-    used."""
-
-    forge: ConfiguredForge | None
-    wanted: ForgeWanted | None
     old_fields: tuple[str, ...] = ()
 
-    def warnings(self, forge: ConfiguredForge) -> tuple[OldFieldUsed, ...]:
-        """One warning per old field used, naming ``forge``, the one the write resolved to."""
-        return tuple(
-            OldFieldUsed(
-                field=field,
-                forge_id=forge.forge_id,
-                forge_slug=forge.slug,
-                message=f"{field} is deprecated; it resolved to forge {forge.slug} — name it as `forge` instead",
-            )
-            for field in self.old_fields
-        )
+    def warnings(self, made: ConfiguredForge) -> tuple[OldFieldUsed, ...]:
+        """One warning per old field used, naming ``made``, the forge the origin resolved to."""
+        return _old_field_warnings(self.old_fields, made)
+
+
+#: The forge a write names: one the tenant holds, or an origin none holds yet.
+type ForgeDecision = ForgeFound | ForgeWanted
 
 
 def _blank(value: str | None) -> bool:
@@ -130,12 +190,11 @@ def decide_forge(
     *,
     provider: str | None,
     current: ConfiguredForge | None,
-    named: ConfiguredForge | None,
     holder_of: Callable[[str], ConfiguredForge | None],
 ) -> ForgeDecision | None:
     """The forge ``choice`` names for a record of ``provider``. ``current`` is the forge an edited record names —
-    ``None`` on a create; ``named`` is what ``choice.forge`` resolved to; ``holder_of`` answers the forge, retired or
-    not, holding a canonical API origin. ``None`` when an edit names nothing, leaving the forge as stored.
+    ``None`` on a create; ``holder_of`` answers the forge, retired or not, holding a canonical API origin. ``None`` when
+    an edit names nothing, leaving the forge as stored.
 
     :class:`ForgeUnavailable` for an unknown or retired forge, or an origin a retired forge holds;
     :class:`ForgeConflict` for an old field that disagrees with the named forge; :class:`ForgeRequired` for a
@@ -143,19 +202,20 @@ def decide_forge(
     :class:`ConfigFieldError` on the field whose address is not an origin."""
     kind = rules.kind_for(provider)
     old: list[str] = []
-    forge: ConfiguredForge | None = None
-    wanted: ForgeWanted | None = None
+    forge: ConfiguredForge | None
+    origin: str | None = None
     if choice.forge is not UNSET:
+        named = choice.named
         if named is None or named.retired:
             state = "retired" if named is not None else "unknown"
             raise ForgeUnavailable(FORGE_FIELD, f"forge {choice.forge} is {state}")
         forge = named
         if choice.api_base is not UNSET:
             old.append(rules.api_field)
-            origin = _api_origin(choice.api_base, rules)
-            if origin != forge.fields.api_base:
+            stated = _api_origin(choice.api_base, rules)
+            if stated != forge.fields.api_base:
                 raise ForgeConflict(
-                    rules.api_field, f"{origin} is not the API origin of forge {forge.label}; send `forge` alone"
+                    rules.api_field, f"{stated} is not the API origin of forge {forge.label}; send `forge` alone"
                 )
     elif choice.api_base is not UNSET or current is None:
         if choice.api_base is UNSET and not rules.defaults_to_github:
@@ -163,9 +223,7 @@ def decide_forge(
         old.append(rules.api_field)
         origin = _api_origin(None if choice.api_base is UNSET else choice.api_base, rules)
         forge = holder_of(origin)
-        if forge is None:
-            wanted = ForgeWanted(origin, None, kind)
-        elif forge.retired:
+        if forge is not None and forge.retired:
             raise ForgeUnavailable(
                 rules.api_field, f"{origin} is held by retired forge {forge.slug}; enable that forge instead"
             )
@@ -173,22 +231,35 @@ def decide_forge(
         return None
     else:
         forge = current
+    web = _web_origin(choice, rules)
     if rules.web_field is not None and choice.web_base is not UNSET:
         old.append(rules.web_field)
-        if not _blank(choice.web_base):
-            assert choice.web_base is not None
-            web = canonical_field(rules.web_field, choice.web_base)
-            if forge is not None and web != forge.web_origin:
-                raise ForgeConflict(
-                    rules.web_field,
-                    f"{web} is not the web origin of forge {forge.slug}, {forge.web_origin}; "
-                    "set the forge's web_base, or leave this field out",
-                )
-            if wanted is not None:
-                wanted = ForgeWanted(wanted.api_base, web, kind)
-    if forge is not None and forge.kind != kind:
+    if forge is None:
+        assert origin is not None
+        return ForgeWanted(origin, web, kind, tuple(old))
+    if web is not None and web != forge.web_origin:
+        raise _web_conflict(rules, web, f"of forge {forge.slug}", forge.web_origin)
+    if forge.kind != kind:
         raise ForgeKindMismatch(FORGE_FIELD, f"forge {forge.slug} is a {forge.kind} forge, not {kind}")
-    return ForgeDecision(forge, wanted, tuple(old))
+    return ForgeFound(forge, tuple(old))
+
+
+def _web_origin(choice: ForgeChoice, rules: ForgeRules) -> str | None:
+    """The canonical web origin ``choice`` states — ``None`` when it states none, or a blank one, which means the
+    forge's."""
+    if rules.web_field is None or choice.web_base is UNSET or _blank(choice.web_base):
+        return None
+    assert choice.web_base is not None
+    return canonical_field(rules.web_field, choice.web_base)
+
+
+def _web_conflict(rules: ForgeRules, web: str, whose: str, held: str) -> ForgeConflict:
+    """A ``web_base`` other than ``held``, the web origin ``whose`` names."""
+    assert rules.web_field is not None
+    return ForgeConflict(
+        rules.web_field,
+        f"{web} is not the web origin {whose}, {held}; set the forge's web_base, or leave this field out",
+    )
 
 
 def _api_origin(value: str | None, rules: ForgeRules) -> str:
@@ -220,35 +291,41 @@ class Authored[T]:
 
 
 class ForgePlanner:
-    """Resolves many writes' forges against the tenant's forges at once, as a document apply or a legacy import does:
-    one forge is planned per API origin no forge holds, however many entries name it and however each spells it.
-    ``resolve`` answers a ``forge`` reference; ``forges`` are every forge of the tenant, retired ones included."""
+    """Resolves writes' forges against the tenant's forges, as a single write, a document apply, and a legacy import
+    each do: one forge is planned per API origin no forge holds, however many entries name it and however each spells
+    it. ``forges`` are every forge of the tenant, retired ones included.
 
-    def __init__(
-        self,
-        forges: Iterable[ConfiguredForge],
-        ctx: ChangeContext,
-        *,
-        at: datetime,
-        resolve: Callable[[str], ConfiguredForge | None],
-    ) -> None:
+    The web origin a planned forge takes is the first explicit one an entry declares for its API origin, whatever entry
+    first names that origin, so an entry naming the origin without a web origin never refuses one declaring it later
+    (:meth:`foresee`)."""
+
+    def __init__(self, forges: Iterable[ConfiguredForge], ctx: ChangeContext, *, at: datetime) -> None:
         self._by_id: dict[str, ConfiguredForge] = {}
         self._by_origin: dict[str, ConfiguredForge] = {}
         for forge in forges:
             self._hold(forge)
         self._ctx = ctx
         self._at = at
-        self._resolve = resolve
-        #: Each forge planned, with its change and the entry that first named it.
-        self.planned: list[tuple[ConfiguredForge, ConfigChange, int]] = []
+        self._webs: dict[str, str] = {}
+        #: Each forge planned, attributed to the entry that first named it.
+        self.planned: list[PlannedForge] = []
 
     def _hold(self, forge: ConfiguredForge) -> None:
         self._by_id[forge.forge_id] = forge
         self._by_origin[forge.fields.api_base] = forge
 
-    def forge(self, forge_id: str) -> ConfiguredForge | None:
-        """The forge, held or planned, with id ``forge_id``."""
-        return self._by_id.get(forge_id)
+    def foresee(self, choice: ForgeChoice, rules: ForgeRules, *, creating: bool) -> None:
+        """Note the web origin ``choice`` declares for an API origin no forge holds, before any entry is decided. An
+        entry whose addresses are malformed notes nothing; :meth:`decide` refuses it."""
+        if choice.forge is not UNSET or (choice.api_base is UNSET and not (creating and rules.defaults_to_github)):
+            return
+        try:
+            origin = _api_origin(None if choice.api_base is UNSET else choice.api_base, rules)
+            web = _web_origin(choice, rules)
+        except ConfigFieldError:
+            return
+        if web is not None and origin not in self._by_origin:
+            self._webs.setdefault(origin, web)
 
     def decide(
         self,
@@ -257,31 +334,28 @@ class ForgePlanner:
         *,
         provider: str | None,
         current: ForgeId | None,
+        section: str,
         index: int,
     ) -> ResolvedForge | None:
-        """:func:`decide_forge` for one entry — at ``index`` of its section — planning the forge it names when none
+        """:func:`decide_forge` for one entry — at ``index`` of ``section`` — planning the forge it names when none
         holds its origin; ``None`` when an edit names nothing."""
-        named = None
-        if choice.forge is not UNSET:
-            named = self._by_id.get(choice.forge) or self._resolve(choice.forge)
         decision = decide_forge(
             choice,
             rules,
             provider=provider,
             current=None if current is None else self._by_id.get(current),
-            named=named,
             holder_of=self._by_origin.get,
         )
         if decision is None:
             return None
-        forge = decision.forge
-        if forge is None:
-            assert decision.wanted is not None
-            wanted = decision.wanted
-            taken = {held.slug for held in self._by_id.values()}
-            forge, change = forge_for_origin(
-                wanted.api_base, wanted.web_base, taken, self._ctx, at=self._at, kind=wanted.kind
-            )
-            self._hold(forge)
-            self.planned.append((forge, change, index))
+        if isinstance(decision, ForgeFound):
+            return ResolvedForge(decision.forge, decision.warnings())
+        web = self._webs.get(decision.api_base, decision.web_base)
+        if decision.web_base is not None and decision.web_base != web:
+            assert web is not None
+            raise _web_conflict(rules, decision.web_base, f"another entry declares for {decision.api_base}", web)
+        taken = {held.slug for held in self._by_id.values()}
+        forge, change = forge_for_origin(decision.api_base, web, taken, self._ctx, at=self._at, kind=decision.kind)
+        self._hold(forge)
+        self.planned.append(PlannedForge(section, index, forge, change))
         return ResolvedForge(forge, decision.warnings(forge))

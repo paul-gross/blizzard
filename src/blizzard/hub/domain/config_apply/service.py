@@ -19,7 +19,6 @@ from blizzard.hub.domain.config.apply import (
     DeclarableRecord,
     DeclaredReferences,
     EntryOutcome,
-    PlannedForge,
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
@@ -163,13 +162,13 @@ class ConfigApplication:
         repositories = self._held_repositories(entries)
         sources = self._held_work_sources(entries)
         projects = self._plan_projects(entries, ctx, repositories, sources)
-        planner = ForgePlanner(
-            self._forges.list_all(include_retired=True), ctx, at=self._clock.now(), resolve=self._forges.resolve
-        )
+        planner = ForgePlanner(self._forges.list_all(include_retired=True), ctx, at=self._clock.now())
         declaration, warnings = self._declaration(entries, projects, repositories, sources, planner)
         outcomes = self._authoring.apply(
             declaration, self._stored(declaration, repositories, sources), ctx, dry_run=dry_run
         )
+        if apply_id is not None:
+            self._authoring.record_old_fields(warnings, record=f"config apply {apply_id}")
         return ApplyResult(apply_id, tuple(outcomes), warnings)
 
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
@@ -293,6 +292,8 @@ class ConfigApplication:
         names, as the apply leaves the projects; with a warning per old address field an entry used. An entry's
         :class:`ConfigFieldError` on its forge is refused at the entry."""
         warnings: list[OldFieldUsed] = []
+        for entry in entries.work_sources:
+            planner.foresee(entry.forge, WORK_SOURCE_FORGE_RULES, creating=entry.slug not in sources_held.stored)
         work_sources: list[WorkSourceDeclaration] = []
         for index, entry in enumerate(entries.work_sources):
             stored = sources_held.stored.get(entry.slug)
@@ -304,7 +305,12 @@ class ConfigApplication:
             try:
                 require_known_provider(provider)
                 resolved = planner.decide(
-                    entry.forge, WORK_SOURCE_FORGE_RULES, provider=provider, current=current, index=index
+                    entry.forge,
+                    WORK_SOURCE_FORGE_RULES,
+                    provider=provider,
+                    current=current,
+                    section=WORK_SOURCES_SECTION,
+                    index=index,
                 )
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(WORK_SOURCES_SECTION, index, exc) from exc
@@ -320,14 +326,18 @@ class ConfigApplication:
                     edit=entry.edit if resolved is None else replace(entry.edit, forge_id=forge_id),
                 )
             )
-        planned_sources = len(planner.planned)
         repositories: list[RepositoryDeclaration] = []
         for index, repo in enumerate(entries.repositories):
             stored_repo = held.stored.get(repo.slug)
             current = None if stored_repo is None else stored_repo.fields.forge_id
             try:
                 resolved = planner.decide(
-                    repo.forge, REPOSITORY_FORGE_RULES, provider=None, current=current, index=index
+                    repo.forge,
+                    REPOSITORY_FORGE_RULES,
+                    provider=None,
+                    current=current,
+                    section=REPOSITORIES_SECTION,
+                    index=index,
                 )
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(REPOSITORIES_SECTION, index, exc) from exc
@@ -343,15 +353,9 @@ class ConfigApplication:
                     edit=repo.edit if resolved is None else replace(repo.edit, forge_id=forge_id),
                 )
             )
-        forges = tuple(
-            PlannedForge(
-                WORK_SOURCES_SECTION if position < planned_sources else REPOSITORIES_SECTION, index, forge, change
-            )
-            for position, (forge, change, index) in enumerate(planner.planned)
-        )
         return ConfigDeclaration(
             secrets=entries.secrets,
-            forges=forges,
+            forges=tuple(planner.planned),
             work_sources=tuple(work_sources),
             repositories=tuple(repositories),
             projects=projects.section,

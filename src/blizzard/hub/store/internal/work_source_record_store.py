@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, ForgeKindMismatch
+from blizzard.hub.domain.config.forges import ForgeId, ForgeKindMismatch, ForgeOriginTaken, ForgeSlugTaken, NewForge
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,
@@ -31,12 +31,15 @@ from blizzard.hub.domain.config.work_sources import (
     resolve_work_source_reference,
 )
 from blizzard.hub.store.internal.config_change_store import append_change
-from blizzard.hub.store.internal.forge_record_store import StandingForge, referred_forge
+from blizzard.hub.store.internal.forge_record_store import StandingForge, insert_new_forge, referred_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import work_source_former_slugs, work_source_lifecycle_facts, work_sources
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+
+#: What creating the forge a write names refuses when another forge holds its origin or slug.
+_FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 
 _SLUGS = SlugTables(work_sources, work_source_former_slugs, "work_source_id", WorkSourceSlugTaken)
 
@@ -194,24 +197,41 @@ class WorkSourceRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, record: ConfiguredWorkSource, *, change: ConfigChange) -> ConfiguredWorkSource:
+    def create(
+        self, record: ConfiguredWorkSource, *, change: ConfigChange, forge: NewForge | None = None
+    ) -> ConfiguredWorkSource:
         try:
             with self._store.write(
                 "create",
-                expect=(ConfigFieldError, WorkSourceSlugTaken, WorkSourceLocatorTaken, IntegrityError),
+                expect=(
+                    ConfigFieldError,
+                    WorkSourceSlugTaken,
+                    WorkSourceLocatorTaken,
+                    IntegrityError,
+                    *_FORGE_REFUSALS,
+                ),
             ) as conn:
+                if forge is not None:
+                    insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
         return record
 
     def update(
-        self, record: ConfiguredWorkSource, *, from_revision: int, left_slug: str | None, change: ConfigChange
+        self,
+        record: ConfiguredWorkSource,
+        *,
+        from_revision: int,
+        left_slug: str | None,
+        change: ConfigChange,
+        forge: NewForge | None = None,
     ) -> ConfiguredWorkSource:
         try:
             with self._store.write(
                 "update",
                 expect=(
+                    *_FORGE_REFUSALS,
                     ConfigFieldError,
                     WorkSourceLocatorTaken,
                     WorkSourceSlugTaken,
@@ -219,6 +239,8 @@ class WorkSourceRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
+                if forge is not None:
+                    insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc

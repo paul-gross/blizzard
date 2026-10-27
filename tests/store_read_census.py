@@ -1366,6 +1366,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
         apply_writer=ConfigApplyStore(store_connections),
         import_writer=ConfigImportStore(store_connections),
+        events=None,
         clock=clock,
     )
     config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)

@@ -2823,13 +2823,15 @@ export const getWorkSourceApiWorkSourcesSourceGet = <ThrowOnError extends boolea
 /**
  * Patch Work Source
  *
- * Apply only the fields present; an explicit `null` clears `api_base`, `web_base`, or
- * `secret` (the last only where the provider needs no credential). A patch that changes
- * nothing writes nothing. A slug that changes keeps resolving to the source until another claims it. 404 unknown,
- * 409 for `hub`, a stale `If-Match` (naming the current revision), a slug some work source holds, or a taken
- * `(provider, locator)`; 422 naming the field (`hub` refused as a slug), coded as on create. `forge` re-points the
- * source at a forge; `api_base` does so the old way, and a cleared `api_base` re-points it at GitHub's, each with a
- * `Deprecation` header and a `warnings` entry.
+ * Apply only the fields present; an explicit `null` clears `secret` (only where the provider needs no
+ * credential), re-points the source at GitHub's forge for `api_base`, and means the forge's own web origin for
+ * `web_base`, which a source no longer holds: a `web_base` other than its forge's is refused `forge_conflict`, naming
+ * the forge whose web origin to set instead. A patch that changes nothing writes nothing. A slug that changes keeps
+ * resolving to the source until another claims it. 404 unknown, 409 for `hub`, a stale `If-Match` (naming the
+ * current revision), a slug some work source holds, or a taken `(provider, locator)`; 422 naming the field (`hub`
+ * refused as a slug), coded as on create. `forge` re-points the source at a forge; `api_base` does so the old way,
+ * and a cleared `api_base` re-points it at GitHub's; each old field answers a `Deprecation` header and a `warnings`
+ * entry.
  */
 export const patchWorkSourceApiWorkSourcesSourcePatch = <ThrowOnError extends boolean = false>(options: Options<PatchWorkSourceApiWorkSourcesSourcePatchData, ThrowOnError>): RequestResult<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchWorkSourceApiWorkSourcesSourcePatchResponses, PatchWorkSourceApiWorkSourcesSourcePatchErrors, ThrowOnError>({
     url: '/api/work-sources/{source}',

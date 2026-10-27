@@ -52,8 +52,9 @@ class RepositoryDocument(BaseModel):
 
 class RepositoryCreateRequest(BaseModel):
     """The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` — a forge's id
-    or slug — beside them. Exactly one of ``forge`` and ``forge_api_url`` names the forge; ``forge_api_url`` alone is
-    resolved to the tenant's forge with that API origin, made when none holds it, and answered with a warning."""
+    or slug — beside them, naming the forge. ``forge_api_url`` is the old way to name it: alone, it is resolved to the
+    tenant's forge with that API origin, made when none holds it; beside ``forge``, it is accepted only when it is that
+    forge's API origin. Either way the write is answered with a warning. Naming neither is refused."""
 
     model_config = ConfigDict(extra="forbid")
 
