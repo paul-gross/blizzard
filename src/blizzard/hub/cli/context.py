@@ -15,7 +15,6 @@ from blizzard.cli.collaborators import ClientFactory, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
-from blizzard.foundation.untyped import as_list, as_table
 
 
 class View(Protocol):
@@ -435,16 +434,6 @@ def _error_code(resp: Response) -> str | None:
     detail = cast(dict[str, object], body).get("detail") if isinstance(body, dict) else None
     code = cast(dict[str, object], detail).get("code") if isinstance(detail, dict) else None
     return code if isinstance(code, str) else None
-
-
-def _keyed_rows(rows: list[object], keys: tuple[str, ...]) -> list[dict[str, str]]:
-    """The object rows of ``rows`` that state every one of ``keys``, each reduced to those keys as strings."""
-    kept: list[dict[str, str]] = []
-    for row in rows:
-        table = as_table(row)
-        if table is not None and all(table.get(k) for k in keys):
-            kept.append({k: str(table[k]) for k in keys})
-    return kept
 
 
 def _tenants_of(me: Response) -> list[dict[str, str]]:

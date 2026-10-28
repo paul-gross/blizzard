@@ -9,7 +9,6 @@ import click
 
 from blizzard.cli.window import since_option, utc_query_value
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.foundation.untyped import as_table
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query

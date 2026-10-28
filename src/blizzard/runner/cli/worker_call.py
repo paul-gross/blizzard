@@ -13,7 +13,6 @@ from blizzard.cli.collaborators import CliCollaborators, Client, HTTPError, HTTP
 from blizzard.cli.operator_trace import exit_code_of
 from blizzard.foundation.roles import dto
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
-from blizzard.foundation.untyped import as_table
 
 if TYPE_CHECKING:
     from blizzard.foundation.cli_spans import CliSpan

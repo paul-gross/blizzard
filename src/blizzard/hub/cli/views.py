@@ -165,7 +165,7 @@ class RunnerLine:
     def declining(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The first throttle an online, unbraked runner reported as saying no — the brake wins the slot; nothing for an
         offline runner or one that reported none."""
-        reasons: list[dict[str, Any]] = self.row.get("declining") or []
+        reasons = self.row.get("declining") or []
         if not reasons or self.brake or self.connection != "online":
             return ""
         return f" [declining: {_declining_reason(reasons[0])}]"
@@ -190,7 +190,7 @@ class QuestionLine:
     row: QuestionRow
 
     def line(self) -> str:
-        options: list[str] = self.row.get("options") or []
+        options = self.row.get("options") or []
         offered = f"  [{'|'.join(options)}]" if options else ""
         return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
 
