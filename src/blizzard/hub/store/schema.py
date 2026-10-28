@@ -1448,8 +1448,7 @@ hub_node_poll = Table(
 Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
 # --- Flows: each branch's delivery line, and the hub-node visits standing in it ---
-# Made by the work that reaches them, never configured. A submission is open while it has no closure; a flow is busy
-# while a turn of a submission holding it has no ``ended_at``. Both are derived, never stored.
+# Made by the work reaching them. Open (no closure) and busy (an unended turn) are derived, never stored.
 
 flows = Table(
     "flows",

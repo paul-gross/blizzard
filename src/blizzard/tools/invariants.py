@@ -963,8 +963,7 @@ class FlowLineStanding(Check):
     """``hub:flow-line-standing`` — every open submission's chunk still stands where its line holds it: at its node,
     at its epoch, or at a later one while a person holds the chunk — ``withdrawal_for`` answering nothing. The line
     converges on two kinds by design, so both are exempt: one with an open turn, whose end writes its closure, and
-    one whose chunk moved within :data:`RECONCILE_FLOOR`, the longest a full reconcile is ever skipped. Standing is
-    derived through the chunk's loaded facts, never re-derived here."""
+    one whose chunk moved within :data:`RECONCILE_FLOOR`, the longest a full reconcile is ever skipped."""
 
     flows: IReadFlows
     facts: IReadChunkFactsRepository

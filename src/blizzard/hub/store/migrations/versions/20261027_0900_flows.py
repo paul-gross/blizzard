@@ -1,8 +1,6 @@
 """flows — each branch's delivery line, the hub-node visits submitted to it, their closures, turns, and facts.
 
-Adds six tenant-keyed tables: ``flows``, ``flow_submissions``, ``flow_submission_flows``, ``flow_submission_closures``,
-``hub_turns`` and ``flow_facts``, with their indexes. Writes no row: no submission and no ``landed`` fact for a landing
-made before it, since admitting a visit to a flow is the domain's. Downgrade drops the six tables.
+Adds six tenant-keyed tables and their indexes, writing no row; downgrade drops them.
 Revision ID: 20261027_0900_flows
 Revises: 20261025_0900_forges
 """
