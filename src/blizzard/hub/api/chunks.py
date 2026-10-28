@@ -730,8 +730,8 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
 )
 def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Services) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
-    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
-    and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
+    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,
+    closes its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:
     completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
     unknown."""
     chunk = services.chunks.record.get(chunk_id)

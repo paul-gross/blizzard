@@ -453,8 +453,8 @@ export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = f
  * Complete Chunk
  *
  * Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
- * Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
- * and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
+ * Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,
+ * closes its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:
  * completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
  * unknown.
  */
@@ -1129,10 +1129,8 @@ export const getGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGet =
 /**
  * Hub Advance
  *
- * Drive a chunk parked at a generic hub command node one step, taking one pass of that
- * node's action under the tenant's hub-execution slot. The call defers when another chunk holds the
- * slot, the node is ``pending`` inside ``poll_interval``, the chunk is escalated, or it is not parked
- * at a drivable hub node — ``detail`` names which.
+ * Wake the hub's flow driver for a chunk parked at a hub command node, and answer where its visit stands in the
+ * flows it holds — ``detail`` names it. The call never takes a pass itself: ``ran`` is always false.
  */
 export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/hub-advance', ...options });
 

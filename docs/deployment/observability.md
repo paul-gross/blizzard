@@ -22,17 +22,27 @@ the hub booted. The hub never runs the command. The remedy is moving the chunk o
 with `chunk restart --to-graph` ([control-verbs.md](./control-verbs.md#restart)), or stopping it.
 
 `hub-action-overran` (warning): a hub node's action pass ran past `action_pass_seconds`
-([install.md](./install.md#configuration-and-credentials)) and was cancelled. It answered `pending` where its action can
-wait, so the node's poll timeout still decides when waiting has gone on too long, and its failure choice where it
-cannot. A node that keeps reaching the bound is one whose forge is slow or unreachable; the remedy is that forge, or a
-larger `action_pass_seconds`.
+([install.md](./install.md#configuration-and-credentials)). A pass cancelled at its next wait answered `pending` where
+its action can wait, so the node's poll timeout still decides when waiting has gone on too long, and its failure choice
+where it cannot. A pass still running thirty seconds past the bound is cut off: its turn ends `cut-off`, nothing routes
+the chunk, and it keeps its place for its next turn. A node that keeps reaching the bound is one whose forge is slow or
+unreachable; the remedy is that forge, or a larger `action_pass_seconds`.
 
-`turn-interrupted` (warning): the hub started and found a turn on a branch's delivery line with no end — the process
-running it stopped mid-turn, by a crash or a shutdown. Before the hub serves, it ends that turn `interrupted`, once; a
-second start finds nothing to end. A chunk still standing at its step keeps its place in the line, and one that has left
-it, such as a stopped chunk, leaves the line in the same write. The event's detail names the turn, its submission, and
-that withdrawal. Nothing needs doing: the chunk's next pass reads the forge before it acts, so it finds any merge the
-interrupted turn had already made.
+A visit cut off at its deadline on each of its last three turns escalates, cause `hub-action-stuck`, at the start of its
+fourth turn, before the hub takes another pass; a turn a hub restart interrupted neither counts nor resets the three.
+The remedy is the forge the action calls, or a larger `action_pass_seconds`, then requeuing.
+
+`flow-landed` (info): a hub step's turn merged a chunk onto a repository branch. The event's detail names the flow, its
+repository and branch, the revision, and the chunks the landing carried. It is written in the same transaction as the
+landing's marker, so a merge the hub recorded always has one.
+
+`turn-interrupted` (warning): the hub found a turn on a branch's delivery line with no end and nothing running it — at
+boot, after the process running it stopped mid-turn by a crash or a shutdown, or in its own sweep, after a turn's task
+ended without ending its turn. It ends that turn `interrupted`, once; a second look finds nothing to end. A turn whose
+visit took longer to build than its bound is ended with this event too. A chunk still standing at its step keeps its
+place in the line, and one that has left it, such as a stopped chunk, leaves the line in the same write. The event's
+detail names the turn, its submission, and that withdrawal. Nothing needs doing: the chunk's next pass reads the forge
+before it acts, so it finds any merge the interrupted turn had already made.
 
 `repository-unresolved` (critical): a `deliver` step's chunk commits resolve to no single
 [repository](./repositories.md) record — none stands for one of them, or several match it. The step is refused before

@@ -76,6 +76,23 @@ older hub then runs each node's untouched `run:` again. A chunk escalated meanwh
 
 ## Upgrading to the next release
 
+### Hub steps take turns on their flows
+
+The hub now takes every hub step as a turn on the flows the step holds, one per repository branch, where it ran one hub
+step at a time across the fleet:
+
+- Landings onto different branches run side by side, and a garden delivery or a review's findings no longer wait behind
+  any landing.
+- A chunk's landing no longer needs its runner. `hub-advance` no longer runs a step: it wakes the hub, answers
+  `ran: false`, and says in its detail where the visit stands.
+- Stopping, restarting or completing a chunk mid-pass lets that pass finish, and its branch stays held until it does.
+- A step cut off at its deadline three times running escalates to a person with the cause `hub-action-stuck`.
+- A chunk paused at a hub node no longer lands while it is paused: it waits for its resume.
+
+The last is the one change that asks something of you. A chunk paused at a hub node when you install this release lands
+only once someone resumes it, with `blizzard hub chunk resume <id>`. A chunk you leave paused keeps its place at its
+node and takes no turn until then.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

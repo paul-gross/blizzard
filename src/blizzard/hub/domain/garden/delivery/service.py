@@ -76,8 +76,8 @@ class GardenDeliveryRecorder:
             delta_artifacts=deltas.contents, proposal_artifacts=proposals.contents, formats=self._formats
         )
         # Every commit is resolved here, once, before any rule runs: a retry never re-resolves one, so the
-        # delivery spends the fleet-wide hub-exec slot at most once per commit. A cited commit resolves
-        # only in a repository the run's project links.
+        # delivery asks the forge about each commit at most once. A cited commit resolves only in a
+        # repository the run's project links.
         resolutions = resolve_commits(
             commits_to_resolve(parsed.deltas, run=run),
             self._resolve_commit_for(ProjectId(run.project_id)) if self._resolve_commit_for else None,

@@ -42,11 +42,11 @@ class StopService:
         self._exclusive = exclusive
 
     def stop(self, chunk: Chunk, *, by: str) -> int:
-        """Append ``chunk.stopped`` and release the chunk's live route (and any held hub-exec
-        slot), atomically. Takes the loaded chunk (``bzh:domain-takes-objects``); the
-        terminal-status guard is re-derived fresh under the row lock
-        (``bzh:store-exclusive-write``), so a concurrent stop or completion cannot race
-        this one past a stale refusal. Raises :class:`ChunkNotStoppable` for a chunk
+        """Append ``chunk.stopped``, release the chunk's live route, and close ``stopped`` each of its flow
+        submissions waiting its turn, atomically; a submission mid-turn closes at its turn's end. Takes the loaded
+        chunk (``bzh:domain-takes-objects``); the terminal-status guard is re-derived fresh under the row lock
+        (``bzh:store-exclusive-write``), so a concurrent stop or completion cannot race this one past a stale
+        refusal. Raises :class:`ChunkNotStoppable` for a chunk
         already done/stopped, :class:`ChunkNotFound` for one gone under the lock. Returns
         the id. ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
