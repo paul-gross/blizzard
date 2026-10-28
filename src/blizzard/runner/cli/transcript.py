@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import click
@@ -22,7 +22,7 @@ def transcript_group() -> None:
 @contextmanager
 def _transcript_config(
     directory: str, *, runner: str | None, verb: str, action: str, door: Door
-) -> Iterator[RunnerConfig]:
+) -> Generator[RunnerConfig, None, None]:
     """Every store-writing transcript verb's guards, and the host directory held while the verb runs — shared so a
     second verb cannot ship with fewer of them than the first."""
     config = load_runner(directory, runner=runner)

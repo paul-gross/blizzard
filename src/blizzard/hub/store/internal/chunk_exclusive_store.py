@@ -11,7 +11,7 @@ already locked, in sorted chunk-id order, as the transaction's first statements.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -123,7 +123,7 @@ class ChunkExclusiveWrites:
         self._work_refs = work_refs
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
         with self._store.write("locked_chunk_transaction") as conn:
             for chunk_id in sorted(set(chunk_ids)):
                 lock_chunk_row(conn, chunk_id)
@@ -132,7 +132,7 @@ class ChunkExclusiveWrites:
     @contextmanager
     def locked_work_refs(
         self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
-    ) -> Iterator[ILockedWorkRefRead]:
+    ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._store.write("locked_work_ref_transaction") as conn:
             if project is not None:
                 lock_keys(conn, PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, [project])

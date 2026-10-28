@@ -6,7 +6,7 @@ Creates one initialized repository with a baseline commit and removes the tree o
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +53,7 @@ class SubprocessOpenCodeScratchGit:
         self._env = env
 
     @contextmanager
-    def new_scratch_repo(self) -> Iterator[OpenCodeScratchRepo]:
+    def new_scratch_repo(self) -> Generator[OpenCodeScratchRepo, None, None]:
         with tempfile.TemporaryDirectory(prefix="blizzard-opencode-") as tmp:
             workdir = Path(tmp)
             self._git(workdir, "init", "-q", "-b", "main", "--template=/dev/null")

@@ -8,7 +8,7 @@ provider, an empty spawn root and no prompt."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import KW_ONLY, dataclass
 from typing import Protocol
@@ -135,7 +135,7 @@ class WorkspaceRegistry:
         return workspace.prompt if workspace is not None else ""
 
     @contextmanager
-    def try_acquisition_lock(self, workspace_id: str) -> Iterator[bool]:
+    def try_acquisition_lock(self, workspace_id: str) -> Generator[bool, None, None]:
         lock = self._locks[workspace_id]
         taken = lock.acquire(blocking=False)
         try:

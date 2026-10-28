@@ -15,7 +15,7 @@ queues every other unit of work behind this one's commit, and each later stateme
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import sqlalchemy as sa
@@ -62,11 +62,13 @@ class _TransactionConnections(HubStoreConnections):
         self._conn = conn
 
     @contextmanager
-    def read(self, operation: str) -> Iterator[Connection]:
+    def read(self, operation: str) -> Generator[Connection, None, None]:
         yield self._conn
 
     @contextmanager
-    def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
+    def write(
+        self, operation: str, *, expect: tuple[type[BaseException], ...] = ()
+    ) -> Generator[Connection, None, None]:
         yield self._conn
 
     def scoped(self, scope: StoreScope) -> ScopedConnections:
@@ -94,7 +96,7 @@ class IdentityTransactions:
         self._store_errors = store_errors
 
     @contextmanager
-    def begin(self) -> Iterator[IdentityWrites]:
+    def begin(self) -> Generator[IdentityWrites, None, None]:
         with self._store.write("identity_transaction") as conn:
             _lock_identities(conn)
             yield self._writes(_TransactionConnections(conn, self._store_errors))

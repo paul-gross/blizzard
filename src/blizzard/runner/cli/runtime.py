@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import signal
 import types
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -143,7 +143,7 @@ type HostClients = Callable[[str], IHostHubClient]
 @contextmanager
 def _http_hub_clients(
     client_factory: ClientFactory, hub_url: str, runner_token: str, operator_token: str | None
-) -> Iterator[InitHubClients]:
+) -> Generator[InitHubClients, None, None]:
     """The identity read under the runner's own token, and the add under the operator's session."""
     runner_headers = {"Authorization": f"Bearer {runner_token}"} if runner_token else {}
     with (
@@ -154,7 +154,7 @@ def _http_hub_clients(
 
 
 @contextmanager
-def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Iterator[HostClients]:
+def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Generator[HostClients, None, None]:
     """The host's own hub calls, each under the host token it is made with."""
     with client_factory(base_url=hub_url, timeout=_INIT_HUB_TIMEOUT_SECONDS) as http:
         yield lambda token: HttpHostHubClient(http, token=token)
@@ -1282,7 +1282,7 @@ def _tick_running_host(directory: str, door: Door, runner: str | None, host_pass
 
 
 @contextmanager
-def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
+def read_stores(config: RunnerConfig) -> Generator[RunnerReadStores, None, None]:
     """The runner's read-only store bundle for a short-lived CLI verb, bound to the runner its host file configures —
     builds its own engine and disposes it on exit, so a caller never holds the engine past the bundle's use."""
     engine = create_engine_from_url(config.db_url)
@@ -1295,7 +1295,7 @@ def read_stores(config: RunnerConfig) -> Iterator[RunnerReadStores]:
 
 
 @contextmanager
-def read_host_stores(config: RunnerConfig) -> Iterator[HostReadStores]:
+def read_host_stores(config: RunnerConfig) -> Generator[HostReadStores, None, None]:
     """:func:`read_stores`'s host-scoped twin, for a short-lived CLI verb reading a host table."""
     engine = create_engine_from_url(config.db_url)
     try:

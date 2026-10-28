@@ -3,7 +3,7 @@ revision this build expects, and no runner's rows foreign to the host."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
 import click
@@ -53,7 +53,7 @@ def store_write_guard(
     runners: Mapping[str, str],
     configured: tuple[str, ...],
     refuse_foreign: bool,
-) -> Iterator[Mapping[str, str]]:
+) -> Generator[Mapping[str, str], None, None]:
     """The host directory held while the caller ``action``s, its store current, and ``runners`` (id to name) judged
     against the store's identity rows; every refusal is a :class:`click.ClickException` naming ``action``. A foreign
     runner refuses when ``refuse_foreign``, else is yielded (id to reason) for the caller to halt."""

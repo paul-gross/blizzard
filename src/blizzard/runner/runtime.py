@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import os
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -391,7 +391,7 @@ class Runtime:
             raise ConfigError(f"the runner store at {config.db_url} cannot be migrated: {exc}") from exc
 
     @contextmanager
-    def _exclusive(self, layout: HostLayout, action: str) -> Iterator[None]:
+    def _exclusive(self, layout: HostLayout, action: str) -> Generator[None, None, None]:
         """The host directory held for a write: its lock taken, and no pre-host daemon answering on ``runner.sock``."""
         with hold_host(
             layout,

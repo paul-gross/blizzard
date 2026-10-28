@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import tzinfo
@@ -1143,7 +1143,7 @@ def build_runner_store_files(clock: IClock | None = None) -> RunnerStoreFiles:
 
 
 @contextlib.contextmanager
-def _engine(url: str) -> Iterator[Engine]:
+def _engine(url: str) -> Generator[Engine, None, None]:
     engine = create_engine_from_url(url)
     try:
         yield engine

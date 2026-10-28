@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -92,7 +92,7 @@ class _FakePermitRepository:
         return self._locked(permit_id)
 
     @contextmanager
-    def _locked(self, permit_id: str) -> Iterator[ILockedPermitRead]:
+    def _locked(self, permit_id: str) -> Generator[ILockedPermitRead, None, None]:
         yield _FakeLockedPermitRead(self.rows, permit_id)
 
     def record_fact_locked(self, held: ILockedPermitRead, fact: PermitFact) -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 # The lock orders this process's own pass bookkeeping; it guards no store decision
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Iterator, Set
+from collections.abc import Generator, Set
 from contextlib import contextmanager
 
 from blizzard.hub.domain.sweeps.names import SweepName
@@ -41,7 +41,7 @@ class SweepLocks:
         self._held: set[SweepLock] = set()
 
     @contextmanager
-    def hold(self, name: SweepName, tenant: TenantId | None = None) -> Iterator[None]:
+    def hold(self, name: SweepName, tenant: TenantId | None = None) -> Generator[None, None, None]:
         """Hold ``name``'s lock — in ``tenant`` alone, or across every tenant — for the block; raises
         :class:`SweepInProgress` at once when :func:`admits` refuses it."""
         lock: SweepLock = (name, tenant)

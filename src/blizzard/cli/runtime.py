@@ -6,7 +6,7 @@ the caller, never taught to this module."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,7 @@ GRACEFUL_SHUTDOWN_SECONDS = 5
 
 
 @contextmanager
-def click_exception_on(*error_types: type[BaseException]) -> Iterator[None]:
+def click_exception_on(*error_types: type[BaseException]) -> Generator[None, None, None]:
     """Translate any of ERROR_TYPES raised inside the block into a ``click.ClickException``."""
     try:
         yield

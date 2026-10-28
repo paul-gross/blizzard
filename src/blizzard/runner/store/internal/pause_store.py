@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -176,7 +176,7 @@ class PauseStore:
         return seq
 
     @contextmanager
-    def locked_brakes(self) -> Iterator[ILockedBrakes]:
+    def locked_brakes(self) -> Generator[ILockedBrakes, None, None]:
         # The runner's identity row is locked as the first statement: the first write takes SQLite's writer lock, and
         # Postgres queues every writer of this runner's brake on the same row.
         with self._store.begin() as conn:

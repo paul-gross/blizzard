@@ -3,7 +3,7 @@ instrumentation is handed it explicitly."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 
 import httpx2
@@ -54,7 +54,7 @@ def _carried_stamp(context: Context | None) -> SpanStamp | None:
 
 
 @contextmanager
-def _stamping(stamp: SpanStamp) -> Iterator[None]:
+def _stamping(stamp: SpanStamp) -> Generator[None, None, None]:
     token = otel_context.attach(otel_context.set_value(_STAMP_KEY, _Carried(stamp)))
     try:
         yield
@@ -111,7 +111,7 @@ class _SdkTracer:
         return self._span(name, attributes, None)
 
     @contextmanager
-    def under(self, derived: DerivedContext) -> Iterator[None]:
+    def under(self, derived: DerivedContext) -> Generator[None, None, None]:
         parent = trace.set_span_in_context(trace.NonRecordingSpan(span_context(derived, remote=True)), _fresh())
         token = otel_context.attach(parent)
         try:
@@ -125,7 +125,7 @@ class _SdkTracer:
             span.add_link(span_context(derived))
 
     @contextmanager
-    def _span(self, name: str, attributes: Attributes | None, context: Context | None) -> Iterator[None]:
+    def _span(self, name: str, attributes: Attributes | None, context: Context | None) -> Generator[None, None, None]:
         # An exception's message can carry a secret, so the span records that it failed and never why.
         with self._tracer.start_as_current_span(
             name,
@@ -149,17 +149,17 @@ class _StampedTracer:
         self._stamp = stamp
 
     @contextmanager
-    def root(self, name: str, attributes: Attributes | None = None) -> Iterator[None]:
+    def root(self, name: str, attributes: Attributes | None = None) -> Generator[None, None, None]:
         with _stamping(self._stamp), self._tracer.root(name, attributes):
             yield
 
     @contextmanager
-    def child(self, name: str, attributes: Attributes | None = None) -> Iterator[None]:
+    def child(self, name: str, attributes: Attributes | None = None) -> Generator[None, None, None]:
         with _stamping(self._stamp), self._tracer.child(name, attributes):
             yield
 
     @contextmanager
-    def under(self, derived: DerivedContext) -> Iterator[None]:
+    def under(self, derived: DerivedContext) -> Generator[None, None, None]:
         with self._tracer.under(derived), _stamping(self._stamp):
             yield
 

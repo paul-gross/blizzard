@@ -8,7 +8,7 @@ baseline commit, torn down on context-manager exit.
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -35,7 +35,7 @@ class SubprocessScratchGit:
         self._env = env
 
     @contextmanager
-    def new_scratch_repo(self) -> Iterator[ScratchRepo]:
+    def new_scratch_repo(self) -> Generator[ScratchRepo, None, None]:
         with tempfile.TemporaryDirectory(prefix="blizzard-selftest-") as tmp:
             workdir = Path(tmp)
             self._git(workdir, "init", "-q", "-b", "main")

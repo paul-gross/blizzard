@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import IO
 
 from blizzard.foundation.logging import get_logger
@@ -164,7 +164,7 @@ def text_after_choice_close(text: str) -> str | None:
 
 
 @contextlib.contextmanager
-def stdout_target(path: str, *, mode: str = "ab") -> Iterator[IO[bytes] | None]:
+def stdout_target(path: str, *, mode: str = "ab") -> Generator[IO[bytes] | None, None, None]:
     """The injected stdout file, opened in ``mode``, else ``None`` (no redirect) when
     ``path`` is empty. A context manager so no caller leaks the descriptor across a failed
     ``Popen``. ``mode`` defaults to append (``"ab"``) — a lease's own growing capture; a
