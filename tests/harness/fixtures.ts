@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { type APIRequestContext, expect } from '@playwright/test';
+import { type APIRequestContext, expect, mergeTests } from '@playwright/test';
 import { loginThroughCli } from './login';
 import { type People, type Person, peopleFactory } from './people';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
@@ -21,9 +21,8 @@ import {
 import { binDir, daemonEnv, requireBinary } from './env';
 import { type HubLog, hubLog as readHubLog } from './logs';
 import { uniqueName } from './base';
-import { mockWorld, type RunnerHostFixtureOptions, type RunnerHosts } from './mock-world';
-import { DEFAULT_RUNNER_OPTIONS, type RunnerHost, runnerHostBuilder } from './runner-host';
-import { startVendorUsage, type VendorUsage } from './vendor-usage';
+import { mockWorld } from './mock-world';
+import { type RunnerBinding, runnerWorld } from './runner-world';
 import { type Project, sharesTenant, tenancy } from './tenancy';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
@@ -32,16 +31,10 @@ export interface FleetClient extends Verbs {
   token: string;
 }
 
-interface Fixtures extends RunnerHostFixtureOptions {
+interface Fixtures {
   api: HubApi;
-  /** A loopback stand-in for the vendors' usage endpoints, closed when the test ends. */
-  vendorUsage: VendorUsage;
-  /** A real `blizzard-runner host` enrolled in the test's own tenant through `init --tenant`; needs isolation `fresh-tenant` or above. */
-  runnerHost: RunnerHost;
-  /** Further runner hosts in the test's tenant. */
-  runnerHosts: RunnerHosts;
-  /** Internal: the builder every runner host of the test comes from. */
-  runnerHostBuilder: ReturnType<typeof runnerHostBuilder>;
+  /** Internal: the runner fixtures' hub, the test's own tenant on the test's hub; a host needs isolation `fresh-tenant` or above. */
+  runnerBinding: RunnerBinding;
   /** The role `user` is invited as; `test.use({ userRole })`. */
   userRole: Role;
   /** One signed-in person in `tenant` with the role `userRole` names. Needs a hub with authentication on. */
@@ -79,7 +72,7 @@ export type { ForgeApi, HubApi };
 export type { Repository };
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
-export const test = tenancy.extend<Fixtures>({
+export const test = mergeTests(tenancy, runnerWorld).extend<Fixtures>({
   api: async ({ testHub, tenant, level, ledger }, use, testInfo) => {
     await use(
       hubApi({
@@ -127,19 +120,7 @@ export const test = tenancy.extend<Fixtures>({
     await use(await people.create({ role: userRole }));
   },
 
-  runnerConfig: [DEFAULT_RUNNER_OPTIONS.runnerConfig, { option: true }],
-  runnerEnv: [DEFAULT_RUNNER_OPTIONS.runnerEnv, { option: true }],
-  runnerLoop: [DEFAULT_RUNNER_OPTIONS.runnerLoop, { option: true }],
-  runnerStarted: [DEFAULT_RUNNER_OPTIONS.runnerStarted, { option: true }],
-  runnerSampling: [DEFAULT_RUNNER_OPTIONS.runnerSampling, { option: true }],
-
-  vendorUsage: async ({}, use) => {
-    const vendor = await startVendorUsage();
-    await use(vendor);
-    await vendor.close();
-  },
-
-  runnerHostBuilder: async ({ testHub, tenant, tenantOf, level, ledger, vendorUsage, playwright }, use, testInfo) => {
+  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright }, use, testInfo) => {
     const hub = testHub.coordinates;
     // On a hub offering an IdP, `init` runs under a logged-in operator's config home; the host's own stays empty.
     // Built only then, since the `people` fixture itself refuses a hub with authentication off.
@@ -164,34 +145,15 @@ export const test = tenancy.extend<Fixtures>({
       await loginThroughCli({ run, env, person, hub });
       return home;
     };
-    const builder = runnerHostBuilder({
+    await use({
       hub: {
         url: hub.url,
         tenantId: tenant.id,
         operatorHome: hub.auth === undefined ? undefined : () => (operator ??= operatorHome()),
       },
-      context: testHub.context,
-      ledger,
-      testInfo,
-      vendor: vendorUsage,
+      admit: () => requireOwnTenant(level.served, 'runnerHost()'),
     });
-    await use(builder);
-    await builder.disposeAll();
     await disposePeople?.();
-  },
-
-  runnerHosts: async ({ runnerHostBuilder: builder, level, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling }, use) => {
-    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling };
-    await use({
-      create: async (options = {}) => {
-        requireOwnTenant(level.served, 'runnerHost()');
-        return builder.create({ ...defaults, ...options });
-      },
-    });
-  },
-
-  runnerHost: async ({ runnerHosts }, use) => {
-    await use(await runnerHosts.create());
   },
 
   bearer: async ({ testHub, ledger, playwright }, use, testInfo) => {
@@ -334,7 +296,8 @@ export type * as RunnerWire from './client/wire/runner/types.gen';
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export type { OtlpSink, ReceivedSpan } from './otlp-sink';
 export type { AuthStub } from './auth-stub';
-export type { MockHub, RunnerHosts } from './mock-world';
+export type { MockHub } from './mock-world';
+export type { RunnerHosts } from './runner-world';
 export type { RunnerHost, RunnerHostOptions } from './runner-host';
 export type { VendorUsage } from './vendor-usage';
 export { expect };

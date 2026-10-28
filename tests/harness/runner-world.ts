@@ -1,0 +1,126 @@
+import type { APIRequestContext } from '@playwright/test';
+import { base } from './base';
+import { type RunnerHostClient, runnerHostApi } from './client/runner';
+import { type Barrier, type BarrierSubscription, openRunnerStream, type Subscription } from './events';
+import { DEFAULT_RUNNER_OPTIONS, type HubBinding, type RunnerHost, type RunnerHostOptions, runnerHostBuilder } from './runner-host';
+import { startVendorUsage, type VendorUsage } from './vendor-usage';
+
+/** The options a runner host is built with; `test.use({ … })` sets them for a file or a describe, `runnerHosts.create` per host. */
+export interface RunnerHostFixtureOptions {
+  runnerConfig: RunnerHostOptions['runnerConfig'];
+  runnerEnv: RunnerHostOptions['runnerEnv'];
+  runnerLoop: RunnerHostOptions['runnerLoop'];
+  runnerStarted: RunnerHostOptions['runnerStarted'];
+  runnerSampling: RunnerHostOptions['runnerSampling'];
+  runnerOtlp: RunnerHostOptions['runnerOtlp'];
+}
+
+/** Makes further runner hosts beside the test's own, each with options of its own over the test's. */
+export interface RunnerHosts {
+  create(options?: Partial<RunnerHostOptions>): Promise<RunnerHost>;
+}
+
+/** What a world gives the runner fixtures: the hub its hosts enroll at, and a refusal for a host the world cannot admit. */
+export interface RunnerBinding {
+  hub: HubBinding;
+  /** Throws when the test may not make a host; asked before each. */
+  admit?(): void;
+}
+
+interface RunnerWorldFixtures extends RunnerHostFixtureOptions {
+  /** Internal: the plain request context the world's clients share. */
+  worldContext: APIRequestContext;
+  /** Internal: where this world's hosts enroll. Each world supplies it; the runner fixtures never choose a hub. */
+  runnerBinding: RunnerBinding;
+  /** A loopback stand-in for the vendors' usage endpoints, closed when the test ends. */
+  vendorUsage: VendorUsage;
+  /** The test's runner host: a real `blizzard-runner host` built through the CLI and the documented files. */
+  runnerHost: RunnerHost;
+  /** Further runner hosts, each its own directory, port and runners. */
+  runnerHosts: RunnerHosts;
+  /** Internal: the builder every runner host of the test comes from, stopped when the test ends. */
+  runnerHostBuilder: ReturnType<typeof runnerHostBuilder>;
+  /** A client for a runner host's local API at `url`; `logContext` names the host log a failure attaches. */
+  runnerHostClient: (url: string, options?: { logContext?: () => string; headers?: Record<string, string> }) => RunnerHostClient;
+  /** A runner host's event stream, closed when the test ends. */
+  runnerStream: (
+    hostUrl: string,
+    options?: { headers?: Record<string, string>; fromNow?: boolean; reconnect?: boolean; barrier?: Barrier },
+  ) => Promise<BarrierSubscription>;
+  /** Internal: the stream subscriptions a test opened, closed when it ends. */
+  openedStreams: Subscription[];
+}
+
+/**
+ * The runner side of both worlds, defined once: the host builder, its options, the host and stream clients, and their
+ * teardown. It rests on `base` and imports nothing from the hub world; each world extends it with the one fixture it
+ * owns, `runnerBinding`, naming the hub a host enrolls at.
+ */
+export const runnerWorld = base.extend<RunnerWorldFixtures>({
+  worldContext: async ({ playwright }, use) => {
+    const context = await playwright.request.newContext();
+    await use(context);
+    await context.dispose();
+  },
+
+  runnerBinding: async ({}, use) => {
+    await use({
+      hub: { url: '' },
+      admit: () => {
+        throw new Error('this world binds its runner hosts to no hub');
+      },
+    });
+  },
+
+  runnerConfig: [DEFAULT_RUNNER_OPTIONS.runnerConfig, { option: true }],
+  runnerEnv: [DEFAULT_RUNNER_OPTIONS.runnerEnv, { option: true }],
+  runnerLoop: [DEFAULT_RUNNER_OPTIONS.runnerLoop, { option: true }],
+  runnerStarted: [DEFAULT_RUNNER_OPTIONS.runnerStarted, { option: true }],
+  runnerSampling: [DEFAULT_RUNNER_OPTIONS.runnerSampling, { option: true }],
+  runnerOtlp: [DEFAULT_RUNNER_OPTIONS.runnerOtlp, { option: true }],
+
+  vendorUsage: async ({}, use) => {
+    const vendor = await startVendorUsage();
+    await use(vendor);
+    await vendor.close();
+  },
+
+  runnerHostBuilder: async ({ runnerBinding, worldContext, ledger, vendorUsage }, use, testInfo) => {
+    const builder = runnerHostBuilder({ hub: runnerBinding.hub, context: worldContext, ledger, testInfo, vendor: vendorUsage });
+    await use(builder);
+    await builder.disposeAll();
+  },
+
+  runnerHosts: async (
+    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerOtlp },
+    use,
+  ) => {
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerOtlp };
+    await use({
+      create: async (options = {}) => {
+        runnerBinding.admit?.();
+        return builder.create({ ...defaults, ...options });
+      },
+    });
+  },
+
+  runnerHost: async ({ runnerHosts }, use) => {
+    await use(await runnerHosts.create());
+  },
+
+  runnerHostClient: async ({ worldContext, ledger }, use, testInfo) => {
+    await use((url, options = {}) =>
+      runnerHostApi({ context: worldContext, testInfo, url, ledger, logContext: options.logContext ?? (() => ''), headers: options.headers }),
+    );
+  },
+
+  openedStreams: async ({}, use) => {
+    const opened: Subscription[] = [];
+    await use(opened);
+    for (const subscription of opened) subscription.close();
+  },
+
+  runnerStream: async ({ openedStreams }, use) => {
+    await use((hostUrl, options = {}) => openRunnerStream({ hostUrl, ...options, opened: openedStreams }));
+  },
+});

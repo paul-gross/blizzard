@@ -10,7 +10,10 @@ import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daem
 import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
+import { profileProject } from './projects';
 import { checkProfile, discoverProfiles, mergeProfile, readProfile, type TomlTable } from './profiles';
+
+export { profileProject };
 
 export const LEVELS = ['common', 'fresh-project', 'fresh-tenant', 'fresh-hub'] as const;
 export type Level = (typeof LEVELS)[number];
@@ -47,13 +50,6 @@ export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: R
     if (contractSet.includes(name)) problems.push(`hubEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`);
   }
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
-}
-
-/** The service project whose setup a project runs on: `harness` rides the default profile's, `harness-auth` the `auth` profile's. */
-export function profileProject(projectName: string): string {
-  if (projectName === 'harness') return 'service-hub';
-  if (projectName === 'harness-auth') return 'service-hub-auth';
-  return projectName;
 }
 
 /** Whether a level shares its tenant with other tests, so reads are narrowed to what the test made. */
