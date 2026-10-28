@@ -188,10 +188,9 @@ class ChunkDecisionsStore:
 
     def list_open_decisions(self, *, project: ProjectId | None = None) -> list[GateDecision]:
         """The gates still awaiting a resolution, hydrated in one batched pass through :meth:`_hydrate`.
-        The SQL drops resolved gates and gates whose chunk has ended — a read optimization mirroring
+        The SQL drops resolved gates, fact-closed gates, and gates whose chunk has ended — mirroring
         :meth:`GateDecision.require_resolvable`, pinned by ``tests/test_open_decisions_closure.py`` —
-        and :attr:`GateDecision.is_open` drops the ones a transition closed undecided. ``project`` narrows to
-        one project's gates."""
+        while :attr:`GateDecision.is_open` remains the exact final check. ``project`` narrows to one project's gates."""
         not_resolved = ~self._store.exists(
             s.decision_resolutions, s.decision_resolutions.c.decision_id == s.decisions.c.decision_id
         )
@@ -200,7 +199,11 @@ class ChunkDecisionsStore:
         with self._store.read("list_open_decisions") as conn:
             rows = conn.execute(
                 self._store.select(s.decisions)
-                .where(not_resolved & ~chunk_is_terminal(self._store, s.decisions.c.chunk_id))
+                .where(
+                    not_resolved,
+                    self._not_closed_clause(self._store, s.decisions.c.decision_id),
+                    ~chunk_is_terminal(self._store, s.decisions.c.chunk_id),
+                )
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
             ).all()
             return [d for d in self._hydrate(conn, rows) if d.is_open]
