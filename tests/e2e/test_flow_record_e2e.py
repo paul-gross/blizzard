@@ -1,8 +1,7 @@
-"""The hub's flow driver keeps a live hub's flow lines true to where its chunks stand, writing no turn.
+"""The hub's flow driver keeps a live hub's flow lines true to where its chunks stand, taking each hub step as a turn.
 
-A chunk held pending at ``deliver`` — the mock forge's ``checks_pending`` lever armed — across a driver tick is
-submitted to its branch's flow; its landing once the lever clears closes that submission ``superseded`` on the next
-tick. A store walked down below ``20261027_0900_flows`` with two chunks pending at ``deliver``, migrated back to head
+A chunk held pending at ``deliver`` — the mock forge's ``checks_pending`` lever armed — is submitted to its branch's
+flow and polls through turns; the turn that lands it once the lever clears closes that submission ``landed``. A store walked down below ``20261027_0900_flows`` with two chunks pending at ``deliver``, migrated back to head
 and booted, submits both in the order they entered ``deliver``. Needs ``BLIZZARD_E2E=1`` and ``blizzard-mock``."""
 
 from __future__ import annotations
@@ -158,15 +157,13 @@ def _await_submissions(hub_dir: Path, until: Callable[[list[tuple[str, str, int,
 
 
 def _assert_flow_record_holds(hub_dir: Path) -> None:
-    """The three flow invariants hold, and no turn was ever taken."""
+    """The three flow invariants hold over every turn taken so far."""
     engine = create_engine_from_url(f"sqlite:///{hub_dir / 'data' / 'hub.db'}")
     try:
         violations = [v for v in HubInvariants(engine).run() if v.invariant in _FLOW_INVARIANTS]
     finally:
         engine.dispose()
     assert violations == []
-    with _store(hub_dir) as conn:
-        assert conn.execute("SELECT count(*) FROM hub_turns").fetchone() == (0,)
 
 
 def _entered_deliver(detail: dict[str, Any]) -> str:
@@ -209,7 +206,9 @@ def test_a_held_chunk_is_submitted_and_its_landing_supersedes_it(tmp_path: Path)
         done = _drive_until(config, hub, chunk_id, lambda b: b["status"] in {"done", "needs_human"})
         assert (done["status"], done["landed"]) == ("done", True)
         [(_, closed, _, outcome)] = _await_submissions(hub_dir, lambda rows: bool(rows) and rows[0][3] is not None)
-        assert (closed, outcome) == (chunk_id, "superseded")
+        assert (closed, outcome) == (chunk_id, "landed")
+        with _store(hub_dir) as conn:
+            assert conn.execute("SELECT count(*) FROM hub_turns WHERE ended_at IS NULL").fetchone() == (0,)
         _assert_flow_record_holds(hub_dir)
 
 
