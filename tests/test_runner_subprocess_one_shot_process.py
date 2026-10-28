@@ -108,18 +108,16 @@ def test_settle_seconds_delays_closing_stdin_past_the_write() -> None:
     """A child that keeps running until it reads EOF, and only then replies, gets that
     reply back — closing stdin waits ``settle_seconds`` past the write rather than
     happening immediately, so a reply still being produced is never cut off."""
-    script = (
-        "import sys, time\n"
-        "start = time.monotonic()\n"
-        "sys.stdin.read()\n"
-        "sys.stdout.write(str(time.monotonic() - start))\n"
-    )
+    script = "import sys; sys.stdin.read(); sys.stdout.write('done')"
+    start = time.monotonic()
     result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", script], stdin="", timeout=5.0, env=_INHERITED_ENV, settle_seconds=0.3
     )
+    elapsed = time.monotonic() - start
 
     assert result.exit_code == 0
-    assert float(result.stdout) >= 0.25  # a monotonic clock read after process start, not before
+    assert result.stdout == "done"
+    assert elapsed >= 0.3
 
 
 def test_settle_seconds_zero_closes_immediately() -> None:
