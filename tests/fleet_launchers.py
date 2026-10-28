@@ -87,6 +87,17 @@ def git_bare(bare: Path, *args: str) -> str:
     return subprocess.run(["git", "--git-dir", str(bare), *args], check=True, capture_output=True, text=True).stdout
 
 
+def mock_daemon_client(port: int) -> httpx2.Client:
+    """A client for a ``blizzard-mock`` uvicorn daemon that pools no idle connection.
+
+    uvicorn closes an idle connection once its keep-alive timeout lapses, and a pooled
+    reuse racing that close fails with ``RemoteProtocolError``, so none is held idle.
+    """
+    return httpx2.Client(
+        base_url=f"http://127.0.0.1:{port}", timeout=15.0, limits=httpx2.Limits(max_keepalive_connections=0)
+    )
+
+
 def await_http(
     proc: subprocess.Popen[str], client: httpx2.Client, path: str, *, log: Path | None = None, timeout: float = 40.0
 ) -> None:
@@ -115,7 +126,7 @@ def run_forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx2.Client
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = mock_daemon_client(port)
     try:
         await_http(proc, client, "/healthz", log=log)
         yield client

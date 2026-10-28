@@ -29,7 +29,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.config_inputs import load_hub_config
-from tests.fleet_launchers import REPO, await_http, mock_bin_dir, run_forge, run_hub, terminate
+from tests.fleet_launchers import REPO, await_http, mock_bin_dir, mock_daemon_client, run_forge, run_hub, terminate
 from tests.fleet_world import REPO_NAME, mint_world, scripted_build_prompt
 from tests.runner_join import add_runner, runner_spawn_env
 from tests.support import daemon_log_sink, free_port, shared_daemon_log_dir
@@ -134,7 +134,7 @@ def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = mock_daemon_client(port)
     try:
         await_http(proc, client, "/healthz", log=log)
         yield client
@@ -343,7 +343,7 @@ def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterat
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = mock_daemon_client(port)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
@@ -387,7 +387,7 @@ def mock_runner(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    client = httpx2.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    client = mock_daemon_client(port)
     try:
         await_http(proc, client, "/api/health", log=log)
         yield client
