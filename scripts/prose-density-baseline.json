@@ -11442,12 +11442,6 @@
    "over_cap": 0,
    "total": 85
   },
-  "service/test_runner_service.py": {
-   "comments": 80,
-   "docstrings": 63,
-   "over_cap": 4,
-   "total": 1204
-  },
   "service/test_spend_figure_service.py": {
    "comments": 2,
    "docstrings": 11,

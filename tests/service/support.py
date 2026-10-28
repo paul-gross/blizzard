@@ -9,11 +9,9 @@ import contextlib
 import dataclasses
 import json
 import os
-import queue
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -26,7 +24,6 @@ import yaml
 
 from blizzard.hub.config import AuthConfig, OAuthProviderConfig
 from blizzard.hub.graphs import PACKAGED
-from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from tests.config_inputs import load_hub_config
 from tests.fleet_launchers import REPO, await_http, mock_bin_dir, mock_daemon_client, run_forge, run_hub, terminate
@@ -309,30 +306,6 @@ def mock_hub_opencode_chunk_spec(work_ref: str) -> dict:
     }
 
 
-def mock_hub_escalating_chunk_spec(work_ref: str) -> dict:
-    """A crashing, no-retry judgement — the runner escalates on the first attempt."""
-    spec = mock_hub_chunk_spec(work_ref)
-    spec["nodes"]["build"]["judgement_prompt"] = "crash()\n"
-    spec["nodes"]["build"]["retries_max"] = 0
-    return spec
-
-
-#: The entry generation calls ``usage_limited()`` immediately and never reaches its own
-#: judgement — the classifier in ``Advance._advance_exited_worker`` intercepts the exit
-#: before any judge is launched, the same shape as the crash tier's own
-#: ``usage_limited_graph_yaml``. No ``produces:`` is declared: this scenario proves the
-#: pause, not delivery, so nothing needs the runner's own local API up.
-USAGE_LIMITED_BUILD_SCRIPT = "usage_limited()\n"
-
-
-def mock_hub_usage_limited_chunk_spec(work_ref: str) -> dict:
-    """A single-node chunk whose entry generation exits usage-limited: the
-    usage limit is marked on the subscription and the lease parks in place, consuming no retry."""
-    spec = mock_hub_chunk_spec(work_ref)
-    spec["nodes"]["build"]["prompt"] = USAGE_LIMITED_BUILD_SCRIPT
-    return spec
-
-
 @contextlib.contextmanager
 def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx2.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
@@ -396,16 +369,6 @@ def mock_runner(
         terminate(proc)
 
 
-def runner_fleet_view(hub: httpx2.Client, config: RunnerConfig) -> dict[str, Any]:
-    """The hub's fleet view of the runner ``config`` names, read as that runner — under its own token,
-    at the id the hub resolves it to — since the fleet answers a runner only about itself."""
-    who = hub.get("/api/fleet/identity", headers=config.auth_headers())
-    assert who.status_code == 200, who.text
-    view = hub.get(f"/api/fleet/runners/{who.json()['runner_id']}", headers=config.auth_headers())
-    assert view.status_code == 200, view.text
-    return view.json()
-
-
 @contextlib.contextmanager
 def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-parity") -> Iterator[HttpHubClient]:
     """A real :class:`HttpHubClient` pointed at a hub subprocess on ``port``, driven
@@ -422,83 +385,6 @@ def http_hub_client(port: int, *, token: str | None = None, name: str = "runner-
         yield HttpHubClient(client)
     finally:
         client.close()
-
-
-class SseTap:
-    """A background ``text/event-stream`` reader. Prefer the :func:`sse_tap` context manager.
-    ``last_event_id`` presents a resume cursor as the real ``Last-Event-ID`` header, the way a
-    reconnecting browser does."""
-
-    def __init__(self, base_url: str, *, last_event_id: int | None = None) -> None:
-        self.base_url = base_url
-        self.events: queue.Queue[str] = queue.Queue()
-        self._headers = {} if last_event_id is None else {"Last-Event-ID": str(last_event_id)}
-        self._ready = threading.Event()
-        self._stop = threading.Event()
-        self._response: httpx2.Response | None = None
-        self._thread = threading.Thread(target=self._run, daemon=True)
-
-    def start(self) -> None:
-        self._thread.start()
-        assert self._ready.wait(20), "the daemon's SSE stream never delivered its first line"
-
-    def _run(self) -> None:
-        with (
-            httpx2.Client(base_url=self.base_url, timeout=None) as client,
-            client.stream("GET", "/api/events/stream", headers=self._headers) as resp,
-        ):
-            self._response = resp
-            event_type: str | None = None
-            for raw in resp.iter_lines():
-                if not self._ready.is_set():
-                    # The first line on the wire, not headers alone, proves
-                    # broker.subscribe() has actually run inside the body generator.
-                    self._ready.set()
-                if self._stop.is_set():
-                    return
-                line = raw.strip()
-                if line.startswith("event:"):
-                    event_type = line.split(":", 1)[1].strip()
-                elif line.startswith("data:") and event_type:
-                    self.events.put(event_type)
-                    event_type = None
-
-    def drain(self, *, settle: float = 1.5) -> list[str]:
-        """Consume and return everything already queued — the broker's replay tail."""
-        return self.collect(window=settle)
-
-    def collect(self, *, window: float = 6.0) -> list[str]:
-        """Every event type arriving within ``window`` seconds."""
-        seen: list[str] = []
-        deadline = time.monotonic() + window
-        while time.monotonic() < deadline:
-            with contextlib.suppress(queue.Empty):
-                seen.append(self.events.get(timeout=0.25))
-        return seen
-
-    def stop(self) -> None:
-        # A flag alone leaves the reader thread parked in iter_lines() until the next
-        # keepalive; closing the response aborts the read so stop() actually returns promptly.
-        self._stop.set()
-        if self._response is not None:
-            with contextlib.suppress(Exception):
-                self._response.close()
-
-
-@contextlib.contextmanager
-def sse_tap(port: int, *, settle: float = 2.0, last_event_id: int | None = None) -> Iterator[SseTap]:
-    """A **live** SSE subscriber on the daemon under test's ``/api/events/stream``,
-    connected before the act, proving an event was actually **delivered** rather than
-    merely recorded. Drains and discards the broker's connect-time replay, so
-    :meth:`SseTap.collect` reports only live fan-out. ``last_event_id`` resumes from a
-    cursor (:class:`SseTap`)."""
-    tap = SseTap(f"http://127.0.0.1:{port}", last_event_id=last_event_id)
-    tap.start()
-    try:
-        tap.drain(settle=settle)
-        yield tap
-    finally:
-        tap.stop()
 
 
 def poll_until(predicate, *, timeout: float = 20.0, interval: float = 0.2) -> bool:
