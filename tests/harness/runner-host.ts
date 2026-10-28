@@ -12,6 +12,7 @@ import { startRunnerHost } from './daemons/runner-host';
 import { binDir, daemonEnv, mockBinDir, readContract, requireBinary } from './env';
 import { scanLog } from './logs';
 import { checkOwnedKeys, checkProfile, expandProfile, mergeHostProfile, parseProfile, type TomlTable } from './profiles';
+import { type OtlpSink, startOtlpSink } from './otlp-sink';
 import type { VendorUsage } from './vendor-usage';
 
 /** The Linux `sockaddr_un` bound the host's `host.sock` must fit, terminator excluded. */
@@ -34,6 +35,11 @@ export interface RunnerHostOptions {
   runnerStarted: boolean;
   /** Points the `anthropic` subscription at a minted credential and the counterpart, sampling on every host pass. */
   runnerSampling: boolean;
+  /**
+   * Starts a sink the host exports its traces to: the host's `OTEL_EXPORTER_OTLP_ENDPOINT` names it, and it is the
+   * handle's `otlp`. Whether the host traces at all stays a `runner.toml` or `runnerConfig` setting.
+   */
+  runnerOtlp: boolean;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -42,6 +48,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerLoop: 'stepped',
   runnerStarted: true,
   runnerSampling: false,
+  runnerOtlp: false,
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -59,7 +66,16 @@ export interface RunnerHost {
   /** The pid of the host process now running, or last run; `undefined` before a first boot. */
   readonly pid: number | undefined;
   readonly logPath: string;
+  /** The sink the host exports to, when `runnerOtlp` asked for one; it is closed when the host is disposed. */
+  readonly otlp: OtlpSink | undefined;
   logTail(): string;
+  /**
+   * Runs the real `blizzard-runner` on this host's directory, under the host's isolated environment. A non-zero exit is
+   * the result, not an error.
+   */
+  cli(args: string[]): Promise<CliResult>;
+  /** The commit a branch of the minted world's bare origin `repo` points at, or `undefined` when the branch is not there. */
+  originHead(repo: string, branch: string): Promise<string | undefined>;
   /** One pass of a runner, answered once it has completed; with no name, the sole runner's. */
   step(runner?: string): Promise<TickPass>;
   /** One pass of the host's own sweeps. */
@@ -165,11 +181,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     const timings: Timings = { mintMs: 0, initMs: 0, addMs: 0, bootMs: 0 };
     let daemon: LiveDaemon | undefined;
     let disposed = false;
+    let otlp: OtlpSink | undefined;
 
     const dispose = async (failed: boolean): Promise<string[]> => {
       if (disposed) return [];
       disposed = true;
       if (daemon !== undefined) await stopDaemon(daemon);
+      await otlp?.close();
       const refusals = scanLog(logPath).map((line) => line.raw);
       if (failed && fs.existsSync(logPath)) await testInfo.attach(`runner host ${index} log`, { body: logTail(logPath), contentType: 'text/plain' });
       await testInfo.attach(`runner host ${index} timings`, { body: JSON.stringify(timings), contentType: 'application/json' });
@@ -180,7 +198,10 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
     try {
       fs.mkdirSync(home, { recursive: true });
+      if (options.runnerOtlp) otlp = await startOtlpSink();
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
+      // The host and the CLI that reaches it export to the sink; the commands that build the host do not.
+      const hostEnv: NodeJS.ProcessEnv = otlp === undefined ? env : { ...env, OTEL_EXPORTER_OTLP_ENDPOINT: otlp.endpoint };
       const cliEnv = (configHome: string): NodeJS.ProcessEnv => ({ ...env, XDG_CONFIG_HOME: configHome });
       const run = async (command: string, args: string[], cliHome: string): Promise<CliResult> => {
         const result = await runCommand(command, args, { env: cliEnv(cliHome), cwd: root });
@@ -275,7 +296,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
       const boot = async (): Promise<void> => {
         const begun = Date.now();
-        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env });
+        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: hostEnv });
         timings.bootMs = Date.now() - begun;
       };
       if (options.runnerStarted) {
@@ -310,7 +331,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           return daemon?.pid;
         },
         logPath,
+        otlp,
         logTail: () => logTail(logPath),
+        cli: (args) => runCommand(runner, args, { env: { ...hostEnv, BZ_RUNNER_DIR: dir }, cwd: root }),
+        async originHead(repo, branch) {
+          const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
+          return result.code === 0 ? result.stdout.trim() : undefined;
+        },
         step(name) {
           const names = Object.keys(runners);
           const target = name ?? (names.length === 1 ? names[0] : undefined);

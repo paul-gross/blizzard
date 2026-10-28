@@ -115,6 +115,7 @@ export default tseslint.config(
       'harness/daemons/mock-hub.ts',
       'harness/daemons/runner-host.ts',
       'harness/runner-host.ts',
+      'harness/runner-world.ts',
       'harness/vendor-usage.ts',
       'harness/client/engine.ts',
       'harness/client/mock-hub.ts',
