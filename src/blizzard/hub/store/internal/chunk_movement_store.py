@@ -37,6 +37,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_epoch_owner,
 )
+from blizzard.hub.store.internal.flow_rows import withdraw_waiting
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
@@ -376,7 +377,8 @@ class ChunkMovementStore:
         note: str | None = None,
     ) -> int:
         """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
-        the restart's own write, on ``handle``'s already-locked connection."""
+        the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
+        each of the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end."""
         return self._record_restart_conn(
             conn_of(handle),
             chunk_id,
@@ -406,6 +408,7 @@ class ChunkMovementStore:
         to_graph_id: str | None,
         note: str | None,
     ) -> int:
+        withdraw_waiting(conn, chunk_id, outcome="restarted", at=at)
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
             already = conn.execute(

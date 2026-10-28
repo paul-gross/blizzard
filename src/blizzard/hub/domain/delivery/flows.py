@@ -26,6 +26,8 @@ type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
 type FlowFactKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
+#: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
+TURN_CUT_OFF = "cut-off"
 
 # Pending-poll cadence defaults, overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
@@ -117,6 +119,56 @@ class TurnEvent:
     node_name: str | None
     message: str
     detail: Mapping[str, object]
+
+
+@domain_model
+@dataclass(frozen=True)
+class FlowLanding:
+    """A merge a turn recorded, as its flow's record says it: the ``landed`` fact on ``flow`` for ``submission_id``
+    and ``chunk_id``, and ``event``, the ``flow-landed`` row written beside it."""
+
+    flow: Flow
+    submission_id: str
+    chunk_id: str
+    event: TurnEvent
+
+    @classmethod
+    def of(cls, flow: Flow, submission: Submission, *, project_id: str, node_name: str, revision: str) -> FlowLanding:
+        """The landing of ``submission``'s chunk on ``flow`` at ``revision``. ``members`` lists every chunk the landing
+        carried — one, until a landing carries several."""
+        chunk_id = submission.chunk_id
+        return cls(
+            flow=flow,
+            submission_id=submission.submission_id,
+            chunk_id=chunk_id,
+            event=TurnEvent(
+                kind="flow-landed",
+                chunk_id=chunk_id,
+                node_name=node_name,
+                message=f"landed on {flow.branch} at {revision}",
+                detail={
+                    "flow_id": flow.flow_id,
+                    "resource": flow.resource,
+                    "repository_id": flow.repository_id,
+                    "branch": flow.branch,
+                    "revision": revision,
+                    "chunk_id": chunk_id,
+                    "project_id": project_id,
+                    "members": [{"chunk_id": chunk_id, "project_id": project_id}],
+                },
+            ),
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class VisitStanding:
+    """Where one visit's newest submission stands: ``turning`` while it has an open turn, and ``ahead`` the number of
+    open submissions that arrived before it on each flow it holds, in ``submission.flows`` order."""
+
+    submission: Submission
+    turning: bool
+    ahead: tuple[int, ...]
 
 
 @domain_model

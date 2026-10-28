@@ -8,7 +8,18 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.delivery.flows import FlowFact, FlowResource, Submission, Turn, TurnEvent, Withdrawal
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.delivery.flows import (
+    FlowFact,
+    FlowLanding,
+    FlowResource,
+    Submission,
+    Turn,
+    TurnEvent,
+    VisitStanding,
+    Withdrawal,
+)
 from blizzard.hub.tenancy import TenantId
 
 
@@ -30,6 +41,16 @@ class IReadFlows(Protocol):
 
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         """Every fact the submission wrote, on every flow it holds, in write order."""
+        ...
+
+    def turn_outcomes(self, chunk_id: str, *, node_id: str, epoch: int) -> list[str]:
+        """The outcome of every ended turn the visit took, across its submissions, newest first — what the stuck
+        rule counts."""
+        ...
+
+    def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
+        """Where the visit's newest submission stands in the flows it holds, or ``None`` when it has no open
+        submission."""
         ...
 
 
@@ -54,6 +75,47 @@ class IWriteFlows(IReadFlows, Protocol):
     def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> bool:
         """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds. Returns False, writing
         nothing, when a closure already exists or the submission has an open turn, whose end writes the closure."""
+        ...
+
+    def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
+        """Start a turn of the submission with a ``turn-started`` fact per flow it holds, in one transaction under the
+        tenant row lock and each held resource's lock. Returns ``None``, writing nothing, unless the submission is open
+        with no open turn, no flow it holds has an open turn, and every open submission ahead of it on those flows is
+        in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at all."""
+        ...
+
+    def end_turn_locked(
+        self,
+        handle: ILockedChunkRead,
+        turn_id: str,
+        *,
+        outcome: str,
+        closure: str | None,
+        event: TurnEvent | None,
+        at: datetime,
+    ) -> bool:
+        """End the open turn ``outcome`` on ``handle``'s locked connection (``bzh:store-exclusive-write``), with a
+        ``turn-ended`` fact per held flow, ``event`` in the event log, and the submission closed ``closure`` — a
+        verdict, or what ``withdrawal_for`` answers under the same lock — unless already closed. The writes routing
+        the answer take this handle, so all commit together or not at all. False, writing nothing, if it has ended."""
+        ...
+
+    def record_landing(
+        self,
+        landing: FlowLanding,
+        *,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        repo: str,
+        revision: str,
+        at: datetime,
+    ) -> bool:
+        """A turn's merge in one transaction admitted past the fence: the ``merged/<repo>`` marker, its
+        ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the landing's flow and its
+        ``flow-landed`` event row. A replay that finds the marker writes nothing. Returns whether the fence would have
+        refused — the chunk's ``record_landing``, widened by the flow's record."""
         ...
 
     def end_turn_interrupted(

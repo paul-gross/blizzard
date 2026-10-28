@@ -22,6 +22,7 @@ from typing import Any, Protocol, cast
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.chunk.model import (
@@ -664,3 +665,59 @@ def chunk_row(conn: Connection, row: Row[Any]) -> Chunk:
         intended_migration=INTENDED_MIGRATION.decode(row.intended_migration),
         project_id=row.project_id,
     )
+
+
+def write_landing_rows(
+    conn: Connection,
+    chunk_id: str,
+    *,
+    node_id: str,
+    node_name: str,
+    epoch: int,
+    admission: EpochAdmission,
+    repo: str,
+    revision: str,
+    repository_id: str,
+    artifact_id: str,
+    at: datetime,
+) -> tuple[bool, bool]:
+    """One merge's ``merged/<repo>`` marker, its ``delivery_repo_landed`` row and the chunk's close intents, admitted
+    past the fence. Answers whether the fence would have refused, and whether this wrote — a replay finds the marker
+    and writes nothing."""
+    lock_chunk_row(conn, chunk_id)
+    stmts = statements_of(conn)
+    name = f"{MARKER_PREFIX}{repo}"
+    refused = fence(conn, chunk_id, epoch=epoch, admission=admission) is not None
+    already = conn.execute(
+        stmts.select(s.artifacts, s.artifacts.c.artifact_id).where(
+            (s.artifacts.c.chunk_id == chunk_id)
+            & (s.artifacts.c.node_id == node_id)
+            & (s.artifacts.c.epoch == epoch)
+            & (s.artifacts.c.name == name)
+        )
+    ).first()
+    if already is not None:
+        return refused, False
+    conn.execute(
+        stmts.insert(s.artifacts).values(
+            artifact_id=artifact_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            name=name,
+            kind=ArtifactKind.ASSET.value,
+            data=revision,
+            repo=None,
+            forge=None,
+            produced_at=at,
+            seq=next_artifact_seq(conn, chunk_id),
+        )
+    )
+    conn.execute(
+        stmts.insert(s.delivery_repo_landed).values(
+            chunk_id=chunk_id, repo=repo, commit_hash=revision, repository_id=repository_id, landed_at=at
+        )
+    )
+    enqueue_close_intents(conn, chunk_id, at=at)
+    return refused, True

@@ -148,7 +148,9 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         already-locked connection (``bzh:store-exclusive-write``). One write with the
         answers it writes, the ``decision_id`` it names and — when ``to_graph_id`` is set —
         the migration fact re-pinning the chunk there and the standing intent that clears
-        with it, so no crash leaves the move half-applied. Returns the ``chunk_restarts.id``."""
+        with it, so no crash leaves the move half-applied. Every flow submission of the chunk
+        waiting its turn closes ``restarted`` in the same write; one mid-turn is left to the
+        turn's end. Returns the ``chunk_restarts.id``."""
         ...
 
     def record_requeue_locked(

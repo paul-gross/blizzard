@@ -5029,6 +5029,7 @@
           "bounce-cap",
           "migration-target-unresolvable",
           "hub-action-missing",
+          "hub-action-stuck",
           "unroutable-outcome",
           "forge-auth",
           "forge-config",

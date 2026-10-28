@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import EscalationOpen
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 
@@ -82,4 +83,38 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         by the escalation's existence at this epoch. No transition is recorded: the chunk's
         held route and stuck node are untouched. Behind the write fence (``bzh:epoch-fencing``):
         a terminal chunk or a stale ``epoch`` writes nothing and is ``REFUSED``."""
+        ...
+
+    def record_bounce_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        cause: str,
+        envelope: str,
+        at: datetime,
+    ) -> bool:
+        """:meth:`record_bounce` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``), and behind
+        the write fence (``bzh:epoch-fencing``): a terminal chunk or a stale ``epoch`` writes nothing. Returns True iff
+        it wrote."""
+        ...
+
+    def record_bounce_escalation_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
+    ) -> BounceEscalationOutcome:
+        """:meth:`record_bounce_escalation` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — a hub-node escalation, committed with the turn's end. Handed the visit's epoch
+        plus one with :attr:`EpochAdmission.ABOVE`, so the escalation opens the next visit."""
         ...

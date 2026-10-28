@@ -40,8 +40,9 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
     def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment —
         and, atomically on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), release any live route and any held fleet-wide
-        hub-exec slot. ``at`` is passed in, stamped by the caller after the row lock, so a
+        (``bzh:store-exclusive-write``), release any live route and close ``stopped`` each of
+        the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end.
+        ``at`` is passed in, stamped by the caller after the row lock, so a
         claim that wins the row lock first can never mint a route sorting newer than this
         release. Returns the freshly-written
         ``chunk_stopped.id``, not the ``route_released.id`` this same transaction may also
@@ -51,9 +52,9 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
     def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), release any live route and any held fleet-wide
-        hub-exec slot, mirroring :meth:`record_stop_locked`, and enqueue the chunk's close
-        intents. The caller has already
+        (``bzh:store-exclusive-write``), release any live route and close ``completed`` each of
+        the chunk's flow submissions waiting its turn, mirroring :meth:`record_stop_locked`, and enqueue
+        the chunk's close intents. The caller has already
         checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
         caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
         ``chunk_completed.id``."""

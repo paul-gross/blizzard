@@ -18,6 +18,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     route_of_conn,
 )
+from blizzard.hub.store.internal.flow_rows import withdraw_waiting
 from blizzard.hub.store.scoped import ScopedConnections
 
 
@@ -53,7 +54,7 @@ class ChunkLifecycleStore:
         """`src/blizzard/hub/domain/chunk/ports/lifecycle.py`'s `IWriteChunkLifecycleRepository.record_stop_locked`.
 
         The route check runs on the same connection (:func:`route_of_conn`), so there is no
-        read-then-write race; the slot release is unconditional."""
+        read-then-write race; a submission mid-turn is left to the turn's end."""
         conn = conn_of(handle)
         result = conn.execute(
             self._store.insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by)
@@ -64,11 +65,7 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        conn.execute(
-            self._store.update(s.hub_exec_slot)
-            .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
-            .values(released_at=at)
-        )
+        withdraw_waiting(conn, chunk_id, outcome="stopped", at=at)
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
@@ -76,8 +73,7 @@ class ChunkLifecycleStore:
         """See ``src/blizzard/hub/domain/chunk/ports/lifecycle.py``'s
         ``IWriteChunkLifecycleRepository.record_completion_locked``.
 
-        The route check runs on the same connection (:func:`route_of_conn`); the slot release is
-        unconditional."""
+        The route check runs on the same connection (:func:`route_of_conn`)."""
         conn = conn_of(handle)
         result = conn.execute(
             self._store.insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by)
@@ -88,11 +84,7 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        conn.execute(
-            self._store.update(s.hub_exec_slot)
-            .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
-            .values(released_at=at)
-        )
+        withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
         enqueue_close_intents(conn, chunk_id, at=at)
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0

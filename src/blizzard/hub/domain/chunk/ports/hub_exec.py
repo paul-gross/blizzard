@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
 
@@ -60,6 +61,26 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         from_node_id, epoch)`` — or when the write fence refuses (``bzh:epoch-fencing``)."""
         ...
 
+    def record_hub_step_transition_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        admission: EpochAdmission,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+        artifacts: list[StoredArtifact],
+        release_route: bool,
+    ) -> bool:
+        """:meth:`record_hub_step_transition` on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — a turn's verdict, committed with the turn's end."""
+        ...
+
     def record_hub_node_poll(
         self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
     ) -> None:
@@ -68,4 +89,18 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
 
         Append-only: an at-least-once poll attempt is harmless to record twice — it only
         widens the interval/timeout gating's read — so this carries no idempotency guard."""
+        ...
+
+    def record_hub_node_poll_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        at: datetime,
+        next_poll_at: datetime | None = None,
+    ) -> None:
+        """:meth:`record_hub_node_poll` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``) — a
+        turn's wait, committed with the turn's end."""
         ...

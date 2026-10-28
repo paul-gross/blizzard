@@ -54,6 +54,7 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
     "hub-action-overran": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_overrun", "warning"),
     "turn-interrupted": Recorded("hub/domain/delivery/reconcile.py:FlowLineReconciler.recover_turns", "warning"),
+    "flow-landed": Recorded("hub/store/internal/flow_rows.py:write_landing", "info"),
     "hub-action-missing": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_action_missing", "critical"),
     "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
     "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),

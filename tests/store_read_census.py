@@ -2418,6 +2418,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
+    (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlows, "visit_standing"): lambda w: w.hub.services.flows.visit_standing(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2
