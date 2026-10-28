@@ -54,16 +54,25 @@ interface ContractKey {
   replaced_by: string | null;
 }
 
-let contractKeys: Map<string, ContractKey> | undefined;
+/** The config contract a profile is checked against: `hub.json` for a hub's, `host.json` for a runner host's. */
+export type Contract = 'hub' | 'host';
+
+const contractKeys = new Map<Contract, Map<string, ContractKey>>();
+
+function keysOf(contract: Contract): Map<string, ContractKey> {
+  let keys = contractKeys.get(contract);
+  if (keys === undefined) {
+    const document = JSON.parse(
+      fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts', 'config', `${contract}.json`), 'utf8'),
+    ) as { keys: ContractKey[] };
+    keys = new Map(document.keys.map((key) => [key.path, key]));
+    contractKeys.set(contract, keys);
+  }
+  return keys;
+}
 
 function hubKeys(): Map<string, ContractKey> {
-  if (contractKeys === undefined) {
-    const document = JSON.parse(
-      fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts', 'config', 'hub.json'), 'utf8'),
-    ) as { keys: ContractKey[] };
-    contractKeys = new Map(document.keys.map((key) => [key.path, key]));
-  }
-  return contractKeys;
+  return keysOf('hub');
 }
 
 function isTable(value: unknown): value is TomlTable {
@@ -91,6 +100,8 @@ function matches(type: string, value: unknown): boolean {
       return typeof value === 'boolean';
     case 'list of strings':
       return Array.isArray(value) && value.every((item) => typeof item === 'string');
+    case 'string or list of strings':
+      return typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
     case 'table':
     case 'open table':
       return isTable(value);
@@ -101,8 +112,11 @@ function matches(type: string, value: unknown): boolean {
   }
 }
 
-/** The stack addresses a profile's strings may name, `${idp}` and `${forge}`, and the base URL each expands to. */
-export interface StackUrls {
+/** What a profile's strings may name as `${name}`, and the text each expands to. */
+export type Placeholders = Record<string, string>;
+
+/** The stack addresses a hub profile's strings may name, `${idp}` and `${forge}`, and the base URL each expands to. */
+export interface StackUrls extends Placeholders {
   idp: string;
   forge: string;
 }
@@ -110,21 +124,22 @@ export interface StackUrls {
 const PLACEHOLDER = /\$\{([^}]*)\}/g;
 
 /** Every `${…}` in a string value anywhere in the table, whatever the key's type: tables, arrays, and open tables alike. */
-function placeholderProblems(value: unknown, keyPath: string): string[] {
+function placeholderProblems(value: unknown, keyPath: string, allowed: string[]): string[] {
   if (typeof value === 'string') {
+    const named = allowed.map((name) => `\${${name}}`).join(' and ');
     return [...value.matchAll(PLACEHOLDER)].flatMap((match) =>
-      match[1] === 'idp' || match[1] === 'forge' ? [] : [`${keyPath}: \${${match[1]}} is not a placeholder; the profile may name \${idp} and \${forge}`],
+      allowed.includes(match[1] as string) ? [] : [`${keyPath}: \${${match[1]}} is not a placeholder; the profile may name ${named}`],
     );
   }
-  if (Array.isArray(value)) return value.flatMap((item, index) => placeholderProblems(item, `${keyPath}[${index}]`));
-  if (isTable(value)) return Object.entries(value).flatMap(([name, item]) => placeholderProblems(item, keyPath === '' ? name : `${keyPath}.${name}`));
+  if (Array.isArray(value)) return value.flatMap((item, index) => placeholderProblems(item, `${keyPath}[${index}]`, allowed));
+  if (isTable(value)) return Object.entries(value).flatMap(([name, item]) => placeholderProblems(item, keyPath === '' ? name : `${keyPath}.${name}`, allowed));
   return [];
 }
 
-/** The profile with `${idp}` and `${forge}` replaced in every string value; it holds no other placeholder once `checkProfile` passed. */
-export function expandProfile(profile: TomlTable, urls: StackUrls): TomlTable {
+/** The profile with each named placeholder replaced in every string value; it holds no other once `checkProfile` passed. */
+export function expandProfile(profile: TomlTable, urls: Placeholders): TomlTable {
   const expand = (value: unknown): unknown => {
-    if (typeof value === 'string') return value.replaceAll('${idp}', urls.idp).replaceAll('${forge}', urls.forge);
+    if (typeof value === 'string') return Object.entries(urls).reduce((text, [name, replacement]) => text.replaceAll(`\${${name}}`, replacement), value);
     if (Array.isArray(value)) return value.map(expand);
     if (isTable(value)) return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, expand(item)]));
     return value;
@@ -137,18 +152,20 @@ export function expandProfile(profile: TomlTable, urls: StackUrls): TomlTable {
  * setting would leave every test believing in a configuration the hub never ran; this check asks nothing of the hub.
  *
  * A profile flattens into the contract's own notation: tables join with `.`, and an array of tables flattens as
- * `name[].key`. A key typed `open table` admits any path beneath it. A string value may name `${idp}` and `${forge}`
- * and no other `${…}`, wherever it sits.
+ * `name[].key`. A key typed `open table` admits any path beneath it. A string value may name the contract's
+ * placeholders, `${idp}` and `${forge}` for a hub and the `placeholders` a host profile is given, and no other `${…}`,
+ * wherever it sits.
  */
-export function checkProfile(profile: TomlTable): string[] {
-  const keys = hubKeys();
-  const problems: string[] = placeholderProblems(profile, '');
+export function checkProfile(profile: TomlTable, options: { contract?: Contract; placeholders?: string[] } = {}): string[] {
+  const contract = options.contract ?? 'hub';
+  const keys = keysOf(contract);
+  const problems: string[] = placeholderProblems(profile, '', options.placeholders ?? ['idp', 'forge']);
   const visit = (table: TomlTable, prefix: string): void => {
     for (const [name, value] of Object.entries(table)) {
       const keyPath = `${prefix}${name}`;
       const key = keys.get(keyPath);
       if (key === undefined) {
-        problems.push(`${keyPath}: not a key the hub declares (contracts/config/hub.json)`);
+        problems.push(`${keyPath}: not a key the ${contract} declares (contracts/config/${contract}.json)`);
         continue;
       }
       if (key.deprecated) {
@@ -210,4 +227,64 @@ export function mergeProfile(base: TomlTable, profile: TomlTable): TomlTable {
     merged[name] = isTable(existing) && isTable(value) ? mergeProfile(existing, value) : value;
   }
   return merged;
+}
+
+/** The identity key an array of tables' entries are matched by when a host profile merges over what the CLI wrote. */
+const HOST_IDENTITY: Record<string, string> = { runner: 'name', subscription: 'slug', workspace: 'id' };
+
+function mergeHostAt(base: TomlTable, profile: TomlTable, keyPath: string): TomlTable {
+  const merged: TomlTable = { ...base };
+  for (const [name, value] of Object.entries(profile)) {
+    const here = keyPath === '' ? name : `${keyPath}.${name}`;
+    const existing = merged[name];
+    const identity = HOST_IDENTITY[here];
+    if (identity !== undefined && Array.isArray(existing) && Array.isArray(value)) {
+      const entries = [...(existing as TomlTable[])];
+      for (const entry of value as TomlTable[]) {
+        const at = entries.findIndex((candidate) => candidate[identity] === entry[identity]);
+        if (at < 0) entries.push(entry);
+        else entries[at] = mergeHostAt(entries[at] as TomlTable, entry, `${here}[]`);
+      }
+      merged[name] = entries;
+    } else {
+      merged[name] = isTable(existing) && isTable(value) ? mergeHostAt(existing, value, here) : value;
+    }
+  }
+  return merged;
+}
+
+/**
+ * Merges a host profile over the file the CLI wrote: tables merge key by key, `runner[]` entries match by `name`,
+ * `subscription[]` by `slug` and `workspace[]` by `id`, and any other value replaces the old one.
+ */
+export function mergeHostProfile(base: TomlTable, profile: TomlTable): TomlTable {
+  return mergeHostAt(base, profile, '');
+}
+
+/** Keys the CLI or the fixture owns on a host, which a profile may not set; `[]` stands for an array-of-tables entry. */
+export const HOST_OWNED_KEYS = [
+  'hub_url',
+  'host_token',
+  'hub_tokens',
+  'host',
+  'port',
+  'db_url',
+  'runner[].id',
+  'runner[].runner_id',
+  'runner[].token_env',
+];
+
+/** The owned keys a host profile sets, each named; the CLI and the fixture write them, so a profile cannot. */
+export function checkOwnedKeys(profile: TomlTable): string[] {
+  const problems: string[] = [];
+  const visit = (table: TomlTable, prefix: string): void => {
+    for (const [name, value] of Object.entries(table)) {
+      const keyPath = `${prefix}${name}`;
+      if (HOST_OWNED_KEYS.includes(keyPath)) problems.push(`${keyPath}: the CLI or the fixture owns it, so a profile cannot set it`);
+      if (Array.isArray(value) && value.every(isTable)) for (const item of value as TomlTable[]) visit(item, `${keyPath}[].`);
+      else if (isTable(value)) visit(value, `${keyPath}.`);
+    }
+  };
+  visit(profile, '');
+  return problems;
 }

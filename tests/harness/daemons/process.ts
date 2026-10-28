@@ -23,6 +23,8 @@ export interface DaemonSpec {
   /** The route answering `200` once the daemon is ready. */
   healthPath: string;
   launch: (port: number) => Launch;
+  /** Signal the daemon's whole process group, so whatever it spawned dies with it. */
+  group?: boolean;
 }
 
 /** A started daemon: what a test reaches it by, and what a later process needs to stop it. */
@@ -35,6 +37,8 @@ export interface DaemonRecord {
 
 /** A daemon this process started: its record, and how it ended. `exited` never reaches a serialized record. */
 export interface LiveDaemon extends DaemonRecord {
+  /** Whether stopping it signals its process group. */
+  group?: boolean;
   /** Resolves with the exit code, or the signal that ended it, once the process is gone. */
   exited: Promise<number | string>;
 }
@@ -66,6 +70,11 @@ export function logTail(logPath: string, lines = 40): string {
   } catch {
     return '(no log)';
   }
+}
+
+/** Sends `signal` to the daemon, or to its whole process group when it was started with `group`. */
+function signalDaemon(daemon: { pid: number; group?: boolean }, signal: NodeJS.Signals): void {
+  process.kill(daemon.group === true ? -daemon.pid : daemon.pid, signal);
 }
 
 export function isAlive(pid: number): boolean {
@@ -124,11 +133,11 @@ async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaem
       throw /address already in use|Errno 98/i.test(tail) ? new AddressInUse(message) : new Error(message);
     }
     if (await answers(`${url}${spec.healthPath}`)) {
-      return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended };
+      return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended, group: spec.group };
     }
     await sleep(POLL_MS);
   }
-  await stopDaemon({ pid: child.pid as number });
+  await stopDaemon({ pid: child.pid as number, group: spec.group });
   throw new Error(`${spec.name} did not answer ${spec.healthPath} within ${START_TIMEOUT_MS / 1000}s:\n${logTail(spec.logPath)}`);
 }
 
@@ -156,7 +165,7 @@ export async function startDaemon(spec: DaemonSpec, port?: number): Promise<Live
 /** `SIGTERM`, then `SIGKILL` after the grace; resolves with how the daemon exited. */
 export async function stopLive(daemon: LiveDaemon): Promise<number | string> {
   if (!isAlive(daemon.pid)) return daemon.exited;
-  process.kill(daemon.pid, 'SIGTERM');
+  signalDaemon(daemon, 'SIGTERM');
   const grace = sleep(STOP_GRACE_MS).then(() => undefined);
   if ((await Promise.race([daemon.exited, grace])) === undefined) await killLive(daemon);
   return daemon.exited;
@@ -165,7 +174,7 @@ export async function stopLive(daemon: LiveDaemon): Promise<number | string> {
 /** `SIGKILL`; resolves with how the daemon exited. */
 export async function killLive(daemon: LiveDaemon): Promise<number | string> {
   try {
-    process.kill(daemon.pid, 'SIGKILL');
+    signalDaemon(daemon, 'SIGKILL');
   } catch {
     // It exited before the signal.
   }
@@ -173,16 +182,26 @@ export async function killLive(daemon: LiveDaemon): Promise<number | string> {
 }
 
 /** `SIGTERM`, then `SIGKILL` if the daemon has not exited ten seconds later. */
-export async function stopDaemon(daemon: { pid: number }): Promise<void> {
-  if (!isAlive(daemon.pid)) return;
-  process.kill(daemon.pid, 'SIGTERM');
+export async function stopDaemon(daemon: { pid: number; group?: boolean }): Promise<void> {
+  if (!isAlive(daemon.pid)) {
+    // A dead leader can leave workers in its group; reap them.
+    if (daemon.group === true) {
+      try {
+        signalDaemon(daemon, 'SIGKILL');
+      } catch {
+        // The group is empty.
+      }
+    }
+    return;
+  }
+  signalDaemon(daemon, 'SIGTERM');
   const deadline = Date.now() + STOP_GRACE_MS;
   while (Date.now() < deadline) {
     if (!isAlive(daemon.pid)) return;
     await sleep(POLL_MS);
   }
   try {
-    process.kill(daemon.pid, 'SIGKILL');
+    signalDaemon(daemon, 'SIGKILL');
   } catch {
     // It exited between the last check and the kill.
   }

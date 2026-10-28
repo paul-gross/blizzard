@@ -1,0 +1,8 @@
+# The host profile this folder's checks read: prompts naming paths of the minted world.
+[[workspace]]
+id = "workspace-local"
+prompt = "work in ${workspace}"
+
+[[runner]]
+name = "runner-local"
+runner_prompt = "origins are at ${origins}"
