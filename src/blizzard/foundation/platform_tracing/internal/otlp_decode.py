@@ -263,7 +263,7 @@ def _points(metric: Metric, scope_name: str, scope_version: str) -> list[Receive
         elif kind == "histogram":
             points.append(
                 ReceivedDataPoint(
-                    **shared,  # pyright: ignore[reportArgumentType]
+                    **shared,  # pyright: ignore[reportArgumentType]  # one dict feeds several constructors; the splat types every field as the value union
                     count=int(point.count),
                     total=float(point.sum) if point.HasField("sum") else 0.0,
                     bucket_counts=tuple(point.bucket_counts),
@@ -273,7 +273,7 @@ def _points(metric: Metric, scope_name: str, scope_version: str) -> list[Receive
                 )
             )
         else:
-            points.append(ReceivedDataPoint(**shared, value=_number(point)))  # pyright: ignore[reportArgumentType]
+            points.append(ReceivedDataPoint(**shared, value=_number(point)))  # pyright: ignore[reportArgumentType]  # one dict feeds several constructors; the splat types every field as the value union
     return points
 
 
