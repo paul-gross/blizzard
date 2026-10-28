@@ -23,7 +23,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
 
 #: Sole-declared default bound on :meth:`PendingWorkerHandle.await_identity`; spawn and selftest both import it.
-DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 10.0
+DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS = 60.0
 
 
 class HarnessSpawnError(RuntimeError):
