@@ -6,6 +6,7 @@ Builds the store-backed ``host`` composition with the work-item read seam replac
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import functools
 import hashlib
@@ -52,6 +53,7 @@ from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.api.auth_session import TENANT_HEADER
+from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.models import User
@@ -63,6 +65,7 @@ from blizzard.hub.composition import (
     LiveConfig,
     TenantServices,
     TenantStores,
+    build_flow_driver,
     build_hub_core,
     build_services,
     default_forge_registry,
@@ -71,6 +74,7 @@ from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, AuthConfig, Hub
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE
 from blizzard.hub.delivery.action_registry import SHIPPED_ACTIONS, TEST_ACTIONS, HubActions
+from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -1082,6 +1086,56 @@ class HubHarness:
     #: The wired app, so a test can build a second ``TestClient`` with a different peer
     #: address — the forwarded-header trust tests need a concrete IP peer.
     app: FastAPI | None = None
+    _driver: FlowDriver | None = field(default=None, repr=False)
+
+    @property
+    def flow_driver(self) -> FlowDriver:
+        """The hub's flow driver, built on first use as the hosted hub builds it — an in-process hub runs none."""
+        if self._driver is None:
+            self._driver = build_flow_driver(self.hub_services, AnnouncedTurns)
+        return self._driver
+
+    def take_turns(self, *, ticks: int = 1) -> list[TickResult]:
+        """Step the flow driver ``ticks`` times, each tick's turns run to their end before the next — the one way an
+        in-process test takes hub steps."""
+        return [asyncio.run(self.flow_driver.step()) for _ in range(ticks)]
+
+    def stand_at(self, chunk_id: str, node: str) -> None:
+        """Promote a resting chunk and restart it onto ``node``, so it stands there ``delivering`` — how a test puts
+        a seeded chunk in line for a hub node's turn."""
+        self.promote(chunk_id)
+        restarted = self.client.post(f"/api/chunks/{chunk_id}/restart", json={"node": node})
+        assert restarted.status_code == 202, restarted.text
+
+    def turn_outcome(self, chunk_id: str) -> str | None:
+        """What one driver tick did with ``chunk_id``: its turn's outcome, the choice the tick routed it by when it
+        refused the visit at submit, or ``None`` when it did neither."""
+        before = self._hub_transitions(chunk_id)
+        (result,) = self.take_turns()
+        turns = [t.turn.turn_id for t in result.started if t.submission.chunk_id == chunk_id]
+        if not turns:
+            refused = self._hub_transitions(chunk_id)[len(before) :]
+            return refused[0] if refused else None
+        (turn_id,) = turns
+        with self.engine.connect() as conn:
+            return conn.execute(
+                hub_scoped(sa.select(schema.hub_turns.c.outcome).where(schema.hub_turns.c.turn_id == turn_id))
+            ).scalar_one()
+
+    def _hub_transitions(self, chunk_id: str) -> list[str | None]:
+        facts = self.services.chunks.facts.load_facts(chunk_id)
+        return [t.choice_name for t in facts.transitions] if facts is not None else []
+
+    def settle_turns(self, *, limit: int = 20) -> list[TickResult]:
+        """Step the flow driver until a tick submits nothing and starts no turn, at most ``limit`` times — every hub
+        step a chunk reaches without waiting on a clock taken."""
+        results: list[TickResult] = []
+        for _ in range(limit):
+            result = asyncio.run(self.flow_driver.step())
+            results.append(result)
+            if not result.started and not result.submitted:
+                return results
+        raise AssertionError(f"the flow driver did not settle within {limit} ticks")
 
     @property
     def wired_app(self) -> FastAPI:

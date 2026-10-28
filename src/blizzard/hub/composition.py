@@ -68,8 +68,9 @@ from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
-from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
-from blizzard.hub.delivery.hub_node import HubNodeExecutor
+from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
+from blizzard.hub.delivery.flow_turn import TurnRunner
+from blizzard.hub.delivery.hub_node import HubMarkerWriter, HubNodeRouter
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
@@ -304,7 +305,10 @@ class TenantServices:
     host_enrollment: HostEnrollmentService
     host_report: HostReportService
     host_retirement: HostRetirementService
-    hub_node: HubNodeExecutor
+    #: The deprecated marker route's writer — a marker written outside any turn.
+    hub_markers: HubMarkerWriter
+    #: Wakes the hosted hub's flow driver; nothing elsewhere.
+    hub_step_wake: StepWake
     events: EventBroker
     #: The one event-log recorder every hub-side authoring site shares.
     event_log: EventLogService
@@ -355,6 +359,8 @@ class TenantServices:
     flows: IReadFlows
     #: Converges the tenant's flow lines on where its chunks stand — driven by the hosted hub's flow driver alone.
     flow_lines: FlowLineReconciler
+    #: Answers for each turn the flow driver starts in this tenant.
+    turns: TurnRunner
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: Stored projects (the read half).
@@ -438,6 +444,8 @@ class HubServices:
     tenant_hosts: Callable[[TenantId], IReadHostRegistry]
     #: The one thread every tenant's hub action passes run on.
     action_loop: ActionLoop
+    #: What every tenant's services wake the flow driver through, once ``build_flow_driver`` binds it.
+    step_wake: StepWake
     #: Closes every served tenant's configured objects at shutdown, while the action loop still runs.
     close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
@@ -933,6 +941,7 @@ class TenantServiceParts:
     versions: IVersionWindow
     actions: HubActions
     action_passes: ActionPassDriver
+    step_wake: StepWake
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -1037,15 +1046,28 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         materialize=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
         formats=garden_formats,
     )
-    hub_node = HubNodeExecutor(
-        facts=chunk_facts,
+    hub_router = HubNodeRouter(
         artifacts=chunk_artifacts,
-        delivery=chunk_delivery,
         hub_exec=chunk_hub_exec,
         escalations=chunk_escalations,
+        exclusive=chunk_exclusive,
         events=event_log,
+        clock=clock,
+        repositories=stores.repository_records,
+        forge_records=stores.forge_records,
+        links=stores.project_links,
+        projects=stores.projects,
+    )
+    turns = TurnRunner(
+        flows=stores.flows,
+        facts=chunk_facts,
         record=chunk_record,
         graphs=graph_store,
+        artifacts=chunk_artifacts,
+        exclusive=chunk_exclusive,
+        router=hub_router,
+        events=event_log,
+        publisher=events,
         clock=clock,
         repositories=stores.repository_records,
         forge_records=stores.forge_records,
@@ -1118,7 +1140,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             artifacts=chunk_artifacts,
             retired=retired,
             clock=clock,
-            hub_node_executor=hub_node,
+            hub_step_wake=parts.step_wake,
             label=work_ref_label,
         ),
         decisions=DecisionService(
@@ -1185,7 +1207,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         host_enrollment=host_enrollment,
         host_report=host_report,
         host_retirement=host_retirement,
-        hub_node=hub_node,
+        hub_markers=HubMarkerWriter(artifacts=chunk_artifacts, delivery=chunk_delivery, clock=clock),
+        hub_step_wake=parts.step_wake,
         events=events,
         event_log=event_log,
         clock=clock,
@@ -1234,8 +1257,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             projects=stores.projects,
             links=stores.project_links,
             catalogue=parts.actions.catalogue,
+            refusals=hub_router,
             clock=clock,
         ),
+        turns=turns,
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
@@ -1364,8 +1389,10 @@ def build_services(
     may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
     later."""
     clock = core.clock
-    # One per hub process, shared by every tenant's executor.
+    # One per hub process, shared by every tenant's turns.
     action_loop = ActionLoop()
+    # Bound to the flow driver by `build_flow_driver`; a build with no driver wakes nothing.
+    step_wake = StepWake()
     store_connections = core.store_connections
     brokers = brokers or TenantBrokers()
     system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
@@ -1388,6 +1415,7 @@ def build_services(
         versions=HubVersionWindow(hub_version, version_window),
         actions=actions,
         action_passes=ActionPassDriver(action_loop, PassBound(action_pass_seconds, action_pass_grace)),
+        step_wake=step_wake,
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)
@@ -1585,6 +1613,7 @@ def build_services(
         full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
     )
     return HubServices(
+        step_wake=step_wake,
         tenants=TenantServicesOpener(
             open_services=core.open_services,
             open_tenants=open_tenants,
@@ -1646,14 +1675,25 @@ def build_services(
     )
 
 
-def build_flow_driver(services: HubServices) -> FlowDriver:
-    """The hosted hub's flow driver, over every open tenant's lines — built by ``build_hosted_app`` alone, never by
-    :func:`build_services`, so no CLI or test build over a live hub's store reconciles that hub's lines."""
-    return FlowDriver(
+def build_flow_driver(
+    services: HubServices,
+    announce: Callable[[TenantServices, ITurnRunner], ITurnRunner] = lambda _services, turns: turns,
+) -> FlowDriver:
+    """The hosted hub's flow driver, over every open tenant's lines and turns — each tenant's turns wrapped by
+    ``announce`` — bound to ``services``' step wake. Built by ``build_hosted_app`` alone, never by
+    :func:`build_services`, so no CLI or test build over a live hub's store takes that hub's turns."""
+    driver = FlowDriver(
         FlowLineStores(
             corpus=services.hub_scoped_reads.corpus,
             tenants=lambda: services.tenants.open_tenants.every().keys(),
             lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
+            turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
         ),
         services.clock,
     )
+    services.step_wake.bind(driver)
+    return driver
+
+
+def _announced(tenant: TenantServices, announce: Callable[[TenantServices, ITurnRunner], ITurnRunner]) -> ITurnRunner:
+    return announce(tenant, tenant.turns)

@@ -341,9 +341,10 @@ def test_hub_executed_landing_retains_the_route_and_derives_delivering(tmp_path:
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "hub_node_taken"  # not "migrated" — the runner keeps holding
+    hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == hub_target_id
-    assert detail["status"] == "running"  # retained route, landed hub node ran onward to `review`
+    assert detail["status"] == "running"  # retained route, the landed hub node's turn ran onward to `review`
     assert detail["current_node_name"] == "review"
     assert detail["intended_migration"] is None
 

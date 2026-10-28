@@ -323,6 +323,7 @@ def test_a_hub_executed_steps_own_exit_transition_carries_no_duration(tmp_path: 
     )
     assert complete.status_code == 200, complete.text
     assert complete.json()["outcome"] == "hub_node_taken", complete.text
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}", headers=_cookie(token)).json()["status"] == "done"
 
     resp = hub.client.get("/api/analytics/durations/nodes", headers=_cookie(token))

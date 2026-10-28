@@ -23,6 +23,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowFact,
     FlowLanding,
     FlowResource,
+    LandingWrite,
     Submission,
     Turn,
     TurnEvent,
@@ -275,7 +276,7 @@ class FlowStore:
         repo: str,
         revision: str,
         at: datetime,
-    ) -> bool:
+    ) -> LandingWrite:
         with self._store.write("record_flow_landing") as conn:
             refused, wrote = write_landing_rows(
                 conn,
@@ -290,9 +291,8 @@ class FlowStore:
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )
-            if wrote:
-                write_landing(conn, landing, revision=revision, at=at)
-            return refused
+            event_id = write_landing(conn, landing, revision=revision, at=at) if wrote else None
+            return LandingWrite(refused=refused, event_id=event_id)
 
     def end_turn_interrupted(
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime

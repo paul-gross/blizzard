@@ -81,9 +81,9 @@ def write_facts(
         )
 
 
-def write_event(conn: Connection, event: TurnEvent, *, at: datetime) -> None:
-    """``event`` as one row of the tenant's event log, in the writer's transaction."""
-    conn.execute(
+def write_event(conn: Connection, event: TurnEvent, *, at: datetime) -> int:
+    """``event`` as one row of the tenant's event log, in the writer's transaction; answers the row's id."""
+    result = conn.execute(
         statements_of(conn)
         .insert(s.event_log)
         .values(
@@ -98,6 +98,9 @@ def write_event(conn: Connection, event: TurnEvent, *, at: datetime) -> None:
             recorded_at=at,
         )
     )
+    key = result.inserted_primary_key
+    assert key is not None
+    return int(key[0])
 
 
 def close_submission(conn: Connection, submission_id: str, *, outcome: str, at: datetime) -> bool:
@@ -159,8 +162,9 @@ def withdraw_waiting(conn: Connection, chunk_id: str, *, outcome: Withdrawal, at
     return sum(close_submission(conn, submission_id, outcome=outcome, at=at) for submission_id in list(open_ids))
 
 
-def write_landing(conn: Connection, landing: FlowLanding, *, revision: str, at: datetime) -> None:
-    """The ``landed`` fact on the landing's flow at ``revision``, and its ``flow-landed`` event row."""
+def write_landing(conn: Connection, landing: FlowLanding, *, revision: str, at: datetime) -> int:
+    """The ``landed`` fact on the landing's flow at ``revision``, and its ``flow-landed`` event row, whose id it
+    answers."""
     write_facts(
         conn,
         [landing.flow],
@@ -171,4 +175,4 @@ def write_landing(conn: Connection, landing: FlowLanding, *, revision: str, at: 
         revision=revision,
         at=at,
     )
-    write_event(conn, landing.event, at=at)
+    return write_event(conn, landing.event, at=at)

@@ -1,6 +1,6 @@
-"""A hub node naming an action takes one pass in place of its ``run:`` steps: the delivering actions record
-through the hub's recorders, the pass is bounded, an escalation routes nothing, and ``hub-advance``
-re-drives a node an action left waiting (component tier)."""
+"""A hub node naming an action takes one pass per turn in place of its ``run:`` steps: the delivering actions record
+through the hub's recorders, the pass is bounded, an escalation routes nothing, and a node an action left waiting
+takes its next turn once its poll is due (component tier)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
 
 import pytest
 from sqlalchemy import insert, select
@@ -18,12 +17,9 @@ from sqlalchemy import insert, select
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
-from blizzard.hub.delivery.hub_node import HubRunResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.model import HubNodePollFact, WorkItemAuthor
-from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.actions import ActionSpec
@@ -40,8 +36,6 @@ from tests.support import (
     fixture_repository,
     hub_scoped,
     hub_store_connections,
-    pointer_token,
-    report_lease,
     seed_work_item,
     stamp,
 )
@@ -146,17 +140,25 @@ def _at_deliver(hub: HubHarness, yaml: str, *, run_context: bool = False) -> str
                 project_id=default_project(hub.engine), routine_name="nightly", scope_slug=_SCOPE, mode="dry_run"
             ),
         )
-    return f"ch_{item.ref}"
+    chunk_id = f"ch_{item.ref}"
+    hub.promote(chunk_id)
+    # A restart onto the hub node stands the chunk there, delivering, at the hub-owned epoch _EPOCH.
+    restarted = hub.client.post(f"/api/chunks/{chunk_id}/restart", json={"node": "deliver"})
+    assert restarted.status_code == 202, restarted.text
+    return chunk_id
 
 
-def _visit(hub: HubHarness, chunk_id: str) -> HubRunResult | None:
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    node = graph.node_by_name("deliver")
-    assert node is not None
-    return hub.services.hub_node.run(chunk, graph, node, epoch=_EPOCH)
+def _visit(hub: HubHarness, chunk_id: str) -> str | None:
+    """The outcome of the turn one tick takes for the chunk, or ``None`` when it takes none."""
+    (result,) = hub.take_turns()
+    started = [t for t in result.started if t.submission.chunk_id == chunk_id]
+    if not started:
+        return None
+    (turn,) = started
+    with hub.engine.connect() as conn:
+        return conn.execute(
+            hub_scoped(select(s.hub_turns.c.outcome).where(s.hub_turns.c.turn_id == turn.turn.turn_id))
+        ).scalar_one()
 
 
 def _artifact(hub: HubHarness, chunk_id: str, name: str) -> str | None:
@@ -170,7 +172,7 @@ def _record_asset(hub: HubHarness, chunk_id: str, name: str, content: str) -> No
     assert graph is not None
     node = graph.node_by_name("deliver")
     assert node is not None
-    assert hub.services.hub_node.record_marker(
+    assert hub.services.hub_markers.record_marker(
         chunk_id, node_id=node.node_id, node_name="deliver", epoch=_EPOCH, name=name, content=content
     )
 
@@ -209,10 +211,7 @@ def test_record_findings_records_the_chunks_review_delta(tmp_path: Path) -> None
     chunk_id = _at_deliver(hub, _graph("record-findings", ("recorded", "invalid", "failure")))
     _record_asset(hub, chunk_id, "review-finding-delta", json.dumps({"entries": [_DEFERRED]}))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert (result.outcome_choice, result.wrote_transition) == ("recorded", True)
+    assert _visit(hub, chunk_id) == "recorded"
     assert _findings(hub) == 1
     assert _artifact(hub, chunk_id, "review-findings-failure") is None
 
@@ -224,10 +223,7 @@ def test_record_findings_without_a_delta_answers_invalid_with_the_recorders_expl
         f"/api/chunks/{chunk_id}/review-findings-delivery?node_id={_node_id(hub, chunk_id)}&epoch={_EPOCH}"
     ).json()
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "invalid"
+    assert _visit(hub, chunk_id) == "invalid"
     assert route["outcome"] == "invalid"
     assert _artifact(hub, chunk_id, "review-findings-failure") == route["detail"]
     assert _findings(hub) == 0
@@ -269,10 +265,7 @@ def test_garden_deliver_records_its_named_delta(tmp_path: Path) -> None:
         hub, chunk_id, "delta", _garden_delta([{"op": "add", "class": "c", "locus": "a.py:1", "summary": "s"}])
     )
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "recorded"
+    assert _visit(hub, chunk_id) == "recorded"
     assert _findings(hub) == 1
 
 
@@ -282,10 +275,7 @@ def test_garden_deliver_with_a_malformed_delta_answers_invalid_naming_it(tmp_pat
     chunk_id = _at_deliver(hub, _garden_graph(), run_context=True)
     _record_asset(hub, chunk_id, "delta", "not valid json")
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "invalid"
+    assert _visit(hub, chunk_id) == "invalid"
     failure = _artifact(hub, chunk_id, "garden-delivery-failure")
     assert failure is not None
     assert "delta" in failure
@@ -296,10 +286,7 @@ def test_garden_deliver_with_no_run_context_answers_invalid(tmp_path: Path) -> N
     hub = _hub(tmp_path)
     chunk_id = _at_deliver(hub, _garden_graph())
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "invalid"
+    assert _visit(hub, chunk_id) == "invalid"
     assert _artifact(hub, chunk_id, "garden-delivery-failure") == f"no run context for chunk {chunk_id}"
 
 
@@ -310,10 +297,7 @@ def test_an_overrunning_pass_answers_pending_and_records_the_overrun(tmp_path: P
     hub = _hub(tmp_path, _Sleeps(_spec("test.slow", "done", "pending")), action_pass_seconds=0.2)
     chunk_id = _at_deliver(hub, _graph("test.slow", ("done",)))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert (result.outcome_choice, result.wrote_transition) == ("pending", False)
+    assert _visit(hub, chunk_id) == "pending"
     assert len(_polls(hub, chunk_id)) == 1
     assert len(_events(hub, chunk_id, "hub-action-overran")) == 1
 
@@ -322,14 +306,11 @@ def test_an_overrunning_pass_of_an_action_that_cannot_wait_answers_failure(tmp_p
     hub = _hub(tmp_path, _Sleeps(_spec("test.slow", "done", "failure")), action_pass_seconds=0.2)
     chunk_id = _at_deliver(hub, _graph("test.slow", ("done", "failure")))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "failure"
+    assert _visit(hub, chunk_id) == "failure"
     assert len(_events(hub, chunk_id, "hub-action-overran")) == 1
 
 
-def test_a_pass_stuck_in_synchronous_work_is_let_go_at_the_callers_deadline(tmp_path: Path) -> None:
+def test_a_pass_stuck_in_synchronous_work_is_cut_off_at_the_callers_deadline_routing_nothing(tmp_path: Path) -> None:
     release = threading.Event()
     hub = _hub(
         tmp_path,
@@ -345,25 +326,18 @@ def test_a_pass_stuck_in_synchronous_work_is_let_go_at_the_callers_deadline(tmp_
     finally:
         release.set()
 
-    assert result is not None
-    assert result.outcome_choice == "pending"
+    assert result == "cut-off"
     assert waited < 5
+    assert _polls(hub, chunk_id) == []
     assert len(_events(hub, chunk_id, "hub-action-overran")) == 1
-    # The slot is released: the tenant's next acquire takes it.
-    slot = hub.services.chunks.hub_exec.acquire_hub_exec_slot(  # type: ignore[attr-defined]
-        "ch_other", node_id="nd_other", at=hub.clock.now(), stale_after=timedelta(minutes=30)
-    )
-    assert slot is not None
+    assert hub.services.flows.open_turns() == []
 
 
 def test_an_exception_escaping_a_pass_answers_failure_with_its_traceback(tmp_path: Path) -> None:
     hub = _hub(tmp_path, _Raises(_spec("test.raises", "done", "failure")))
     chunk_id = _at_deliver(hub, _graph("test.raises", ("done", "failure")))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "failure"
+    assert _visit(hub, chunk_id) == "failure"
     log = _artifact(hub, chunk_id, "hub-log.test.raises")
     assert log is not None
     assert "RuntimeError: the pass broke" in log
@@ -378,10 +352,7 @@ def test_an_escalation_escalates_once_at_the_next_epoch_and_routes_nothing(tmp_p
     hub = _hub(tmp_path, _Answers(_spec("test.escalates", "done"), Pass(choice=None, escalation=escalation)))
     chunk_id = _at_deliver(hub, _graph("test.escalates", ("done",)))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert (result.outcome_choice, result.wrote_transition) == ("spend-cap", False)
+    assert _visit(hub, chunk_id) == "escalated"
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert facts.transitions == []
@@ -401,10 +372,7 @@ def test_a_reserved_wait_writes_the_actions_next_poll_at(tmp_path: Path) -> None
     )
     chunk_id = _at_deliver(hub, _graph("test.hints", ("done",)))
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == "pending"
+    assert _visit(hub, chunk_id) == "pending"
     assert [poll.next_poll_at for poll in _polls(hub, chunk_id)] == [later]
 
 
@@ -431,42 +399,19 @@ nodes:
 """
 
 
-def test_hub_advance_re_drives_a_node_waiting_on_an_action(tmp_path: Path) -> None:
+def test_a_node_waiting_on_an_action_takes_its_next_turn_once_its_poll_is_due(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
-    minted = hub.client.post("/api/graphs", json={"definition_yaml": _SEQUENCE_GRAPH})
-    assert minted.status_code == 201, minted.text
-    chunk_id = hub.client.post(
-        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "7"})]}
-    ).json()["chunk_id"]
-    repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": minted.json()["graph_id"]})
-    assert repin.status_code == 202, repin.text
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-    )
-    build_node_id = claim.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id="tr_test_deliver",
-        chunk_id=chunk_id,
-        from_node_id=build_node_id,
-        to_node_id=_node_id(hub, chunk_id),
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    chunk_id = _at_deliver(hub, _SEQUENCE_GRAPH)
 
-    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
-    assert (first["ran"], first["outcome_choice"]) == (True, "pending")
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is False
+    assert _visit(hub, chunk_id) == "pending"
+    assert _visit(hub, chunk_id) is None
+    advanced = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
+    assert (advanced["ran"], advanced["outcome_choice"]) == (False, None)
+    assert advanced["detail"].startswith("pending — next poll at ")
 
     hub.clock.advance(timedelta(seconds=31))
-    second = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
-    assert (second["ran"], second["outcome_choice"], second["to_node_name"]) == (True, "done", "done")
+    assert _visit(hub, chunk_id) == "done"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
 # --- secrets -----------------------------------------------------------------
@@ -485,14 +430,11 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
         revealed.append(name.value)
         raise SecretRetired(name.value)
 
-    monkeypatch.setattr(hub.services.hub_node._forges._secrets, "reveal", retired)
+    monkeypatch.setattr(hub.services.forges._secrets, "reveal", retired)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
 
-    result = _visit(hub, chunk_id)
-
-    assert result is not None
-    assert result.outcome_choice == choice
+    assert _visit(hub, chunk_id) == choice
     assert bool(revealed) is lands
     assert (_artifact(hub, chunk_id, "hub-log.repository-secret-unavailable") is not None) is lands
 

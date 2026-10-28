@@ -43,6 +43,7 @@ def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
     ).json()["chunk_id"]
     repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": graph_id})
     assert repin.status_code == 202, repin.text
+    hub.promote(chunk_id)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
@@ -93,21 +94,14 @@ def test_an_unconverged_delivery_routes_the_failure_edge_instead_of_escaping_the
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_two_branches_for_one_repo(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    node = graph.node_by_id(nodes["deliver"])
-    assert node is not None
 
     try:
-        result = hub.services.hub_node.run(chunk, graph, node, epoch=1)
+        outcome = hub.turn_outcome(chunk_id)
     except UnconvergedDeliveryError as exc:
         pytest.fail(f"an unconverged set must route `failure`, not escape the tick: {exc}")
 
-    assert result is not None
-    assert result.outcome_choice == "failure"
-    assert result.to_node_name == "resolve"
+    assert outcome == "failure"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "resolve"
     assert double.calls == [], "land must never reach the forge for an unconverged set"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert any("unconverged-delivery" in a["name"] for a in detail["artifacts"]), detail["artifacts"]

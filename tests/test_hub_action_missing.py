@@ -159,25 +159,26 @@ def test_a_chunk_reaching_a_node_with_no_action_escalates_once_naming_its_stored
     _strip_action(hub, graph_id, _LEGACY_RUN)
 
     assert _pass_build(hub, chunk_id, build_node_id) == "hub_node_taken"
+    hub.settle_turns()
 
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
     # Driven again, nothing new is written.
     assert _advance(hub, chunk_id)["ran"] is False
+    hub.settle_turns()
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
 
 
-def test_hub_advance_escalates_a_parked_node_with_no_action_once(tmp_path: Path) -> None:
+def test_the_reconcile_escalates_a_parked_node_with_no_action_once(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, build_node_id, graph_id = _claimed(hub)
     _strip_action(hub, graph_id, None)
     _park_at_merge(hub, chunk_id, build_node_id, graph_id)
 
-    first = _advance(hub, chunk_id)
-    second = _advance(hub, chunk_id)
+    hub.settle_turns()
+    hub.flow_driver.wake()
+    hub.settle_turns()
 
-    assert (first["ran"], first["outcome_choice"]) == (True, "hub-action-missing")
-    assert (second["ran"], second["detail"]) == (False, "escalated — awaiting a person")
+    assert _advance(hub, chunk_id)["detail"] == "escalated — awaiting a person"
     _assert_escalated_once(hub, chunk_id, naming="no `run:`")
 
 
@@ -187,12 +188,12 @@ def test_the_boot_pass_escalates_a_chunk_standing_at_a_node_with_no_action(tmp_p
     _strip_action(hub, graph_id, _LEGACY_RUN)
     _park_at_merge(hub, chunk_id, build_node_id, graph_id)
 
-    assert hub.services.hub_node.escalate_actionless() == 1
+    assert hub.services.flow_lines.escalate_actionless() == 1
 
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
-    # A second boot, and a drive after it, write nothing.
-    assert hub.services.hub_node.escalate_actionless() == 0
-    assert _advance(hub, chunk_id)["ran"] is False
+    # A second boot, and a tick after it, write nothing.
+    assert hub.services.flow_lines.escalate_actionless() == 0
+    hub.settle_turns()
     _assert_escalated_once(hub, chunk_id, naming="./ship.sh --now")
 
 
@@ -201,7 +202,7 @@ def test_the_boot_pass_leaves_a_chunk_pinned_to_the_graph_but_standing_elsewhere
     chunk_id, _build_node_id, graph_id = _claimed(hub)
     _strip_action(hub, graph_id, _LEGACY_RUN)
 
-    assert hub.services.hub_node.escalate_actionless() == 0
+    assert hub.services.flow_lines.escalate_actionless() == 0
 
     assert _escalations(hub, chunk_id) == []
 
@@ -253,6 +254,7 @@ def test_an_unrouted_answer_escalates_at_once_naming_the_choice_and_takes_no_sec
     chunk_id, build_node_id, _graph_id = _claimed(hub, _UNROUTED_YAML)
 
     assert _pass_build(hub, chunk_id, build_node_id) == "hub_node_taken"
+    hub.settle_turns()
 
     ((epoch, cause, detail),) = _escalations(hub, chunk_id)
     assert (epoch, cause) == (2, "unroutable-outcome")
@@ -261,9 +263,10 @@ def test_an_unrouted_answer_escalates_at_once_naming_the_choice_and_takes_no_sec
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     assert _advance(hub, chunk_id)["ran"] is False
+    hub.settle_turns()
 
     names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
     assert sorted(n for n in names if n.startswith("test-sequence/")) == ["test-sequence/0"]
     assert len(_escalations(hub, chunk_id)) == 1
     assert len(_events(hub, chunk_id, "hub-node-unroutable-outcome")) == 1
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
+    assert hub.services.flows.open_turns() == []

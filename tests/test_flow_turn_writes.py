@@ -17,7 +17,14 @@ from sqlalchemy import Table, func, select
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from blizzard.hub.domain.delivery.flows import FlowLanding, FlowResource, Submission, TurnEvent, withdrawal_for
+from blizzard.hub.domain.delivery.flows import (
+    FlowLanding,
+    FlowResource,
+    LandingWrite,
+    Submission,
+    TurnEvent,
+    withdrawal_for,
+)
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import HubHarness, build_hub, chunk_stores, hub_scoped, hub_store_connections, ingest
@@ -374,7 +381,7 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
         submission.flows[0], submission, project_id="prj_default", node_name="deliver", revision="m1"
     )
 
-    def record() -> bool:
+    def record() -> LandingWrite:
         return world.flows.record_landing(
             landing,
             node_id=_NODE,

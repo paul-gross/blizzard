@@ -212,13 +212,16 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     assert mid["status"] == "running"
     assert mid["decision"]["resolved_choice"] == "approve" and mid["decision"]["transitioned"] is False
 
-    # The holding runner records the resolving transition referencing the decision.
+    # The holding runner records the resolving transition referencing the decision — a
+    # moment after the gate's own arrival, so the two same-epoch transitions order by time.
+    hub.clock.advance(timedelta(seconds=1))
     resolving = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["approve-gate"], choice="approve", decision_id=decision_id),
     )
-    # approve -> deliver (a hub node): its `pass` action answers.
+    # approve -> deliver (a hub node): its turn's `pass` action answers.
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
+    hub.settle_turns()
     done_resp = hub.client.get(f"/api/chunks/{chunk_id}")
     done = done_resp.json()
     assert done["status"] == "done"
@@ -301,6 +304,7 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
         json=_completion(nodes["build"], choice="pass", decision_id=decision["decision_id"]),
     )
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 

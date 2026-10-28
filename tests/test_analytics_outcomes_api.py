@@ -224,10 +224,7 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
-    advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    body = advance.json()
-    assert body["ran"] is True
-    assert body["outcome_choice"] == "conflict"
+    assert hub.turn_outcome(chunk_id) == "conflict"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert len(detail["bounces"]) == 1  # the kick-back landed
     assert detail["current_node_id"] == nodes["resolve"]  # ...and so did its own transition
@@ -241,13 +238,13 @@ def test_a_bounced_transitions_own_routing_edge_counts_as_neither(tmp_path: Path
 
 def test_the_bounce_exclusion_reaches_the_kick_backs_own_epoch_and_no_further(tmp_path: Path) -> None:
     """The exclusion's grain is ``(chunk_id, epoch)``, and the next node-step's own
-    judged choice on the SAME chunk still counts — the hub step claims a synthetic lease
+    judged choice on the SAME chunk still counts — the hub's turn claims a synthetic lease
     at its epoch, so the runner's next lease mints strictly above it and never collides."""
     hub = build_hub(tmp_path, forges=_forge(mergeability=Mergeability.CONFLICTING).forges)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["outcome_choice"] == "conflict"
+    assert hub.turn_outcome(chunk_id) == "conflict"
 
     envelope = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()
     assert envelope["node"]["node_name"] == "resolve"

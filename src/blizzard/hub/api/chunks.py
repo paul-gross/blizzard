@@ -465,7 +465,7 @@ def record_hub_marker(
     node = graph.node_by_id(node_id) if graph is not None else None
     node_name = node.name if node is not None else node_id
     try:
-        recorded = services.hub_node.record_marker(
+        recorded = services.hub_markers.record_marker(
             chunk_id,
             node_id=node_id,
             node_name=node_name,

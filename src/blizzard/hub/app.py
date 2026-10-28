@@ -48,6 +48,7 @@ from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
+from blizzard.hub.api.chunk_events import AnnouncedTurns
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.decisions import router as decisions_router
@@ -659,13 +660,11 @@ def build_hosted_app(
         OrphanedProviders.of(config, services).check()
         warn_forge_refusals(engine)
         KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
-        # Before the hub serves, in each open tenant: the slot first, then the actionless escalations, so the
-        # flow driver's boot reconcile finds those chunks escalated and submits none of them.
-        flow_driver = build_flow_driver(services)
+        # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
+        # reconcile finds those chunks escalated and submits none of them, then the turns the last process left open.
+        flow_driver = build_flow_driver(services, AnnouncedTurns)
         for stores in tenants:
-            hub_node = services.tenants.open_services(stores.scope).hub_node
-            hub_node.release_orphaned_slots()
-            hub_node.escalate_actionless()
+            services.tenants.open_services(stores.scope).flow_lines.escalate_actionless()
             try:
                 flow_driver.recover_turns(stores.scope.tenant)
             except Exception:

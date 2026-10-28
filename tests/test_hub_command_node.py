@@ -32,7 +32,6 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, PollPolicy
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
@@ -40,7 +39,6 @@ from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
-from tests.crash_points import discover_crash_points
 from tests.support import (
     TEST_CATALOGUE,
     TEST_HUB_ACTIONS,
@@ -375,12 +373,6 @@ def test_hub_node_pending_is_none_off_a_non_hub_node() -> None:
     assert facts.hub_node_pending() is None
 
 
-def test_hubnode_after_poll_before_slot_release_crash_point_is_registered() -> None:
-    """The #66 between-polls crash point is declared, discoverable by the sweep."""
-    names = {p.name for p in discover_crash_points()}
-    assert "hubnode.after-poll.before-slot-release" in names
-
-
 # Unit — env injection
 
 
@@ -489,6 +481,13 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML,
 
 
 def _submit_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # type: ignore[no-untyped-def]
+    """Complete ``build`` with ``pass``, then take every hub turn it leads to."""
+    resp = _post_build_pass(hub, chunk_id, build_node_id, epoch)
+    hub.settle_turns()
+    return resp
+
+
+def _post_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # type: ignore[no-untyped-def]
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -514,7 +513,7 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
 
-    recorded = hub.services.hub_node.record_marker(
+    recorded = hub.services.hub_markers.record_marker(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -543,7 +542,7 @@ def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path)
     intents_before = intents()
 
     def record(name: str, content: str) -> bool:
-        return hub.services.hub_node.record_marker(
+        return hub.services.hub_markers.record_marker(
             chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name=name, content=content
         )
 
@@ -570,7 +569,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path)
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
-    recorded = hub.services.hub_node.record_marker(
+    recorded = hub.services.hub_markers.record_marker(
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -718,7 +717,7 @@ def test_a_hub_node_landing_done_releases_the_route(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_a_failed_work_item_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
     """A forge read failing while resolving the feature title must never break delivery
-    (:meth:`HubNodeExecutor._resolve_feature_title`): the pass is still taken, its visit naming no title."""
+    : the turn still takes its pass, its visit naming no title."""
     recorded = _Recorded()
     hub = _hub_with(tmp_path, recorded, work_sources={"default": FakeWorkSource(fail_refs={"42"})})
     chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_gated("test.recorded"))
@@ -745,8 +744,8 @@ def test_a_failure_answer_maps_to_the_failure_edge(tmp_path: Path) -> None:
 def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch: int, *, repo: str):  # type: ignore[no-untyped-def]
     """Like :func:`_submit_build_pass`, but carrying one ``git_commit`` artifact for
     ``repo`` — the shape a hub node's kick-back accounting reads to tell a genuine
-    delivery attempt (#64) from a bare hub-command smoke test."""
-    return hub.client.post(
+    delivery attempt from a bare hub-command smoke test."""
+    resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
@@ -765,6 +764,8 @@ def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch
             ],
         },
     )
+    hub.settle_turns()
+    return resp
 
 
 @pytest.mark.component
@@ -955,124 +956,30 @@ def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) 
     assert result.json()["ran"] is False
 
 
-# Component — the serialization barrier (REQUIRED, flagged)
-
-
-def _park_at_merge(hub: HubHarness, pointer_ref: str):  # type: ignore[no-untyped-def]
-    """Ingest, claim, and park one chunk directly at ``merge``, bypassing the executor's own pass on
-    transition — the shape "two held chunks both poll hub-advance" needs."""
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": pointer_ref})]})
-    chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
-    )
-    build_node_id = claim.json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
-        transition_id=f"tr_test_{pointer_ref}",
-        chunk_id=chunk_id,
-        from_node_id=build_node_id,
-        to_node_id=merge_node.node_id,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    return chunk, graph, merge_node
-
-
 @pytest.mark.component
-def test_serialization_barrier_two_chunks_never_take_passes_concurrently(tmp_path: Path) -> None:
-    """Two chunks parked at a hub node both call the executor; the fleet-wide slot (#65) MUST
-    ensure exactly one pass runs at a time — proven with the gate's in-flight count, never above 1."""
+def test_a_chunks_own_live_turn_is_never_reentered_and_a_finished_one_never_replays(tmp_path: Path) -> None:
+    """While a chunk's hub node takes its turn, another tick takes none for that chunk; once the turn ended, a
+    replayed completion and further ticks take none either."""
     gate = _Gate()
     hub = _hub_with(tmp_path, gate)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _gated()}).status_code == 201
-    chunk_a, graph_a, merge_node = _park_at_merge(hub, "100")
-    chunk_b, _graph_b, _ = _park_at_merge(hub, "200")
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_gated())
+    assert _post_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
 
-    result_a: dict = {}
-    thread = threading.Thread(
-        target=lambda: result_a.update(value=hub.services.hub_node.run(chunk_a, graph_a, merge_node, epoch=1))
-    )
-    thread.start()
-    assert gate.entered.wait(timeout=5), "chunk A never entered its pass"
-
-    # Chunk B's concurrent attempt: the slot is live (held by chunk A) — deferred, not run alongside it.
-    assert hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1) is None
-
-    gate.release.set()
-    thread.join(timeout=5)
-
-    assert result_a["value"] is not None
-    assert gate.max_in_flight == 1, "two chunks' passes ran concurrently — serialization slot failed"
-    # Now that A released the slot, B takes its pass on its own call.
-    assert hub.services.hub_node.run(chunk_b, graph_a, merge_node, epoch=1) is not None
-    assert gate.passes == 2
-
-
-@pytest.mark.component
-def test_a_chunks_own_live_pass_is_never_reentered_and_a_finished_one_never_replays(tmp_path: Path) -> None:
-    """The slot is not reentrant: while a chunk's hub node takes its pass, a second ``run`` of that same
-    chunk takes none; once it finished, a replay finds the chunk past the node and takes none."""
-    gate = _Gate()
-    hub = _hub_with(tmp_path, gate)
-    chunk_id, build_node_id, graph = _to_merge_node(hub, graph_yaml=_gated())
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-
-    applied: dict = {}
-    thread = threading.Thread(target=lambda: applied.update(r=_submit_build_pass(hub, chunk_id, build_node_id, 1)))
+    thread = threading.Thread(target=hub.take_turns)
     thread.start()
     assert gate.entered.wait(timeout=5), "the hub node never started"
 
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
+    (during,) = hub.take_turns()
+    assert [t for t in during.started if t.submission.chunk_id == chunk_id] == []
     assert gate.passes == 1
-    # The deferred attempt freed no slot but its own: the first pass's is still live.
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 1
 
     gate.release.set()
     thread.join(timeout=5)
-    assert applied["r"].json()["outcome"] == "hub_node_taken"
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
 
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
     assert _submit_build_pass(hub, chunk_id, build_node_id, 1).json()["outcome"] == "hub_node_taken"
     assert gate.passes == 1
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert len([t for t in detail["history"] if t["from_node_name"] == "merge"]) == 1
-
-
-@pytest.mark.component
-def test_boot_release_frees_a_dead_runs_live_slot_so_the_chunk_resumes(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
-    chunk, graph, merge_node = _park_at_merge(hub, "boot")
-    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
-    # A pass the previous process died in left its slot live.
-    assert hub_exec.acquire_hub_exec_slot(
-        chunk.chunk_id, node_id=merge_node.node_id, at=hub.clock.now(), stale_after=timedelta(hours=1)
-    )
-    assert hub.services.hub_node.run(chunk, graph, merge_node, epoch=1) is None
-
-    assert hub.services.hub_node.release_orphaned_slots() == 1
-
-    assert hub_exec.count_live_hub_exec_slots() == 0
-    result = hub.services.hub_node.run(chunk, graph, merge_node, epoch=1)
-    assert result is not None
-    assert result.outcome_choice == "success"
 
 
 @pytest.mark.component
@@ -1146,9 +1053,9 @@ def _to_poll_merge_node(hub, pointer, graph_yaml: str = _POLL_GRAPH_YAML):  # ty
 
 
 @pytest.mark.component
-def test_pending_records_no_transition_and_releases_the_slot(tmp_path: Path) -> None:
+def test_pending_records_no_transition_and_ends_the_turn(tmp_path: Path) -> None:
     """A ``pending`` answer parks the chunk without a transition, and the fleet-wide
-    slot is free immediately after — the #66 property a pending node must hold."""
+    turn ends with it — the property a pending node must hold."""
     hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-1"})
 
@@ -1162,13 +1069,12 @@ def test_pending_records_no_transition_and_releases_the_slot(tmp_path: Path) -> 
     assert detail["pending"]["node_name"] == "merge"
     # No bounce recorded — pending itself is not contention (#64's kick-back path).
     assert detail["bounces"] == []
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
 
 
 @pytest.mark.component
 def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) -> None:
-    """Re-polling before ``poll_interval`` elapses is a no-op (no pass is taken); once
-    elapsed, the node takes its next pass and a ``success`` routes ``done``."""
+    """Before ``poll_interval`` elapses the driver takes no turn; once elapsed, the node takes its next pass and
+    a ``success`` routes ``done``."""
     hub = build_hub(tmp_path)
     chunk_id, build_node_id, _graph = _to_poll_merge_node(hub, {"source": "default", "ref": "poll-2"})
 
@@ -1176,15 +1082,12 @@ def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) ->
     assert apply.json()["outcome"] == "hub_node_taken"
     assert _passes(hub, chunk_id) == 1
 
-    # Not yet due (poll_interval: 30) — hub-advance no-ops, no pass is taken.
-    too_soon = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert too_soon.json()["ran"] is False
+    # Not yet due (poll_interval: 30) — the driver takes no turn.
+    assert hub.turn_outcome(chunk_id) is None
     assert _passes(hub, chunk_id) == 1
 
     hub.clock.advance(timedelta(seconds=31))
-    due = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert due.json()["ran"] is True
-    assert due.json()["outcome_choice"] == "success"
+    assert hub.turn_outcome(chunk_id) == "success"
     assert _passes(hub, chunk_id) == 2
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -1211,7 +1114,7 @@ def test_a_slug_renamed_between_two_passes_of_one_chunk_reaches_the_second_under
     renamed = hub.client.patch("/api/projects/default", json={"slug": "widgets"})
     assert renamed.status_code == 200, renamed.text
     hub.clock.advance(timedelta(seconds=31))
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+    assert hub.turn_outcome(chunk_id) == "success"
 
     assert [(visit.project.project_id, visit.project.slug) for visit in recorded.visits] == [
         (project_id, "default"),
@@ -1254,16 +1157,14 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert apply.json()["outcome"] == "hub_node_taken"  # poll #1 at t0
 
     hub.clock.advance(timedelta(seconds=31))
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #2 at t0+31
+    assert hub.turn_outcome(chunk_id) == "pending"  # poll #2 at t0+31
     hub.clock.advance(timedelta(seconds=31))
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #3 at t0+62
+    assert hub.turn_outcome(chunk_id) == "pending"  # poll #3 at t0+62
     assert _passes(hub, chunk_id) == 3
 
     # poll_timeout: 90, measured from the FIRST poll (t0) — elapsed is now 62 + 31 = 93 >= 90.
     hub.clock.advance(timedelta(seconds=31))
-    timed_out = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert timed_out.json()["ran"] is True
-    assert timed_out.json()["outcome_choice"] == "failure"
+    assert hub.turn_outcome(chunk_id) == "failure"
     # No 4th pass is taken — the timeout check pre-empts it.
     assert _passes(hub, chunk_id) == 3
 
@@ -1273,7 +1174,6 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert detail["pending"] is None
     assert len(detail["bounces"]) == 1
     assert detail["bounces"][0]["cause"] == "poll-timeout"
-    assert hub.services.chunks.hub_exec.count_live_hub_exec_slots() == 0
     envelope = json.loads(detail["bounces"][0]["envelope"])
     assert "poll_timeout" in envelope["detail"]
     assert envelope["unlanded"] == []
@@ -1292,12 +1192,12 @@ def test_a_poll_timeout_envelope_lists_a_seeded_commit_until_its_repo_lands(tmp_
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     if landed:
-        assert hub.services.hub_node.record_marker(
+        assert hub.services.hub_markers.record_marker(
             chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name="merged/acme/widget", content="sha"
         )
 
     hub.clock.advance(timedelta(seconds=91))
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    assert hub.turn_outcome(chunk_id) == "failure"
 
     (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
     unlanded = [u["repo"] for u in json.loads(bounce["envelope"])["unlanded"]]
@@ -1317,8 +1217,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     # Bounce #1 (poll_timeout: 30, one poll at t0 then straight past the bound).
     _submit_build_pass(hub, chunk_id, build_node_id, 1)
     hub.clock.advance(timedelta(seconds=31))
-    first_timeout = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert first_timeout.json()["outcome_choice"] == "failure"
+    assert hub.turn_outcome(chunk_id) == "failure"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"  # below the cap (1) — routed back, not escalated
     assert len(detail["bounces"]) == 1
@@ -1330,8 +1229,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     second_build_node = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
     _submit_build_pass(hub, chunk_id, second_build_node, 3)
     hub.clock.advance(timedelta(seconds=31))
-    second_timeout = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    assert second_timeout.json()["outcome_choice"] == "failure"
+    assert hub.turn_outcome(chunk_id) == "escalated"
     detail2 = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail2["status"] == "needs_human"
     assert len(detail2["bounces"]) == 2

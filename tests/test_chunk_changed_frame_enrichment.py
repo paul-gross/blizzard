@@ -139,7 +139,7 @@ def test_claim_carries_cause_claimed_and_runner_id(tmp_path: Path) -> None:
 
 
 def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path) -> None:
-    """Driving to the terminal ``done`` in one request: ``prev_node`` is ``deliver`` and
+    """Driving to the terminal ``done`` — the completion, then the deliver turn: ``prev_node`` is ``deliver`` and
     ``node`` is omitted — ``done`` is the reserved terminal, not a real node."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
@@ -161,10 +161,11 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     }
     resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
     assert resp.status_code == 200, resp.text
+    hub.settle_turns()
     frames = _chunk_changed_frames(hub, since=before)
-    assert frames, "the completion should publish a chunk-changed frame"
+    assert frames, "the completion and the deliver turn should publish chunk-changed frames"
     frame = frames[-1]
-    assert frame["cause"] == "node-completed"
+    assert frame["cause"] == "hub-advanced"
     assert frame["prev_node"] == "deliver"
     assert "node" not in frame
     assert frame["status"] == "done"
@@ -172,8 +173,8 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     # The terminal transition releases the route (`bzh:facts-not-status`), so
     # `runner_id` is omitted too.
     assert "runner_id" not in frame
-    # `key` names the freshly-recorded transition (`deliver -> done`).
-    assert frame["key"].startswith("transitions:")
+    # A turn's frame names no fact: the turn routes inside the router's own write.
+    assert "key" not in frame
 
 
 def test_stop_carries_cause_stopped(tmp_path: Path) -> None:

@@ -42,7 +42,7 @@ from blizzard.hub.domain.execution.completion import MigrationTargets
 from blizzard.hub.domain.execution.decisions import DecisionService
 from blizzard.hub.domain.execution.envelope import Arrival
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
-from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from tests.test_completion_rules import (
     _AT_BUILD,
@@ -76,8 +76,7 @@ class _Ports:
     migrations: list[dict[str, Any]] = field(default_factory=list)
     transitions: list[dict[str, Any]] = field(default_factory=list)
     decisions: list[dict[str, Any]] = field(default_factory=list)
-    hub_runs: list[tuple[str, str, int]] = field(default_factory=list)
-    hub_run_chunks: list[str] = field(default_factory=list)
+    wakes: int = 0
     migration_handles: list[ILockedChunkRead] = field(default_factory=list)
     refusal: FenceRefusal | None = None
     gate: GateDecision | None = None
@@ -123,9 +122,8 @@ class _Ports:
     def is_retired(self, runner_id: str) -> bool:
         return False
 
-    def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> None:
-        self.hub_run_chunks.append(chunk.chunk_id)
-        self.hub_runs.append((graph.graph_id, node.node_id, epoch))
+    def wake(self) -> None:
+        self.wakes += 1
 
     @property
     def writes(self) -> list[dict[str, Any]]:
@@ -182,7 +180,7 @@ def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports,
         artifacts=cast(IReadChunkArtifactsRepository, ports),
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
-        hub_node_executor=ports,
+        hub_step_wake=ports,
         label=lambda _ref: None,
     )
     return service, ports, clock
@@ -273,7 +271,7 @@ def test_a_fresh_cross_graph_migration_records_once_with_the_landing_and_the_cla
     assert ports.migrations[0]["migration_id"].startswith("mg_")
     assert (result.outcome, result.migration_id) == (ApplyOutcome.MIGRATED, "mg_recorded")
     assert result.fresh_migration
-    assert ports.hub_runs == []
+    assert ports.wakes == 0
 
 
 def test_a_migration_landing_on_a_hub_node_keeps_the_route_and_hands_the_node_to_the_hub() -> None:
@@ -285,8 +283,7 @@ def test_a_migration_landing_on_a_hub_node_keeps_the_route_and_hands_the_node_to
     assert [(m["landed_node_id"], m["release_route"], m["clear_intent"]) for m in ports.migrations] == [
         (_D_LAND, False, True)
     ]
-    assert ports.hub_runs == [("gr_d", _D_LAND, 1)]
-    assert ports.hub_run_chunks == ["chk_1"]
+    assert ports.wakes == 1
     assert (result.outcome, result.migration_id) == (ApplyOutcome.HUB_NODE_TAKEN, "mg_recorded")
     assert not result.fresh_migration  # only a MIGRATED answer is a fresh migration
 
@@ -372,7 +369,7 @@ def test_a_duplicate_migration_answers_as_a_replay_with_no_second_write(
     result, ports, _clock = _hand_off(_migrated_from_build(executor))
 
     assert ports.writes == []
-    assert ports.hub_runs == []
+    assert ports.wakes == 0
     assert (result.outcome, result.migration_id) == (outcome, None)
     assert not result.fresh_migration
 

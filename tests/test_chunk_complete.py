@@ -96,6 +96,7 @@ def _ingest_and_deliver(hub) -> str:  # type: ignore[no-untyped-def]
         },
     )
     assert apply.status_code == 200, apply.text
+    hub.settle_turns()
     return chunk_id
 
 

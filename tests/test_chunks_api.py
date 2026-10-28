@@ -104,6 +104,7 @@ def _ingest_and_deliver(hub, *, yaml: str) -> str:  # type: ignore[no-untyped-de
     apply = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_build_completion(build_node_id, 1))
     assert apply.status_code == 200, apply.text
     assert apply.json()["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     return chunk_id
 
 

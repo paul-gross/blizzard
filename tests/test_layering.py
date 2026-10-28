@@ -2434,7 +2434,7 @@ def _plant_domain(tmp_path: Path, files: dict[str, str]) -> list[str]:
         ("chunk/ports.py", "from blizzard.hub.domain import kernel", False),
         ("garden/ports.py", "def f():\n    from blizzard.hub.domain.chunk.model import X", False),
         ("chunk/ports.py", "import blizzard.hub.config", True),
-        ("chunk/ports.py", "from blizzard.hub.delivery.hub_node import HubNodeExecutor", True),
+        ("chunk/ports.py", "from blizzard.hub.delivery.hub_node import HubNodeRouter", True),
         ("chunk/ports.py", "from ...config import X", True),
         ("chunk/ports.py", "from blizzard.hub import config", True),
         ("garden/ports.py", "from blizzard.hub.domain.config.legacy_keys import Z", False),

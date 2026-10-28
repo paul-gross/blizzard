@@ -1,7 +1,7 @@
 """The hub's actions: the catalogue graph validation reads and the implementation the executor takes a
 pass with, keyed by one name.
 
-The two test actions join only when ``BLIZZARD_TEST_ACTIONS=1`` is set beside the crash fence
+The test actions join only when ``BLIZZARD_TEST_ACTIONS=1`` is set beside the crash fence
 ``BLIZZARD_CRASH_FENCE=1``, read once at import as ``src/blizzard/foundation/crash.py`` reads its fence, so an
 installation can never mint them. The read lives here, outside ``hub/delivery/actions/``, whose modules
 may not import ``os`` (``bzh:hub-action-purity``)."""
@@ -20,7 +20,7 @@ from blizzard.hub.delivery.actions.garden_deliver import GardenDeliver
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.delivery.actions.pass_ import PassAction
 from blizzard.hub.delivery.actions.record_findings import RecordFindings
-from blizzard.hub.delivery.actions.test_actions import AnswerAction, SequenceAction
+from blizzard.hub.delivery.actions.test_actions import AnswerAction, BlockAction, SequenceAction
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 
 #: Admits the test actions, beside the crash fence.
@@ -48,7 +48,7 @@ class HubActions:
 
 
 SHIPPED_ACTIONS = HubActions.of([Land(), RecordFindings(), GardenDeliver(), PassAction()])
-TEST_ACTIONS: tuple[IHubAction, ...] = (AnswerAction(), SequenceAction())
+TEST_ACTIONS: tuple[IHubAction, ...] = (AnswerAction(), SequenceAction(), BlockAction())
 
 
 def _test_actions_admitted() -> bool:

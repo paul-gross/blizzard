@@ -2,7 +2,7 @@
 (component tier).
 
 ``bzh:epoch-fencing``: a bounce-cap escalation is refused when a restart or stop took the chunk
-since the hub run began; a completion or runner-config decision re-derives the current node on
+since the hub turn began; a completion or runner-config decision re-derives the current node on
 the write's own locked connection, so a racing duplicate answers as the replay it is and writes
 nothing twice. Each interleaving holds a writer on the chunk row lock while the submission is
 in flight (the shape of ``tests/test_write_fence.py``)."""
@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import func
 
+from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.domain.chunk.model import DecisionChoice
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -79,7 +80,8 @@ nodes:
 
 
 def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
-    """A chunk on the poll graph one poll-timeout away from crossing its ``bounce_cap``."""
+    """A chunk on the poll graph one poll-timeout away from crossing its ``bounce_cap``: each ``merge`` visit's
+    first turn answers ``pending``, and the next turn past ``poll_timeout`` kicks it back."""
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _POLL_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "cap"})]})
@@ -92,12 +94,14 @@ def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
     _submit_build_pass(hub, chunk_id, build_node_id, 1)
+    assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["outcome_choice"] == "failure"
+    assert hub.turn_outcome(chunk_id) == "failure"
     hub.clock.advance(timedelta(seconds=1))
     report_lease(hub, chunk_id, epoch=3, seq=2)
     second_build = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
     _submit_build_pass(hub, chunk_id, second_build, 3)
+    assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
     return hub, chunk_id
 
@@ -105,7 +109,7 @@ def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
 def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Path) -> None:
     hub, chunk_id = _bounce_capped_chunk(tmp_path)
 
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    assert hub.turn_outcome(chunk_id) == "escalated"
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"
@@ -119,8 +123,9 @@ def test_a_poll_timeout_bounce_cap_escalation_keeps_the_route_held(tmp_path: Pat
 def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer: Callable[[_Chunk], Callable[[object], None]]
 ) -> None:
-    """The writer lands after the hub run decided to escalate and before the escalation's own
-    write — the window the fence closes."""
+    """The writer lands after the hub turn decided to kick the chunk back and before the routing's own locked
+    write — the window the fence closes: the escalation the crossing would record is refused, so the turn
+    escalates nothing."""
     hub, chunk_id = _bounce_capped_chunk(tmp_path)
     stores = chunk_stores(hub.engine, hub.clock)
     standing = SimpleNamespace(
@@ -129,21 +134,28 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
         chunk_id=chunk_id,
         nodes={"build": hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]},
     )
-    real = ChunkEscalationsStore.record_bounce_escalation
+    real_route = HubNodeRouter.route_pending_timeout
+    real_escalate = ChunkEscalationsStore.record_bounce_escalation_locked
     landed: list[bool] = []
+    outcomes: list[BounceEscalationOutcome] = []
 
     def _after_the_writer(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         with stores.exclusive.locked([chunk_id]) as handle:
             writer(standing)(handle)  # type: ignore[arg-type]
         landed.append(True)
-        return real(self, *args, **kwargs)
+        return real_route(self, *args, **kwargs)
 
-    monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation", _after_the_writer)
+    def _observed(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        outcomes.append(real_escalate(self, *args, **kwargs))
+        return outcomes[-1]
 
-    advanced = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
+    monkeypatch.setattr(HubNodeRouter, "route_pending_timeout", _after_the_writer)
+    monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation_locked", _observed)
 
-    assert landed, "the hub run never reached its bounce-cap escalation"
-    assert "escalation not recorded" in advanced["detail"], advanced
+    hub.take_turns()
+
+    assert landed, "the hub turn never reached its poll-timeout kick-back"
+    assert BounceEscalationOutcome.RECORDED not in outcomes
     assert _count(hub, s.escalations, chunk_id) == 0
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "needs_human"
 
@@ -151,9 +163,10 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
 def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An earlier attempt recorded the escalation at this epoch; the re-run's own attempt finds it."""
+    """An earlier attempt recorded the escalation at this epoch; the re-run's own attempt finds it, and the turn
+    still ends escalated."""
     hub, chunk_id = _bounce_capped_chunk(tmp_path)
-    real = ChunkEscalationsStore.record_bounce_escalation
+    real = ChunkEscalationsStore.record_bounce_escalation_locked
     outcomes: list[BounceEscalationOutcome] = []
 
     def _twice(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -161,13 +174,11 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
         outcomes.append(real(self, *args, **kwargs))
         return outcomes[-1]
 
-    monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation", _twice)
+    monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation_locked", _twice)
 
-    advanced = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
+    assert hub.turn_outcome(chunk_id) == "escalated"
 
     assert outcomes == [BounceEscalationOutcome.RECORDED, BounceEscalationOutcome.ALREADY_RECORDED]
-    assert advanced["detail"].endswith(", already escalated"), advanced
-    assert "not recorded" not in advanced["detail"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
 

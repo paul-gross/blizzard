@@ -103,7 +103,7 @@ PASS = ActionSpec(
 
 SHIPPED_CATALOGUE = HubActionCatalogue.of([LAND, RECORD_FINDINGS, GARDEN_DELIVER, PASS])
 
-# The two actions a hub process driven by the end-to-end suites and the crash sweep adds,
+# The actions a hub process driven by the end-to-end suites and the crash sweep adds,
 # behind both test fences; an installation never mints them.
 TEST_ANSWER = ActionSpec(
     name="test.answer",
@@ -121,4 +121,12 @@ TEST_SEQUENCE = ActionSpec(
     answers_from_arg="choices",
     lands=False,
 )
-TEST_ACTION_SPECS: tuple[ActionSpec, ...] = (TEST_ANSWER, TEST_SEQUENCE)
+TEST_BLOCK = ActionSpec(
+    name="test.block",
+    args=frozenset({"seconds"}),
+    required_args=frozenset({"seconds"}),
+    answers=frozenset({"success"}),
+    answers_from_arg=None,
+    lands=False,
+)
+TEST_ACTION_SPECS: tuple[ActionSpec, ...] = (TEST_ANSWER, TEST_SEQUENCE, TEST_BLOCK)

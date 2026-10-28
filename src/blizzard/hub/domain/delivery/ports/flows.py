@@ -8,18 +8,22 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
     FlowFact,
     FlowLanding,
     FlowResource,
+    LandingWrite,
     Submission,
     Turn,
     TurnEvent,
     VisitStanding,
     Withdrawal,
 )
+from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.tenancy import TenantId
 
 
@@ -111,11 +115,11 @@ class IWriteFlows(IReadFlows, Protocol):
         repo: str,
         revision: str,
         at: datetime,
-    ) -> bool:
+    ) -> LandingWrite:
         """A turn's merge in one transaction admitted past the fence: the ``merged/<repo>`` marker, its
         ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the landing's flow and its
-        ``flow-landed`` event row. A replay that finds the marker writes nothing. Returns whether the fence would have
-        refused — the chunk's ``record_landing``, widened by the flow's record."""
+        ``flow-landed`` event row. A replay that finds the marker writes nothing. Answers whether the fence would have
+        refused, and the event row it wrote."""
         ...
 
     def end_turn_interrupted(
@@ -143,4 +147,27 @@ class IReadFlowLinesCorpus(Protocol):
     def flow_lines_signature(self) -> Mapping[TenantId, LineSignature]:
         """A one-statement, hub-wide read of each tenant's :class:`LineSignature`, closed tenants included. A tenant
         holding none of those rows has no entry."""
+        ...
+
+
+class IHubStepRefusals(Protocol):
+    """What the reconcile writes to a chunk it cannot submit: a visit refused before it names its resources routes its
+    failure choice, and a hub node naming no action escalates its chunk at the visit's epoch plus one."""
+
+    def refuse(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        node: Node,
+        *,
+        epoch: int,
+        step: str,
+        detail: str,
+        resolution: RepositoryResolution | None = None,
+    ) -> object:
+        """Record why the visit cannot run as its ``hub-log.<step>`` artifact and route its failure choice."""
+        ...
+
+    def escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int) -> bool:
+        """Escalate a chunk standing at ``node``, which names no action; whether this call recorded the escalation."""
         ...

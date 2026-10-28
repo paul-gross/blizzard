@@ -120,15 +120,10 @@ def test_a_dirty_conflict_routes_to_resolve_and_records_a_bounce(tmp_path: Path)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
-    advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    body = advance.json()
-    assert body["ran"] is True
-    assert body["outcome_choice"] == "conflict"
+    assert hub.turn_outcome(chunk_id) == "conflict"
 
     # The accepted transition's target node is `resolve` — the named assertion a
     # mutation proof (deleting the choice from graph.yaml) must break.
-    assert body["to_node_name"] == "resolve"
-
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["current_node_id"] == nodes["resolve"]
     assert detail["current_node_name"] == "resolve"
@@ -162,9 +157,7 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
         )
     report_lease(hub, chunk_id, epoch=DEFAULT_BOUNCE_CAP + 1, seq=1)
 
-    advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
-    body = advance.json()
-    assert body["ran"] is True
+    assert hub.turn_outcome(chunk_id) == "escalated"
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"
@@ -188,8 +181,8 @@ def test_a_red_check_envelope_names_the_unlanded_repo_its_pr_and_the_land_action
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    body = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
-    assert (body["outcome_choice"], body["to_node_name"]) == ("failure", "resolve")
+    assert hub.turn_outcome(chunk_id) == "failure"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "resolve"
 
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
@@ -216,7 +209,7 @@ def test_an_envelope_lists_only_the_unlanded_repo_with_its_pr(tmp_path: Path) ->
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/done", "acme/widget"))
     _record(hub, chunk_id, nodes, "merged/acme/done", "d" * 40)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    hub.take_turns()
 
     envelope = _envelope(hub, chunk_id)
     assert [u["repo"] for u in envelope["unlanded"]] == ["acme/widget"]
@@ -230,7 +223,7 @@ def test_a_conflict_answered_by_the_action_names_no_step_in_its_envelope(tmp_pat
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    hub.take_turns()
 
     envelope = _envelope(hub, chunk_id)
     assert envelope["step"] is None
@@ -247,7 +240,7 @@ def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_pat
     _seed_at_deliver_with_an_unlanded_commit(hub, chunk_id, nodes, repos=("acme/widget", "acme/gadget"))
     _record(hub, chunk_id, nodes, "merged/acme/widget", "  ")
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    hub.take_turns()
 
     assert sorted(u["repo"] for u in _envelope(hub, chunk_id)["unlanded"]) == ["acme/gadget", "acme/widget"]
 

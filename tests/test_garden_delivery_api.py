@@ -132,7 +132,7 @@ def _seed_review_finding(hub: HubHarness, finding_id: str, *, scope_slug: str = 
 
 
 def _record_artifact(hub: HubHarness, chunk_id: str, *, name: str, content: str, epoch: int = _EPOCH) -> None:
-    assert hub.services.hub_node.record_marker(
+    assert hub.services.hub_markers.record_marker(
         chunk_id, node_id=_NODE_ID, node_name="deliver", epoch=epoch, name=name, content=content
     )
 

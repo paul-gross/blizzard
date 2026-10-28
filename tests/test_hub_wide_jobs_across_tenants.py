@@ -43,7 +43,6 @@ from blizzard.hub.secrets import (
 )
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
-from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import (
@@ -119,10 +118,10 @@ def _build(config: HubConfig) -> None:
     build_hosted_hub_app(config).state.engine.dispose()
 
 
-def _orphan_a_slot(hub: _Hub, tenant: TenantId, suffix: str) -> None:
-    """Leave one live hub-execution slot in ``tenant``, as a run the previous process died in does."""
+def _orphan_a_turn(hub: _Hub, tenant: TenantId, suffix: str) -> None:
+    """Leave one open turn in ``tenant``, as a turn the previous process died in does."""
     conns = scoped_connections(hub.engine, tenant)
-    with conns.write("orphan_a_slot") as conn:
+    with conns.write("orphan_a_turn") as conn:
         conn.execute(
             conns.insert(schema.graphs).values(
                 graph_id=f"gr_{suffix}", name="g", entry_node_id="nd_1", definition_yaml="", created_at=_NOW
@@ -138,44 +137,54 @@ def _orphan_a_slot(hub: _Hub, tenant: TenantId, suffix: str) -> None:
             )
         )
         conn.execute(
-            conns.insert(schema.hub_exec_slot).values(
-                slot_id=f"hes_{suffix}", holder_chunk_id=f"ch_{suffix}", node_id="nd_1", acquired_at=_NOW
+            conns.insert(schema.flow_submissions).values(
+                submission_id=f"fsub_{suffix}",
+                chunk_id=f"ch_{suffix}",
+                node_id="nd_1",
+                epoch=1,
+                generation=0,
+                arrival=1,
+                submitted_at=_NOW,
+            )
+        )
+        conn.execute(
+            conns.insert(schema.hub_turns).values(
+                turn_id=f"htn_{suffix}", submission_id=f"fsub_{suffix}", started_at=_NOW
             )
         )
 
 
-def _live_slots(hub: _Hub, tenant: TenantId) -> int:
-    return ChunkHubExecStore(scoped_connections(hub.engine, tenant), FixedClock(_NOW)).count_live_hub_exec_slots()
+def _open_turns(hub: _Hub, tenant: TenantId) -> int:
+    turns = schema.hub_turns
+    with hub.engine.connect() as conn:
+        return conn.execute(
+            hub_scoped(
+                sa.select(sa.func.count())
+                .select_from(turns)
+                .where(turns.c.tenant_id == tenant, turns.c.ended_at.is_(None))
+            )
+        ).scalar_one()
 
 
-def test_a_hub_holding_two_open_tenants_boots_and_releases_each_tenants_orphaned_slot(hub: _Hub) -> None:
-    _orphan_a_slot(hub, hub.first, "first")
-    _orphan_a_slot(hub, hub.second, "second")
+def test_a_hub_holding_two_open_tenants_boots_and_ends_each_tenants_open_turn(hub: _Hub) -> None:
+    _orphan_a_turn(hub, hub.first, "first")
+    _orphan_a_turn(hub, hub.second, "second")
 
     _build(hub.config)
 
-    assert (_live_slots(hub, hub.first), _live_slots(hub, hub.second)) == (0, 0)
+    assert (_open_turns(hub, hub.first), _open_turns(hub, hub.second)) == (0, 0)
 
 
 def test_boot_acts_in_no_closed_tenant(hub: _Hub) -> None:
     closed = add_tenant(hub.engine, "closed")
-    _orphan_a_slot(hub, closed, "closed")
+    _orphan_a_turn(hub, closed, "closed")
     close_tenant(hub.engine, closed)
-    _orphan_a_slot(hub, hub.first, "first")
+    _orphan_a_turn(hub, hub.first, "first")
 
     _build(hub.config)
 
-    assert _live_slots(hub, hub.first) == 0
-    slots = schema.hub_exec_slot
-    with hub.engine.connect() as conn:
-        live = conn.execute(
-            hub_scoped(
-                sa.select(sa.func.count())
-                .select_from(slots)
-                .where(slots.c.tenant_id == closed, slots.c.released_at.is_(None))
-            )
-        ).scalar_one()
-    assert live == 1
+    assert _open_turns(hub, hub.first) == 0
+    assert _open_turns(hub, closed) == 1
 
 
 def test_the_hub_refuses_to_start_while_any_tenants_secret_has_no_generation(hub: _Hub, tmp_path: Path) -> None:

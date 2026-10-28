@@ -167,10 +167,11 @@ class _Raced:
     migration: ReplayedMigration | None = None
 
 
-class IHubNodeExecutor(Protocol):
-    """Runs a hub-executed node's ``run:`` list once; the result is the executor's own and unread here."""
+class IHubStepWake(Protocol):
+    """Wakes whatever takes hub steps, so a chunk just moved onto a hub node is submitted at once — callable from
+    any thread, and a no-op where nothing takes them."""
 
-    def run(self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int) -> object: ...
+    def wake(self) -> None: ...
 
 
 class ApplyService:
@@ -189,7 +190,7 @@ class ApplyService:
         artifacts: IReadChunkArtifactsRepository,
         retired: RetiredRunnerGuard,
         clock: IClock,
-        hub_node_executor: IHubNodeExecutor,
+        hub_step_wake: IHubStepWake,
         label: WorkRefLabel,
     ) -> None:
         self._facts = facts
@@ -202,7 +203,7 @@ class ApplyService:
         self._artifacts = artifacts
         self._retired = retired
         self._clock = clock
-        self._hub_node_executor = hub_node_executor
+        self._hub_step_wake = hub_step_wake
         self._label = label
 
     def apply(
@@ -467,7 +468,7 @@ class ApplyService:
         landed_node = landing.node
         if not landing.releases_route:
             assert landed_node is not None
-            self._hub_node_executor.run(chunk, landing.graph, landed_node, epoch=submission.epoch)
+            self._hub_step_wake.wake()
             return ApplyResult.landed_on_hub(landed_node, landed)
         return ApplyResult.migrated(from_node, landing.graph, landed)
 
@@ -526,8 +527,8 @@ class ApplyService:
         if step.node is None:
             return ApplyResult.failure(f"transition target {to_node_id} is not a node")
         if step.kind is NextStepKind.HUB_TAKES:
-            # Run on BOTH the fresh apply and the replay.
-            self._hub_node_executor.run(chunk, graph, step.node, epoch=submission.epoch)
+            # On BOTH the fresh apply and the replay: the driver's next reconcile submits the visit.
+            self._hub_step_wake.wake()
             return ApplyResult.taken_over(step.node, transition_id)
         if step.kind is NextStepKind.GATE:
             return ApplyResult.parked(step.node, transition_id)

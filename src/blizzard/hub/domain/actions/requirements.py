@@ -43,4 +43,5 @@ ACTION_REQUIREMENTS: Mapping[str, Requirement] = {
     "pass": _nothing,
     "test.answer": _nothing,
     "test.sequence": _nothing,
+    "test.block": _nothing,
 }

@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
@@ -51,7 +52,8 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
 )
-from blizzard.hub.domain.delivery.flows import PollPolicy
+from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.delivery.flows import Flow, PollPolicy
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -70,7 +72,7 @@ from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRef
 from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.graph.model import FollowLatest, Graph
+from blizzard.hub.domain.graph.model import FollowLatest, Graph, Node
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.projects.model import ProjectId
@@ -616,10 +618,8 @@ def hub_advance(
     chunk_id: str,
     services: Services,
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step, taking one pass of that
-    node's action under the tenant's hub-execution slot. The call defers when another chunk holds the
-    slot, the node is ``pending`` inside ``poll_interval``, the chunk is escalated, or it is not parked
-    at a drivable hub node — ``detail`` names which."""
+    """Wake the hub's flow driver for a chunk parked at a hub command node, and answer where its visit stands in the
+    flows it holds — ``detail`` names it. The call never takes a pass itself: ``ran`` is always false."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -632,35 +632,47 @@ def hub_advance(
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=facts.status(), ran=False, detail="not parked at a hub command node"
         )
-    change = chunk_events.ChunkChanged.of(services, chunk_id, prev_status=facts.status().value)
+    services.hub_step_wake.wake()
     epoch = facts.latest_epoch() or 0
-    result = services.hub_node.run(chunk, graph, node, epoch=epoch)
-    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    derived = facts.status()
-    # `key` names the transition this call recorded — absent when the poll deferred or wrote a
-    # poll-attempt fact instead, since there is no fresh `transitions` row to key on.
-    advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
-    change.publish(cause="hub-advanced", key=advance_key)
-    if result is None:
-        pending = facts.hub_node_pending()
-        next_poll_at = PollPolicy.of(node).due_at(pending) if pending is not None else None
-        # A future `next_poll_at` distinguishes "not yet due to poll" from a genuinely busy slot;
-        # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
-        if facts.open_escalation() is not None:
-            detail = "escalated — awaiting a person"
-        elif next_poll_at is not None and next_poll_at > services.clock.now():
-            detail = f"pending — next poll at {iso_utc(next_poll_at)}"
-        else:
-            detail = "hub-execution slot busy — try again"
-        return HubAdvanceResponse(chunk_id=chunk_id, status=derived, ran=False, detail=detail)
     return HubAdvanceResponse(
         chunk_id=chunk_id,
-        status=derived,
-        ran=True,
-        outcome_choice=result.outcome_choice,
-        to_node_name=result.to_node_name or None,
-        detail=result.detail,
+        status=facts.status(),
+        ran=False,
+        detail=_standing(services, chunk_id, facts, node, epoch=epoch),
     )
+
+
+def _standing(services: TenantServices, chunk_id: str, facts: ChunkFacts, node: Node, *, epoch: int) -> str:
+    """Where the chunk's visit to ``node`` stands: held by a person, waiting to be submitted, taking its turn,
+    waiting on its next poll, or its place on each flow it holds."""
+    if facts.open_escalation() is not None:
+        return "escalated — awaiting a person"
+    if facts.status() is not ChunkStatus.DELIVERING:
+        return f"{facts.status().value} — takes no turn until it is delivering"
+    standing = services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch)
+    if standing is None:
+        return "waiting to be submitted to its flows"
+    names = [_flow_name(services, flow) for flow in standing.submission.flows]
+    if standing.turning:
+        return f"landing on {', '.join(names)}" if names else "taking its turn"
+    polls = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch)
+    due = PollPolicy.of(node).due_at(polls[-1]) if polls else None
+    if due is not None and due > services.clock.now():
+        return f"pending — next poll at {iso_utc(due)}"
+    if not names:
+        return "next to take its turn"
+    return ", ".join(f"{_ordinal(ahead + 1)} on {name}" for name, ahead in zip(names, standing.ahead, strict=True))
+
+
+def _flow_name(services: TenantServices, flow: Flow) -> str:
+    """A flow as an operator names it: its repository and branch."""
+    record = services.repository_records.get(RepositoryId(flow.repository_id))
+    return f"{record.fields.repo if record is not None else flow.repository_id}/{flow.branch}"
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
 
 
 def _incompatible_denial(

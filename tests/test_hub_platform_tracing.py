@@ -308,9 +308,14 @@ nodes:
 """
 
 
-def test_a_hub_action_pass_parents_on_the_derived_hub_exec_span_and_the_driving_request_links_it(
+def test_a_hub_action_pass_parents_on_its_turns_derived_hub_exec_span_and_no_request_links_it(
     tmp_path: Path,
 ) -> None:
+    """The completion that reaches ``merge`` only submits the visit; the hosted hub's flow driver takes it as a turn
+    on its own task, and the pass runs under the hub-exec context derived from that turn. The driver's turn runs
+    under no request span, so the completion's server span carries no link to it."""
+    import time
+
     from sqlalchemy import select
 
     from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
@@ -361,16 +366,25 @@ def test_a_hub_action_pass_parents_on_the_derived_hub_exec_span_and_the_driving_
             },
         )
         assert applied.json()["outcome"] == "hub_node_taken", applied.text
-    with app.state.engine.connect() as conn:
-        (slot,) = conn.execute(
-            hub_scoped(select(s.hub_exec_slot.c.slot_id).where(s.hub_exec_slot.c.holder_chunk_id == chunk_id))
-        ).all()
+        turn_query = hub_scoped(
+            select(s.hub_turns.c.turn_id)
+            .join(s.flow_submissions, s.flow_submissions.c.submission_id == s.hub_turns.c.submission_id)
+            .where(s.flow_submissions.c.chunk_id == chunk_id, s.hub_turns.c.ended_at.is_not(None))
+        )
+        deadline = time.monotonic() + 10
+        while True:
+            with app.state.engine.connect() as conn:
+                ended = conn.execute(turn_query).all()
+            if ended or time.monotonic() > deadline:
+                break
+            time.sleep(0.05)
+    (turn,) = ended
     spans = _spans(handle, exporter)
-    hub_exec = DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, slot.slot_id)
+    hub_exec = DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, turn.turn_id)
 
-    driver = _server_span(spans, "POST /api/fleet/chunks/{chunk_id}/completions")
-    assert [(link.context.trace_id, link.context.span_id) for link in driver.links] == [
-        (hub_exec.trace_id, hub_exec.span_id)
+    completion = _server_span(spans, "POST /api/fleet/chunks/{chunk_id}/completions")
+    assert (hub_exec.trace_id, hub_exec.span_id) not in [
+        (link.context.trace_id, link.context.span_id) for link in completion.links
     ]
     (action_pass,) = [span for span in spans if span.name == ACTION_PASS_SPAN]
     assert action_pass.parent is not None

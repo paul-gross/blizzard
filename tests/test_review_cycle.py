@@ -286,6 +286,7 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
     ).json()
 
     assert delivered["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 

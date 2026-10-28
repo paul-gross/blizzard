@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -59,6 +60,7 @@ def _mint_and_claim(hub: HubHarness, ref: str = "1", *, project: str | None = No
     chunk_id = ingested.json()["chunk_id"]
     repin = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": minted.json()["graph_id"]})
     assert repin.status_code == 202, repin.text
+    hub.promote(chunk_id)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
@@ -67,9 +69,9 @@ def _mint_and_claim(hub: HubHarness, ref: str = "1", *, project: str | None = No
 
 
 def _seed_at_deliver(
-    hub: HubHarness, chunk_id: str, nodes: dict[str, str], repos: list[tuple[str, str | None]]
+    hub: HubHarness, chunk_id: str, nodes: dict[str, str], repos: list[tuple[str, str | None]], at: str = "deliver"
 ) -> None:
-    """Place the chunk at ``deliver`` carrying one ``git_commit`` per ``(repo, origin)``."""
+    """Place the chunk at ``at`` carrying one ``git_commit`` per ``(repo, origin)``."""
     rows = [
         StoredArtifact(
             kind=ArtifactKind.GIT_COMMIT,
@@ -89,7 +91,7 @@ def _seed_at_deliver(
         transition_id=f"tr_seed_{chunk_id}",
         chunk_id=chunk_id,
         from_node_id=None,
-        to_node_id=nodes["deliver"],
+        to_node_id=nodes[at],
         choice_name=None,
         epoch=1,
         runner_id="r1",
@@ -108,16 +110,14 @@ def _ids(hub: HubHarness) -> dict[str, str]:
     return {r["slug"]: r["repository_id"] for r in listed}
 
 
-def _visit(hub: HubHarness, chunk_id: str, nodes: dict[str, str], node_name: str = "deliver"):  # type: ignore[no-untyped-def]
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    node = graph.node_by_id(nodes[node_name])
-    assert node is not None
-    result = hub.services.hub_node.run(chunk, graph, node, epoch=1)
-    assert result is not None
-    return result
+@dataclass(frozen=True)
+class _Visited:
+    outcome_choice: str | None
+
+
+def _visit(hub: HubHarness, chunk_id: str, nodes: dict[str, str], node_name: str = "deliver") -> _Visited:
+    """What the flow driver's next tick did with the chunk standing at ``node_name``."""
+    return _Visited(hub.turn_outcome(chunk_id))
 
 
 def _event_kinds(hub: HubHarness) -> list[str]:
@@ -235,6 +235,7 @@ def test_a_repository_retired_after_the_chunk_minted_still_resolves_but_a_chunk_
         "chunk_id"
     ]
     hub.client.patch(f"/api/chunks/{later}", json={"graph_id": earlier_chunk.graph_id})
+    hub.promote(later)
     hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": later, "runner_id": "r1", "workspace_id": "w2", "environment_ids": ["e2"]},
@@ -242,8 +243,9 @@ def test_a_repository_retired_after_the_chunk_minted_still_resolves_but_a_chunk_
     _seed_at_deliver(hub, later, earlier_nodes, [("widget", None)])
 
     assert _visit(hub, earlier, earlier_nodes).outcome_choice == "landed"
-    assert len(forge.built) == 1
-    assert _visit(hub, later, earlier_nodes).outcome_choice == "failure"
+    # The same tick refused the later chunk at submit: its repository resolves to nothing.
+    later_facts = hub.services.chunks.facts.load_facts(later)
+    assert later_facts is not None and [t.choice_name for t in later_facts.transitions][-1] == "failure"
     assert len(forge.built) == 1
     assert "repository-unresolved" in _event_kinds(hub)
 
@@ -300,9 +302,9 @@ def test_an_action_that_lands_nothing_is_handed_no_forge(tmp_path: Path) -> None
     hub, forge = _hub(tmp_path)
     create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
     chunk_id, nodes = _mint_and_claim(hub)
-    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
+    _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)], at="record-findings")
 
-    _visit(hub, chunk_id, nodes, "record-findings")
+    assert _visit(hub, chunk_id, nodes) is not None
 
     assert forge.built == []
 
@@ -319,7 +321,7 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
             fixture_repository("gadget", _FORGE, owner="acme") | {"secret_name": "other-forge-token"},
         ],
     )
-    secrets = hub.services.hub_node._forges._secrets
+    secrets = hub.services.forges._secrets
     reveal = secrets.reveal
 
     def reveal_unless_retired(name: SecretName):  # type: ignore[no-untyped-def]
@@ -464,11 +466,11 @@ def test_two_projects_linking_one_repository_land_onto_its_one_base_branch_and_r
     linked = hub.client.put("/api/projects/second/repository-links/widget")
     assert linked.status_code == 200, linked.text
     chunks = [_mint_and_claim(hub, ref, project=project) for ref, project in (("1", "default"), ("2", "second"))]
-    for chunk_id, nodes in chunks:
-        _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
 
     for chunk_id, nodes in chunks:
-        # Each chunk's branch is pushed afresh: the first landing merged and closed the PR for it.
+        # Each chunk reaches `deliver` only once the one before it landed, so each tick takes one chunk's turn,
+        # and its branch is pushed afresh: the first landing merged and closed the PR for it.
+        _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
         forge.double.repo("acme/widget").changes.clear()
         forge.push("acme/widget")
         assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"

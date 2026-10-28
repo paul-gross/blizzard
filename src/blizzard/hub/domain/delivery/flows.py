@@ -7,7 +7,7 @@ once it leaves the node. Whether a submission is open, or a flow busy, is derive
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
@@ -28,6 +28,12 @@ type FlowFactKind = Literal["submitted", "turn-started", "turn-ended", "landed",
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
 TURN_CUT_OFF = "cut-off"
+#: The outcome of a turn that handed its chunk to a person — never a verdict.
+TURN_ESCALATED = "escalated"
+#: The outcome of a turn that found its visit's resources moved under it, or its visit already left.
+TURN_SUPERSEDED = "superseded"
+#: How many turns in a row cut off send a visit to a person on its next.
+STUCK_AFTER = 3
 
 # Pending-poll cadence defaults, overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
@@ -133,7 +139,9 @@ class FlowLanding:
     event: TurnEvent
 
     @classmethod
-    def of(cls, flow: Flow, submission: Submission, *, project_id: str, node_name: str, revision: str) -> FlowLanding:
+    def of(
+        cls, flow: Flow, submission: Submission, *, project_id: str | None, node_name: str, revision: str
+    ) -> FlowLanding:
         """The landing of ``submission``'s chunk on ``flow`` at ``revision``. ``members`` lists every chunk the landing
         carried — one, until a landing carries several."""
         chunk_id = submission.chunk_id
@@ -158,6 +166,40 @@ class FlowLanding:
                 },
             ),
         )
+
+
+@domain_model
+@dataclass(frozen=True)
+class LandingWrite:
+    """What recording a turn's merge did: whether the fence would have refused it, and the ``flow-landed`` event row
+    it wrote — ``None`` for a replay that found the marker written."""
+
+    refused: bool
+    event_id: int | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class AdmittedTurn:
+    """A turn the tick started, and the submission it is a turn of."""
+
+    turn: Turn
+    submission: Submission
+
+
+def is_stuck(outcomes: Sequence[str]) -> bool:
+    """Whether a visit whose ended turns answered ``outcomes``, newest first, is stuck: its :data:`STUCK_AFTER` newest
+    turns not ``interrupted`` all ended ``cut-off``. An interrupted turn neither counts nor resets the run."""
+    counted = [outcome for outcome in outcomes if outcome != TURN_INTERRUPTED][:STUCK_AFTER]
+    return len(counted) == STUCK_AFTER and all(outcome == TURN_CUT_OFF for outcome in counted)
+
+
+def resources_moved(held: Sequence[FlowResource], resolved: Sequence[FlowResource], submitted: Sequence[str]) -> bool:
+    """Whether a visit's resources moved under its submission: a resource still to land (``held``) it does not hold,
+    or one it holds (``submitted``) the visit no longer resolves to (``resolved``, landed or not). A repository landed
+    earlier in the visit keeps its flow until the verdict."""
+    holds = set(submitted)
+    return not {r.resource for r in held} <= holds or not holds <= {r.resource for r in resolved}
 
 
 @domain_model
@@ -225,7 +267,7 @@ def _stands_at(facts: ChunkFacts, submission: Submission) -> bool:
 
 def is_current(facts: ChunkFacts, submission: Submission) -> bool:
     """The submission's visit is the chunk's current one: it stands at the node, at the submission's epoch."""
-    return _stands_at(facts, submission) and facts.latest_epoch() == submission.epoch
+    return _stands_at(facts, submission) and (facts.latest_epoch() or 0) == submission.epoch
 
 
 def held_by_a_person(facts: ChunkFacts, submission: Submission) -> bool:
