@@ -27,6 +27,13 @@ wait, so the node's poll timeout still decides when waiting has gone on too long
 cannot. A node that keeps reaching the bound is one whose forge is slow or unreachable; the remedy is that forge, or a
 larger `action_pass_seconds`.
 
+`turn-interrupted` (warning): the hub started and found a turn on a branch's delivery line with no end — the process
+running it stopped mid-turn, by a crash or a shutdown. Before the hub serves, it ends that turn `interrupted`, once; a
+second start finds nothing to end. A chunk still standing at its step keeps its place in the line, and one that has left
+it, such as a stopped chunk, leaves the line in the same write. The event's detail names the turn, its submission, and
+that withdrawal. Nothing needs doing: the chunk's next pass reads the forge before it acts, so it finds any merge the
+interrupted turn had already made.
+
 `repository-unresolved` (critical): a `deliver` step's chunk commits resolve to no single
 [repository](./repositories.md) record — none stands for one of them, or several match it. The step is refused before
 any command runs and routes its failure choice; the remedy is creating or editing the repository records, then
