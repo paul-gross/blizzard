@@ -399,7 +399,7 @@ class ChunkMovementStore:
 
     def _record_restart_conn(
         self,
-        conn,
+        conn: Connection,
         chunk_id: str,
         *,
         from_node_id: str | None,

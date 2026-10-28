@@ -10,6 +10,7 @@ import json
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any, cast
 
 from sqlalchemy import or_
 
@@ -37,12 +38,14 @@ from blizzard.hub.store.scoped import ScopedConnections
 def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
     """The PR a ``delivery-pr/`` marker's JSON payload names, or ``None`` when it is not that shape."""
     try:
-        payload = json.loads(data)
+        loaded: object = json.loads(data)
     except ValueError:
         return None
+    if not isinstance(loaded, dict):
+        return None
+    payload = cast(dict[str, Any], loaded)
     if not (
-        isinstance(payload, dict)
-        and isinstance(payload.get("repo"), str)
+        isinstance(payload.get("repo"), str)
         and isinstance(payload.get("number"), int)
         and isinstance(payload.get("url"), str)
     ):

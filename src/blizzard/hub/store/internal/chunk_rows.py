@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol, cast
 
-from sqlalchemy import Column, Connection, CursorResult, Select, Table, func, literal, select
+from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -87,7 +87,7 @@ class QuestionQuery:
     Both joins are **outer**. Deliveries pre-aggregate to the **earliest** instant per
     question, since ``answer_deliveries`` is append-only with no per-question uniqueness."""
 
-    def select(self, stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+    def select(self, stmts: ScopedStatements) -> Select[Any]:
         """The question read within ``stmts``' scope. A question is keyed ``(tenant_id,
         question_id)`` — its id is runner-minted — so each outer join matches on both in its
         ``ON`` (an answer row keeps its outer join outer), and the grouped deliveries are scoped
@@ -125,7 +125,7 @@ class QuestionQuery:
             earliest_delivery.c.delivered_at,
         )
 
-    def of(self, q) -> NodeQuestion:  # type: ignore[no-untyped-def]
+    def of(self, q: Row[Any]) -> NodeQuestion:
         """One :attr:`select` row as its domain shape — every derived state read off the
         joined columns, so the three question reads cannot disagree."""
         return NodeQuestion(
@@ -279,16 +279,16 @@ _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
 declared; the subquery helper and the id-set helpers below all derive from it."""
 
 
-def ephemeral_ids_select(stmts: ScopedStatements) -> Select:  # type: ignore[type-arg]
+def ephemeral_ids_select(stmts: ScopedStatements) -> CompoundSelect[Any]:
     """The ephemeral set as a ``chunk_id`` subquery for a ``NOT IN`` — the union of
     grouped-away and deleted chunks within ``stmts``' scope, each arm scoped on its own, for a
     read that filters in SQL rather than fetching :func:`ephemeral_ids`; widened here so every
     consumer inherits the exclusion."""
     first, *rest = (stmts.select(t, t.c.chunk_id) for t in _EPHEMERAL_TABLES)
-    return first.union(*rest)  # type: ignore[return-value]
+    return first.union(*rest)
 
 
-def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
+def ephemeral_ids(conn: Connection) -> set[str]:
     """Every chunk id gone from every read — the union of grouped-away
     and deleted chunks; widened here so every consumer across every seam inherits the
     exclusion."""
@@ -298,14 +298,14 @@ def ephemeral_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
     }
 
 
-def is_ephemeral_id(conn, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
+def is_ephemeral_id(conn: Connection, chunk_id: str) -> bool:
     """Whether ``chunk_id`` alone is grouped-away or deleted — a single-id call site's
     narrow sibling of :func:`ephemeral_ids`, two targeted existence checks rather than
     that helper's unfiltered scan of both tables."""
     return any(row_exists(conn, table, chunk_id) for table in _EPHEMERAL_TABLES)
 
 
-def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no-untyped-def]
+def ephemeral_ids_in(conn: Connection, batch: Sequence[str]) -> set[str]:
     """Which of ``batch``'s ids are grouped-away or deleted — :func:`graph_id_of_batch`'s
     own exclusion, factored out so a caller already holding ``batch``'s full ``chunks``
     rows doesn't pay for a second, narrower read of the same ids just to get it. A
@@ -322,7 +322,7 @@ def ephemeral_ids_in(conn, batch: Sequence[str]) -> set[str]:  # type: ignore[no
     }
 
 
-def graph_id_of_batch(conn, batch: Sequence[str] | None) -> dict[str, str]:  # type: ignore[no-untyped-def]
+def graph_id_of_batch(conn: Connection, batch: Sequence[str] | None) -> dict[str, str]:
     """A selection's chunk id -> graph id pins, ephemeral ids excluded. ``None`` (the
     whole live fleet) keeps :func:`ephemeral_ids`'s own single unfiltered scan; a bounded
     batch delegates to :func:`ephemeral_ids_in`."""
@@ -351,7 +351,7 @@ def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[st
     :attr:`~blizzard.hub.domain.chunk.model.RouteHistory.newest`, which owns same-instant ties."""
     stmts = statements_of(conn)
 
-    def newest(table: Table, ts: str, *columns: Column[Any]) -> Select:  # type: ignore[type-arg]
+    def newest(table: Table, ts: str, *columns: Column[Any]) -> Select[Any]:
         # (ts, seq) — the key `RouteHistory.newest` orders by; that property, not this query, owns it.
         rival = table.alias("rival")
         beaten = newer_row_exists(
@@ -560,7 +560,7 @@ def record_hub_lease(conn: Connection, chunk_id: str, *, epoch: int, runner_id: 
     record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
 
 
-def row_exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]
+def row_exists(conn: Connection, table: Table, chunk_id: str) -> bool:
     stmt = statements_of(conn).select(table, table.c.chunk_id).where(table.c.chunk_id == chunk_id).limit(1)
     return conn.execute(stmt).first() is not None
 
@@ -652,7 +652,7 @@ def enqueue_close_intents(conn: Connection, chunk_id: str, *, at: datetime) -> N
         )
 
 
-def chunk_row(conn, row) -> Chunk:  # type: ignore[no-untyped-def]
+def chunk_row(conn: Connection, row: Row[Any]) -> Chunk:
     pointers = [
         WorkRef(source=p.source, ref=p.ref)
         for p in conn.execute(

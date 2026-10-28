@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ColumnElement, Join, func
+from sqlalchemy import ColumnElement, Join, Row, func
+from sqlalchemy.engine import Connection
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store.batching import id_batches
@@ -78,13 +80,13 @@ def _canonical_work_ref(stmts: ScopedStatements) -> ColumnElement[bool]:
     )
 
 
-def _identity_of(row: object) -> RunIdentity:
+def _identity_of(row: Row[Any]) -> RunIdentity:
     return RunIdentity(
-        chunk_id=row.chunk_id,  # type: ignore[attr-defined]
-        routine_name=row.routine_name,  # type: ignore[attr-defined]
-        scope_slug=row.scope_slug,  # type: ignore[attr-defined]
-        mode=RunMode(row.mode),  # type: ignore[attr-defined]
-        minted_at=row.minted_at,  # type: ignore[attr-defined]
+        chunk_id=row.chunk_id,
+        routine_name=row.routine_name,
+        scope_slug=row.scope_slug,
+        mode=RunMode(row.mode),
+        minted_at=row.minted_at,
     )
 
 
@@ -144,10 +146,10 @@ class GardenRunStore:
                 for row in rows
             ]
 
-    def _delivered_sets_by_chunk(self, conn, chunk_ids: list[str]) -> dict[str, list[DeliveredSet]]:
+    def _delivered_sets_by_chunk(self, conn: Connection, chunk_ids: list[str]) -> dict[str, list[DeliveredSet]]:
         if not chunk_ids:
             return {}
-        rows = []
+        rows: list[Row[Any]] = []
         for batch in id_batches(chunk_ids):
             rows.extend(
                 conn.execute(
@@ -180,7 +182,7 @@ class GardenRunStore:
         return dict(grouped)
 
     @staticmethod
-    def _fact_counts_by_set(conn, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:
+    def _fact_counts_by_set(conn: Connection, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:
         """How many `add`/`observed`/`gone` facts each delivered set's own delivery
         recorded — one `GROUP BY` query for every id in `finding_set_ids`
         (index-backed on `ix_finding_facts_tenant_finding_set_id`), the `fact_summaries`
@@ -205,7 +207,7 @@ class GardenRunStore:
         return counts
 
     @staticmethod
-    def _add_finding_ids_by_set(conn, finding_set_ids: list[str]) -> dict[str, list[str]]:
+    def _add_finding_ids_by_set(conn: Connection, finding_set_ids: list[str]) -> dict[str, list[str]]:
         """Every listed set's own `add` facts' finding ids, in insertion order, read in one
         query (index-backed on `ix_finding_facts_tenant_finding_set_id`). A set with no linked `add`
         fact maps to an empty list."""

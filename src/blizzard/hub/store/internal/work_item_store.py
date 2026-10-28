@@ -9,8 +9,9 @@ import json
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection, desc
+from sqlalchemy import Connection, Row, desc
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
@@ -375,7 +376,7 @@ class WorkItemStore:
         return str(row.next_ref - 1)
 
     @staticmethod
-    def _record(row) -> HubWorkItem:
+    def _record(row: Row[Any]) -> HubWorkItem:
         payload = json.loads(row.author_payload)
         author_kind = WorkItemAuthorKind(row.author_kind)
         author = (

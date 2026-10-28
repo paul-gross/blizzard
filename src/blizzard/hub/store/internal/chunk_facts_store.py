@@ -12,8 +12,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Table, and_, func
+from sqlalchemy import Column, Connection, Row, Table, and_, func
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -136,7 +137,9 @@ def status_family_tables() -> tuple[Table, ...]:
 _TICK_STATUS_FAMILIES: frozenset[str] = _STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
 
 
-def _rows(stmts: ScopedStatements, conn, table, batch: Sequence[str] | None, *columns):
+def _rows(
+    stmts: ScopedStatements, conn: Connection, table: Table, batch: Sequence[str] | None, *columns: Column[Any]
+) -> Sequence[Row[Any]]:
     """``table``'s rows (or just ``columns`` of them) for the chunks in ``batch`` — every chunk's
     when ``batch`` is ``None`` — confined to ``stmts``'s tenant."""
     stmt = stmts.select(table, *columns)
@@ -157,13 +160,13 @@ class ChunkFactsStore:
             result = self._load(conn, [chunk_id])
         return result.get(chunk_id)
 
-    def load_facts_conn(self, conn, chunk_id: str) -> ChunkFacts | None:
+    def load_facts_conn(self, conn: Connection, chunk_id: str) -> ChunkFacts | None:
         """`load_facts`'s already-open-connection sibling — the locked-transaction seam's
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection
         rather than a fresh one."""
         return self._load(conn, [chunk_id]).get(chunk_id)
 
-    def load_facts_for_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
         if not chunk_ids:
             return {}
@@ -204,7 +207,7 @@ class ChunkFactsStore:
         with self._store.read("status_facts_for") as conn:
             return self._load(conn, chunk_ids, families=_TICK_STATUS_FAMILIES)
 
-    def status_facts_for_conn(self, conn, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def status_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`status_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
         if not chunk_ids:
             return {}
@@ -263,7 +266,7 @@ class ChunkFactsStore:
                 residue += 1
         return settled + residue
 
-    def _maybe_live_statuses(self, conn, project: ProjectId | None = None) -> dict[str, ChunkStatus]:
+    def _maybe_live_statuses(self, conn: Connection, project: ProjectId | None = None) -> dict[str, ChunkStatus]:
         """Every :func:`maybe_live` candidate's derived status, terminal ones included — the
         prefilter's tie residue derives here, not in SQL. Ephemeral chunks never write a
         terminal fact, so they are excluded in the same query."""
@@ -278,7 +281,7 @@ class ChunkFactsStore:
 
     def _load(
         self,
-        conn,
+        conn: Connection,
         chunk_ids: Sequence[str] | None,
         *,
         families: frozenset[str] | None = None,
@@ -291,7 +294,9 @@ class ChunkFactsStore:
             result.update(self._load_batch(conn, batch, selected))
         return result
 
-    def _load_batch(self, conn, batch: Sequence[str] | None, families: frozenset[str]) -> dict[str, ChunkFacts]:
+    def _load_batch(
+        self, conn: Connection, batch: Sequence[str] | None, families: frozenset[str]
+    ) -> dict[str, ChunkFacts]:
         graph_id_of = graph_id_of_batch(conn, batch)
         if not graph_id_of:
             return {}
@@ -299,9 +304,13 @@ class ChunkFactsStore:
         # the caller's, opened through the caller's own scoped seam.
         stmts = statements_of(conn)
 
-        transition_rows = _rows(stmts, conn, s.transitions, batch) if "transitions" in families else []
-        migration_rows = _rows(stmts, conn, s.chunk_migrations, batch) if "migrations" in families else []
-        restart_rows = _rows(stmts, conn, s.chunk_restarts, batch) if "restarts" in families else []
+        transition_rows: Sequence[Row[Any]] = (
+            _rows(stmts, conn, s.transitions, batch) if "transitions" in families else []
+        )
+        migration_rows: Sequence[Row[Any]] = (
+            _rows(stmts, conn, s.chunk_migrations, batch) if "migrations" in families else []
+        )
+        restart_rows: Sequence[Row[Any]] = _rows(stmts, conn, s.chunk_restarts, batch) if "restarts" in families else []
 
         # The executor map spans every graph any fetched movement fact touched, keyed by
         # (graph_id, node_id) so a node id shared by two graphs never collides — built
@@ -581,7 +590,7 @@ class ChunkFactsStore:
         }
 
     @staticmethod
-    def _resolved_ids(conn, decision_ids: list[str]) -> set[str]:
+    def _resolved_ids(conn: Connection, decision_ids: list[str]) -> set[str]:
         """The decisions among ``decision_ids`` that carry a resolution row, or that an
         operator restart superseded (#370) — the two ways one stops deriving open.
         ``decision_ids`` can outgrow one chunk-id batch's worth of decisions, so each

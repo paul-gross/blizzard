@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
@@ -338,11 +339,11 @@ class ForgeRecordStore:
         return resolve_forge_reference(value, self)
 
 
-def _reconstituted(conn: Connection, row: Row) -> ConfiguredForge:  # type: ignore[type-arg]
+def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredForge:
     return _of(row, retired=row.forge_id in _retired_ids(conn, [ForgeId(row.forge_id)]))
 
 
-def _of(row: Row, *, retired: bool) -> ConfiguredForge:  # type: ignore[type-arg]
+def _of(row: Row[Any], *, retired: bool) -> ConfiguredForge:
     return ConfiguredForge(
         forge_id=ForgeId(row.forge_id),
         slug=row.slug,

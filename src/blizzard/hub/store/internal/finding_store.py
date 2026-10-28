@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, and_, case, desc, func, or_
+from sqlalchemy import ColumnElement, Connection, Row, and_, case, desc, func, or_
 
 from blizzard.foundation.findings import FindingState
 from blizzard.foundation.store.batching import id_batches
@@ -478,7 +479,7 @@ class FindingStore:
             ).first()
         return row is not None
 
-    def _facts(self, conn, finding_id: str) -> list[FindingFact]:
+    def _facts(self, conn: Connection, finding_id: str) -> list[FindingFact]:
         rows = conn.execute(
             self._store.select(finding_facts)
             .where(finding_facts.c.finding_id == finding_id)
@@ -487,7 +488,7 @@ class FindingStore:
         return [self._fact_of(r) for r in rows]
 
     @staticmethod
-    def _fact_of(row) -> FindingFact:
+    def _fact_of(row: Row[Any]) -> FindingFact:
         return FindingFact(
             kind=row.kind,
             recorded_at=row.recorded_at,
@@ -498,7 +499,7 @@ class FindingStore:
         )
 
     @staticmethod
-    def _of(row, summary: FindingFactSummary) -> Finding:
+    def _of(row: Row[Any], summary: FindingFactSummary) -> Finding:
         state = liveness_of(summary)
         return Finding(
             finding_id=row.finding_id,
@@ -619,7 +620,7 @@ class FindingSetStore:
         return [self._of(row) for row in rows]
 
     @staticmethod
-    def _of(row) -> FindingSet:
+    def _of(row: Row[Any]) -> FindingSet:
         return FindingSet(
             finding_set_id=row.finding_set_id,
             artifact_id=row.artifact_id,

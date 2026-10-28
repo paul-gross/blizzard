@@ -12,6 +12,7 @@ import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -103,7 +104,7 @@ def _reshaped(bind: sa.Connection) -> bool:
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])
@@ -179,8 +180,8 @@ def _rekey_fleet_authors(bind: sa.Connection, mapping: Mapping[str, str]) -> Non
         .order_by(_work_items.c.work_item_id)
     ).all()
     for work_item_id, raw in rows:
-        payload = json.loads(raw)
-        runner_id = payload.get("runner_id") if isinstance(payload, dict) else None
+        payload: Any = json.loads(raw)
+        runner_id = cast(dict[str, Any], payload).get("runner_id") if isinstance(payload, dict) else None
         if isinstance(runner_id, str) and runner_id in mapping:
             payload["runner_id"] = mapping[runner_id]
             bind.execute(

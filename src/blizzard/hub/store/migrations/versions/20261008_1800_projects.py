@@ -35,6 +35,7 @@ import json
 import os
 from collections.abc import Callable, Sequence
 from datetime import datetime
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -207,7 +208,7 @@ def _reflected(bind: sa.Connection, table: str) -> sa.Table:
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])
@@ -310,7 +311,7 @@ def _change_row(
     key: sa.ColumnElement[str] | str,
     diff: list[dict[str, object]],
     at: datetime,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "recorded_at": sa.literal(at, type_=UtcDateTime()),
         "actor": sa.literal(_MIGRATION),
@@ -326,11 +327,11 @@ def _change_row(
     }
 
 
-def _insert_selected(table: sa.TableClause, row: dict[str, object], select: sa.Select) -> None:
+def _insert_selected(table: sa.TableClause, row: dict[str, Any], select: sa.Select[Any]) -> None:
     """``INSERT INTO table (row's names) SELECT row's values`` from ``select``'s FROM and WHERE."""
     bind = op.get_bind()
     names = list(row)
-    bind.execute(sa.insert(table).from_select(names, select.with_only_columns(*row.values())))  # type: ignore[arg-type]
+    bind.execute(sa.insert(table).from_select(names, select.with_only_columns(*row.values())))
 
 
 def _create_projects(bind: sa.Connection) -> None:
@@ -357,7 +358,7 @@ def _create_projects(bind: sa.Connection) -> None:
         _changes.c.record_kind == "project",
         _changes.c.record_key == _projects.c.project_id,
     )
-    diff = [
+    diff: list[dict[str, object]] = [
         {"field": "slug", "old": None, "new": _DEFAULT_SLUG},
         {"field": "name", "old": None, "new": _DEFAULT_NAME},
         {"field": "description", "old": None, "new": ""},

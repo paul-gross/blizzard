@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection, func, select
+from sqlalchemy import Connection, Label, func, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
@@ -66,7 +67,7 @@ class ChunkWorkRefsStore:
         tables = sorted(
             (*status_family_tables(), s.chunk_work_refs, s.chunk_grouped, s.chunk_deleted), key=lambda t: t.name
         )
-        columns = []
+        columns: list[Label[Any]] = []
         for table in tables:
             columns.append(self._store.select(table, func.count()).scalar_subquery().label(f"{table.name}__count"))
             if "id" in table.c:
@@ -128,7 +129,7 @@ class ChunkWorkRefsStore:
                 ).all()
                 pairs.extend((WorkRef(source=source, ref=row.ref), row.chunk_id) for row in rows)
         held_ids = sorted({chunk_id for _, chunk_id in pairs})
-        ephemeral = ephemeral_ids_in(conn, held_ids) if held_ids else set()
+        ephemeral: set[str] = ephemeral_ids_in(conn, held_ids) if held_ids else set()
         maybe_live_ids = {
             chunk_id
             for batch in id_batches([c for c in held_ids if c not in ephemeral])
@@ -154,7 +155,7 @@ class ChunkWorkRefsStore:
         the group fold's own write, on ``handle``'s already-locked connection."""
         self._add_work_refs_conn(conn_of(handle), chunk_id, pointers)
 
-    def _add_work_refs_conn(self, conn, chunk_id: str, pointers: list[WorkRef]) -> None:
+    def _add_work_refs_conn(self, conn: Connection, chunk_id: str, pointers: list[WorkRef]) -> None:
         existing = {
             (p.source, p.ref)
             for p in conn.execute(

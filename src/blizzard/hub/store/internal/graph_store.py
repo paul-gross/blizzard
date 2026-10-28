@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Connection, Select
+from sqlalchemy import Column, Connection, Row, Select
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
@@ -120,7 +120,7 @@ class SessionRow:
             "harnesses": TEXTS.encode(list(decl.harnesses)),
         }
 
-    def of(self, row: Any) -> SessionDecl:
+    def of(self, row: Row[Any]) -> SessionDecl:
         """Three null ``rotate_*`` columns hydrate ``rotate=None``, not an all-null
         :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified one."""
         bounds = (row.rotate_max_context_tokens, row.rotate_max_transcript_bytes, row.rotate_max_invocations)
@@ -145,7 +145,7 @@ class GraphArtifactRow:
             "content": artifact.content,
         }
 
-    def of(self, row: Any) -> GraphArtifact:
+    def of(self, row: Row[Any]) -> GraphArtifact:
         return GraphArtifact(name=row.name, content=row.content, ordinal=row.ordinal)
 
 
@@ -161,7 +161,7 @@ class ChoiceRow:
             "requires_checks": choice.requires_checks,
         }
 
-    def of(self, row: Any) -> Choice:
+    def of(self, row: Row[Any]) -> Choice:
         return Choice(
             choice_id=row.choice_id,
             name=row.name,
@@ -183,7 +183,7 @@ class EdgeRow:
             "to_graph_model": edge.model,
         }
 
-    def of(self, row: Any) -> Edge:
+    def of(self, row: Row[Any]) -> Edge:
         return Edge(
             from_node_id=row.from_node_id,
             choice_id=row.choice_id,
@@ -226,7 +226,7 @@ class NodeRow:
             "action_args": json.dumps({k: list(v) for k, v in node.action_args.items()}) if node.action_args else None,
         }
 
-    def of(self, row: Any, *, choices: list[Choice]) -> Node:
+    def of(self, row: Row[Any], *, choices: list[Choice]) -> Node:
         return Node(
             node_id=row.node_id,
             graph_id=row.graph_id,
@@ -365,7 +365,7 @@ class GraphStore:
         with self._store.read("graph_id_of_enabled_name") as conn:
             return conn.execute(self._enabled_by_name_select(name, graphs.c.graph_id)).scalar_one_or_none()
 
-    def _enabled_by_name_select(self, name: str, *columns: Any) -> Select:
+    def _enabled_by_name_select(self, name: str, *columns: Column[Any]) -> Select[Any]:
         """The one statement behind both enabled-by-name reads: ``name``'s newest mint that is not
         retired — ``(created_at, graph_id)`` descending, ULIDs sorting lexically by creation — as
         ``LIMIT 1``, so only the winning row is read. Retired is :func:`newest_retired_select`'s
@@ -395,7 +395,7 @@ class GraphStore:
                 result.update(self._reify_many(conn, batch))
         return result
 
-    def _reify_many(self, conn, graph_ids: Sequence[str]) -> dict[str, Graph]:
+    def _reify_many(self, conn: Connection, graph_ids: Sequence[str]) -> dict[str, Graph]:
         graph_rows = conn.execute(self._store.select(graphs).where(graphs.c.graph_id.in_(graph_ids))).all()
         if not graph_rows:
             return {}
@@ -545,7 +545,7 @@ class GraphStore:
         with self._store.read("is_retired") as conn:
             return self._is_retired(conn, graph_id)
 
-    def _is_retired(self, conn, graph_id: str) -> bool:
+    def _is_retired(self, conn: Connection, graph_id: str) -> bool:
         """Newest ``graph_lifecycle_facts`` row for ``graph_id`` wins; no row reads
         not-retired (a freshly minted graph starts enabled)."""
         row = conn.execute(
@@ -600,7 +600,7 @@ class GraphStore:
                 )
             )
 
-    def _reify(self, conn, graph_row) -> Graph:
+    def _reify(self, conn: Connection, graph_row: Row[Any]) -> Graph:
         node_rows = conn.execute(
             self._store.select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)
         ).all()

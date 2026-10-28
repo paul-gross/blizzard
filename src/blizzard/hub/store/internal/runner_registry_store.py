@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Row
 
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.store.batching import id_batches
@@ -69,7 +70,7 @@ class RunnerRegistryStore:
         with self._store.read("is_retired") as conn:
             return self._lifecycle(conn, runner_id)[0]
 
-    def get_runner_conn(self, conn, runner_id: str) -> RunnerRegistration | None:
+    def get_runner_conn(self, conn: Connection, runner_id: str) -> RunnerRegistration | None:
         """`get_runner`'s already-open-connection sibling — the locked-transaction seam's
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection
         rather than a fresh one."""
@@ -112,7 +113,9 @@ class RunnerRegistryStore:
             ]
             return {r.runner_id: r for r in self._hydrate(conn, rows, include_retired=True)}
 
-    def _hydrate(self, conn: Connection, rows: Sequence, *, include_retired: bool) -> list[RunnerRegistration]:
+    def _hydrate(
+        self, conn: Connection, rows: Sequence[Row[Any]], *, include_retired: bool
+    ) -> list[RunnerRegistration]:
         """The registrations ``rows`` stand for, in row order — retired ones only when ``include_retired``."""
         runner_ids = [row.runner_id for row in rows]
         lifecycle = self._lifecycle_many(conn, runner_ids)
@@ -486,12 +489,12 @@ class RunnerRegistryStore:
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _paused(conn, runner_id: str) -> bool:
+    def _paused(conn: Connection, runner_id: str) -> bool:
         """Derive the fleet's brake from the newest pause/resume fact, default False."""
         return RunnerRegistryStore._paused_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _paused_many(conn, runner_ids: Sequence[str]) -> dict[str, bool]:
+    def _paused_many(conn: Connection, runner_ids: Sequence[str]) -> dict[str, bool]:
         """``_paused``'s grouped sibling and its one home — every listed runner's fleet
         brake off its own newest pause/resume fact, one query for every id in
         ``runner_ids`` rather than one query per runner (`list_runners`)."""
@@ -516,12 +519,14 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _lifecycle(conn, runner_id: str) -> tuple[bool, datetime | None, str | None]:
+    def _lifecycle(conn: Connection, runner_id: str) -> tuple[bool, datetime | None, str | None]:
         """The runner's retirement, off its newest lifecycle fact."""
         return RunnerRegistryStore._lifecycle_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _lifecycle_many(conn, runner_ids: Sequence[str]) -> dict[str, tuple[bool, datetime | None, str | None]]:
+    def _lifecycle_many(
+        conn: Connection, runner_ids: Sequence[str]
+    ) -> dict[str, tuple[bool, datetime | None, str | None]]:
         """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
         its newest lifecycle fact, one query per id batch. Defaults ``(False, None, None)``,
         and a reinstated runner's newest fact nulls ``at``/``by``."""
@@ -546,12 +551,14 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:
+    def _local_pause_detail(conn: Connection, runner_id: str) -> tuple[bool, str | None, str | None]:
         """The runner's own brake plus its cause, off the newest fact."""
         return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _local_pause_detail_many(conn, runner_ids: Sequence[str]) -> dict[str, tuple[bool, str | None, str | None]]:
+    def _local_pause_detail_many(
+        conn: Connection, runner_ids: Sequence[str]
+    ) -> dict[str, tuple[bool, str | None, str | None]]:
         """``_local_pause_detail``'s grouped sibling and its one home — every listed
         runner's own brake plus its cause, off its own newest fact, one query for every id
         in ``runner_ids`` rather than one query per runner (`list_runners`).
@@ -582,13 +589,15 @@ class RunnerRegistryStore:
         return result
 
     @staticmethod
-    def _external_usage(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:
+    def _external_usage(conn: Connection, runner_id: str) -> list[tuple[str, str, datetime, str]]:
         """Every reported subscription's newest sample for this runner, raw,
         one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _external_usage_many(conn, runner_ids: Sequence[str]) -> dict[str, list[tuple[str, str, datetime, str]]]:
+    def _external_usage_many(
+        conn: Connection, runner_ids: Sequence[str]
+    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
         """``_external_usage``'s grouped sibling and its one home — every listed runner's
         reported subscriptions, raw, one row per slug — ``(slug, name, sampled_at,
         windows_json)`` tuples — one query for every id in ``runner_ids`` rather than one
@@ -615,13 +624,15 @@ class RunnerRegistryStore:
         return grouped
 
     @staticmethod
-    def _external_usage_misses(conn, runner_id: str) -> list[tuple[str, str, datetime, str]]:
+    def _external_usage_misses(conn: Connection, runner_id: str) -> list[tuple[str, str, datetime, str]]:
         """Every reported subscription's newest miss for this runner, raw,
         one row per slug. Empty for a runner that has never reported one."""
         return RunnerRegistryStore._external_usage_misses_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _external_usage_misses_many(conn, runner_ids: Sequence[str]) -> dict[str, list[tuple[str, str, datetime, str]]]:
+    def _external_usage_misses_many(
+        conn: Connection, runner_ids: Sequence[str]
+    ) -> dict[str, list[tuple[str, str, datetime, str]]]:
         """``_external_usage_misses``'s grouped sibling and its one home — every listed
         runner's reported subscription misses, raw, one row per slug — ``(slug, name,
         missed_at, reason)`` tuples — one query for every id in ``runner_ids`` rather than
@@ -649,7 +660,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _registration(
-        row,
+        row: Row[Any],
         hub_paused: bool,
         local_pause_detail: tuple[bool, str | None, str | None],
         external_usage: list[tuple[str, str, datetime, str]],
@@ -671,6 +682,15 @@ class RunnerRegistryStore:
             SubscriptionUsageMiss(slug=slug, name=name, missed_at=missed_at, reason=reason)
             for slug, name, missed_at, reason in external_usage_misses
         )
+        capability_entries: list[dict[str, Any]] = json.loads(row.capabilities) if row.capabilities else []
+        subscription_entries: list[dict[str, Any]] | None = (
+            json.loads(row.subscriptions) if row.subscriptions is not None else None
+        )
+        redirect_uris: list[str] = json.loads(row.redirect_uris) if row.redirect_uris else []
+        gates: list[str] = json.loads(row.gates) if row.gates else []
+        binding_entries: list[dict[str, Any]] | None = json.loads(row.bindings) if row.bindings is not None else None
+        declining_entries: list[dict[str, Any]] = json.loads(row.declining) if row.declining else []
+        served_entries: list[dict[str, Any]] = json.loads(row.projects) if row.projects else []
         capabilities = tuple(
             RunnerCapability(
                 harness_id=c["harness_id"],
@@ -680,16 +700,16 @@ class RunnerRegistryStore:
                 default=bool(c.get("default", False)),
                 available=bool(c.get("available", True)),
             )
-            for c in (json.loads(row.capabilities) if row.capabilities else [])
+            for c in capability_entries
         )
         # `NULL` (no roster reported) stays `None`; `"[]"` (an empty declared roster)
         # decodes to `()`, not `None` — the absent/empty distinction is kept.
         declared_subscriptions = (
             tuple(
                 DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])
-                for d in json.loads(row.subscriptions)
+                for d in subscription_entries
             )
-            if row.subscriptions is not None
+            if subscription_entries is not None
             else None
         )
         return RunnerRegistration(
@@ -707,7 +727,7 @@ class RunnerRegistryStore:
             token_hash=row.token_hash,
             env_capacity=row.env_capacity,
             public_url=row.public_url,
-            redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
+            redirect_uris=tuple(redirect_uris),
             subscription_usage=subscription_usage,
             subscription_usage_misses=subscription_usage_misses,
             capabilities=capabilities,
@@ -715,11 +735,11 @@ class RunnerRegistryStore:
             retired=retired,
             retired_at=as_utc(retired_at) if retired_at is not None else None,
             retired_by=retired_by,
-            gates=tuple(json.loads(row.gates)) if row.gates else (),
+            gates=tuple(gates),
             host_id=row.host_id,
             bindings=(
-                tuple(RunnerBinding(b["project"], b["workspace_id"], b["agents"]) for b in json.loads(row.bindings))
-                if row.bindings is not None
+                tuple(RunnerBinding(b["project"], b["workspace_id"], b["agents"]) for b in binding_entries)
+                if binding_entries is not None
                 else None
             ),
             subscription=row.subscription,
@@ -731,15 +751,12 @@ class RunnerRegistryStore:
                     subscription=d.get("subscription"),
                     until=None if d.get("until") is None else as_utc(datetime.fromisoformat(d["until"])),
                 )
-                for d in (json.loads(row.declining) if row.declining else [])
+                for d in declining_entries
             ),
             reported_version=row.reported_version,
             version_refusal=None if row.version_refusal is None else VersionRefusalReason(row.version_refusal),
             version_judged_at=row.version_judged_at,
-            served=tuple(
-                ServedEntry(entry=e["entry"], project_id=e.get("project_id"))
-                for e in (json.loads(row.projects) if row.projects else [])
-            ),
+            served=tuple(ServedEntry(entry=e["entry"], project_id=e.get("project_id")) for e in served_entries),
         )
 
 

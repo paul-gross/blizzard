@@ -7,10 +7,11 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, and_, or_, true
+from sqlalchemy import Column, ColumnElement, Connection, Row, Select, and_, or_, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -41,13 +42,15 @@ _HUB_RUNNER_ID = "hub"
 # real joins and anti-join included.
 
 
-def _bounded_stmt(stmt: Select[Any], *, ts_col: Any, pk_col: Any, since: datetime, limit: int) -> Select[Any]:
+def _bounded_stmt(
+    stmt: Select[Any], *, ts_col: Column[Any], pk_col: Column[Any], since: datetime, limit: int
+) -> Select[Any]:
     """``activity_facts_since``'s shared bound over a source's base statement (never a full-table scan) — a pure
     builder that lets a test compile the exact statement a source executes."""
     return stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
 
 
-def _event_log_in_lens(stmts: ScopedStatements, lens: FeedLens) -> Any:
+def _event_log_in_lens(stmts: ScopedStatements, lens: FeedLens) -> ColumnElement[bool]:
     """An ``event_log`` row :class:`FeedLens` keeps: one naming a chunk of its project, or one naming no chunk whose
     runner, if it names one, serves the project."""
     t = s.event_log
@@ -244,7 +247,7 @@ def _route_released_activity_stmt(stmts: ScopedStatements, deleted: Select[Any])
     ).where(released.c.chunk_id.not_in(deleted))
 
 
-def _route_released_entry(r: Any) -> ActivityEntry:
+def _route_released_entry(r: Row[Any]) -> ActivityEntry:
     """A ``route_released`` row as its feed entry: a release reads ``released``, naming its holder and its
     reason; every other cause, a null one included, reads ``detached``."""
     if r.cause == RouteReleaseCause.RELEASE:
@@ -724,7 +727,17 @@ class ChunkEventsStore:
             return rows
 
     @staticmethod
-    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, chunks, builder):
+    def _bounded(
+        conn: Connection,
+        stmt: Select[Any],
+        *,
+        ts_col: Column[Any],
+        pk_col: Column[Any],
+        since: datetime,
+        limit: int,
+        chunks: Select[Any] | None,
+        builder: Callable[[Row[Any]], ActivityEntry],
+    ) -> list[ActivityEntry]:
         """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
         read and reshape each row via ``builder`` — the one piece every
         :meth:`activity_facts_since` source shares (never a full-table scan). ``chunks``, when given, narrows
@@ -744,7 +757,7 @@ class ChunkEventsStore:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict | None,
+        detail: dict[str, Any] | None,
         at: datetime,
     ) -> int:
         # Append-only operational fact, no epoch fence. `detail` serializes

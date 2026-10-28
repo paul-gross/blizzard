@@ -1748,10 +1748,10 @@ usage_facts = Table(
     Column("output_tokens", Integer, nullable=False),
     Column("cache_read_tokens", Integer, nullable=False),
     Column("cache_create_tokens", Integer, nullable=False),
-    Column("cost_usd", Float, nullable=True),  # None = no billed figure for this invocation — never fabricated
+    Column("cost_usd", Float(), nullable=True),  # None = no billed figure for this invocation — never fabricated
     # A runner-side estimate, kept apart from `cost_usd` — nullable, un-backfilled; see
     # `docs/deployment/spend.md`'s "Estimated cost" section.
-    Column("estimated_cost_usd", Float, nullable=True),
+    Column("estimated_cost_usd", Float(), nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_usage_facts_tenant_id"), nullable=False),
 )
@@ -2022,7 +2022,7 @@ queue_positions = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("position", Float, nullable=False),  # lower sorts earlier; newest fact per chunk wins
+    Column("position", Float(), nullable=False),  # lower sorts earlier; newest fact per chunk wins
     Column("set_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_queue_positions_tenant_id"), nullable=False),
 )

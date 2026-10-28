@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from collections.abc import Sequence
+from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
@@ -79,7 +80,7 @@ def _digests_fingerprint(digests: Sequence[str]) -> str:
     return digest.hexdigest()
 
 
-def _old_formula_fingerprint(rows: Sequence[sa.engine.Row]) -> str:
+def _old_formula_fingerprint(rows: Sequence[sa.Row[Any]]) -> str:
     """Restates the whole-segment formula this revision retires — one hash over
     every row's own ``(turn_range_start, rejected, content)`` in range order — so a
     still-valid marker can be told from a stale one before it is rewritten."""
@@ -124,7 +125,7 @@ def upgrade() -> None:
             )
             pending_row_updates.clear()
 
-    def process_segment(segment_id: str, rows: list) -> None:
+    def process_segment(segment_id: str, rows: list[sa.Row[Any]]) -> None:
         rows_sorted = sorted(rows, key=lambda r: r.turn_range_start)
         digests = [
             _row_digest(turn_range_start=r.turn_range_start, rejected=r.rejected, content=r.content)
@@ -150,7 +151,7 @@ def upgrade() -> None:
                 )
 
     current_segment_id: str | None = None
-    current_rows: list = []
+    current_rows: list[sa.Row[Any]] = []
     # Streamed, like the write side's own `_FLUSH_EVERY` batching below — `content` at
     # production scale (~178 MB compressed) must never sit in memory as one result set.
     rows_iter = bind.execute(
@@ -172,7 +173,7 @@ def upgrade() -> None:
         current_segment_id = row.segment_id
         current_rows.append(row)
     if current_rows:
-        process_segment(current_segment_id, current_rows)  # type: ignore[arg-type]
+        process_segment(cast(str, current_segment_id), current_rows)
     flush_rows()
 
     with op.batch_alter_table(_SEGMENTS_TABLE) as batch:

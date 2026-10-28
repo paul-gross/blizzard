@@ -7,6 +7,7 @@ rollback after the last write (``bzh:config-apply``)."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
@@ -218,7 +219,9 @@ def _run_routine(
             routine_writes.update_routine(conn, record, from_revision, change)
         else:
             assert isinstance(linked, list)
-            routine_writes.set_linked_scopes(conn, record, linked, from_revision=from_revision, change=change)
+            routine_writes.set_linked_scopes(
+                conn, record, cast(list[str], linked), from_revision=from_revision, change=change
+            )
 
 
 def _run_project(conn: Connection, record: Project, from_revision: int | None, change: ConfigChange) -> None:

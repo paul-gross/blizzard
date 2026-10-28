@@ -31,7 +31,7 @@ _queue_positions = sa.Table(
     _frozen_metadata,
     sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
-    sa.Column("position", sa.Float, nullable=False),
+    sa.Column("position", sa.Float(), nullable=False),
     sa.Column("set_at", UtcDateTime, nullable=False),
 )
 sa.Index("ix_queue_positions_chunk_id", _queue_positions.c.chunk_id)

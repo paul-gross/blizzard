@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, CursorResult, Row
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
@@ -318,8 +319,11 @@ class HostRegistryStore:
         return result
 
     @staticmethod
-    def _host(row, lifecycle: _Lifecycle) -> Host:
+    def _host(row: Row[Any], lifecycle: _Lifecycle) -> Host:
         retired, retired_at, retired_by = lifecycle
+        redirect_uris: list[str] = json.loads(row.redirect_uris) if row.redirect_uris else []
+        workspaces: list[dict[str, Any]] = json.loads(row.workspaces) if row.workspaces else []
+        subscriptions: list[dict[str, Any]] = json.loads(row.subscriptions) if row.subscriptions else []
         return Host(
             host_id=row.host_id,
             name=row.name,
@@ -328,14 +332,12 @@ class HostRegistryStore:
             registered_at=row.registered_at,
             last_seen_at=row.last_seen_at,
             url=row.url,
-            redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
+            redirect_uris=tuple(redirect_uris),
             workspaces=tuple(
-                HostWorkspace(workspace_id=w["workspace_id"], env_capacity=w.get("env_capacity"))
-                for w in (json.loads(row.workspaces) if row.workspaces else [])
+                HostWorkspace(workspace_id=w["workspace_id"], env_capacity=w.get("env_capacity")) for w in workspaces
             ),
             subscriptions=tuple(
-                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])
-                for d in (json.loads(row.subscriptions) if row.subscriptions else [])
+                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"]) for d in subscriptions
             ),
             token_hash=row.token_hash,
             retired=retired,
@@ -344,7 +346,7 @@ class HostRegistryStore:
         )
 
 
-def _inserted_id(result) -> int:
+def _inserted_id(result: CursorResult[Any]) -> int:
     key = result.inserted_primary_key
     return int(key[0]) if key is not None else 0
 

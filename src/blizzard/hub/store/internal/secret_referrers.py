@@ -5,7 +5,9 @@ newest lifecycle fact (``bzh:facts-not-status``)."""
 
 from __future__ import annotations
 
-from sqlalchemy import Table
+from typing import Any
+
+from sqlalchemy import Row, Table
 from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
@@ -35,7 +37,7 @@ def active_referrers(conn: Connection, secret_names: list[str]) -> dict[str, lis
     stmts = statements_of(conn)
     for kind, table, facts, key, label in _REFERRING:
         order = table.c[label]
-        rows = []
+        rows: list[Row[Any]] = []
         for batch in id_batches(secret_names):
             rows.extend(
                 conn.execute(

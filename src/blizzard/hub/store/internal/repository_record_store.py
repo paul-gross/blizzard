@@ -10,6 +10,7 @@ forge's API origin in the deprecated ``forge_api_url`` column, which the coordin
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
@@ -318,11 +319,11 @@ class RepositoryRecordStore:
         return resolve_repository_reference(value, self)
 
 
-def _reconstituted(conn: Connection, row: Row) -> ConfiguredRepository:  # type: ignore[type-arg]
+def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredRepository:
     return _of(row, retired_at=_retirements(conn, [RepositoryId(row.repository_id)]).get(row.repository_id))
 
 
-def _of(row: Row, *, retired_at: datetime | None) -> ConfiguredRepository:  # type: ignore[type-arg]
+def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
     return ConfiguredRepository(
         repository_id=RepositoryId(row.repository_id),
         slug=row.slug,

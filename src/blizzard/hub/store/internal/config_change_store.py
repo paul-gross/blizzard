@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import Row, Select, func, or_
 from sqlalchemy.engine import Connection
 
 from blizzard.hub.domain.config.changes import (
@@ -79,7 +80,13 @@ class ConfigChangeStore:
             return conn.execute(query).scalar_one()
 
     @staticmethod
-    def _filtered(query, *, record_kind, record_key, project_id):
+    def _filtered(
+        query: Select[Any],
+        *,
+        record_kind: RecordKind | None,
+        record_key: str | None,
+        project_id: str | None,
+    ) -> Select[Any]:
         """``query`` narrowed by the log's filters; a ``project_id`` keeps the tenant-wide rows beside the project's."""
         if record_kind is not None:
             query = query.where(config_changes.c.record_kind == record_kind.value)
@@ -90,7 +97,7 @@ class ConfigChangeStore:
         return query
 
     @staticmethod
-    def _of(row) -> ConfigChange:
+    def _of(row: Row[Any]) -> ConfigChange:
         return ConfigChange(
             id=row.id,
             recorded_at=row.recorded_at,

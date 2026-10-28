@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import datetime
 
-from sqlalchemy import insert, select
+from sqlalchemy import ColumnElement, insert, select
 
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.graph.model import Graph
@@ -100,7 +100,7 @@ class TraceStore:
         """The newest row that told spans — rows of zero are jumps and idle advances."""
         return self._newest_cursor("newest_export_cursor", s.trace_cursor.c.span_count > 0)
 
-    def _newest_cursor(self, operation: str, *where) -> TraceCheckpoint | None:
+    def _newest_cursor(self, operation: str, *where: ColumnElement[bool]) -> TraceCheckpoint | None:
         c = s.trace_cursor.c
         with self._store.read(operation) as conn:
             row = conn.execute(
@@ -139,7 +139,7 @@ class TraceStore:
 
 def _graph_ids(facts: StepFacts) -> set[str]:
     """Every graph a chunk's facts name — its pin and each movement fact's graphs."""
-    ids = {facts.pin_graph_id} if facts.pin_graph_id is not None else set()
+    ids: set[str] = {facts.pin_graph_id} if facts.pin_graph_id is not None else set()
     ids |= {t.graph_id for t in facts.transitions}
     ids |= {m.from_graph_id for m in facts.migrations} | {m.to_graph_id for m in facts.migrations}
     ids |= {r.graph_id for r in facts.restarts}
@@ -149,7 +149,7 @@ def _graph_ids(facts: StepFacts) -> set[str]:
 
 def _runner_ids(facts: StepFacts) -> set[str]:
     """Every runner a chunk's facts name — each epoch's owner and each gate's imposing runner."""
-    ids = {o.runner_id for o in facts.epoch_owners if o.runner_id is not None}
+    ids: set[str] = {o.runner_id for o in facts.epoch_owners if o.runner_id is not None}
     return ids | {d.imposed_by_runner_id for d in facts.decisions if d.imposed_by_runner_id is not None}
 
 

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Insert, Select, Update, func
+from sqlalchemy import Insert, Row, Select, Update, func
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
@@ -374,7 +374,7 @@ class TranscriptSegmentStore:
             # Batched by chunk id, each batch narrowed by its epochs; a pair outside
             # ``wanted`` is filtered out below.
             for batch in id_batches(sorted(epochs_by_chunk)):
-                epochs = sorted(set().union(*(epochs_by_chunk[c] for c in batch)))
+                epochs = sorted(set[int]().union(*(epochs_by_chunk[c] for c in batch)))
                 rows = conn.execute(_epoch_owners_stmt(self._store, batch, epochs)).all()
                 for row in rows:
                     if (row.chunk_id, row.epoch) in wanted:
@@ -439,7 +439,7 @@ class TranscriptSegmentStore:
         return zlib.decompress(content).decode("utf-8")
 
     @staticmethod
-    def _index_row(segment_id: str, rows: list) -> SegmentSummary:
+    def _index_row(segment_id: str, rows: list[Row[Any]]) -> SegmentSummary:
         return SegmentSummary(
             segment_id=segment_id,
             node_id=rows[0].node_id,

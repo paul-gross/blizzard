@@ -15,7 +15,7 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Delete, Insert, Select, func
+from sqlalchemy import Delete, Insert, Row, Select, func
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.observability.analytics.events import (
@@ -506,7 +506,7 @@ class TranscriptEventStore:
         with self._store.write("drop_segments") as conn:
             for batch in itertools.batched(segment_ids, _DROP_SEGMENTS_BATCH_SIZE):
                 # A segment with no stored record writes no drop fact: nothing to record it against.
-                first_by_segment = {}
+                first_by_segment: dict[str, Row[Any]] = {}
                 for row in conn.execute(_drop_identities_stmt(self._store, batch)).all():
                     first_by_segment.setdefault(row.segment_id, row)
                 if first_by_segment:

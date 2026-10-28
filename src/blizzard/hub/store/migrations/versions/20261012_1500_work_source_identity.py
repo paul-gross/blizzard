@@ -40,6 +40,7 @@ import logging
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -160,7 +161,7 @@ def _index_columns(table: str, source: str) -> list[str]:
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])
@@ -271,7 +272,7 @@ def _rewrite(
     table: sa.TableClause,
     column: str,
     conditions: list[sa.ColumnElement[bool]],
-    value: sa.Select,
+    value: sa.Select[Any],
 ) -> None:
     """Set ``column`` of the rows ``conditions`` select to ``value``, a page of row ids at a time."""
     page = sa.select(table.c.id).where(*conditions).order_by(table.c.id).limit(_BATCH_ROWS)
@@ -335,7 +336,7 @@ def _mint(bind: sa.Connection) -> None:
             taken.setdefault(tenant_id, set()).add(name)
     after: sa.ColumnElement[bool] = sa.true()
     while rows := bind.execute(page.where(after)).all():
-        stamps = []
+        stamps: list[dict[str, Any]] = []
         for tenant_id, name, created_at, slug in rows:
             held = taken.setdefault(tenant_id, set())
             if slug is None:
@@ -604,10 +605,7 @@ def _carry_names(bind: sa.Connection, child: _Child) -> None:
         return
     rows = _child_table(table, key, name)
     resolved = (
-        sa.select(_sources.c.slug)
-        .where(_sources.c.work_source_id == rows.c[_ID])
-        .correlate(rows)
-        .scalar_subquery()
+        sa.select(_sources.c.slug).where(_sources.c.work_source_id == rows.c[_ID]).correlate(rows).scalar_subquery()
     )
     page_key = (*key, _ID) if table == _LINKS else key
     _fill(bind, rows, page_key, name, resolved)

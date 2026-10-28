@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from typing import Any, cast
 
 from sqlalchemy import Connection
 
@@ -30,7 +31,8 @@ def stored_usage_windows(windows_json: str) -> tuple[ExternalSubscriptionUsageWi
         return ()
     if not isinstance(entries, list):
         return ()
-    admitted = (ExternalSubscriptionUsageWindow.admitted(entry) for entry in entries)
+    items = cast(list[Any], entries)
+    admitted = (ExternalSubscriptionUsageWindow.admitted(entry) for entry in items)
     return tuple(window for window in admitted if not isinstance(window, str))
 
 
@@ -67,8 +69,8 @@ def read_host_rosters(
         for row in conn.execute(
             store.select(hosts, hosts.c.host_id, hosts.c.subscriptions).where(hosts.c.host_id.in_(batch))
         ):
+            declared: list[dict[str, Any]] = json.loads(row.subscriptions) if row.subscriptions else []
             rosters[row.host_id] = tuple(
-                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"])
-                for d in (json.loads(row.subscriptions) if row.subscriptions else [])
+                DeclaredSubscription(slug=d["slug"], name=d["name"], provider=d["provider"]) for d in declared
             )
     return rosters

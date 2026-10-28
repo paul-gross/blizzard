@@ -11,6 +11,7 @@ import json
 import logging
 import shlex
 from collections.abc import Sequence
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -56,7 +57,7 @@ def _flag_args(argv: list[str], flags: dict[str, str]) -> dict[str, list[str]] |
 
 def _translated(raw_run: str | None) -> tuple[str, dict[str, list[str]]] | None:
     """The action and arguments a stored ``run`` stood for, or ``None`` when it stood for none."""
-    steps = json.loads(raw_run) if raw_run else []
+    steps: Any = json.loads(raw_run) if raw_run else []
     if not steps:
         return "pass", {}
     if len(steps) != 1 or not isinstance(steps[0], dict):

@@ -16,6 +16,7 @@ Revises: 20261008_1100_tenants
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -126,7 +127,8 @@ _tenants = sa.table("tenants", sa.column("tenant_id", sa.String))
 
 def _stub(table: str, primary_key: tuple[str, ...]) -> sa.TableClause:
     """A narrow stub: the primary key the backfill pages by, and the column it fills."""
-    return sa.table(table, *(sa.column(name) for name in primary_key), sa.column(_TENANT_COLUMN, sa.String))
+    columns: list[sa.ColumnClause[Any]] = [sa.column(name) for name in primary_key]
+    return sa.table(table, *columns, sa.column(_TENANT_COLUMN, sa.String))
 
 
 def _has_column(bind: sa.Connection, table: str) -> bool:

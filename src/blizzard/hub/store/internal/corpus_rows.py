@@ -18,7 +18,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, Connection, Select, Table, and_, func, not_, or_, select
+from sqlalchemy import Column, Connection, Row, Select, Table, and_, func, not_, or_, select
 from sqlalchemy.sql import ColumnElement
 
 from blizzard.foundation.migration_source import MigrationSource
@@ -63,7 +63,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
 
 
-def open_tenant(table: Any) -> ColumnElement[bool]:
+def open_tenant(table: Table) -> ColumnElement[bool]:
     """``table``'s rows that belong to an open tenant — one with no ``tenant_deletions`` row, whether
     a closed tenant's drain is still running or done. A row naming no tenant belongs to none, so it
     is left out whatever ``tenant_deletions`` holds: ``NOT IN`` alone would admit it while that
@@ -72,7 +72,7 @@ def open_tenant(table: Any) -> ColumnElement[bool]:
     return and_(tenant.is_not(None), tenant.not_in(select(s.tenant_deletions.c.tenant_id)))
 
 
-def of_chunks(table: Table, chunk_id: Column, chunk_ids: Sequence[str]) -> ColumnElement[bool]:  # type: ignore[type-arg]
+def of_chunks(table: Table, chunk_id: Column[Any], chunk_ids: Sequence[str]) -> ColumnElement[bool]:
     """``table``'s open-tenant rows naming one of ``chunk_ids`` by ``chunk_id``, qualified by those chunks' own
     tenants: a chunk's rows share its tenant, and naming it lets the read seek the table's tenant-led chunk index
     rather than walk the table."""
@@ -83,7 +83,7 @@ def of_chunks(table: Table, chunk_id: Column, chunk_ids: Sequence[str]) -> Colum
 # --- closing candidates --------------------------------------------------------------
 
 #: Closing-fact tables, (time, id)-indexed (blizzard-product:/delivered/tracing/fleet-spans/spec/spans.md §Closing).
-_CLOSING_TABLES: tuple[tuple[Table, Column, Column], ...] = (
+_CLOSING_TABLES: tuple[tuple[Table, Column[Any], Column[Any]], ...] = (
     (s.transitions, s.transitions.c.recorded_at, s.transitions.c.transition_id),
     (s.decisions, s.decisions.c.submitted_at, s.decisions.c.decision_id),
     (s.chunk_migrations, s.chunk_migrations.c.recorded_at, s.chunk_migrations.c.migration_id),
@@ -112,9 +112,9 @@ def closing_candidates(conn: Connection, since: datetime, until: datetime, limit
     return ClosingCandidates(tuple(chunk_ids), min(frontiers, default=None), max(newest, default=None))
 
 
-def _closing_rows(  # type: ignore[no-untyped-def]
-    conn: Connection, table: Table, at: Column, row_id: Column, since: datetime, until: datetime, limit: int
-):
+def _closing_rows(
+    conn: Connection, table: Table, at: Column[Any], row_id: Column[Any], since: datetime, until: datetime, limit: int
+) -> tuple[list[Row[Any]], bool]:
     """One table's rows in ``(time, id)`` order. A full page that never left ``since`` pages on past
     it, so the frontier it sets is always later than ``since``."""
     columns = (table.c.tenant_id, table.c.chunk_id, at.label("at"), row_id.label("row_id"))
@@ -153,8 +153,8 @@ def with_work_refs(facts: StepFacts, refs: Sequence[WorkRef], label: WorkRefLabe
     )
 
 
-def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Column) -> dict[str, list]:  # type: ignore[type-arg]
-    grouped: dict[str, list] = defaultdict(list)  # type: ignore[type-arg]
+def _by_chunk(conn: Connection, table: Table, batch: Sequence[str], *order: Column[Any]) -> dict[str, list[Row[Any]]]:
+    grouped: dict[str, list[Row[Any]]] = defaultdict(list)
     stmt = select(table).where(of_chunks(table, table.c.chunk_id, batch)).order_by(*order)
     for row in conn.execute(stmt).all():
         grouped[row.chunk_id].append(row)
@@ -300,7 +300,7 @@ def _prerequisites_met(conn: Connection, ids: Sequence[str]) -> dict[str, list[T
     return grouped
 
 
-def _transition(r) -> TracedTransition:  # type: ignore[no-untyped-def]
+def _transition(r: Row[Any]) -> TracedTransition:
     return TracedTransition(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
@@ -312,7 +312,7 @@ def _transition(r) -> TracedTransition:  # type: ignore[no-untyped-def]
     )
 
 
-def _migration(r) -> TracedMigration:  # type: ignore[no-untyped-def]
+def _migration(r: Row[Any]) -> TracedMigration:
     return TracedMigration(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
@@ -327,7 +327,7 @@ def _migration(r) -> TracedMigration:  # type: ignore[no-untyped-def]
     )
 
 
-def _restart(r) -> TracedRestart:  # type: ignore[no-untyped-def]
+def _restart(r: Row[Any]) -> TracedRestart:
     return TracedRestart(
         epoch=r.epoch,
         recorded_at=r.recorded_at,
@@ -339,7 +339,7 @@ def _restart(r) -> TracedRestart:  # type: ignore[no-untyped-def]
     )
 
 
-def _usage(u) -> UsageFact:  # type: ignore[no-untyped-def]
+def _usage(u: Row[Any]) -> UsageFact:
     return UsageFact(
         node_id=u.node_id,
         epoch=u.epoch,
@@ -446,7 +446,7 @@ def derivations(conn: Connection, markers: Sequence[DerivationMarker]) -> list[E
     for batch in id_batches(list(markers)):
         segment_ids = sorted({marker.segment_id for marker in batch})
         versions = sorted({marker.extractor_version for marker in batch})
-        events: dict[tuple[str | None, str, str], list[Any]] = defaultdict(list)
+        events: dict[tuple[str | None, str, str], list[Row[Any]]] = defaultdict(list)
         for row in conn.execute(_events_stmt(segment_ids, versions)):
             events[(row.tenant_id, row.segment_id, row.extractor_version)].append(row)
         records = {
@@ -566,7 +566,7 @@ def epoch_drops(conn: Connection, epochs: Sequence[EpochKey]) -> list[DropFact]:
     return sorted(drops, key=lambda drop: (drop.dropped_at, drop.segment_id))
 
 
-def _marker(row: Any) -> DerivationMarker:
+def _marker(row: Row[Any]) -> DerivationMarker:
     return DerivationMarker(
         segment_id=row.segment_id,
         extractor_version=row.extractor_version,
@@ -578,7 +578,7 @@ def _marker(row: Any) -> DerivationMarker:
     )
 
 
-def _drop(row: Any) -> DropFact:
+def _drop(row: Row[Any]) -> DropFact:
     return DropFact(
         segment_id=row.segment_id,
         chunk_id=row.chunk_id,
@@ -589,7 +589,7 @@ def _drop(row: Any) -> DropFact:
     )
 
 
-def _event(row: Any) -> TranscriptEvent:
+def _event(row: Row[Any]) -> TranscriptEvent:
     return TranscriptEvent(
         kind=row.kind,
         turn_path=row.turn_path,
@@ -608,7 +608,7 @@ def _event(row: Any) -> TranscriptEvent:
     )
 
 
-def _provenance(events: Sequence[Any], records: Sequence[Any]) -> SegmentProvenance:
+def _provenance(events: Sequence[Row[Any]], records: Sequence[Row[Any]]) -> SegmentProvenance:
     """As derived: stamped on the events when there are any; otherwise the segment's own,
     as ``transcript_event_store._provenance`` derives it."""
     if events:
