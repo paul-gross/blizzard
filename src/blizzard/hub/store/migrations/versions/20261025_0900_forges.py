@@ -276,7 +276,7 @@ def _web_host(web_origin: str) -> str:
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])

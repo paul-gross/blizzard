@@ -6,6 +6,8 @@ row, and the change row. ``uq_projects_tenant_slug`` refuses a slug another proj
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
@@ -146,7 +148,7 @@ def _color_of(stored: str) -> ProjectColor | HexColor:
         return stored
 
 
-def _of(row: Row) -> Project:
+def _of(row: Row[Any]) -> Project:
     return Project(
         project_id=ProjectId(row.project_id),
         slug=row.slug,

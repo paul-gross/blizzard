@@ -8,6 +8,7 @@ Revises: 20260722_1200_hub_artifact_forge
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -17,11 +18,11 @@ down_revision: str | None = "20260722_1200_hub_artifact_forge"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_NODE_COLUMNS: dict[str, sa.Column] = {
+_NODE_COLUMNS: dict[str, sa.Column[Any]] = {
     "checks_cwd": sa.Column("checks_cwd", sa.String(), nullable=True),
     "checks_timeout": sa.Column("checks_timeout", sa.Integer(), nullable=True),
 }
-_CHOICE_COLUMNS: dict[str, sa.Column] = {
+_CHOICE_COLUMNS: dict[str, sa.Column[Any]] = {
     "requires_checks": sa.Column("requires_checks", sa.Boolean(), nullable=True),
 }
 

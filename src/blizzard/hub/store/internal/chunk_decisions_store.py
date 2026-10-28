@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, Select, and_
+from sqlalchemy import ColumnElement, Connection, Row, Select, and_
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
@@ -118,7 +119,7 @@ class ChunkDecisionsStore:
         ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
         return and_(*(~stmts.exists(table, table.c.decision_id == decision_id) for table in _DECISION_CLOSURE_TABLES))
 
-    def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select:
+    def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select[Any]:
         """The newest not-yet-transitioned decision of each chunk in ``chunk_ids``, one row per chunk:
         a decision no newer not-closed decision of its chunk beats, in ``(submitted_at, decision_id)``
         order. The not-closed rule binds the competing row too — an older open decision under a newer
@@ -385,14 +386,14 @@ class ChunkDecisionsStore:
             )
             return True
 
-    def _decision_row(self, conn: Connection, row) -> GateDecision:
+    def _decision_row(self, conn: Connection, row: Row[Any]) -> GateDecision:
         resolution = conn.execute(
             self._store.select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
         transitioned = row.decision_id in decision_closure_ids(conn, [row.decision_id])
         return self._build_row(row, resolution, transitioned)
 
-    def _hydrate(self, conn: Connection, rows: Sequence) -> list[GateDecision]:
+    def _hydrate(self, conn: Connection, rows: Sequence[Row[Any]]) -> list[GateDecision]:
         """``rows``' resolution/closure state, each read batched once across the
         whole list rather than once per row — :meth:`list_open_decisions`'s own
         hydration, sharing :meth:`_build_row`'s assembly with the single-row
@@ -400,7 +401,7 @@ class ChunkDecisionsStore:
         if not rows:
             return []
         decision_ids = [row.decision_id for row in rows]
-        resolutions = {}
+        resolutions: dict[str, Row[Any]] = {}
         for batch in id_batches(decision_ids):
             resolutions.update(
                 {
@@ -423,7 +424,7 @@ class ChunkDecisionsStore:
         ]
 
     @staticmethod
-    def _build_row(row, resolution, transitioned: bool) -> GateDecision:
+    def _build_row(row: Row[Any], resolution: Row[Any] | None, transitioned: bool) -> GateDecision:
         """The one ``decisions`` row + resolution + transitioned flag ->
         :class:`GateDecision` assembly, shared by :meth:`_decision_row` (one row) and
         :meth:`_hydrate` (batched) so neither keeps its own copy of the shape."""

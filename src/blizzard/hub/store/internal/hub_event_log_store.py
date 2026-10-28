@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import insert, select
 
@@ -82,7 +83,7 @@ class HubEventLogStore:
         severity: EventLogSeverity,
         kind: HubEventKind,
         message: str,
-        detail: dict | None,
+        detail: dict[str, Any] | None,
         at: datetime,
     ) -> int:
         with self._store.write("hub_event_log_record") as conn:

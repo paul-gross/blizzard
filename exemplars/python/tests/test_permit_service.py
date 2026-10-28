@@ -61,8 +61,8 @@ class _FakeLockedPermitRead:
 
 @dataclass
 class _FakePermitRepository:
-    rows: dict[str, Permit] = field(default_factory=dict)
-    facts: list[PermitFact] = field(default_factory=list)
+    rows: dict[str, Permit] = field(default_factory=dict[str, Permit])
+    facts: list[PermitFact] = field(default_factory=list[PermitFact])
 
     def get(self, permit_id: str) -> Permit | None:
         return self.rows.get(permit_id)

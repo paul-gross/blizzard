@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy import ColumnElement, Select
+from sqlalchemy import ColumnElement, Row, Select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.selectable import ScalarSelect
@@ -81,7 +81,7 @@ def ensure_scope(conn: Connection, mint: ScopeMint) -> bool:
     return True
 
 
-def _named(stmts: ScopedStatements, project_id: str, slug: str, *columns: Any) -> Select:
+def _named(stmts: ScopedStatements, project_id: str, slug: str, *columns: Any) -> Select[Any]:
     """``columns`` of the scope ``project_id`` names ``slug`` (every column when none is given)."""
     return stmts.select(scopes, *columns).where(scopes.c.project_id == project_id, scopes.c.slug == slug)
 
@@ -217,7 +217,7 @@ class ScopeStore:
             return _retired_slugs(conn, project_id)
 
     @staticmethod
-    def _of(row, *, retired: bool) -> Scope:
+    def _of(row: Row[Any], *, retired: bool) -> Scope:
         return Scope(
             scope_id=row.scope_id,
             slug=row.slug,

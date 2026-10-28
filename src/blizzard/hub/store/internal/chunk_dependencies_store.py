@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Row
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
@@ -94,7 +95,7 @@ class ChunkDependenciesStore:
         return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
     def _declare_conn(
-        self, conn, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        self, conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
     ) -> DependencyEdge:
         dependency_id = Id.mint_at(IdPrefix.DEPENDENCY_EDGE, at).value
         conn.execute(
@@ -149,7 +150,7 @@ class ChunkDependenciesStore:
         return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
 
     def _record_fold_conn(
-        self, conn, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
+        self, conn: Connection, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime
     ) -> dict[str, int]:
         grouped_ids: dict[str, int] = {}
         for target in targets:
@@ -178,7 +179,7 @@ class ChunkDependenciesStore:
         return grouped_ids
 
 
-def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str):
+def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str) -> Row[Any] | None:
     return conn.execute(
         statements_of(conn)
         .select(s.chunk_dependencies)
@@ -192,7 +193,7 @@ def _standing_row(conn: Connection, dependent_chunk_id: str, prerequisite_chunk_
     ).first()
 
 
-def _edge(row) -> DependencyEdge:
+def _edge(row: Row[Any]) -> DependencyEdge:
     return DependencyEdge(
         dependency_id=row.dependency_id,
         dependent_chunk_id=row.dependent_chunk_id,

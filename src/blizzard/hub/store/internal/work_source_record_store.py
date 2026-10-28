@@ -11,6 +11,7 @@ columns."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.engine import Connection, Row
 from sqlalchemy.exc import IntegrityError
@@ -319,11 +320,11 @@ class WorkSourceRecordStore:
         return resolve_work_source_reference(value, self)
 
 
-def _reconstituted(conn: Connection, row: Row) -> ConfiguredWorkSource:
+def _reconstituted(conn: Connection, row: Row[Any]) -> ConfiguredWorkSource:
     return _of(row, retired=row.work_source_id in _retired_ids(conn, [WorkSourceId(row.work_source_id)]))
 
 
-def _of(row: Row, *, retired: bool) -> ConfiguredWorkSource:
+def _of(row: Row[Any], *, retired: bool) -> ConfiguredWorkSource:
     return ConfiguredWorkSource(
         work_source_id=WorkSourceId(row.work_source_id),
         slug=row.slug,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -142,7 +143,7 @@ def upgrade() -> None:
         for r in bind.execute(select(close_intents.c.chunk_id, close_intents.c.source, close_intents.c.ref))
     }
 
-    rows = []
+    rows: list[dict[str, Any]] = []
     for r in bind.execute(select(chunk_work_refs.c.chunk_id, chunk_work_refs.c.source, chunk_work_refs.c.ref)):
         if r.chunk_id in ephemeral:
             continue

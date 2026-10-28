@@ -38,6 +38,7 @@ import hashlib
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -139,7 +140,7 @@ def _name_column(table: str) -> str:
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])
@@ -252,9 +253,7 @@ def _create_former_slugs(bind: sa.Connection) -> None:
         sa.Column("left_at", UtcDateTime(), nullable=False),
         sa.Column(_TENANT, sa.String(), nullable=False),
         sa.PrimaryKeyConstraint(_TENANT, "slug", name="pk_repository_former_slugs"),
-        sa.ForeignKeyConstraint(
-            [_TENANT], ["tenants.tenant_id"], name="fk_repository_former_slugs_tenant_id"
-        ),
+        sa.ForeignKeyConstraint([_TENANT], ["tenants.tenant_id"], name="fk_repository_former_slugs_tenant_id"),
     )
 
 
@@ -287,7 +286,7 @@ def _mint(bind: sa.Connection) -> None:
             taken.setdefault(tenant_id, set()).add(name)
     after: sa.ColumnElement[bool] = sa.true()
     while rows := bind.execute(page.where(after)).all():
-        stamps = []
+        stamps: list[dict[str, Any]] = []
         for tenant_id, name, created_at, slug in rows:
             held = taken.setdefault(tenant_id, set())
             if slug is None:
@@ -328,7 +327,7 @@ def _carry_change_keys(bind: sa.Connection) -> None:
     _rewrite_keys(bind, [c.c.record_kind.in_(_KEYED_KINDS), ~held, sa.exists(named)], named)
 
 
-def _rewrite_keys(bind: sa.Connection, conditions: list[sa.ColumnElement[bool]], value: sa.Select) -> None:
+def _rewrite_keys(bind: sa.Connection, conditions: list[sa.ColumnElement[bool]], value: sa.Select[Any]) -> None:
     """Set the key of the change rows ``conditions`` select to ``value``, a page of row ids at a time."""
     c = _changes
     page = sa.select(c.c.id).where(*conditions).order_by(c.c.id).limit(_BATCH_ROWS)

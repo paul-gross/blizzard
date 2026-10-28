@@ -45,7 +45,7 @@ class ConfigRevisionsStore:
                     )
         return found
 
-    def _query(self, kind: RecordKind) -> tuple[Select, Column[Any]]:
+    def _query(self, kind: RecordKind) -> tuple[Select[Any], Column[Any]]:
         """The revisions select of ``kind``, unfiltered, and the column keying it."""
         if kind is RecordKind.SECRET:
             query = self._store.select(

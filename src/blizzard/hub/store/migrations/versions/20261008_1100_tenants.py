@@ -116,7 +116,7 @@ _TABLES: tuple[sa.Table, ...] = (_tenants, _tenant_deletions, _invitations, _inv
 
 
 def _encode(value: int) -> str:
-    chars = []
+    chars: list[str] = []
     for _ in range(_ULID_CHARS):
         value, rem = divmod(value, 32)
         chars.append(_CROCKFORD[rem])

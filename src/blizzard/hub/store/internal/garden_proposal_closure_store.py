@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Row
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
@@ -143,7 +144,7 @@ class GardenProposalClosureStore:
             return False
 
     @staticmethod
-    def _of(row) -> GardenProposalClosure:
+    def _of(row: Row[Any]) -> GardenProposalClosure:
         return GardenProposalClosure(
             proposal_id=row.proposal_id,
             closure=GardenProposalClosureKind(row.closure),

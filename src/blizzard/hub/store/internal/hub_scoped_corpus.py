@@ -21,7 +21,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, Table, and_, func, literal, null, select, union_all
+from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null, select, union_all
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
@@ -60,10 +60,10 @@ MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
 
 
-def _ephemeral_chunk_ids() -> Select[Any]:
+def _ephemeral_chunk_ids() -> CompoundSelect[Any]:
     """Every tenant's grouped-away and deleted chunk ids — gone from every corpus read."""
     first, *rest = (select(t.c.chunk_id) for t in _EPHEMERAL_TABLES)
-    return first.union(*rest)  # type: ignore[return-value]
+    return first.union(*rest)
 
 
 def _visible_segments() -> Select[Any]:

@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import insert, select
+from sqlalchemy import Row, insert, select
 
 from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS
 from blizzard.hub.domain.observability.egress.repository import (
@@ -102,7 +103,7 @@ class EgressStore:
             )
 
 
-def _cursor(row) -> EgressCheckpoint:
+def _cursor(row: Row[Any]) -> EgressCheckpoint:
     events = (
         EventsPosition(row.position_at, row.segment_id, row.extractor_version or "", _tenant(row.events_tenant_id))
         if row.segment_id is not None

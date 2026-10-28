@@ -15,9 +15,8 @@ never reads another tenant's facts whatever the enclosing read selects from."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, or_
+from sqlalchemy import ColumnElement, FromClause, and_, func, or_
 
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
@@ -40,13 +39,13 @@ def _done_by_transition(
     return stmts.exists(terminal, *clauses)
 
 
-def _unsuperseded_terminal(stmts: ScopedStatements, terminal: Any) -> list[ColumnElement[bool]]:
+def _unsuperseded_terminal(stmts: ScopedStatements, terminal: FromClause) -> list[ColumnElement[bool]]:
     """The criteria making the ``terminal`` transition alias a transition into the reserved terminal
     that no later movement supersedes — :func:`_done_by_transition`'s own test, factored out so the
     completion instant ranks exactly the transitions that settle."""
     other = s.transitions.alias("other_transition")
 
-    def not_older(row):
+    def not_older(row: FromClause) -> ColumnElement[bool]:
         return or_(
             row.c.recorded_at > terminal.c.recorded_at,
             and_(row.c.recorded_at == terminal.c.recorded_at, row.c.epoch >= terminal.c.epoch),

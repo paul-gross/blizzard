@@ -42,8 +42,8 @@ _usage_facts = sa.Table(
     sa.Column("output_tokens", sa.Integer, nullable=False),
     sa.Column("cache_read_tokens", sa.Integer, nullable=False),
     sa.Column("cache_create_tokens", sa.Integer, nullable=False),
-    sa.Column("cost_usd", sa.Float, nullable=True),
-    sa.Column("estimated_cost_usd", sa.Float, nullable=True),
+    sa.Column("cost_usd", sa.Float(), nullable=True),
+    sa.Column("estimated_cost_usd", sa.Float(), nullable=True),
     sa.Column("recorded_at", UtcDateTime, nullable=False),
 )
 sa.Index("ix_usage_facts_chunk_id", _usage_facts.c.chunk_id)

@@ -10,7 +10,9 @@ from __future__ import annotations
 import base64
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
+from sqlalchemy import Row
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -163,7 +165,7 @@ class SecretStore:
         with self._store.read("retired_names") as conn:
             return self._retired_among(conn, names)
 
-    def _retired_among(self, conn, names: Sequence[str] | None) -> set[str]:  # type: ignore[no-untyped-def]
+    def _retired_among(self, conn: Connection, names: Sequence[str] | None) -> set[str]:
         """Every name of ``names`` (all when ``None``) whose newest lifecycle fact reads retired —
         the one derivation :meth:`retired_names` and every metadata load share."""
         facts = secret_lifecycle_facts
@@ -186,7 +188,7 @@ class SecretStore:
         return self._sealed_of(row) if row is not None else None
 
     @staticmethod
-    def _sealed_of(row) -> SealedSecret:  # type: ignore[no-untyped-def]
+    def _sealed_of(row: Row[Any]) -> SealedSecret:
         return SealedSecret(
             name=row.name,
             revision=row.revision,
@@ -226,7 +228,7 @@ class SecretStore:
             record_lifecycle_fact(conn, name, retired=retired, at=at, by=by, change=change)
 
     @staticmethod
-    def _of(row, *, retired: bool) -> SecretMetadata:  # type: ignore[no-untyped-def]
+    def _of(row: Row[Any], *, retired: bool) -> SecretMetadata:
         return SecretMetadata(
             name=row.name,
             revision=row.revision,

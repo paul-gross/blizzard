@@ -9,7 +9,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_
+from sqlalchemy import Row, Select, and_, func, or_
+from sqlalchemy.engine import Connection
 
 from blizzard.foundation.garden_proposals import (
     GardenProposalClosureKind,
@@ -217,7 +218,7 @@ class GardenProposalStore:
                 )
             return self._reread(conn, proposal_id)
 
-    def _reread(self, conn, proposal_id: str) -> GardenProposal:
+    def _reread(self, conn: Connection, proposal_id: str) -> GardenProposal:
         """The proposal as it now stands — the tail `edit` and `detach` share."""
         row = conn.execute(
             self._store.select(garden_proposals).where(garden_proposals.c.proposal_id == proposal_id)
@@ -368,7 +369,7 @@ class GardenProposalStore:
             )
         ]
 
-    def _findings(self, conn, proposal_id: str) -> list[str]:
+    def _findings(self, conn: Connection, proposal_id: str) -> list[str]:
         rows = conn.execute(
             self._store.select(garden_proposal_findings, garden_proposal_findings.c.finding_id)
             .where(garden_proposal_findings.c.proposal_id == proposal_id)
@@ -377,7 +378,7 @@ class GardenProposalStore:
         return [r.finding_id for r in rows]
 
     @staticmethod
-    def _findings_for(conn, proposal_ids: Sequence[str]) -> dict[str, list[str]]:
+    def _findings_for(conn: Connection, proposal_ids: Sequence[str]) -> dict[str, list[str]]:
         """`list_all`/`list_for_routine`'s bulk sibling to `_findings` — every listed
         proposal's findings in one batched read apiece, instead of one query per
         proposal. A proposal with no findings maps to an empty list, not an absent key."""
@@ -398,7 +399,7 @@ class GardenProposalStore:
         return result
 
     @staticmethod
-    def _of(row, findings: list[str]) -> GardenProposal:
+    def _of(row: Row[Any], findings: list[str]) -> GardenProposal:
         return GardenProposal(
             proposal_id=row.proposal_id,
             origin=GardenProposalOrigin(row.origin),

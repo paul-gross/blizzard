@@ -7,6 +7,10 @@ together or not at all."""
 from __future__ import annotations
 
 import json
+from typing import Any
+
+from sqlalchemy import Row
+from sqlalchemy.engine import Connection
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
@@ -48,7 +52,7 @@ class GardenDeliveryStore:
             return self._marker(conn, chunk_id=chunk_id, node_id=node_id, epoch=epoch) is not None
 
     @staticmethod
-    def _marker(conn, *, chunk_id: str, node_id: str, epoch: int):
+    def _marker(conn: Connection, *, chunk_id: str, node_id: str, epoch: int) -> Row[Any] | None:
         return conn.execute(
             statements_of(conn)
             .select(artifacts, artifacts.c.artifact_id)

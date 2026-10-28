@@ -7,6 +7,9 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
+
+from sqlalchemy import Row
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
@@ -150,7 +153,9 @@ class ChunkEscalationsStore:
             )
             return BounceEscalationOutcome.RECORDED
 
-    def _newest_escalation_per_chunk(self, project: ProjectId | None = None, chunk_id: str | None = None):  # type: ignore[no-untyped-def]
+    def _newest_escalation_per_chunk(
+        self, project: ProjectId | None = None, chunk_id: str | None = None
+    ) -> dict[str, Row[Any]]:
         """The newest ``escalations`` row per chunk, over the chunks whose newest escalation *might*
         still be open — a chunk a terminal fact settles, or one grouped away or deleted, can never
         hold an open escalation, and neither can one a later lease or requeue supersedes, so each is
