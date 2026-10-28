@@ -541,7 +541,7 @@ class HubNodeExecutor:
             )
         spec = action.spec
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        project = self._landing_project(chunk)
+        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
         resolved = resolve_visit(
             artifacts,
             project=project,
@@ -743,17 +743,6 @@ class HubNodeExecutor:
         read = self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
         return DeliverySources(markers=read.markers, pr_markers=read.pr_markers)
 
-    def _landing_project(self, chunk: Chunk) -> LandingProject:
-        """The chunk's project and the repository records it links, read now."""
-        if chunk.project_id is None:
-            return LandingProject()
-        project = self._projects.get(chunk.project_id)
-        return LandingProject(
-            project_id=chunk.project_id,
-            slug=project.slug if project is not None else chunk.project_id,
-            linked=frozenset(link.repository_id for link in self._links.repositories_of(chunk.project_id)),
-        )
-
     def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
         kind = REFUSAL_EVENT[resolution.outcome]
         if kind is None:
@@ -816,7 +805,7 @@ class HubNodeExecutor:
         cause = "poll-timeout"
         loaded = self._artifacts.load_artifacts(chunk.chunk_id)
         rows = GitCommits.of(loaded)
-        project = self._landing_project(chunk)
+        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
         resolution = resolve_chunk_repositories(
             rows.origins(),
             self._repositories.list_all(include_retired=True),

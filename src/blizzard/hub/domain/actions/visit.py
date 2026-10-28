@@ -24,7 +24,8 @@ from blizzard.hub.domain.config.repositories import (
     ResolvedRepository,
     resolve_chunk_repositories,
 )
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 
 
 @domain_model
@@ -36,6 +37,20 @@ class LandingProject:
     project_id: str = ""
     slug: str = ""
     linked: frozenset[str] = frozenset()
+
+    @classmethod
+    def read(
+        cls, project_id: ProjectId | None, *, projects: IReadProjectRepository, links: IReadProjectLinks
+    ) -> LandingProject:
+        """The chunk's project and the repository records it links, read now."""
+        if project_id is None:
+            return cls()
+        project = projects.get(project_id)
+        return cls(
+            project_id=project_id,
+            slug=project.slug if project is not None else project_id,
+            linked=frozenset(link.repository_id for link in links.repositories_of(project_id)),
+        )
 
 
 class UnconvergedDeliveryError(RuntimeError):
