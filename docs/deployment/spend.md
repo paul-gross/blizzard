@@ -283,10 +283,7 @@ older client, or one declaring none) keeps the prior behavior: its rows show onl
 minutes, the sole staleness gate that survives for it.
 
 Each binding reads the credential file its own vendor CLI writes: `~/.claude/.credentials.json` for `anthropic`,
-`~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. Each samples its
-vendor's public usage endpoint — `https://api.anthropic.com` or `https://chatgpt.com/backend-api` — unless the
-declaration sets `usage_api_base` to another `http(s)` base, such as a provider gateway; the adapter keeps its own usage
-path, headers, and failure behavior under it, and a malformed value, or one with credentials, a query or a fragment, fails config load. **Blizzard never writes
+`~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. **Blizzard never writes
 that file** — the vendor CLI owns the refresh flow, its lock, and its refresh-token rotation — but renewal is delegated
 to it, per provider. `openai` carries a renewal binding: once the access token is within ten minutes of its own expiry,
 the runner asks `codex app-server` for a proactive refresh, at most once per the subscription's own sampling interval,
@@ -301,6 +298,11 @@ one-shot (haiku, one turn, no tools, MCP servers, settings or session) and count
 `~/.claude/.credentials.json` has moved forward — even if the call itself was throttled, since Claude Code refreshes
 before it sends. It needs the `claude` binary reachable from the runner's environment. An expired refresh token still
 needs an operator login and shows the lapsed condition below.
+
+Each binding samples its vendor's public usage endpoint — `https://api.anthropic.com` or
+`https://chatgpt.com/backend-api` — unless the declaration sets `usage_api_base` to another `http(s)` base, such as a
+provider gateway. The adapter keeps its own usage path, headers, and failure behavior under it. A value that is not an
+`http(s)` URL with a host, or that carries credentials, a query, or a fragment, fails config load.
 
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
