@@ -64,9 +64,15 @@ export type MockDriveAnswer<V extends string> = V extends 'register' ? MockDrive
 /** One node of a seeded chunk's graph; only what a runner-tier test sets. */
 export interface MockNodeSpec {
   executor?: string;
+  session?: string;
   prompt?: string;
   judged_by?: string;
+  judgement_prompt?: string;
+  /** How many retries the node grants before its attempt escalates. */
+  retries_max?: number;
   choices?: { name: string; to: string; description?: string }[];
+  /** A hub-executed node's choices, by name. */
+  judgement?: { choices: Record<string, { description: string; to: string }> };
   produces?: string[];
 }
 

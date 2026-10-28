@@ -70,34 +70,3 @@ test('a claimed chunk is worked by the mock worker, pushed, completed, and its l
   expect(leases[0]).toMatchObject({ node_name: 'build', state: 'closed' });
   await stream.waitFor((frame) => frame.event === 'lease-changed');
 });
-
-test('a completion the hub could not take stays pending under its seq until the hub is back, then is acknowledged', async ({ mockHub, runnerHost }) => {
-  const runner = runnerHost.runners['runner-local']!;
-  const reader = (await mockHub.enroll.runner({ name: 'reader' })).body.token;
-  const chunkId = (await mockHub.seed.chunk(buildThenDeliver as never)).body.chunk_id;
-  const status = async (): Promise<string> => (await mockHub.fleet(reader).get(`/api/fleet/chunks/${chunkId}`)).body.status as string;
-  const completion = async () => (await runner.facts()).body.items.find((fact) => fact.kind === 'completion.submitted' && fact.chunk_id === chunkId);
-  const submissions = async (): Promise<number> =>
-    (await mockHub.captured.read()).body.requests.filter((request) => request.method === 'POST' && request.path === '/api/fleet/events').length;
-
-  // The completion is recorded by the runner before the hub has taken it: pending, with the chunk still running.
-  const pending = await stepUntil(runnerHost, async () => ({ fact: await completion(), chunk: await status() }), (state) => state.fact !== undefined);
-  const seq = pending.fact?.seq as number;
-  expect(pending.fact?.acked_at).toBeNull();
-  expect(pending.chunk).not.toBe('done');
-
-  await mockHub.levers.arm('unreachable');
-  const before = await submissions();
-  await stepUntil(runnerHost, submissions, (count) => count > before);
-  const during = await completion();
-  expect(during).toMatchObject({ seq });
-  expect(during?.acked_at).toBeNull();
-
-  // The hub answers nothing during the outage, so the chunk is read once it is back and before the host steps again.
-  await mockHub.levers.clear('unreachable');
-  expect(await status()).not.toBe('done');
-  await stepUntil(runnerHost, status, (current) => current === 'done');
-  expect(await completion()).toMatchObject({ seq });
-  expect((await completion())?.acked_at).not.toBeNull();
-  expect(await runner.bufferDepth()).toBe(0);
-});

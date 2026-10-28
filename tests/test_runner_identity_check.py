@@ -195,6 +195,22 @@ def test_a_hub_without_the_identity_read_leaves_the_held_flags_as_they_stood(tmp
     assert ctx.flags.current().on("fleet-thing") is False
 
 
+def test_the_runner_reads_a_fleet_flag_as_its_hub_answers_it_each_tick(tmp_path: Path) -> None:
+    hub = FakeHub(default_runner_id="r1")
+    ctx = _fleet_ctx(tmp_path, hub)
+
+    tick(ctx)
+    assert ctx.flags.current().on("fleet-thing") is False, "unarmed: the hub answers no fleet flags"
+
+    hub.fleet_flags = {"fleet-thing": True, "no-such-flag": True}
+    tick(ctx)
+    assert ctx.flags.current().on("fleet-thing") is True, "armed on: the identity check applies the hub's answer"
+
+    hub.fleet_flags = {}
+    tick(ctx)
+    assert ctx.flags.current().on("fleet-thing") is False, "cleared: the hub answers none, so the flag reads off again"
+
+
 def test_an_unregistered_store_records_its_identity_at_the_first_registration_never_at_the_check(
     tmp_path: Path,
 ) -> None:
