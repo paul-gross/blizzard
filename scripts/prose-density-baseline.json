@@ -4842,9 +4842,9 @@
   },
   "blizzard/hub/store/internal/corpus_rows.py": {
    "comments": 7,
-   "docstrings": 39,
+   "docstrings": 40,
    "over_cap": 1,
-   "total": 642
+   "total": 647
   },
   "blizzard/hub/store/internal/egress_store.py": {
    "comments": 0,
