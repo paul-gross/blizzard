@@ -546,3 +546,25 @@ def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: _World) -> Non
     asyncio.run(drive())
 
     assert len(ticks) == 2
+
+
+def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submit(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broken, build_broken = world.mint(ref="broken")
+    sound, build_sound = world.mint(ref="sound")
+    world.complete(broken, build_broken)
+    world.complete(sound, build_sound)
+    submit = FlowLineReconciler._submit
+
+    def flaky(self: FlowLineReconciler, standing):  # type: ignore[no-untyped-def]
+        if standing.chunk.chunk_id == broken:
+            raise RuntimeError("unreadable visit")
+        return submit(self, standing)
+
+    monkeypatch.setattr(FlowLineReconciler, "_submit", flaky)
+
+    result = world.tick()
+
+    assert result.failed == () and result.reconciled == (world.tenant,)
+    assert world.submissions(broken) == [] and len(world.submissions(sound)) == 1

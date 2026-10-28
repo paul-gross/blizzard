@@ -671,7 +671,13 @@ def build_hosted_app(
             hub_node = services.tenants.open_services(stores.scope).hub_node
             hub_node.release_orphaned_slots()
             hub_node.escalate_actionless()
-            flow_driver.recover_turns(stores.scope.tenant)
+            try:
+                flow_driver.recover_turns(stores.scope.tenant)
+            except Exception:
+                # Observe-only: a tenant whose lines cannot be recovered now is reconciled by the driver's ticks.
+                get_logger("blizzard.hub.flow_driver").exception(
+                    "flow driver boot recovery failed", tenant_id=stores.scope.tenant
+                )
         Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)

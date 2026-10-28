@@ -14,6 +14,7 @@ from datetime import datetime
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
@@ -29,8 +30,11 @@ from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.tenancy import TenantClosed
 
 _EVENT_TURN_INTERRUPTED: EventLogKind = "turn-interrupted"
+
+_log = get_logger("blizzard.hub.flow_reconcile")
 
 
 @domain_model
@@ -103,7 +107,7 @@ class FlowLineReconciler:
             sub
             for standing in self._standing(facts_by_id)
             if (standing.chunk.chunk_id, standing.node.node_id, standing.epoch) not in in_line
-            and (sub := self._submit(standing)) is not None
+            and (sub := self._submit_isolated(standing)) is not None
         ]
         closed, still_open = self._close_departed(open_subs, facts_by_id)
         arrivals = [sub.arrival for sub in (*still_open, *submitted)]
@@ -161,6 +165,17 @@ class FlowLineReconciler:
                 continue
             standing.append(_Standing(chunk, node, facts.latest_epoch() or 0, entered_at))
         return sorted(standing, key=lambda s: (s.entered_at, s.chunk.chunk_id))
+
+    def _submit_isolated(self, standing: _Standing) -> Submission | None:
+        """Submit one visit, logging and skipping it when it raises, so one chunk's failure never holds back the
+        rest of the tenant's line. A closed tenant still ends the pass."""
+        try:
+            return self._submit(standing)
+        except TenantClosed:
+            raise
+        except Exception:
+            _log.exception("flow reconcile skipped a visit", chunk_id=standing.chunk.chunk_id)
+            return None
 
     def _submit(self, standing: _Standing) -> Submission | None:
         """Submit the visit to the flows it holds, or leave it unsubmitted when the slot's run would refuse it."""
