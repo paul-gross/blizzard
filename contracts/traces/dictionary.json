@@ -1408,7 +1408,7 @@
       "scope": "blizzard.hub.fleet_spans"
     },
     {
-      "meaning": "A hub node's run holding its execution slot.",
+      "meaning": "A hub node's turn on its flows, keyed by the turn; a step from before turns holds its execution slot instead.",
       "name": "hub exec",
       "role": "hub-exec",
       "scope": "blizzard.hub.fleet_spans"

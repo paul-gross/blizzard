@@ -23,6 +23,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedEscalation,
     TracedHubExecSlot,
     TracedHubPoll,
+    TracedHubTurn,
     TracedLease,
     TracedMigration,
     TracedPause,
@@ -274,6 +275,24 @@ def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() 
     assert (first.name, first.start, first.end) == ("hub exec", fx.at(10), fx.at(30))
     assert (second.start, second.end) == (fx.at(50), fx.at(100))
     assert first.context != second.context
+
+
+def test_hub_step_spans_each_turn_on_its_node_by_window_keyed_by_the_turn() -> None:
+    facts = fx.hub_facts(
+        hub_turns=(
+            TracedHubTurn("ht1", "g1-poll", fx.at(10), fx.at(30)),
+            TracedHubTurn("ht2", "g1-poll", fx.at(50), None),
+            TracedHubTurn("ht3", "g1-other", fx.at(12), fx.at(13)),
+        ),
+        transitions=(fx.to("g1", "build", 100, 2),),
+    )
+    _, first, second = _step(facts)
+    assert (first.name, first.start, first.end) == ("hub exec", fx.at(10), fx.at(30))
+    assert (second.name, second.start, second.end) == ("hub exec", fx.at(50), fx.at(100))
+    (hub_step,) = [step for step in identify_steps(facts) if step.kind is StepKind.HUB]
+    step_key = hub_step.key
+    assert first.context == DerivedContext.of(step_key, SpanRole.HUB_EXEC, "ht1")
+    assert second.context == DerivedContext.of(step_key, SpanRole.HUB_EXEC, "ht2")
 
 
 def test_a_hub_step_exited_in_the_write_that_minted_its_lease_still_stands_on_its_node() -> None:

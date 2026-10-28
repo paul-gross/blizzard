@@ -32,7 +32,7 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     resource_attributes,
 )
 from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import RunnerFleetClient, hub_scoped, seed_runner, seed_user, tenant_services_of
+from tests.support import RunnerFleetClient, hub_scoped, hub_scoped_engine, seed_runner, seed_user, tenant_services_of
 from tests.worker_http import bind_transport
 
 pytestmark = pytest.mark.component
@@ -308,24 +308,29 @@ nodes:
 """
 
 
-def test_a_hub_action_pass_parents_on_its_turns_derived_hub_exec_span_and_no_request_links_it(
+def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_corpus_derives_alike(
     tmp_path: Path,
 ) -> None:
     """The completion that reaches ``merge`` only submits the visit; the hosted hub's flow driver takes it as a turn
-    on its own task, and the pass runs under the hub-exec context derived from that turn. The driver's turn runs
-    under no request span, so the completion's server span carries no link to it."""
+    on its own task, and the pass runs under the hub-exec context derived from that turn. The corpus assembles that
+    step's ``hub exec`` span from the turn's row under the same id, so the live pass hangs on the told span. The
+    driver's turn runs under no request span, so the completion's server span carries no link to it."""
     import time
+    from dataclasses import replace
 
     from sqlalchemy import select
 
     from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+    from blizzard.hub.domain.observability.tracing.assembly import assemble_step
     from blizzard.hub.domain.observability.tracing.platform import (
         ACTION_CHOICE,
         ACTION_NAME,
         ACTION_PASS_SPAN,
         RUN_STEP_SPAN,
     )
+    from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
     from blizzard.hub.store import schema as s
+    from blizzard.hub.store.internal.corpus_rows import step_facts_for
 
     exporter = InMemorySpanExporter()
     config = _config(tmp_path)
@@ -378,6 +383,12 @@ def test_a_hub_action_pass_parents_on_its_turns_derived_hub_exec_span_and_no_req
             if ended or time.monotonic() > deadline:
                 break
             time.sleep(0.05)
+        with hub_scoped_engine(app.state.engine).connect() as conn:
+            _, facts, _ = step_facts_for(conn, [chunk_id])[chunk_id]
+        assert facts.pin_graph_id is not None
+        pinned = tenant_services_of(app).graphs.get(facts.pin_graph_id)
+        assert pinned is not None
+        facts = replace(facts, graphs={facts.pin_graph_id: pinned})
     (turn,) = ended
     spans = _spans(handle, exporter)
     hub_exec = DerivedContext.of(StepKey.attempt(chunk_id, 2), SpanRole.HUB_EXEC, turn.turn_id)
@@ -390,6 +401,10 @@ def test_a_hub_action_pass_parents_on_its_turns_derived_hub_exec_span_and_no_req
     assert action_pass.parent is not None
     assert (action_pass.parent.trace_id, action_pass.parent.span_id) == (hub_exec.trace_id, hub_exec.span_id)
     assert dict(action_pass.attributes or {}) == {ACTION_NAME: "pass", ACTION_CHOICE: "success"}
+    steps = identify_steps(facts)
+    (merge,) = [step for step in steps if step.kind is StepKind.HUB]
+    told = [span for span in assemble_step(facts, merge, steps) if span.name == "hub exec"]
+    assert [(span.context.trace_id, span.context.span_id) for span in told] == [(hub_exec.trace_id, hub_exec.span_id)]
     # The retired step loop emits no step span.
     assert not [span for span in spans if span.name == RUN_STEP_SPAN]
 

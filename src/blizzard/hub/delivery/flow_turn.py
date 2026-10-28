@@ -443,7 +443,6 @@ class TurnRunner:
     async def _pass(self, turn: Turn, submission: Submission, ready: _Ready, cut_off: TurnCutOff) -> PassRun:
         chunk, node, epoch = ready.at.chunk, ready.at.node, ready.at.epoch
         hub_exec = DerivedContext.of(StepKey.attempt(chunk.chunk_id, epoch + 1), SpanRole.HUB_EXEC, turn.turn_id)
-        self._tracer.link(hub_exec)
         write = partial(self._write_effect, chunk, node, epoch, submission)
         with self._tracer.under(hub_exec), self._tracer.child(ACTION_PASS_SPAN, {ACTION_NAME: ready.action.spec.name}):
             run = await self._passes.drive(ready.action, ready.visit, ready.forges, write, cut_off=cut_off.set)

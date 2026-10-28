@@ -46,6 +46,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedEscalation,
     TracedHubExecSlot,
     TracedHubPoll,
+    TracedHubTurn,
     TracedLease,
     TracedMigration,
     TracedPause,
@@ -182,6 +183,7 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
     completed = _by_chunk(conn, s.chunk_completed, ids, s.chunk_completed.c.id)
     questions = _questions(conn, ids)
     pauses = _by_chunk(conn, s.chunk_pause_facts, ids, s.chunk_pause_facts.c.id)
+    turns = _turns(conn, ids)
     slots = _slots(conn, ids)
     polls = _by_chunk(conn, s.hub_node_poll, ids, s.hub_node_poll.c.id)
     bounces = _by_chunk(conn, s.chunk_bounces, ids, s.chunk_bounces.c.id)
@@ -218,6 +220,7 @@ def _hydrate(conn: Connection, batch: Sequence[str]) -> dict[str, tuple[TenantId
                 chunk_completed=tuple(TracedChunkCompletion(r.completed_at) for r in completed[chunk_id]),
                 questions=tuple(questions[chunk_id]),
                 pauses=tuple(TracedPause(str(r.id), r.paused, r.set_at) for r in pauses[chunk_id]),
+                hub_turns=tuple(turns[chunk_id]),
                 hub_exec_slots=tuple(slots[chunk_id]),
                 hub_polls=tuple(TracedHubPoll(str(r.id), r.node_id, r.epoch, r.polled_at) for r in polls[chunk_id]),
                 bounces=tuple(TracedBounce(r.epoch, r.cause, r.recorded_at) for r in bounces[chunk_id]),
@@ -259,6 +262,26 @@ def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedQue
     grouped: dict[str, list[TracedQuestion]] = defaultdict(list)
     for r in conn.execute(stmt).all():
         grouped[r.chunk_id].append(TracedQuestion(r.question_id, r.epoch, r.asked_at, r.answered_at))
+    return grouped
+
+
+def _turns(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubTurn]]:
+    turn, submission = s.hub_turns, s.flow_submissions
+    stmt = (
+        select(submission.c.chunk_id, submission.c.node_id, turn)
+        .join(
+            submission,
+            and_(
+                submission.c.submission_id == turn.c.submission_id,
+                submission.c.tenant_id == turn.c.tenant_id,
+            ),
+        )
+        .where(of_chunks(submission, submission.c.chunk_id, ids))
+        .order_by(turn.c.started_at)
+    )
+    grouped: dict[str, list[TracedHubTurn]] = defaultdict(list)
+    for r in conn.execute(stmt).all():
+        grouped[r.chunk_id].append(TracedHubTurn(r.turn_id, r.node_id, r.started_at, r.ended_at))
     return grouped
 
 
