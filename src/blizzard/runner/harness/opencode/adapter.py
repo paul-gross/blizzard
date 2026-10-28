@@ -1066,5 +1066,4 @@ class OpenCodeAdapter:
         return None
 
 
-def _conforms_harness_adapter(x: OpenCodeAdapter) -> IHarnessAdapter:
-    return x
+_harness_adapter_conforms: type[IHarnessAdapter] = OpenCodeAdapter

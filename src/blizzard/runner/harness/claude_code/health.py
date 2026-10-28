@@ -115,8 +115,7 @@ class ClaudeCodeHealthProbe:
         return ()
 
 
-def _conforms_harness_health_probe(x: ClaudeCodeHealthProbe) -> IHarnessHealthProbe:
-    return x
+_harness_health_probe_conforms: type[IHarnessHealthProbe] = ClaudeCodeHealthProbe
 
 
 __all__ = [

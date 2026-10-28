@@ -100,12 +100,10 @@ class _FakePermitRepository:
         self.rows[fact.permit_id] = replace(self.rows[fact.permit_id], latest=fact)
 
 
-def _conforms_fake_permit_repository(x: _FakePermitRepository) -> IWritePermitRepository:
-    return x
+_fake_permit_repository_conforms: type[IWritePermitRepository] = _FakePermitRepository
 
 
-def _conforms_fake_locked_permit_read(x: _FakeLockedPermitRead) -> ILockedPermitRead:
-    return x
+_fake_locked_permit_read_conforms: type[ILockedPermitRead] = _FakeLockedPermitRead
 
 
 def _service(permits: _FakePermitRepository) -> PermitService:

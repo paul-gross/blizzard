@@ -260,5 +260,4 @@ def _window_label(window_seconds: int) -> str:
     return f"{window_seconds}s"
 
 
-def _conforms_subscription_sampler(x: OpenAISubscriptionSampler) -> ISubscriptionSampler:
-    return x
+_subscription_sampler_conforms: type[ISubscriptionSampler] = OpenAISubscriptionSampler

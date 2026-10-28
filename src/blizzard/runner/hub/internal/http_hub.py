@@ -732,36 +732,28 @@ def _refusal_code(resp: httpx2.Response) -> str | None:
     return code if isinstance(code, str) else None
 
 
-def _conforms_hub_client(x: HttpHubClient) -> IHubClient:
-    return x
+_hub_client_conforms: type[IHubClient] = HttpHubClient
 
 
-def _conforms_token_identity_reader(x: HttpHubClient) -> ITokenIdentityReader:
-    return x
+_token_identity_reader_conforms: type[ITokenIdentityReader] = HttpHubClient
 
 
-def _conforms_hub_runner_admin(x: HttpHubRunnerAdmin) -> IHubRunnerAdmin:
-    return x
+_hub_runner_admin_conforms: type[IHubRunnerAdmin] = HttpHubRunnerAdmin
 
 
-def _conforms_host_hub_client(x: HttpHostHubClient) -> IHostHubClient:
-    return x
+_host_hub_client_conforms: type[IHostHubClient] = HttpHostHubClient
 
 
-def _conforms_host_reporter(x: HttpHostHubClient) -> IHostReporter:
-    return x
+_host_reporter_conforms: type[IHostReporter] = HttpHostHubClient
 
 
-def _conforms_host_record_reader(x: HttpHostHubClient) -> IHostRecordReader:
-    return x
+_host_record_reader_conforms: type[IHostRecordReader] = HttpHostHubClient
 
 
-def _conforms_host_fact_pusher(x: HttpHostHubClient) -> IHostFactPusher:
-    return x
+_host_fact_pusher_conforms: type[IHostFactPusher] = HttpHostHubClient
 
 
-def _conforms_host_runner_adder(x: HttpHostHubClient) -> IHostRunnerAdder:
-    return x
+_host_runner_adder_conforms: type[IHostRunnerAdder] = HttpHostHubClient
 
 
 def _identity_refusal(resp: httpx2.Response) -> TokenRefusal | None:

@@ -219,5 +219,4 @@ def _parse_number(value: JsonValue) -> float | None:
 
 # Typecheck-time Protocol conformance sentinel (the exemplar's shape): pyright rejects the
 # return if `FileOpenCodePriceCatalog` drifts from `IOpenCodePriceCatalog`.
-def _conforms_catalog(x: FileOpenCodePriceCatalog) -> IOpenCodePriceCatalog:
-    return x
+_catalog_conforms: type[IOpenCodePriceCatalog] = FileOpenCodePriceCatalog

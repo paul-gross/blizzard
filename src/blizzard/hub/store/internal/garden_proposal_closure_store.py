@@ -157,5 +157,4 @@ class GardenProposalClosureStore:
         )
 
 
-def _conforms_garden_proposal_closure_store(x: GardenProposalClosureStore) -> IWriteGardenProposalClosureRepository:
-    return x
+_garden_proposal_closure_store_conforms: type[IWriteGardenProposalClosureRepository] = GardenProposalClosureStore

@@ -520,5 +520,4 @@ class ChunkMovementStore:
         )
 
 
-def _conforms_movement(x: ChunkMovementStore) -> IWriteChunkMovementRepository:
-    return x
+_movement_conforms: type[IWriteChunkMovementRepository] = ChunkMovementStore

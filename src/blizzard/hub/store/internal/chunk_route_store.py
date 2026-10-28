@@ -225,5 +225,4 @@ class ChunkRouteStore:
                 )
 
 
-def _conforms_route(x: ChunkRouteStore) -> IWriteChunkRouteRepository:
-    return x
+_route_conforms: type[IWriteChunkRouteRepository] = ChunkRouteStore

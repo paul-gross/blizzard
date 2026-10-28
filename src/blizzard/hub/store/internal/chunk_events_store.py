@@ -780,5 +780,4 @@ class ChunkEventsStore:
             return int(key[0]) if key is not None else 0
 
 
-def _conforms_events(x: ChunkEventsStore) -> IWriteChunkEventsRepository:
-    return x
+_events_conforms: type[IWriteChunkEventsRepository] = ChunkEventsStore

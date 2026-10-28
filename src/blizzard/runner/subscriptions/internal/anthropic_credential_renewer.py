@@ -121,5 +121,4 @@ class AnthropicCredentialRenewer:
             return None
 
 
-def _conforms_credential_renewer(x: AnthropicCredentialRenewer) -> ICredentialRenewer:
-    return x
+_credential_renewer_conforms: type[ICredentialRenewer] = AnthropicCredentialRenewer

@@ -147,5 +147,4 @@ def _shown(content: Mapping[str, Any]) -> str:
     return str(next(iter(content.values()))) if len(content) == 1 else str(dict(content))
 
 
-def _conforms_host_ingest_store(x: HostIngestStore) -> IWriteHostIngestRepository:
-    return x
+_host_ingest_store_conforms: type[IWriteHostIngestRepository] = HostIngestStore

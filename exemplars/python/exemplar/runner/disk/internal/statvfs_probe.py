@@ -19,5 +19,4 @@ class StatvfsDiskProbe:
         return stat.f_bavail * stat.f_frsize
 
 
-def _conforms_statvfs_disk_probe(x: StatvfsDiskProbe) -> IDiskProbe:
-    return x
+_statvfs_disk_probe_conforms: type[IDiskProbe] = StatvfsDiskProbe

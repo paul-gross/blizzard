@@ -68,5 +68,4 @@ class AttachmentStore:
         _log.info("attachment recorded", lease_id=lease_id, name=name)
 
 
-def _conforms_attachment_store(x: AttachmentStore) -> IWriteAttachmentRepository:
-    return x
+_attachment_store_conforms: type[IWriteAttachmentRepository] = AttachmentStore

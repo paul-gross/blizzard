@@ -77,5 +77,4 @@ class HubTokenHolder:
         return TokenReread.SWITCHED
 
 
-def _conforms_current_hub_token(x: HubTokenHolder) -> ICurrentHubToken:
-    return x
+_current_hub_token_conforms: type[ICurrentHubToken] = HubTokenHolder

@@ -103,5 +103,4 @@ class HostIdentityHolder:
             self._identity = identity
 
 
-def _conforms_current_host_identity(x: HostIdentityHolder) -> ICurrentHostIdentity:
-    return x
+_current_host_identity_conforms: type[ICurrentHostIdentity] = HostIdentityHolder

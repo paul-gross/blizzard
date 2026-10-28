@@ -414,5 +414,4 @@ class GardenProposalStore:
         )
 
 
-def _conforms_garden_proposal_store(x: GardenProposalStore) -> IWriteGardenProposalRepository:
-    return x
+_garden_proposal_store_conforms: type[IWriteGardenProposalRepository] = GardenProposalStore

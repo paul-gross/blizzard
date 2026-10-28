@@ -84,5 +84,4 @@ class HostLaneStore:
         _log.info("host lane answered", high_water=mark, cleared=cleared)
 
 
-def _conforms_host_lane_store(x: HostLaneStore) -> IWriteHostLaneRepository:
-    return x
+_host_lane_store_conforms: type[IWriteHostLaneRepository] = HostLaneStore

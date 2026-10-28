@@ -214,5 +214,4 @@ class WinterWorkspaceProvider:
             ) from exc
 
 
-def _conforms_workspace_provider(x: WinterWorkspaceProvider) -> IWorkspaceProvider:
-    return x
+_workspace_provider_conforms: type[IWorkspaceProvider] = WinterWorkspaceProvider

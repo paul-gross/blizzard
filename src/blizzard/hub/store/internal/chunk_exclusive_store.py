@@ -140,5 +140,4 @@ class ChunkExclusiveWrites:
             yield LockedWorkRefTransaction(conn, self._work_refs)
 
 
-def _conforms_exclusive(x: ChunkExclusiveWrites) -> IChunkExclusiveWrites:
-    return x
+_exclusive_conforms: type[IChunkExclusiveWrites] = ChunkExclusiveWrites

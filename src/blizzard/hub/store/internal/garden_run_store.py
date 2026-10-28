@@ -225,5 +225,4 @@ class GardenRunStore:
         return grouped
 
 
-def _conforms_garden_run_store(x: GardenRunStore) -> IReadGardenRunRepository:
-    return x
+_garden_run_store_conforms: type[IReadGardenRunRepository] = GardenRunStore

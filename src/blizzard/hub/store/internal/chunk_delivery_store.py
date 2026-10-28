@@ -230,5 +230,4 @@ class ChunkDeliveryStore:
             return wrote
 
 
-def _conforms_delivery(x: ChunkDeliveryStore) -> IWriteChunkDeliveryRepository:
-    return x
+_delivery_conforms: type[IWriteChunkDeliveryRepository] = ChunkDeliveryStore

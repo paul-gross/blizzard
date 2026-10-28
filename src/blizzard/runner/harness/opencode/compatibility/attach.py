@@ -485,8 +485,7 @@ class LoopbackAttachProxyFactory:
         )
 
 
-def _conforms_attach_proxy_factory(x: LoopbackAttachProxyFactory) -> IAttachProxyFactory:
-    return x
+_attach_proxy_factory_conforms: type[IAttachProxyFactory] = LoopbackAttachProxyFactory
 
 
 def _is_sse_content_type(content_type: str | None) -> bool:

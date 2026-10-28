@@ -48,5 +48,4 @@ class NdjsonEgressWriter(DirectoryEgressWriter):
         super().__init__(directory, settings, token, NdjsonEncoder())
 
 
-def _conforms_ndjson(x: NdjsonEgressWriter) -> IEgressWriter:
-    return x
+_ndjson_conforms: type[IEgressWriter] = NdjsonEgressWriter

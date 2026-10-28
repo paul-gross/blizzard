@@ -109,5 +109,4 @@ class CheckStore:
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
 
 
-def _conforms_check_store(x: CheckStore) -> IWriteCheckRepository:
-    return x
+_check_store_conforms: type[IWriteCheckRepository] = CheckStore

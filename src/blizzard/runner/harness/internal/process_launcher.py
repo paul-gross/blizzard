@@ -204,5 +204,4 @@ def _confirm_once(write_fd: int, ack_read_fd: int) -> Callable[[], None]:
     return confirm_durable
 
 
-def _conforms_process_launcher(x: ProcessLauncher) -> IProcessLauncher:
-    return x
+_process_launcher_conforms: type[IProcessLauncher] = ProcessLauncher

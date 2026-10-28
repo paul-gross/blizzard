@@ -333,5 +333,4 @@ class ChunkArtifactsStore:
             return refused
 
 
-def _conforms_artifacts(x: ChunkArtifactsStore) -> IWriteChunkArtifactsRepository:
-    return x
+_artifacts_conforms: type[IWriteChunkArtifactsRepository] = ChunkArtifactsStore

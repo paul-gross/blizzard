@@ -49,5 +49,4 @@ def _held(conn: Connection) -> HostIdentity | None:
     return HostIdentity(host_id=str(row.host_id), tenant_id=str(row.tenant_id), registered_at=row.registered_at)
 
 
-def _conforms_host_identity_store(x: HostIdentityStore) -> IWriteHostIdentityRepository:
-    return x
+_host_identity_store_conforms: type[IWriteHostIdentityRepository] = HostIdentityStore

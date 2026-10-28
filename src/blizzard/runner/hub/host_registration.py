@@ -100,8 +100,7 @@ class HostRegistrationHolder:
         return was
 
 
-def _conforms_current_host_registration(x: HostRegistrationHolder) -> ICurrentHostRegistration:
-    return x
+_current_host_registration_conforms: type[ICurrentHostRegistration] = HostRegistrationHolder
 
 
 class IStandingRunner(Protocol):

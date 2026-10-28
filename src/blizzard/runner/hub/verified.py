@@ -133,5 +133,4 @@ class VerifiedHubClient:
         return self._verified().release(chunk_id, epoch=epoch, route_token=route_token, reason=reason)
 
 
-def _conforms_hub_client(x: VerifiedHubClient) -> IHubClient:
-    return x
+_hub_client_conforms: type[IHubClient] = VerifiedHubClient

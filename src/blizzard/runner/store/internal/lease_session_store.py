@@ -192,5 +192,4 @@ class LeaseSessionStore:
         _log.info("session preamble recorded", session_id=session.session_id, harness_id=session.harness_id)
 
 
-def _conforms_lease_session_store(x: LeaseSessionStore) -> IWriteLeaseSessionRepository:
-    return x
+_lease_session_store_conforms: type[IWriteLeaseSessionRepository] = LeaseSessionStore

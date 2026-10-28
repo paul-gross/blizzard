@@ -68,5 +68,4 @@ class SelfTestResultStore:
         _log.info("selftest result recorded", harness_id=harness_id, status=status)
 
 
-def _conforms_selftest_result_store(x: SelfTestResultStore) -> IWriteSelfTestResultRepository:
-    return x
+_selftest_result_store_conforms: type[IWriteSelfTestResultRepository] = SelfTestResultStore

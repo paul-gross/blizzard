@@ -39,5 +39,4 @@ class SubprocessOneShotProcess:
         )
 
 
-def _conforms_one_shot_process(x: SubprocessOneShotProcess) -> IOneShotProcess:
-    return x
+_one_shot_process_conforms: type[IOneShotProcess] = SubprocessOneShotProcess

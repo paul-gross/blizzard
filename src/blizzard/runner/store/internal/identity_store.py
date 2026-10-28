@@ -73,9 +73,7 @@ class RunnerIdentityStore:
         _log.debug("runner identity forgotten", runner_id=bound)
 
 
-def _conforms_runner_identity_store(x: RunnerIdentityStore) -> IWriteRunnerIdentityRepository:
-    return x
+_runner_identity_store_conforms: type[IWriteRunnerIdentityRepository] = RunnerIdentityStore
 
 
-def _conforms_retired_runner_identity(x: RunnerIdentityStore) -> IWriteRetiredRunnerIdentity:
-    return x
+_retired_runner_identity_conforms: type[IWriteRetiredRunnerIdentity] = RunnerIdentityStore

@@ -52,5 +52,4 @@ class HubAdminRepository:
             )
 
 
-def _conforms_hub_admin_repository(x: HubAdminRepository) -> IWriteHubAdminRepository:
-    return x
+_hub_admin_repository_conforms: type[IWriteHubAdminRepository] = HubAdminRepository

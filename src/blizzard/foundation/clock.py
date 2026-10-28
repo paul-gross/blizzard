@@ -98,17 +98,13 @@ class FixedClock:
         self.instant += delta
 
 
-def _conforms_system_clock(x: SystemClock) -> IClock:
-    return x
+_system_clock_conforms: type[IClock] = SystemClock
 
 
-def _conforms_fixed_clock(x: FixedClock) -> IClock:
-    return x
+_fixed_clock_conforms: type[IClock] = FixedClock
 
 
-def _conforms_system_monotonic_clock(x: SystemMonotonicClock) -> IMonotonicClock:
-    return x
+_system_monotonic_clock_conforms: type[IMonotonicClock] = SystemMonotonicClock
 
 
-def _conforms_manual_monotonic_clock(x: ManualMonotonicClock) -> IMonotonicClock:
-    return x
+_manual_monotonic_clock_conforms: type[IMonotonicClock] = ManualMonotonicClock

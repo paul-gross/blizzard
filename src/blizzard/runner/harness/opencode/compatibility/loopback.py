@@ -343,8 +343,7 @@ class UrllibLoopbackTransport:
                 response.close()
 
 
-def _conforms_loopback_transport(x: UrllibLoopbackTransport) -> ILoopbackTransport:
-    return x
+_loopback_transport_conforms: type[ILoopbackTransport] = UrllibLoopbackTransport
 
 
 __all__ = [

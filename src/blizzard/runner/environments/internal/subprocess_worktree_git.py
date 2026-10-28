@@ -55,5 +55,4 @@ class SubprocessWorktreeGit:
             raise WorktreeGitError(str(exc)) from exc
 
 
-def _conforms_worktree_git(x: SubprocessWorktreeGit) -> IWorktreeGit:
-    return x
+_worktree_git_conforms: type[IWorktreeGit] = SubprocessWorktreeGit

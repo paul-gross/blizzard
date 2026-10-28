@@ -250,5 +250,4 @@ def _run_link(conn: Connection, record: LinkRecord, from_revision: int | None, c
         )
 
 
-def _conforms_config_apply_store(x: ConfigApplyStore) -> IConfigApplyWriter:
-    return x
+_config_apply_store_conforms: type[IConfigApplyWriter] = ConfigApplyStore

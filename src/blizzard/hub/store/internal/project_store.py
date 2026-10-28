@@ -160,5 +160,4 @@ def _of(row: Row[Any]) -> Project:
     )
 
 
-def _conforms_project_store(x: ProjectStore) -> IWriteProjectRepository:
-    return x
+_project_store_conforms: type[IWriteProjectRepository] = ProjectStore

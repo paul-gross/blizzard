@@ -118,5 +118,4 @@ def _record(row: Row[Any]) -> InvitationRecord:
     return InvitationRecord(invitation, outcome)
 
 
-def _conforms_invitation_store(x: InvitationStore) -> IWriteInvitationRepository:
-    return x
+_invitation_store_conforms: type[IWriteInvitationRepository] = InvitationStore

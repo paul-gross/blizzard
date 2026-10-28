@@ -66,5 +66,4 @@ class SecretReferrersStore:
             return active_referrers(conn, names)
 
 
-def _conforms_secret_references(x: SecretReferrersStore) -> ISecretReferences:
-    return x
+_secret_references_conforms: type[ISecretReferences] = SecretReferrersStore

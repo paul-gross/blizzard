@@ -1769,14 +1769,15 @@ def _step_contexts(
 def _conformance_sentinels(context_file: Path) -> set[str]:
     tree = ast.parse(context_file.read_text(), filename=str(context_file))
     return {
-        node.returns.id
+        node.annotation.slice.id
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
-        and node.name.startswith("_conforms_")
-        and isinstance(node.returns, ast.Name)
-        and len(node.args.args) == 1
-        and isinstance(node.args.args[0].annotation, ast.Name)
-        and node.args.args[0].annotation.id == "LoopContext"
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.annotation, ast.Subscript)
+        and isinstance(node.annotation.value, ast.Name)
+        and node.annotation.value.id == "type"
+        and isinstance(node.annotation.slice, ast.Name)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "LoopContext"
     }
 
 
@@ -1907,7 +1908,7 @@ def test_step_context_check_admits_a_local_protocol(tmp_path: Path) -> None:
 
 
 def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: Path) -> None:
-    sentinel = "def _conforms_to_{}(ctx: LoopContext) -> {}:\n        return ctx\n"
+    sentinel = "_{}_conforms: type[{}] = LoopContext\n"
     context = _TYPE_CHECKING_IMPORT.format(sentinel.format("other", "OtherContext"))
     src = _plant_tree(
         tmp_path,

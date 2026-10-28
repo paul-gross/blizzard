@@ -280,5 +280,4 @@ class UsageStore:
         return seq
 
 
-def _conforms_usage_store(x: UsageStore) -> IWriteUsageRepository:
-    return x
+_usage_store_conforms: type[IWriteUsageRepository] = UsageStore

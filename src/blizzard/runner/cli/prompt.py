@@ -179,8 +179,7 @@ class _ConfiguredPrompts:
         return workspace.resolved_prompt(self.config.root) if workspace is not None else ""
 
 
-def _conforms_configured_prompts(x: _ConfiguredPrompts) -> IConfiguredWorkspacePrompts:
-    return x
+_configured_prompts_conforms: type[IConfiguredWorkspacePrompts] = _ConfiguredPrompts
 
 
 def _effective_prompt_lane(config: RunnerConfig) -> EffectiveWorkspacePrompt:

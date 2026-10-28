@@ -82,7 +82,6 @@ class HttpArchivedTranscriptRepository:
         )
 
 
-def _conforms_read_archived_transcript_repository(
-    x: HttpArchivedTranscriptRepository,
-) -> IReadArchivedTranscriptRepository:
-    return x
+_read_archived_transcript_repository_conforms: type[IReadArchivedTranscriptRepository] = (
+    HttpArchivedTranscriptRepository
+)

@@ -75,5 +75,4 @@ class ConfigRevisionsStore:
         return query, table.c[key_column]
 
 
-def _conforms(x: ConfigRevisionsStore) -> IReadConfigRevisions:
-    return x
+_read_config_revisions_conforms: type[IReadConfigRevisions] = ConfigRevisionsStore

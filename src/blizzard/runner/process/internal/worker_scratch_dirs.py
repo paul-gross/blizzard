@@ -67,5 +67,4 @@ class WorkerScratchDirs:
         return removed
 
 
-def _conforms_worker_scratch_dirs(x: WorkerScratchDirs) -> IWorkerScratchDirs:
-    return x
+_worker_scratch_dirs_conforms: type[IWorkerScratchDirs] = WorkerScratchDirs

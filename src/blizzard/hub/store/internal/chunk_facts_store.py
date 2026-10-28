@@ -617,5 +617,4 @@ class ChunkFactsStore:
         return resolved
 
 
-def _conforms_facts(x: ChunkFactsStore) -> IReadChunkFactsRepository:
-    return x
+_facts_conforms: type[IReadChunkFactsRepository] = ChunkFactsStore

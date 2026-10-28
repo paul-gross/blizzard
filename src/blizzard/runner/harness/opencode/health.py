@@ -118,8 +118,7 @@ class OpenCodeHealthProbe:
         return tuple(seen.values())
 
 
-def _conforms_harness_health_probe(x: OpenCodeHealthProbe) -> IHarnessHealthProbe:
-    return x
+_harness_health_probe_conforms: type[IHarnessHealthProbe] = OpenCodeHealthProbe
 
 
 __all__ = ["OpenCodeHealthProbe"]

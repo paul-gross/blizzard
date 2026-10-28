@@ -318,5 +318,4 @@ class ExternalUsageStore:
         return result.rowcount
 
 
-def _conforms_external_usage_store(x: ExternalUsageStore) -> IWriteExternalUsageRepository:
-    return x
+_external_usage_store_conforms: type[IWriteExternalUsageRepository] = ExternalUsageStore

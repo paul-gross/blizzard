@@ -202,5 +202,4 @@ class AnthropicSubscriptionSampler:
         return None
 
 
-def _conforms_subscription_sampler(x: AnthropicSubscriptionSampler) -> ISubscriptionSampler:
-    return x
+_subscription_sampler_conforms: type[ISubscriptionSampler] = AnthropicSubscriptionSampler

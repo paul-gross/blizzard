@@ -124,9 +124,7 @@ def _insert_link(conn: Connection, link: LinkRecord, change: ConfigChange) -> No
     link_writes.insert_link(conn, link_writes.LINK_KINDS[link.KIND], link.project_id, link.target(), change)
 
 
-def _conforms_config_import_reader(x: ConfigImportStore) -> IReadConfigImports:
-    return x
+_config_import_reader_conforms: type[IReadConfigImports] = ConfigImportStore
 
 
-def _conforms_config_import_writer(x: ConfigImportStore) -> IConfigImportWriter:
-    return x
+_config_import_writer_conforms: type[IConfigImportWriter] = ConfigImportStore

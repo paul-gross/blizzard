@@ -84,5 +84,4 @@ class GitCommitDeclarationStore:
         _log.info("git-commit declaration recorded", lease_id=lease_id, repo=repo)
 
 
-def _conforms_git_commit_declaration_store(x: GitCommitDeclarationStore) -> IWriteGitCommitDeclarationRepository:
-    return x
+_git_commit_declaration_store_conforms: type[IWriteGitCommitDeclarationRepository] = GitCommitDeclarationStore

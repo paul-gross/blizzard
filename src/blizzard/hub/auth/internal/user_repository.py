@@ -108,5 +108,4 @@ class UserRepository:
         )
 
 
-def _conforms_user_repository(x: UserRepository) -> IWriteUserRepository:
-    return x
+_user_repository_conforms: type[IWriteUserRepository] = UserRepository

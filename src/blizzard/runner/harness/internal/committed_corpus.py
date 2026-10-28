@@ -38,5 +38,4 @@ class CommittedCorpus:
         return manifest if isinstance(manifest, dict) else None
 
 
-def _conforms_compatibility_corpus(x: CommittedCorpus) -> ICompatibilityCorpus:
-    return x
+_compatibility_corpus_conforms: type[ICompatibilityCorpus] = CommittedCorpus

@@ -398,17 +398,13 @@ class ImportLinks:
         )
 
 
-def conforms_project_record(x: Project) -> ProjectRecord:
-    return x
+_project_record_conforms: type[ProjectRecord] = Project
 
 
-def conforms_source_link_record(x: SourceLink) -> LinkRecord:
-    return x
+_source_link_record_conforms: type[LinkRecord] = SourceLink
 
 
-def conforms_repository_link_record(x: RepositoryLink) -> LinkRecord:
-    return x
+_repository_link_record_conforms: type[LinkRecord] = RepositoryLink
 
 
-def conforms_import_links(x: ImportLinks) -> IImportLinks:
-    return x
+_import_links_conforms: type[IImportLinks] = ImportLinks

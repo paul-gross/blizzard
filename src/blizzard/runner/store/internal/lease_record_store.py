@@ -276,5 +276,4 @@ class LeaseRecordStore:
         return event_seq
 
 
-def _conforms_lease_record_store(x: LeaseRecordStore) -> IWriteLeaseRecordRepository:
-    return x
+_lease_record_store_conforms: type[IWriteLeaseRecordRepository] = LeaseRecordStore

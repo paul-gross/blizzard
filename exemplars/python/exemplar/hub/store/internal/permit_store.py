@@ -205,5 +205,4 @@ def _fact_of(row: Row[Any]) -> PermitFact:
     )
 
 
-def _conforms_permit_store(x: PermitStore) -> IWritePermitRepository:
-    return x
+_permit_store_conforms: type[IWritePermitRepository] = PermitStore

@@ -103,5 +103,4 @@ class DirectoryKeyProvider:
             raise
 
 
-def _conforms_directory_key_provider(x: DirectoryKeyProvider) -> IHubKeyProvider:
-    return x
+_directory_key_provider_conforms: type[IHubKeyProvider] = DirectoryKeyProvider

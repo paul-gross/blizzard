@@ -32,5 +32,4 @@ class OAuthProviderRegistry:
         return list(self._providers.values())
 
 
-def _conforms_oauth_provider_registry(x: OAuthProviderRegistry) -> IOAuthProviderRegistry:
-    return x
+_oauth_provider_registry_conforms: type[IOAuthProviderRegistry] = OAuthProviderRegistry

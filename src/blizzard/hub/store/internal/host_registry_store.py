@@ -351,5 +351,4 @@ def _inserted_id(result: CursorResult[Any]) -> int:
     return int(key[0]) if key is not None else 0
 
 
-def _conforms_registry(x: HostRegistryStore) -> IWriteHostRegistry:
-    return x
+_registry_conforms: type[IWriteHostRegistry] = HostRegistryStore

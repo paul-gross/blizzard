@@ -136,9 +136,7 @@ class RunnerRowRemovalStore:
         _log.info("runner rows removed", runner_id=runner_id, rows=deleted, counters_kept=keep_counters)
 
 
-def _conforms_runner_transfer_store(x: RunnerTransferStore) -> IRunnerTransfer:
-    return x
+_runner_transfer_store_conforms: type[IRunnerTransfer] = RunnerTransferStore
 
 
-def _conforms_runner_row_removal_store(x: RunnerRowRemovalStore) -> IRunnerRowRemoval:
-    return x
+_runner_row_removal_store_conforms: type[IRunnerRowRemoval] = RunnerRowRemovalStore

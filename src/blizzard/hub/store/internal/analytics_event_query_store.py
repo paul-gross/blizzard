@@ -189,5 +189,4 @@ class AnalyticsEventQueryStore:
         return [KeyedCount(key=row.key, count=row.occurrences) for row in rows]
 
 
-def _conforms_analytics_event_query_store(x: AnalyticsEventQueryStore) -> IReadAnalyticsEventQueries:
-    return x
+_analytics_event_query_store_conforms: type[IReadAnalyticsEventQueries] = AnalyticsEventQueryStore

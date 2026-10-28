@@ -44,5 +44,4 @@ class LeaseResumeIntentStore:
         _log.info("resume intent cleared", lease_id=lease_id)
 
 
-def _conforms_lease_resume_intent_store(x: LeaseResumeIntentStore) -> IWriteLeaseResumeIntentRepository:
-    return x
+_lease_resume_intent_store_conforms: type[IWriteLeaseResumeIntentRepository] = LeaseResumeIntentStore

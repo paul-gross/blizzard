@@ -26,5 +26,4 @@ class SqlAlchemyStoreStatusReader:
 
 # Typecheck-time conformance sentinel (matches the exemplar): pyright rejects the
 # return if the adapter drifts from the read-only seam it implements.
-def _conforms_store_status_reader(x: SqlAlchemyStoreStatusReader) -> IStoreStatusReader:
-    return x
+_store_status_reader_conforms: type[IStoreStatusReader] = SqlAlchemyStoreStatusReader

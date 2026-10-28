@@ -91,9 +91,7 @@ class MemoizingChunkViewCache:
         self._cache.pop(chunk_id, None)
 
 
-def _conforms_read_through(x: ReadThroughChunkViews) -> IChunkViews:
-    return x
+_read_through_conforms: type[IChunkViews] = ReadThroughChunkViews
 
 
-def _conforms_memoizing(x: MemoizingChunkViewCache) -> IChunkViews:
-    return x
+_memoizing_conforms: type[IChunkViews] = MemoizingChunkViewCache

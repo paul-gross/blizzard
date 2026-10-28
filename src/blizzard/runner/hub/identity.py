@@ -96,8 +96,7 @@ class RunnerIdentityHolder:
         self._identity = identity
 
 
-def _conforms_current_runner_identity(x: RunnerIdentityHolder) -> ICurrentRunnerIdentity:
-    return x
+_current_runner_identity_conforms: type[ICurrentRunnerIdentity] = RunnerIdentityHolder
 
 
 #: The states in which the runner drives no lease and delivers nothing.
@@ -301,9 +300,7 @@ class IdentityVerdictHolder:
             self._standing_reason = reason
 
 
-def _conforms_current_identity_verdict(x: IdentityVerdictHolder) -> ICurrentIdentityVerdict:
-    return x
+_current_identity_verdict_conforms: type[ICurrentIdentityVerdict] = IdentityVerdictHolder
 
 
-def _conforms_host_standing_sink(x: IdentityVerdictHolder) -> IHostStandingSink:
-    return x
+_host_standing_sink_conforms: type[IHostStandingSink] = IdentityVerdictHolder

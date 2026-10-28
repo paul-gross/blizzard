@@ -124,13 +124,10 @@ class HubWorkSource:
         return item
 
 
-def _conforms_work_source(x: HubWorkSource) -> IWorkSource:
-    return x
+_work_source_conforms: type[IWorkSource] = HubWorkSource
 
 
-def _conforms_work_editor(x: HubWorkSource) -> IWorkEditor:
-    return x
+_work_editor_conforms: type[IWorkEditor] = HubWorkSource
 
 
-def _conforms_work_closer(x: HubWorkSource) -> IWorkCloser:
-    return x
+_work_closer_conforms: type[IWorkCloser] = HubWorkSource

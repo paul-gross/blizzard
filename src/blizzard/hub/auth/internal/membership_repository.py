@@ -90,5 +90,4 @@ class MembershipRepository:
         return Membership(tenant_id=TenantId(row.tenant_id), user_id=row.user_id, role=Role(row.role))
 
 
-def _conforms_membership_repository(x: MembershipRepository) -> IWriteMembershipRepository:
-    return x
+_membership_repository_conforms: type[IWriteMembershipRepository] = MembershipRepository

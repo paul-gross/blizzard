@@ -81,9 +81,7 @@ class HubTokenFile:
         return True
 
 
-def _conforms_token_writer(x: HubTokenFile) -> ITokenWriter:
-    return x
+_token_writer_conforms: type[ITokenWriter] = HubTokenFile
 
 
-def _conforms_hub_token_file(x: HubTokenFile) -> IHubTokenFile:
-    return x
+_hub_token_file_conforms: type[IHubTokenFile] = HubTokenFile

@@ -1151,12 +1151,10 @@ def _engine(url: str) -> Generator[Engine, None, None]:
         engine.dispose()
 
 
-def _conforms_runner_bound_stores(x: RunnerBoundStoreFiles) -> IRunnerBoundStores:
-    return x
+_runner_bound_stores_conforms: type[IRunnerBoundStores] = RunnerBoundStoreFiles
 
 
-def _conforms_ingest_stores(x: RunnerStoreFiles) -> IIngestStores:
-    return x
+_ingest_stores_conforms: type[IIngestStores] = RunnerStoreFiles
 
 
 @collaborator
@@ -1174,8 +1172,7 @@ class DotenvTokenFiles:
         HubTokenFile.of(root, token_env).remove()
 
 
-def _conforms_token_files(x: DotenvTokenFiles) -> ITokenFiles:
-    return x
+_token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
 
 
 def runner_store_migrations(url: str) -> MigrationRunner:

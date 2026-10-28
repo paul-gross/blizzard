@@ -52,5 +52,4 @@ def _parse(environ: Mapping[str, str], variable: str) -> KeyGeneration:
     return generation_of(material)
 
 
-def _conforms_env_key_provider(x: EnvKeyProvider) -> IRotatableHubKeyProvider:
-    return x
+_env_key_provider_conforms: type[IRotatableHubKeyProvider] = EnvKeyProvider

@@ -56,5 +56,4 @@ class ParquetEgressWriter(DirectoryEgressWriter):
         super().__init__(directory, settings, token, ParquetEncoder())
 
 
-def _conforms_parquet(x: ParquetEgressWriter) -> IEgressWriter:
-    return x
+_parquet_conforms: type[IEgressWriter] = ParquetEgressWriter

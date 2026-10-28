@@ -458,5 +458,4 @@ class TranscriptLedgerStore:
         return {"agent_tool_use_ids": json.dumps({**learned, **stored})}
 
 
-def _conforms_transcript_ledger_store(x: TranscriptLedgerStore) -> IWriteTranscriptLedgerRepository:
-    return x
+_transcript_ledger_store_conforms: type[IWriteTranscriptLedgerRepository] = TranscriptLedgerStore

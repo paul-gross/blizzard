@@ -150,5 +150,4 @@ class OverloadStore:
         )
 
 
-def _conforms_overload_store(x: OverloadStore) -> IWriteOverloadRepository:
-    return x
+_overload_store_conforms: type[IWriteOverloadRepository] = OverloadStore

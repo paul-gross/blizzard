@@ -67,5 +67,4 @@ class SubprocessScratchGit:
         return result.stdout
 
 
-def _conforms_scratch_git(x: SubprocessScratchGit) -> IScratchGit:
-    return x
+_scratch_git_conforms: type[IScratchGit] = SubprocessScratchGit

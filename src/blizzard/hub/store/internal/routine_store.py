@@ -296,5 +296,4 @@ def _retired_ids(conn: Connection, routine_ids: Sequence[str] | None = None) -> 
     return found
 
 
-def _conforms_routine_store(x: RoutineStore) -> IWriteRoutineRepository:
-    return x
+_routine_store_conforms: type[IWriteRoutineRepository] = RoutineStore

@@ -405,5 +405,4 @@ class WorkItemStore:
         )
 
 
-def _conforms_work_item_store(x: WorkItemStore) -> IWriteWorkItemRepository:
-    return x
+_work_item_store_conforms: type[IWriteWorkItemRepository] = WorkItemStore

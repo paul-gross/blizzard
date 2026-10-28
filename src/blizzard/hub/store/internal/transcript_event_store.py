@@ -527,5 +527,4 @@ class TranscriptEventStore:
                 conn.execute(_delete_all_markers_for_segments_stmt(self._store, batch))
 
 
-def _conforms_transcript_event_store(x: TranscriptEventStore) -> IWriteTranscriptEvents:
-    return x
+_transcript_event_store_conforms: type[IWriteTranscriptEvents] = TranscriptEventStore

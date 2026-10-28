@@ -74,8 +74,7 @@ class StoreSecretReader:
         return self._cipher.open(secret)
 
 
-def _conforms_store_secret_reader(x: StoreSecretReader) -> ISecretReader:
-    return x
+_store_secret_reader_conforms: type[ISecretReader] = StoreSecretReader
 
 
 @domain_model

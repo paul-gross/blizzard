@@ -38,5 +38,4 @@ class RequeueStore:
         _log.info("chunk requeued locally", chunk_id=chunk_id)
 
 
-def _conforms_requeue_store(x: RequeueStore) -> IWriteRequeueRepository:
-    return x
+_requeue_store_conforms: type[IWriteRequeueRepository] = RequeueStore

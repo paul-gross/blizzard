@@ -48,5 +48,4 @@ class WorkspacePromptStore:
         return bool(deleted)
 
 
-def _conforms_workspace_prompt_store(x: WorkspacePromptStore) -> IWriteWorkspacePromptRepository:
-    return x
+_workspace_prompt_store_conforms: type[IWriteWorkspacePromptRepository] = WorkspacePromptStore

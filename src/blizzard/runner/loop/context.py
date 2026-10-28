@@ -289,62 +289,42 @@ if TYPE_CHECKING:
     from blizzard.runner.transcripts.transcript_drain import TranscriptDrainContext
     from blizzard.runner.transcripts.transcript_pump import TranscriptPumpContext
 
-    def _conforms_to_outbound(ctx: LoopContext) -> OutboundContext:
-        return ctx
+    _outbound_conforms: type[OutboundContext] = LoopContext
 
-    def _conforms_to_transcript_pump(ctx: LoopContext) -> TranscriptPumpContext:
-        return ctx
+    _transcript_pump_conforms: type[TranscriptPumpContext] = LoopContext
 
-    def _conforms_to_transcript_drain(ctx: LoopContext) -> TranscriptDrainContext:
-        return ctx
+    _transcript_drain_conforms: type[TranscriptDrainContext] = LoopContext
 
-    def _conforms_to_transcript_backfill(ctx: LoopContext) -> TranscriptBackfillContext:
-        return ctx
+    _transcript_backfill_conforms: type[TranscriptBackfillContext] = LoopContext
 
-    def _conforms_to_git_commits(ctx: LoopContext) -> GitCommitsContext:
-        return ctx
+    _git_commits_conforms: type[GitCommitsContext] = LoopContext
 
-    def _conforms_to_overload(ctx: LoopContext) -> OverloadContext:
-        return ctx
+    _overload_conforms: type[OverloadContext] = LoopContext
 
-    def _conforms_to_gate(ctx: LoopContext) -> GateContext:
-        return ctx
+    _gate_conforms: type[GateContext] = LoopContext
 
-    def _conforms_to_release(ctx: LoopContext) -> ReleaseContext:
-        return ctx
+    _release_conforms: type[ReleaseContext] = LoopContext
 
-    def _conforms_to_spawn(ctx: LoopContext) -> SpawnContext:
-        return ctx
+    _spawn_conforms: type[SpawnContext] = LoopContext
 
-    def _conforms_to_attempt(ctx: LoopContext) -> AttemptContext:
-        return ctx
+    _attempt_conforms: type[AttemptContext] = LoopContext
 
-    def _conforms_to_held_chunk(ctx: LoopContext) -> HeldChunkContext:
-        return ctx
+    _held_chunk_conforms: type[HeldChunkContext] = LoopContext
 
-    def _conforms_to_drain(ctx: LoopContext) -> DrainContext:
-        return ctx
+    _drain_conforms: type[DrainContext] = LoopContext
 
-    def _conforms_to_claim(ctx: LoopContext) -> ClaimContext:
-        return ctx
+    _claim_conforms: type[ClaimContext] = LoopContext
 
-    def _conforms_to_fill(ctx: LoopContext) -> FillContext:
-        return ctx
+    _fill_conforms: type[FillContext] = LoopContext
 
-    def _conforms_to_held_binding_completion(ctx: LoopContext) -> HeldBindingCompletionContext:
-        return ctx
+    _held_binding_completion_conforms: type[HeldBindingCompletionContext] = LoopContext
 
-    def _conforms_to_usage_limit(ctx: LoopContext) -> UsageLimitContext:
-        return ctx
+    _usage_limit_conforms: type[UsageLimitContext] = LoopContext
 
-    def _conforms_to_dormant(ctx: LoopContext) -> DormantContext:
-        return ctx
+    _dormant_conforms: type[DormantContext] = LoopContext
 
-    def _conforms_to_judgement(ctx: LoopContext) -> JudgementContext:
-        return ctx
+    _judgement_conforms: type[JudgementContext] = LoopContext
 
-    def _conforms_to_registration(ctx: LoopContext) -> RegistrationContext:
-        return ctx
+    _registration_conforms: type[RegistrationContext] = LoopContext
 
-    def _conforms_to_identity_check(ctx: LoopContext) -> IdentityCheckContext:
-        return ctx
+    _identity_check_conforms: type[IdentityCheckContext] = LoopContext

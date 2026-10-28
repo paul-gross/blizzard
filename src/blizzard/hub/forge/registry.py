@@ -257,13 +257,10 @@ class _ChecksHandle:
         return await self.adapter.rerun_check(id)
 
 
-def _conforms_refs(x: _RefsHandle) -> IForgeRefs:
-    return x
+_refs_conforms: type[IForgeRefs] = _RefsHandle
 
 
-def _conforms_changes(x: _ChangesHandle) -> IForgeChanges:
-    return x
+_changes_conforms: type[IForgeChanges] = _ChangesHandle
 
 
-def _conforms_checks(x: _ChecksHandle) -> IForgeChecks:
-    return x
+_checks_conforms: type[IForgeChecks] = _ChecksHandle

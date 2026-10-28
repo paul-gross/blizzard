@@ -264,8 +264,7 @@ def _compaction_records(export: OpenCodeSessionExport) -> tuple[MessagePartRevis
     )
 
 
-def _conforms_compactor(x: SubprocessOpenCodeCompactor) -> IOpenCodeCompactor:
-    return x
+_compactor_conforms: type[IOpenCodeCompactor] = SubprocessOpenCodeCompactor
 
 
 __all__ = [
