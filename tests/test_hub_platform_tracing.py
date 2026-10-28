@@ -311,10 +311,8 @@ nodes:
 def test_a_hub_action_pass_parents_on_its_turns_hub_exec_span_which_the_trace_corpus_derives_alike(
     tmp_path: Path,
 ) -> None:
-    """The completion that reaches ``merge`` only submits the visit; the hosted hub's flow driver takes it as a turn
-    on its own task, and the pass runs under the hub-exec context derived from that turn. The corpus assembles that
-    step's ``hub exec`` span from the turn's row under the same id, so the live pass hangs on the told span. The
-    driver's turn runs under no request span, so the completion's server span carries no link to it."""
+    """The driver takes the ``merge`` visit as a turn under no request span, so no request links it; its pass parents
+    on the turn's hub-exec context, which is the ``hub exec`` span the corpus assembles from the turn's row."""
     import time
     from dataclasses import replace
 
