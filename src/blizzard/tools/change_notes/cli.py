@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -22,7 +23,7 @@ from blizzard.tools.compat.reader import CompatError, supported_tags
 from blizzard.tools.compat.releases import parse_release, parse_releases
 
 
-def _tag_notes(repo: Repository, tag: str) -> list:
+def _tag_notes(repo: Repository, tag: str) -> list[Any]:
     directories = (d for d in repo.names(tag, CHANGES_DIR) if VERSION_DIR.fullmatch(d))
     return [note for directory in directories for note in notes_at(repo, tag, directory)]
 

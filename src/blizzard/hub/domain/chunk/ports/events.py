@@ -3,6 +3,7 @@ cross-table activity feed derived from it and the other concepts' own fact table
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -77,7 +78,7 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict | None,
+        detail: Mapping[str, object] | None,
         at: datetime,
     ) -> int:
         """Append one ``event_log`` row — never mutated once written.

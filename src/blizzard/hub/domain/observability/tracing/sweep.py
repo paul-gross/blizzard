@@ -6,6 +6,7 @@ is one complete, directly-callable pass (``bzh:steppable-loop``)."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -138,7 +139,7 @@ class TraceExportSweep:
                 {"reason": jump.reason.value, "since": _key_detail(since), "until": iso_utc(jump.to.at)},
             )
 
-    def _record(self, kind: HubEventKind, message: str, detail: dict | None) -> None:
+    def _record(self, kind: HubEventKind, message: str, detail: Mapping[str, object] | None) -> None:
         self._events.record(
             kind=kind,
             message=message,

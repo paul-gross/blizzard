@@ -13,7 +13,7 @@ from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
 
 
-class WorkToken(click.ParamType):
+class WorkToken(click.ParamType[tuple[str, str]]):
     """A work-item token as typed (``hub:<n>``, ``<repo>#<n>``), parsed once here at
     the CLI edge into the plain ``(source, ref)`` path segments the wire carries."""
 

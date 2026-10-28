@@ -592,7 +592,7 @@ class OperationalEvent:
     lease_id: str | None
     node_name: str | None
     message: str
-    detail: dict | None
+    detail: dict[str, object] | None
 
 
 @domain_model

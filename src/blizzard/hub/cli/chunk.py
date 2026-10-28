@@ -135,7 +135,7 @@ def chunk_show(cli: CliContext, chunk_id: str) -> None:
     cli.show(detail, ChunkDetail(detail))
 
 
-class Pointer(click.ParamType):
+class Pointer(click.ParamType[str]):
     """One ``ingest`` argument as typed, bound to the token the hub is handed. The CLI carries no
     pointer grammar of its own, so a token travels through verbatim — bar a deprecated prefix."""
 
