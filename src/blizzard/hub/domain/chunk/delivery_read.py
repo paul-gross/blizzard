@@ -34,9 +34,9 @@ class DeliverySources:
     """The narrowed, page-keyed delivery read (not the chunk's whole artifact history): the ``merged/`` and
     ``awaiting-external-merge`` ``markers`` and the ``pr_markers``, each in durable write order."""
 
-    markers: list[StoredArtifact] = field(default_factory=list)
-    pr_markers: list[PrMarker] = field(default_factory=list)
-    legacy_landed: dict[str, str] = field(default_factory=dict)
+    markers: list[StoredArtifact] = field(default_factory=list[StoredArtifact])
+    pr_markers: list[PrMarker] = field(default_factory=list[PrMarker])
+    legacy_landed: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @domain_model

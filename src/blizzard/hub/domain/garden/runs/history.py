@@ -29,7 +29,6 @@ from blizzard.hub.domain.garden.findings.model import Finding, IReadFindingRepos
 from blizzard.hub.domain.garden.formats import (
     DeliveredDelta,
     FindingAddOp,
-    FindingGoneOp,
     FindingObservedOp,
     IGardenFormats,
 )
@@ -277,7 +276,7 @@ def _set_delta(raw: DeliveredSetRaw, delta: DeliveredDelta, findings: Mapping[st
                     summary=row.summary if row is not None else None,
                 )
             )
-        elif isinstance(op, FindingGoneOp):
+        else:
             gone.append(GoneFinding(finding_id=op.id, note=op.note))
     return DeliveredSetDelta(
         finding_set_id=raw.finding_set_id,

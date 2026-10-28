@@ -76,8 +76,8 @@ class ReviewFindingsPlan:
     epoch: int
     at: datetime
     new_scope_description: str = ""
-    new_findings: list[NewReviewFinding] = field(default_factory=list)
-    facts: list[NewReviewFindingFact] = field(default_factory=list)
+    new_findings: list[NewReviewFinding] = field(default_factory=list[NewReviewFinding])
+    facts: list[NewReviewFindingFact] = field(default_factory=list[NewReviewFindingFact])
 
     def scope_mint(self, slug: str, project_id: str) -> ScopeMint:
         """The mint of the scope ``slug`` in ``project_id`` — the reviewed chunk's project, which the store reads in

@@ -114,7 +114,13 @@ class HubEventLogService:
 
     def record(self, *, kind: HubEventKind, message: str, detail: Mapping[str, object] | None, at: datetime) -> int:
         """Append the row and return its id."""
-        return self._events.append(severity=HUB_EVENT_SEVERITY[kind], kind=kind, message=message, detail=detail, at=at)
+        return self._events.append(
+            severity=HUB_EVENT_SEVERITY[kind],
+            kind=kind,
+            message=message,
+            detail=dict(detail) if detail is not None else None,
+            at=at,
+        )
 
 
 __all__ = [

@@ -50,7 +50,7 @@ class SweepMode(StrEnum):
 class SweepModes:
     """Each sweep's resolved mode; a sweep not named is timed."""
 
-    modes: Mapping[SweepName, SweepMode] = field(default_factory=dict)
+    modes: Mapping[SweepName, SweepMode] = field(default_factory=lambda: dict[SweepName, SweepMode]())
 
     def of(self, name: SweepName) -> SweepMode:
         return self.modes.get(name, SweepMode.TIMED)

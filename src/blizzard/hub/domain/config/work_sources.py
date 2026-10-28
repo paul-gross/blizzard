@@ -46,7 +46,6 @@ _GITHUB_LOCATOR = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 #: The mutable fields, in the order a diff lists them.
 _FIELDS = ("provider", "locator", "forge_id", "annotate", "secret")
-_NULLABLE = frozenset({"secret"})
 #: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
 #: recorded by its id under ``forge``, as every reference is held.
 _DIFF_FIELDS = ("slug", "name", "provider", "locator", "forge", "annotate", "secret")
@@ -303,15 +302,22 @@ def validate_fields(fields: WorkSourceFields) -> None:
 def merge(current: WorkSourceFields, edit: WorkSourceEdit) -> WorkSourceFields:
     """``current`` with every set field of ``edit`` applied; ``None`` on a non-nullable
     field is refused naming it."""
-    changes: dict[str, object] = {}
-    for name in _FIELDS:
-        value = getattr(edit, name)
-        if value is UNSET:
-            continue
-        if value is None and name not in _NULLABLE:
-            raise ConfigFieldError(name, "must not be null")
-        changes[name] = value
-    return replace(current, **changes)  # type: ignore[arg-type]
+    return replace(
+        current,
+        provider=_merged_required("provider", current.provider, edit.provider),
+        locator=_merged_required("locator", current.locator, edit.locator),
+        forge_id=_merged_required("forge_id", current.forge_id, edit.forge_id),
+        annotate=_merged_required("annotate", current.annotate, edit.annotate),
+        secret=current.secret if edit.secret is UNSET else edit.secret,
+    )
+
+
+def _merged_required[T](name: str, current: T, value: T | None | UnsetType) -> T:
+    if value is UNSET:
+        return current
+    if value is None:
+        raise ConfigFieldError(name, "must not be null")
+    return value
 
 
 def merge_labels(current: ConfiguredWorkSource, edit: WorkSourceEdit) -> tuple[str, str]:

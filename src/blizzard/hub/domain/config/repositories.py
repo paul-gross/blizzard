@@ -475,15 +475,22 @@ def validate_fields(fields: RepositoryFields) -> None:
 
 def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
     """``current`` with every set field of ``edit`` applied; ``None`` is refused naming the field."""
-    changes: dict[str, object] = {}
-    for name in _FIELDS:
-        value = getattr(edit, name)
-        if value is UNSET:
-            continue
-        if value is None:
-            raise ConfigFieldError("forge" if name == "forge_id" else name, "must not be null")
-        changes[name] = value
-    return replace(current, **changes)  # type: ignore[arg-type]
+    return replace(
+        current,
+        forge_id=_merged_required("forge", current.forge_id, edit.forge_id),
+        owner=_merged_required("owner", current.owner, edit.owner),
+        repo=_merged_required("repo", current.repo, edit.repo),
+        base_branch=_merged_required("base_branch", current.base_branch, edit.base_branch),
+        secret_name=_merged_required("secret_name", current.secret_name, edit.secret_name),
+    )
+
+
+def _merged_required[T](name: str, current: T, value: T | None | UnsetType) -> T:
+    if value is UNSET:
+        return current
+    if value is None:
+        raise ConfigFieldError(name, "must not be null")
+    return value
 
 
 def merge_labels(current: ConfiguredRepository, edit: RepositoryEdit) -> tuple[str, str]:

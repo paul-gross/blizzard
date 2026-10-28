@@ -17,7 +17,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 ColorPick = Callable[[Sequence[ProjectColor]], ProjectColor]
 
 
-def parse_color(raw: str) -> ProjectColor | HexColor:
+def parse_color(raw: str | None) -> ProjectColor | HexColor:
     """The palette color ``raw`` names, or ``raw`` lowercased when it is a ``#rrggbb``; :class:`ConfigFieldError` on
     ``color``, naming both forms, otherwise."""
     try:
