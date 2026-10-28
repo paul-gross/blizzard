@@ -405,24 +405,26 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
 
 
 def test_a_chunk_stopped_mid_turn_keeps_its_branch_busy_and_closes_stopped_at_the_turns_end(world: _World) -> None:
-    chunk_id = world.at_step("test.hooked")
-    waiting = world.at_step("test.hooked")
+    chunks = {world.at_step("test.hooked"), world.at_step("test.hooked")}
     seen: dict[str, Any] = {}
 
     def stop_mid_pass(visit: Visit) -> None:
-        if visit.chunk.chunk_id != chunk_id:
+        if seen:
             return
-        assert world.hub.client.post(f"/api/chunks/{chunk_id}/stop", json={}).status_code in (200, 202)
+        stopped = visit.chunk.chunk_id
+        assert world.hub.client.post(f"/api/chunks/{stopped}/stop", json={}).status_code in (200, 202)
         lines = world.hub.services.flow_lines
         lines.reconcile(0)
-        seen["admitted"] = lines.admit(0, world.hub.clock.now())
-        seen["closed"] = world.submission(chunk_id).closed
+        seen.update(chunk=stopped, admitted=lines.admit(0, world.hub.clock.now()))
+        seen["closed"] = world.submission(stopped).closed
 
     world.hooked.hook = stop_mid_pass
     world.hooked.answer = Pass(choice="landed")
 
     world.tick()
 
+    chunk_id = seen.pop("chunk")
+    (waiting,) = chunks - {chunk_id}
     assert seen == {"admitted": [], "closed": None}
     assert world.outcomes(chunk_id) == ["landed"]
     assert world.submission(chunk_id).closed == "stopped"

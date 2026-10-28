@@ -31,7 +31,7 @@ from tests.support import (
     pointer_token,
     report_lease,
 )
-from tests.test_hub_command_node import _submit_build_pass
+from tests.test_hub_command_node import _post_build_pass
 from tests.test_write_fence import _Chunk, _held_by_a_writer, _restart_under_lock, _stop_under_lock
 
 pytestmark = pytest.mark.component
@@ -93,14 +93,14 @@ def _bounce_capped_chunk(tmp_path: Path):  # type: ignore[no-untyped-def]
     )
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    _submit_build_pass(hub, chunk_id, build_node_id, 1)
+    _post_build_pass(hub, chunk_id, build_node_id, 1)
     assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
     assert hub.turn_outcome(chunk_id) == "failure"
     hub.clock.advance(timedelta(seconds=1))
     report_lease(hub, chunk_id, epoch=3, seq=2)
     second_build = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
-    _submit_build_pass(hub, chunk_id, second_build, 3)
+    _post_build_pass(hub, chunk_id, second_build, 3)
     assert hub.turn_outcome(chunk_id) == "pending"
     hub.clock.advance(timedelta(seconds=31))
     return hub, chunk_id

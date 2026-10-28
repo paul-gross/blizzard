@@ -3,7 +3,7 @@ catalogue only behind both test fences (``src/blizzard/hub/delivery/action_regis
 
 from __future__ import annotations
 
-import time
+import asyncio
 
 from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
@@ -43,7 +43,8 @@ class BlockAction:
     spec = TEST_BLOCK
 
     async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
-        until = time.monotonic() + float(visit.node.action_args["seconds"][0])
-        while time.monotonic() < until:
+        loop = asyncio.get_running_loop()
+        until = loop.time() + float(visit.node.action_args["seconds"][0])
+        while loop.time() < until:
             pass
         return Pass(choice="success")
