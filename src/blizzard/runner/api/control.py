@@ -104,7 +104,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             effective=summary.pause.effective,
             local_reason=summary.pause.local_reason,
         ),
-        throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
+        throttle=_throttle_view(summary.throttle) if summary.throttle is not None else None,
         capacities=CapacitiesView(
             used=summary.capacities.used,
             agents=summary.capacities.agents,
@@ -167,7 +167,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     )
 
 
-def throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
+def _throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
     floor = status.verdict.floor
     hold = floor.hold
     clear = floor.clear

@@ -9,7 +9,7 @@ from typing import TypeGuard
 
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.foundation.untyped import as_table
+from blizzard.foundation.untyped import as_mapping
 
 # A Unix timestamp past this many seconds is read as milliseconds.
 _MILLISECONDS_ABOVE = 2e10
@@ -41,7 +41,7 @@ def admit_usage_window(entry: object) -> AdmittedUsageWindow | str:
     ``utilization_pct`` a finite number from 0 to 100, ``window_seconds`` a positive integer —
     a ``bool`` is never a number here — and ``resets_at`` an ISO-8601 instant or a Unix
     timestamp, read as UTC when naive (``bzh:utc-instants``)."""
-    fields = as_table(entry)
+    fields = as_mapping(entry)
     if fields is None:
         return "not an object"
     window, pct, seconds = fields.get("window"), fields.get("utilization_pct"), fields.get("window_seconds")
