@@ -208,6 +208,9 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         // `init` scaffolds the file before it reaches the hub, so a first pass against nothing leaves the scaffold to
         // rename; the second pass registers the host under that name.
         await runCommand(runner, ['init', dir, '--hub', 'http://127.0.0.1:9'], { env: cliEnv(operatorHome), cwd: root });
+        if (!fs.existsSync(path.join(dir, 'blizzard-host.toml'))) {
+          throw new Error('`blizzard-runner init` left no host file when the hub was unreachable, so the second host cannot name its runner; the scaffold-then-rename step needs revisiting');
+        }
         const scaffold = readHostFile(dir);
         scaffold.hub_url = ctx.hub.url;
         (scaffold.runner as TomlTable[])[0]!.name = defaultRunner;
@@ -232,7 +235,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       timings.addMs = Date.now() - started;
 
       // The overlay: the fixture's baseline first, then the profile, over the file the CLI wrote.
-      const port = await freePort();
+      let port = await freePort();
       const written = readHostFile(dir);
       const baseline: TomlTable = {
         host: '127.0.0.1',
@@ -270,13 +273,26 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const entries = runnerEntries(readHostFile(dir));
       for (const entry of entries) ctx.ledger.add('runner', entry.id);
 
-      const url = `http://127.0.0.1:${port}`;
       const boot = async (): Promise<void> => {
         const begun = Date.now();
         daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env });
         timings.bootMs = Date.now() - begun;
       };
-      if (options.runnerStarted) await boot();
+      if (options.runnerStarted) {
+        try {
+          await boot();
+        } catch (error) {
+          // The port was free when chosen; another process may have taken it before the first bind. Nothing has been
+          // handed to the test yet, so the host file can name another.
+          if (!/could not take port/.test(String(error))) throw error;
+          port = await freePort();
+          const file = readHostFile(dir);
+          file.port = port;
+          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
+          await boot();
+        }
+      }
+      const url = `http://127.0.0.1:${port}`;
 
       const api = runnerHostApi({ context: ctx.context, testInfo, url, ledger: ctx.ledger, logContext: () => logTail(logPath) });
       const sock = hostSocketApi({ socket, logContext: () => logTail(logPath) });

@@ -183,7 +183,17 @@ export async function killLive(daemon: LiveDaemon): Promise<number | string> {
 
 /** `SIGTERM`, then `SIGKILL` if the daemon has not exited ten seconds later. */
 export async function stopDaemon(daemon: { pid: number; group?: boolean }): Promise<void> {
-  if (!isAlive(daemon.pid)) return;
+  if (!isAlive(daemon.pid)) {
+    // A dead leader can leave workers in its group; reap them.
+    if (daemon.group === true) {
+      try {
+        signalDaemon(daemon, 'SIGKILL');
+      } catch {
+        // The group is empty.
+      }
+    }
+    return;
+  }
   signalDaemon(daemon, 'SIGTERM');
   const deadline = Date.now() + STOP_GRACE_MS;
   while (Date.now() < deadline) {
