@@ -87,6 +87,7 @@ from blizzard.runner.host_layout import (
     migrate_remedy,
 )
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token
+from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, SAMPLED_PROVIDERS
 from blizzard.runner.throttle.settings import DAY_NAMES, HoldOrRelease, ThrottleSettings
@@ -296,6 +297,7 @@ class HostConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    loop: LoopMode = LoopMode.TIMED
     hub_url: str = DEFAULT_HUB_URL
     public_urls: tuple[str, ...] = ()
     trusted_proxies: tuple[str, ...] = ()
@@ -530,6 +532,7 @@ class HostConfig:
         *,
         host: str | None = None,
         port: int | None = None,
+        loop: LoopMode | None = None,
         flag_registry: FlagRegistry,
         strict: bool,
         key_registry: ConfigRegistry | None = None,
@@ -561,6 +564,7 @@ class HostConfig:
                 layout=layout,
                 host=host,
                 port=port,
+                loop=loop,
                 flag_registry=flag_registry,
                 strict=strict,
                 key_registry=key_registry,
@@ -575,13 +579,14 @@ class HostConfig:
         *,
         host: str | None = None,
         port: int | None = None,
+        loop: LoopMode | None = None,
         flag_registry: FlagRegistry,
         strict: bool,
     ) -> HostConfig:
         """:meth:`load`, for a verb that opens the store without creating it: where the store is the default SQLite
         file and that file is absent, the directory is refused, naming ``migrate`` — which alone creates it, and
         adopts a pre-host ``runner.db`` first. A store named by ``db_url`` is left to the engine."""
-        config = cls.load(root, host=host, port=port, flag_registry=flag_registry, strict=strict)
+        config = cls.load(root, host=host, port=port, loop=loop, flag_registry=flag_registry, strict=strict)
         layout = config.layout
         if config.db_url != layout.default_db_url or layout.store_path.exists():
             return config
@@ -629,6 +634,7 @@ class HostConfig:
             layout=layout,
             host=None,
             port=None,
+            loop=None,
             flag_registry=flag_registry,
             strict=strict,
         )
@@ -788,12 +794,19 @@ class _Errors:
             return fallback
 
 
+def _parse_loop(value: object) -> LoopMode:
+    if isinstance(value, str) and value in set(LoopMode):
+        return LoopMode(value)
+    raise ConfigError(f"loop must be one of {[str(mode) for mode in LoopMode]}, got {value!r}")
+
+
 def _parse(
     raw: dict[str, Any],
     *,
     layout: HostLayout,
     host: str | None,
     port: int | None,
+    loop: LoopMode | None,
     flag_registry: FlagRegistry,
     strict: bool,
     key_registry: ConfigRegistry | None = None,
@@ -824,6 +837,11 @@ def _parse(
         errors.add("db_url must not be blank")
     resolved_port = errors.attempt(
         "port", lambda: port if port is not None else int(document.get("port", DEFAULT_PORT)), DEFAULT_PORT
+    )
+    resolved_loop = errors.attempt(
+        "loop",
+        lambda: loop if loop is not None else _parse_loop(document.get("loop", LoopMode.TIMED.value)),
+        LoopMode.TIMED,
     )
     public_urls = errors.attempt(
         "public_url", lambda: PublicOrigins.entries(document.get("public_url"), ConfigError), ()
@@ -856,6 +874,7 @@ def _parse(
         db_url=db_url,
         host=host or str(document.get("host", DEFAULT_HOST)),
         port=resolved_port,
+        loop=resolved_loop,
         hub_url=str(document.get("hub_url", DEFAULT_HUB_URL)),
         public_urls=public_urls,
         trusted_proxies=trusted_proxies,

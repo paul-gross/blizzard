@@ -887,6 +887,18 @@
           "type": "integer"
         },
         {
+          "help": "Run passes on timers (timed) or only on request (stepped); overrides the host file's `loop` for this run.",
+          "hidden": false,
+          "kind": "option",
+          "name": "loop",
+          "opts": [
+            "--loop"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "choice"
+        },
+        {
           "help": "Run every check a start would \u2014 the host file, the store's revision, each runner's token resolved to its id \u2014 report each error, and start nothing.",
           "hidden": false,
           "kind": "option",

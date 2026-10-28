@@ -59,6 +59,7 @@ from blizzard.runner.host_layout import (
     RUNNERS_DIRNAME,
 )
 from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME
+from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.throttle.settings import DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT, HoldOrRelease
 from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
@@ -137,6 +138,7 @@ _HOST_KEYS = (
     ConfigKey("hub_url", STRING, default=DEFAULT_HUB_URL),
     ConfigKey("host", STRING, default=DEFAULT_HOST),
     ConfigKey("port", INTEGER, default=DEFAULT_PORT),
+    ConfigKey("loop", STRING, default=LoopMode.TIMED.value),
     ConfigKey("db_url", STRING),
     ConfigKey("public_url", STRING_OR_LIST),
     ConfigKey("trusted_proxies", STRING_LIST),

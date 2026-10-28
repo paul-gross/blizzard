@@ -45,6 +45,7 @@ from blizzard.runner.leases.session import LeaseSessionService
 from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.lifecycle.takeover import TakeoverService
+from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.selftest.service import SelfTestService
@@ -60,6 +61,7 @@ from blizzard.runner.transcripts.service import TranscriptService
 if TYPE_CHECKING:
     # `src/blizzard/runner/api/federation.py` resolves its own collaborators through this module.
     from blizzard.runner.api.federation import FederationSettings
+    from blizzard.runner.loop_wiring import RunnerStepper
 
 _STORE = "runner store"
 
@@ -228,6 +230,14 @@ class RunnerWiring:
                 detail=f"no active lease or open takeover for lease {lease_id}",
             )
         return WorkerLease(lease=reference, active=False)
+
+    def stepper(self) -> RunnerStepper:
+        stepper: RunnerStepper | None = self._seam("stepper")
+        return stepper if stepper is not None else self._refuse("runner stepper")
+
+    def host_stepper(self) -> HostPassStepper:
+        stepper: HostPassStepper | None = self._seam("host_stepper")
+        return stepper if stepper is not None else self._refuse("host stepper")
 
     def status(self) -> RunnerStatusService:
         service: RunnerStatusService | None = self._seam("runner_status")

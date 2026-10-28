@@ -3751,6 +3751,20 @@ export type StagedAttachment = {
     name: string;
 };
 
+/**
+ * SweepPassOutcome
+ *
+ * How one sweep pass ended.
+ */
+export const SweepPassOutcome = { COMPLETED: 'completed', FAILED: 'failed' } as const;
+
+/**
+ * SweepPassOutcome
+ *
+ * How one sweep pass ended.
+ */
+export type SweepPassOutcome = typeof SweepPassOutcome[keyof typeof SweepPassOutcome];
+
 export const TakeoverChangeCause = { OPENED: 'opened', CLOSED: 'closed' } as const;
 
 export type TakeoverChangeCause = typeof TakeoverChangeCause[keyof typeof TakeoverChangeCause];
@@ -3891,6 +3905,25 @@ export type ThrottleStatusView = {
      * State
      */
     state: string;
+};
+
+/**
+ * TickPassResponse
+ */
+export type TickPassResponse = {
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Finished At
+     */
+    finished_at: string;
+    outcome: SweepPassOutcome;
+    /**
+     * Started At
+     */
+    started_at: string;
 };
 
 /**
@@ -4692,6 +4725,29 @@ export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse
 };
 
 export type ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponse = ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses[keyof ClearSubscriptionFloorApiHostSubscriptionsSlugFloorClearPostResponses];
+
+export type RunHostTickApiHostTicksPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host/ticks';
+};
+
+export type RunHostTickApiHostTicksPostErrors = {
+    /**
+     * A pass of the same lock is in progress, timed or requested: `{"code": "tick_in_progress"}`.
+     */
+    409: unknown;
+};
+
+export type RunHostTickApiHostTicksPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TickPassResponse;
+};
+
+export type RunHostTickApiHostTicksPostResponse = RunHostTickApiHostTicksPostResponses[keyof RunHostTickApiHostTicksPostResponses];
 
 export type ListWorkspacesApiHostWorkspacesGetData = {
     body?: never;
@@ -6583,6 +6639,42 @@ export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses = {
 };
 
 export type ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponse = ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses[keyof ListOpenTakeoversRunnersRunnerIdApiTakeoversGetResponses];
+
+export type RunTickRunnersRunnerIdApiTicksPostData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/ticks';
+};
+
+export type RunTickRunnersRunnerIdApiTicksPostErrors = {
+    /**
+     * A pass of the same lock is in progress, timed or requested: `{"code": "tick_in_progress"}`.
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RunTickRunnersRunnerIdApiTicksPostError = RunTickRunnersRunnerIdApiTicksPostErrors[keyof RunTickRunnersRunnerIdApiTicksPostErrors];
+
+export type RunTickRunnersRunnerIdApiTicksPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TickPassResponse;
+};
+
+export type RunTickRunnersRunnerIdApiTicksPostResponse = RunTickRunnersRunnerIdApiTicksPostResponses[keyof RunTickRunnersRunnerIdApiTicksPostResponses];
 
 export type TraceReplayRunnersRunnerIdApiTracesReplayPostData = {
     body: TraceReplayRequest;

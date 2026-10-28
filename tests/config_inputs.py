@@ -23,6 +23,7 @@ from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
+from blizzard.runner.loop.mode import LoopMode
 
 #: The registry packaged with the wheel, as every root reads it.
 FLAG_REGISTRY: Final = packaged_flag_registry()
@@ -62,13 +63,14 @@ def load_host_config(
     *,
     host: str | None = None,
     port: int | None = None,
+    loop: LoopMode | None = None,
     flag_registry: FlagRegistry = FLAG_REGISTRY,
     strict: bool = STRICT,
     key_registry: ConfigRegistry | None = None,
 ) -> HostConfig:
     """:meth:`HostConfig.load` with the suite's inputs."""
     return HostConfig.load(
-        root, host=host, port=port, flag_registry=flag_registry, strict=strict, key_registry=key_registry
+        root, host=host, port=port, loop=loop, flag_registry=flag_registry, strict=strict, key_registry=key_registry
     )
 
 

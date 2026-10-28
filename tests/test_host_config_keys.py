@@ -295,6 +295,7 @@ _SAMPLE_BY_TYPE: dict[str, object] = {
     STRING_OR_LIST: "https://a.example",
 }
 _SAMPLE_BY_PATH: dict[str, object] = {
+    "loop": "stepped",
     "trusted_proxies": ["127.0.0.1"],
     "workspace[].provider": "basic",
     "workspace[].prompt_package": "",
@@ -360,6 +361,7 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
         layout=HostLayout(tmp_path),
         host=None,
         port=None,
+        loop=None,
         flag_registry=FLAG_REGISTRY,
         strict=True,
     )

@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import Protocol, TypeVar
 
@@ -18,7 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import collaborator
-from blizzard.runner.composition import RunnerProcess, build_runner_process
+from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
@@ -38,6 +39,7 @@ from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.retention_floor import RetentionPasses
+from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
 from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
@@ -318,11 +320,102 @@ class ResumeMarking:
         )
 
 
-class PeriodicDriver:
-    """A background thread that ticks the loop on an interval (~30s).
+class RunnerStepper:
+    def __init__(self, config: RunnerConfig, *, process_graph: RunnerProcess) -> None:
+        self._wiring = LoopWiring.of(config, broker=process_graph.host.events)
+        self._graph = process_graph
+        self._tick_lock = StepLock()
+        self._trace_lock = StepLock()
+        self._build = threading.Lock()
+        self._client: httpx2.Client | None = None
+        self._ctx: LoopContext | None = None
 
-    Owns its own ``httpx2.Client`` for the driver's lifetime. A tick that raises is logged
-    and swallowed so one bad pass never kills the daemon."""
+    @property
+    def wiring(self) -> LoopWiring:
+        return self._wiring
+
+    def traces(self) -> bool:
+        return self._graph.trace_sweep is not None
+
+    def request(self) -> PassResult:
+        with ExitStack() as held:
+            held.enter_context(self._tick_lock.hold())
+            if self.traces():
+                held.enter_context(self._trace_lock.hold())
+            clock = self._graph.clock
+            started_at = clock.now()
+            faults: list[Exception] = []
+            for run in (self._tick, self._sweep_traces):
+                try:
+                    run()
+                except Exception as exc:
+                    _log.error("tick failed" if run == self._tick else "lease trace sweep failed", detail=str(exc))
+                    faults.append(exc)
+            joined = RuntimeError("; ".join(str(f) or type(f).__name__ for f in faults)) if faults else None
+            return ended(clock, started_at, joined)
+
+    def timed_tick(self) -> None:
+        try:
+            with self._tick_lock.hold():
+                self._tick()
+        except TickInProgress:
+            _log.info("tick skipped; another pass is in progress", runner_name=self._wiring.config.name)
+        except Exception as exc:  # a bad tick must not kill the daemon
+            _log.error("tick failed", detail=str(exc))
+
+    def timed_trace_sweep(self) -> None:
+        try:
+            with self._trace_lock.hold():
+                self._sweep_traces()
+        except TickInProgress:
+            _log.info("lease trace sweep skipped; another pass is in progress")
+        except Exception as exc:
+            get_logger("blizzard.runner.trace_export").error("lease trace sweep failed", detail=str(exc))
+
+    def quiesce(self) -> None:
+        self._tick_lock.wait_idle()
+
+    def close(self) -> None:
+        with self._build:
+            if self._client is not None:
+                self._client.close()
+                self._client = None
+            self._ctx = None
+
+    def _tick(self) -> None:
+        tick(self._context())
+
+    def _sweep_traces(self) -> None:
+        if self._graph.trace_sweep is not None:
+            self._graph.trace_sweep.sweep()
+
+    def _context(self) -> LoopContext:
+        with self._build:
+            if self._ctx is None:
+                config = self._wiring.config
+                client = httpx2.Client(
+                    base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
+                )
+                self._graph.platform_tracing.instrument_client(client)
+                try:
+                    self._ctx = self._wiring.context(
+                        HttpHubClient(client), self._graph, sweep_worker_scratch=True, tracer=self._graph.tracer
+                    )
+                except BaseException:
+                    client.close()
+                    raise
+                self._client = client
+            return self._ctx
+
+
+def host_pass_stepper(host: HostProcess) -> HostPassStepper:
+    return HostPassStepper(
+        host.host_tick.run, clock=host.clock, log=get_logger("blizzard.runner.subscriptions"), label="host tick"
+    )
+
+
+class PeriodicDriver:
+    """A background thread that ticks the loop on an interval (~30s) through a ``RunnerStepper``."""
 
     def __init__(
         self,
@@ -330,15 +423,16 @@ class PeriodicDriver:
         *,
         interval_seconds: float,
         process_graph: RunnerProcess,
+        stepper: RunnerStepper | None = None,
     ) -> None:
         # Wired eagerly on the constructing (``host``) thread so a missing prompt file
         # fails startup rather than the loop thread (`tests/test_runner_loop_build.py`).
-        self._wiring = LoopWiring.of(config, broker=process_graph.host.events)
-        self._graph = process_graph
+        self._owned = stepper is None
+        self._stepper = stepper or RunnerStepper(config, process_graph=process_graph)
+        self._wiring = self._stepper.wiring
         self._interval = interval_seconds
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
-        self._client: httpx2.Client | None = None
 
     def start(self) -> None:
         self._thread.start()
@@ -357,27 +451,13 @@ class PeriodicDriver:
         id with nowhere durable to poll it from until that handshake completes."""
         self._stop.set()
         self._thread.join()
+        if self._owned:
+            self._stepper.close()
 
     def _run(self) -> None:
-        config = self._wiring.config
-        self._client = httpx2.Client(
-            base_url=config.hub_url, timeout=_HTTP_TIMEOUT, auth=HeldTokenAuth(self._graph.hub_token)
-        )
-        self._graph.platform_tracing.instrument_client(self._client)
-        try:
-            ctx = self._wiring.context(
-                HttpHubClient(self._client),
-                self._graph,
-                sweep_worker_scratch=True,
-                tracer=self._graph.tracer,
-            )
-            _log.info("reconciliation loop started", runner_name=config.name, interval=self._interval)
-            while not self._stop.is_set():
-                try:
-                    tick(ctx)
-                except Exception as exc:  # a bad tick must not kill the daemon
-                    _log.error("tick failed", detail=str(exc))
-                self._stop.wait(self._interval)
-        finally:
-            self._client.close()
-            _log.info("reconciliation loop stopped", runner_name=config.name)
+        name = self._wiring.config.name
+        _log.info("reconciliation loop started", runner_name=name, interval=self._interval)
+        while not self._stop.is_set():
+            self._stepper.timed_tick()
+            self._stop.wait(self._interval)
+        _log.info("reconciliation loop stopped", runner_name=name)

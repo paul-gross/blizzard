@@ -22,6 +22,7 @@ from blizzard.runner.host_config import (
 )
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
+from blizzard.runner.loop.mode import LoopMode
 from tests.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 
 pytestmark = pytest.mark.unit
@@ -667,3 +668,25 @@ def test_a_flat_runner_file_declaring_one_subscription_names_it_and_several_are_
     assert _graduated(tmp_path, {"subscription": [plan]}).sole_runner(None).subscription == "team"
     with pytest.raises(ConfigError, match="graduate it by hand"):
         _graduated(tmp_path, {"subscription": [plan, {**plan, "slug": "other"}]})
+
+
+def test_the_loop_is_timed_unless_the_file_says_stepped(tmp_path: Path) -> None:
+    assert load_host_config(_write(tmp_path / "default", _VALID)).loop is LoopMode.TIMED
+    assert load_host_config(_write(tmp_path / "stepped", 'loop = "stepped"\n' + _VALID)).loop is LoopMode.STEPPED
+
+
+def test_a_loop_flag_overrides_the_file_for_one_load(tmp_path: Path) -> None:
+    root = _write(tmp_path / "host", 'loop = "stepped"\n' + _VALID)
+
+    assert load_host_config(root, loop=LoopMode.TIMED).loop is LoopMode.TIMED
+    assert load_host_config(root).loop is LoopMode.STEPPED
+
+
+@pytest.mark.parametrize("value", ['"paced"', "3", "true"])
+def test_a_loop_that_is_neither_timed_nor_stepped_is_refused_naming_the_key(tmp_path: Path, value: str) -> None:
+    root = _write(tmp_path / "host", f"loop = {value}\n" + _VALID)
+
+    with pytest.raises(HostConfigError) as refused:
+        load_host_config(root)
+
+    assert any(error.startswith("loop: loop must be one of") for error in refused.value.errors)

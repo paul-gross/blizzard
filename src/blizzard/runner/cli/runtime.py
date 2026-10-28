@@ -109,8 +109,10 @@ from blizzard.runner.lifecycle.identity_check import (
     reset_hazard,
 )
 from blizzard.runner.listeners import ListenerError, Uds
+from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
-from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver
+from blizzard.runner.loop.step_passes import HostPassStepper
+from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, RunnerStepper, host_pass_stepper
 from blizzard.runner.runtime import (
     StoreResetRefused,
     ensure_current_revision,
@@ -875,6 +877,13 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
 @click.option(
+    "--loop",
+    "loop",
+    type=click.Choice([str(mode) for mode in LoopMode]),
+    default=None,
+    help="Run passes on timers (timed) or only on request (stepped); overrides the host file's `loop` for this run.",
+)
+@click.option(
     "--check",
     is_flag=True,
     help="Run every check a start would — the host file, the store's revision, each runner's token resolved to its "
@@ -882,7 +891,13 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
 )
 @click.pass_context
 def host(
-    ctx: click.Context, directory: str | None, dir_option: str, host_: str | None, port: int | None, check: bool
+    ctx: click.Context,
+    directory: str | None,
+    dir_option: str,
+    host_: str | None,
+    port: int | None,
+    loop: str | None,
+    check: bool,
 ) -> None:
     """Run the blizzard host until stopped: each runner works its chunks, and its local API answers `runner` verbs.
 
@@ -890,10 +905,11 @@ def host(
     they agree. Defaults to $BZ_RUNNER_DIR, then the cwd. A directory that has not graduated to a host is
     refused, naming the graduation procedure."""
     directory = HostDirectory(directory, dir_option).path
+    loop_mode = LoopMode(loop) if loop is not None else None
     if check:
-        _check(ctx, Path(directory), host=host_, port=port)
+        _check(ctx, Path(directory), host=host_, port=port, loop=loop_mode)
         return
-    config = load_host(directory, host=host_, port=port)
+    config = load_host(directory, host=host_, port=port, loop=loop_mode)
     for warning in config.warnings:
         click.echo(f"warning: {warning}")
     projections = config.projections()
@@ -942,20 +958,22 @@ def _start(
     )
     try:
         shared = runners[0].config if runners else config.host_view()
-        hosted = build_hosted_app(shared, process)
+        # A configured-but-missing prompt file raises while the steppers are built, before any socket binds.
+        with click_exception_on(ConfigError):
+            hosted = build_hosted_app(shared, process)
         try:
-            _serve_host(shared, process, hosted)
+            _serve_host(shared, process, hosted, loop=config.loop)
         finally:
             hosted.close()
     finally:
         process.close()
 
 
-def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None) -> None:
+def _check(ctx: click.Context, root: Path, *, host: str | None, port: int | None, loop: LoopMode | None) -> None:
     """``host --check``: every error a start would meet, reported together; starts nothing and holds nothing."""
     try:
         config = HostConfig.load_for_store(
-            root, host=host, port=port, flag_registry=packaged_flag_registry(), strict=strict_config()
+            root, host=host, port=port, loop=loop, flag_registry=packaged_flag_registry(), strict=strict_config()
         )
     except HostConfigError as exc:
         raise click.ClickException("\n".join(f"host: {error}" for error in exc.errors)) from exc
@@ -1050,31 +1068,43 @@ class _RunnerThreads:
         self.driver.stop()
 
 
-def _runner_threads(runner: RunnerProcess, *, interval: float) -> _RunnerThreads:
-    config = runner.config
-    # A configured-but-missing prompt file raises here, before any socket binds.
-    with click_exception_on(ConfigError):
-        driver = PeriodicDriver(config, interval_seconds=interval, process_graph=runner)
-    announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
-    return _RunnerThreads(runner, driver, _pass_drivers(config, runner))
+def _runner_threads(runner: RunnerProcess, stepper: RunnerStepper, *, interval: float) -> _RunnerThreads:
+    driver = PeriodicDriver(runner.config, interval_seconds=interval, process_graph=runner, stepper=stepper)
+    return _RunnerThreads(runner, driver, _pass_drivers(runner, stepper))
 
 
-def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> None:
+def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp, *, loop: LoopMode) -> None:
+    """Serve ``hosted`` until stopped. A ``timed`` loop starts every pass on its timer; a ``stepped`` one starts
+    none, and a pass runs only when requested through its stepper."""
     app = hosted.app
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
-    threads = [_runner_threads(runner, interval=interval) for runner in host.runners]
-    host_tick = _host_tick_driver(host, tick_seconds=interval)
+    for runner in host.runners:
+        announce_rejected_tracing(runner.trace_settings, runner.stores.outbound, runner.clock.now())
+    stepped = loop is LoopMode.STEPPED
+    threads = (
+        []
+        if stepped
+        else [
+            _runner_threads(runner, stepper, interval=interval)
+            for runner, stepper in zip(host.runners, hosted.steppers, strict=True)
+        ]
+    )
+    host_tick = (
+        None
+        if stepped or hosted.host_stepper is None
+        else _host_tick_driver(host, tick_seconds=interval, stepper=hosted.host_stepper)
+    )
 
     # Two doors onto the one app, bound up front so a clash fails startup loudly and
     # served by the single `Server` below, which keeps the shutdown path on one frame.
     with click_exception_on(ListenerError):
         sockets = host.listeners.bound()
-    click.echo(
-        f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
-    )
+    cadence = "stepped: a pass runs only on request" if stepped else f"loop tick {interval}s"
+    click.echo(f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} ({cadence})")
 
     started: list[_RunnerThreads] = []
     host_tick_started = False
+    reconciled = False
     try:
         server = build_early_shutdown_server(
             app, host=config.host, port=config.port, shutdown_signal=app.state.shutdown
@@ -1096,21 +1126,26 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> N
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.
         host.host_tick.report()
+        reconciled = True
         for runner_threads in threads:
             runner_threads.start()
             started.append(runner_threads)
-        host_tick.start()
-        host_tick_started = True
+        if host_tick is not None:
+            host_tick.start()
+            host_tick_started = True
         server.run(sockets=sockets)
     finally:
         try:
             # Quiesce before marking; the spawner executors and engine outlive
             # the drain and are closed by the outer host frame.
-            if host_tick_started:
+            if host_tick is not None and host_tick_started:
                 host_tick.stop()
             for runner_threads in reversed(started):
                 runner_threads.stop()
-            if started:
+            # A requested pass in flight is waited out, as a timed one is by its driver's join.
+            for stepper in hosted.steppers:
+                stepper.quiesce()
+            if reconciled:
                 for resume in hosted.resumes:
                     marked = resume.on_shutdown()
                     if marked:
@@ -1120,11 +1155,14 @@ def _serve_host(config: RunnerConfig, host: HostProcess, hosted: HostedApp) -> N
             Uds(config.socket_path).unlink()
 
 
-def _host_tick_driver(host: HostProcess, *, tick_seconds: float) -> PeriodicPassDriver:
+def _host_tick_driver(
+    host: HostProcess, *, tick_seconds: float, stepper: HostPassStepper | None = None
+) -> PeriodicPassDriver:
     """The host's own thread, passing on the tick's own interval with no jitter, so a credential lapsed across a
-    restart is renewed at once; each slug's own cadence gates it within the pass."""
+    restart is renewed at once; each slug's own cadence gates it within the pass. ``stepper`` is the host pass it
+    drives, else one built over the host's tick."""
     return PeriodicPassDriver(
-        host.host_tick.run,
+        (stepper or host_pass_stepper(host)).timed,
         name="blizzard-host-tick",
         label="host tick",
         log=get_logger("blizzard.runner.subscriptions"),
@@ -1133,17 +1171,17 @@ def _host_tick_driver(host: HostProcess, *, tick_seconds: float) -> PeriodicPass
     )
 
 
-def _pass_drivers(config: RunnerConfig, runner: RunnerProcess) -> list[PeriodicPassDriver]:
+def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[PeriodicPassDriver]:
     """One runner's off-tick drivers."""
     drivers: list[PeriodicPassDriver] = []
     if runner.trace_sweep is not None:
         drivers.append(
             PeriodicPassDriver(
-                runner.trace_sweep.sweep,
+                stepper.timed_trace_sweep,
                 name="blizzard-runner-trace-sweep",
                 label="lease trace sweep",
                 log=get_logger("blizzard.runner.trace_export"),
-                interval_seconds=config.tracing.sweep_seconds,
+                interval_seconds=runner.config.tracing.sweep_seconds,
             )
         )
     return drivers

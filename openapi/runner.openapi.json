@@ -6303,6 +6303,15 @@
         "title": "StagedAttachment",
         "type": "object"
       },
+      "SweepPassOutcome": {
+        "description": "How one sweep pass ended.",
+        "enum": [
+          "completed",
+          "failed"
+        ],
+        "title": "SweepPassOutcome",
+        "type": "string"
+      },
       "TakeoverChangeCause": {
         "enum": [
           "opened",
@@ -6503,6 +6512,41 @@
           "on_usage_limit"
         ],
         "title": "ThrottleStatusView",
+        "type": "object"
+      },
+      "TickPassResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SweepPassOutcome",
+            "x-blizzard-open": true
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "outcome",
+          "error"
+        ],
+        "title": "TickPassResponse",
         "type": "object"
       },
       "ToolCallSegmentView": {
@@ -7807,6 +7851,30 @@
           }
         },
         "summary": "Clear Subscription Floor",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/ticks": {
+      "post": {
+        "operationId": "run_host_tick_api_host_ticks_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TickPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "A pass of the same lock is in progress, timed or requested: `{\"code\": \"tick_in_progress\"}`."
+          }
+        },
+        "summary": "Run Host Tick",
         "tags": [
           "host"
         ]
@@ -10830,6 +10898,53 @@
         "summary": "List Open Takeovers",
         "tags": [
           "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/ticks": {
+      "post": {
+        "operationId": "run_tick_runners__runner_id__api_ticks_post",
+        "parameters": [
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TickPassResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "A pass of the same lock is in progress, timed or requested: `{\"code\": \"tick_in_progress\"}`."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Tick",
+        "tags": [
+          "ticks"
         ]
       }
     },
