@@ -9,7 +9,7 @@ import { hostSocketApi, type RunnerClient, type RunnerHostClient, runnerHostApi,
 import type { Ledger } from './client/ledger';
 import { type LiveDaemon, freePort, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
 import { startRunnerHost } from './daemons/runner-host';
-import { binDir, daemonEnv, mockBinDir, readContract, requireBinary } from './env';
+import { BLIZZARD_ROOT, binDir, daemonEnv, mockBinDir, readContract, requireBinary } from './env';
 import { scanLog } from './logs';
 import { checkOwnedKeys, checkProfile, expandProfile, mergeHostProfile, parseProfile, type TomlTable } from './profiles';
 import { type OtlpSink, startOtlpSink } from './otlp-sink';
@@ -37,9 +37,10 @@ export interface RunnerHostOptions {
   runnerSampling: boolean;
   /**
    * Starts a sink the host exports its traces to: the host's `OTEL_EXPORTER_OTLP_ENDPOINT` names it, and it is the
-   * handle's `otlp`. Whether the host traces at all stays a `runner.toml` or `runnerConfig` setting.
+   * handle's `otlp`. Whether the host traces at all stays a `runner.toml` or `runnerConfig` setting. `'hung'` starts a
+   * sink that accepts each connection and never answers.
    */
-  runnerOtlp: boolean;
+  runnerOtlp: boolean | 'hung';
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -68,7 +69,28 @@ export interface RunnerHost {
   readonly logPath: string;
   /** The sink the host exports to, when `runnerOtlp` asked for one; it is closed when the host is disposed. */
   readonly otlp: OtlpSink | undefined;
+  /**
+   * Where the host reads its workers' transcripts: the default runner's `transcripts_root`, which the host process
+   * carries as `BZ_TRANSCRIPTS_ROOT` for the workers it spawns. Read from the host file at each boot.
+   */
+  readonly transcriptsRoot: string;
   logTail(): string;
+  /** The whole host log, across restarts. */
+  log(): string;
+  /** The hub tokens enrollment issued, read now from the host's `.env` by the names the host contract declares. */
+  hubTokens(): HostHubTokens;
+  /**
+   * The headers a worker of lease `leaseId` calls the runner with: a bearer of the lease token the runner exported to
+   * it, as the mock harness recorded at spawn. Throws when no spawned session recorded that lease.
+   */
+  workerHeaders(leaseId: string): Record<string, string>;
+  /**
+   * Merges `overlay` over the stopped host's file, checked as a profile is; the next boot reads it. Throws naming every
+   * problem, writing nothing, when the overlay is unsound or the host is running.
+   */
+  reconfigure(overlay: TomlTable): void;
+  /** Removes the transcripts root, as an operator's rotation does. */
+  rotateTranscripts(): void;
   /**
    * Runs the real `blizzard-runner` on this host's directory, under the host's isolated environment. A non-zero exit is
    * the result, not an error.
@@ -110,6 +132,63 @@ export interface RunnerHostBuilder {
   create(options?: Partial<RunnerHostOptions>): Promise<RunnerHost>;
   /** Stops every host the builder made and removes their scratch roots; throws on a statement-guard refusal in a host log. */
   disposeAll(): Promise<void>;
+}
+
+/** The tokens a host's `.env` holds: the host's own, and each runner's by runner name. */
+export interface HostHubTokens {
+  host: string | undefined;
+  runners: Record<string, string | undefined>;
+}
+
+interface EnvVariable {
+  name: string;
+  name_rule: { prefix: string; replace_pattern: string; replacement: string; upper_case: boolean } | null;
+}
+
+/** The `env` section of `contracts/config/host.json`: the file and the variables enrollment writes there. */
+function hostEnvContract(): { file: string; variables: EnvVariable[] } {
+  const document = JSON.parse(fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts', 'config', 'host.json'), 'utf8')) as {
+    env: { file: string; variables: EnvVariable[] };
+  };
+  return document.env;
+}
+
+/** The `.env` assignments, as the runner reads them: comments skipped, one pair of quotes stripped, the last wins. */
+export function parseDotenv(text: string): Record<string, string> {
+  const assigned: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const stripped = line.trim();
+    if (stripped === '' || stripped.startsWith('#') || stripped.startsWith(';') || !stripped.includes('=')) continue;
+    const at = stripped.indexOf('=');
+    let value = stripped.slice(at + 1).trim();
+    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) value = value.slice(1, -1);
+    assigned[stripped.slice(0, at).trim()] = value;
+  }
+  return assigned;
+}
+
+/** The host's issued tokens, by the contract's variable names. */
+export function readHubTokens(dir: string, runnerNames: string[]): HostHubTokens {
+  const contract = hostEnvContract();
+  const file = path.join(dir, contract.file);
+  const assigned = fs.existsSync(file) ? parseDotenv(fs.readFileSync(file, 'utf8')) : {};
+  const fixed = contract.variables.find((variable) => variable.name_rule === null);
+  const rule = contract.variables.find((variable) => variable.name_rule !== null)?.name_rule;
+  if (fixed === undefined || rule == null) throw new Error(`contracts/config/host.json declares no host and per-runner token variables: ${JSON.stringify(contract)}`);
+  const variableOf = (name: string): string =>
+    rule.prefix + (rule.upper_case ? name.toUpperCase() : name).replace(new RegExp(rule.replace_pattern, 'g'), rule.replacement);
+  return { host: assigned[fixed.name], runners: Object.fromEntries(runnerNames.map((name) => [name, assigned[variableOf(name)]])) };
+}
+
+/** The lease credential the mock harness recorded for the session spawned under `leaseId`, scanning `stateDir`. */
+export function recordedLeaseToken(stateDir: string, leaseId: string): string {
+  const files = fs.existsSync(stateDir) ? fs.readdirSync(stateDir).filter((name) => name.endsWith('.json')) : [];
+  for (const name of files) {
+    const state = JSON.parse(fs.readFileSync(path.join(stateDir, name), 'utf8')) as { spawn_credential?: { lease_id: string | null; lease_token: string | null } | null };
+    const credential = state.spawn_credential;
+    if (credential?.lease_id === leaseId && credential.lease_token != null) return credential.lease_token;
+  }
+  throw new Error(`no mock session under ${stateDir} recorded a spawn credential for lease ${leaseId} (${files.length} sessions read)`);
 }
 
 /** `runnerEnv` names the contract pins, or the fence, are refused: they hold the host in its fenced world. */
@@ -198,10 +277,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
     try {
       fs.mkdirSync(home, { recursive: true });
-      if (options.runnerOtlp) otlp = await startOtlpSink();
+      if (options.runnerOtlp !== false) otlp = await startOtlpSink({ hang: options.runnerOtlp === 'hung' });
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
-      // The host and the CLI that reaches it export to the sink; the commands that build the host do not.
-      const hostEnv: NodeJS.ProcessEnv = otlp === undefined ? env : { ...env, OTEL_EXPORTER_OTLP_ENDPOINT: otlp.endpoint };
       const cliEnv = (configHome: string): NodeJS.ProcessEnv => ({ ...env, XDG_CONFIG_HOME: configHome });
       const run = async (command: string, args: string[], cliHome: string): Promise<CliResult> => {
         const result = await runCommand(command, args, { env: cliEnv(cliHome), cwd: root });
@@ -294,9 +371,23 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const entries = runnerEntries(readHostFile(dir));
       for (const entry of entries) ctx.ledger.add('runner', entry.id);
 
+      // The default runner's root, which the mock worker reads as `BZ_TRANSCRIPTS_ROOT`; a `runnerEnv` naming it wins.
+      const transcriptsRoot = (): string => {
+        const file = readHostFile(dir);
+        const entry = ((file.runner ?? []) as TomlTable[]).find((candidate) => candidate.name === defaultRunner);
+        return options.runnerEnv.BZ_TRANSCRIPTS_ROOT ?? (entry?.transcripts_root as string | undefined) ?? path.join(root, 'transcripts');
+      };
+      // The host and the CLI that reaches it export to the sink; the commands that build the host do not.
+      const hostEnv = (): NodeJS.ProcessEnv => ({
+        BZ_TRANSCRIPTS_ROOT: transcriptsRoot(),
+        ...env,
+        ...(otlp === undefined ? {} : { OTEL_EXPORTER_OTLP_ENDPOINT: otlp.endpoint }),
+      });
+      const sessionsDir = options.runnerEnv.BLIZZARD_MOCK_HARNESS_STATE_DIR ?? path.join(workspace, '.blizzard-mock-harness', 'sessions');
+
       const boot = async (): Promise<void> => {
         const begun = Date.now();
-        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: hostEnv });
+        daemon = await startRunnerHost({ binary: runner, dir, port, loop: options.runnerLoop, logPath, env: hostEnv() });
         timings.bootMs = Date.now() - begun;
       };
       if (options.runnerStarted) {
@@ -332,8 +423,22 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         },
         logPath,
         otlp,
+        get transcriptsRoot() {
+          return transcriptsRoot();
+        },
         logTail: () => logTail(logPath),
-        cli: (args) => runCommand(runner, args, { env: { ...hostEnv, BZ_RUNNER_DIR: dir }, cwd: root }),
+        log: () => (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''),
+        hubTokens: () => readHubTokens(dir, entries.map((entry) => entry.name)),
+        workerHeaders: (leaseId) => ({ Authorization: `Bearer ${recordedLeaseToken(sessionsDir, leaseId)}` }),
+        reconfigure(overlay) {
+          const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];
+          if (daemon !== undefined && isAlive(daemon.pid)) problems.push('the host is running; stop() it before reconfigure()');
+          if (problems.length > 0) throw new Error(`the host overlay is unsound:\n${problems.join('\n')}`);
+          const placed = expandProfile(overlay, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url });
+          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(mergeHostProfile(readHostFile(dir), placed)));
+        },
+        rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),
+        cli: (args) => runCommand(runner, args, { env: { ...hostEnv(), BZ_RUNNER_DIR: dir }, cwd: root }),
         async originHead(repo, branch) {
           const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;
