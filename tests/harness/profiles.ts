@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parse } from 'smol-toml';
 import { BLIZZARD_ROOT, TESTS_ROOT } from './env';
+import { strayProfiles } from './projects';
 
 export const SERVICE_HUB_DIR = path.join(TESTS_ROOT, 'service', 'hub');
 
@@ -207,13 +208,16 @@ export function checkStepped(profile: TomlTable): string[] {
 }
 
 /** Checks every profile in the package, not only those a run selected, and fails naming each bad key or timed sweep. */
-export function assertProfilesSound(profiles: ProfileFolder[] = discoverProfiles()): void {
+export function assertProfilesSound(profiles: ProfileFolder[] = discoverProfiles(), strays: string[] = strayProfiles()): void {
   const failures = profiles.flatMap((folder) => {
     const profile = readProfile(folder.file);
     return [...checkProfile(profile), ...checkStepped(profile).map((problem) => `${folder.project} ${problem}`)].map(
       (problem) => `${path.relative(TESTS_ROOT, folder.file)}: ${problem}`,
     );
   });
+  failures.push(
+    ...strays.map((file) => `${path.relative(TESTS_ROOT, file)}: a hub profile lives in service/hub/ alone; a runner host's profile is its runner.toml`),
+  );
   if (failures.length > 0) {
     throw new Error(`profile check failed:\n${failures.join('\n')}`);
   }
