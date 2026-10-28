@@ -10,11 +10,12 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from functools import partial
+from http import HTTPStatus
 from pathlib import Path
 
 import click
 
-from blizzard.cli.collaborators import CliCollaborators, ClientFactory
+from blizzard.cli.collaborators import CliCollaborators, ClientFactory, ConnectError, HTTPError
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.host_directory import HostDirectory
 from blizzard.cli.runtime import build_early_shutdown_server, click_exception_on, run_init, run_migrate
@@ -31,9 +32,10 @@ from blizzard.foundation.store.migrations import (
     RevisionMismatchError,
     StoreBelowFloorError,
 )
+from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.app import HostedApp, build_hosted_app
-from blizzard.runner.cli.daemon import Door, daemon_holding, runner_option
+from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store import runtime_of
@@ -64,7 +66,7 @@ from blizzard.runner.host_config import (
     TokenSource,
 )
 from blizzard.runner.host_file import write_runner_id
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostLayout
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -1196,12 +1198,28 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
     help="Host directory (overrides $BZ_RUNNER_DIR).",
 )
 @runner_option
+@click.option(
+    "--host",
+    "host_pass",
+    is_flag=True,
+    help="Run the host-wide pass of a running host instead of a runner's; refused when no host is running.",
+)
 @click.pass_context
-def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
+def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: bool) -> None:
     """Run one pass of the host's runner against the live hub and workspace, then exit.
 
-    Refused on a store revision mismatch, like ``host``, while another process holds the directory, or while
-    any of the host's runners is halted."""
+    While a host serves the directory, the pass is stepped on that host over its socket, by the runner --runner
+    names or the host's only one; --host steps the host-wide pass instead. Exits 0 only when the pass completed.
+    With no host serving, the pass runs here: refused on a store revision mismatch, like ``host``, while another
+    process holds the directory, or while any of the host's runners is halted."""
+    if host_pass and runner is not None:
+        raise click.UsageError("--host and --runner are mutually exclusive: --host steps the host, not a runner")
+    door = Door.of(ctx)
+    if _host_answers(HostLayout(Path(directory)).socket_path, door):
+        _tick_running_host(directory, door, runner, host_pass)
+        return
+    if host_pass:
+        raise click.ClickException(f"no host is serving {directory}, so there is no host pass to run")
     config = load_host(directory)
     built = [projection for projection in config.projections() if isinstance(projection, BuiltRunner)]
     halted = [projection for projection in config.projections() if isinstance(projection, HaltedRunner)]
@@ -1233,6 +1251,33 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None) -> None:
             LoopWiring.of(runner_built.config, bundle=bundle).tick_once(process=graph)
         finally:
             graph.close()
+    click.echo("tick complete")
+
+
+def _host_answers(sock: Path, door: Door) -> bool:
+    """Whether a host answers its health probe on ``sock`` — a socket file with nothing listening, or anything that
+    does not answer cleanly, is not one."""
+    if not sock.exists():
+        return False
+    try:
+        with door.uds_client(sock) as client:
+            return client.get("/api/health").status_code == HTTPStatus.OK
+    except (ConnectError, HTTPError):
+        return False
+
+
+def _tick_running_host(directory: str, door: Door, runner: str | None, host_pass: bool) -> None:
+    """Step one pass on the host serving ``directory``: the host-wide one, or the selected runner's. Exits 1 on any
+    outcome but ``completed``."""
+    with RunnerDaemon.reach("tick", directory, None, door, runner) as daemon:
+        response = daemon.send_to_host("post", "/api/host/ticks") if host_pass else daemon.send("post", "/api/ticks")
+    if response.status_code == HTTPStatus.CONFLICT:
+        raise click.ClickException("tick: a pass is already in progress on the host, so none was started")
+    if response.status_code != HTTPStatus.OK:
+        raise click.ClickException(f"tick: the host refused the pass ({response.status_code}): {response.text}")
+    outcome = response.json()
+    if outcome["outcome"] != SweepPassOutcome.COMPLETED:
+        raise click.ClickException(f"tick {outcome['outcome']}: {outcome.get('error') or 'no reason reported'}")
     click.echo("tick complete")
 
 
