@@ -884,6 +884,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadEscalationRepository, "open_escalations_for"): lambda w: w.read.escalations.open_escalations_for(
         [w.chunk_3, w.chunk_4]
     ),
+    (IReadEscalationRepository, "closed_escalations"): lambda w: w.read.escalations.closed_escalations(10),
     (IReadUsageRepository, "session_cost_basis"): lambda w: w.read.usage.session_cost_basis(w.lease_1),
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
