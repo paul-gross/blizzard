@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.foundation.sign_in_refusal import SignInRefusal
-from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, PresentedSession
+from blizzard.hub.api.auth_session import SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
@@ -175,7 +175,7 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
 
     response = RedirectResponse(landing, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
-        _SESSION_COOKIE_NAME,
+        SESSION_COOKIE_NAME,
         plaintext,
         httponly=True,
         samesite="lax",
@@ -195,6 +195,6 @@ def logout(request: Request, response: Response) -> Response:
             session = services.sessions.get_by_hash(id_hash)
             if session is not None:
                 services.auth.revoke(session)
-    response.delete_cookie(_SESSION_COOKIE_NAME)
+    response.delete_cookie(SESSION_COOKIE_NAME)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

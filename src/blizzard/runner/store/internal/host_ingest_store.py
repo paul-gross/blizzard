@@ -132,12 +132,12 @@ def _carry_workspace_row(destination: Connection, table: Table, row: Mapping[str
     """Insert ``row`` unless the destination holds a row for its workspace: that row's content must equal ``row``'s,
     its instants aside, or the transfer refuses. Whether it was inserted."""
     key = {WORKSPACE_COLUMN: row[WORKSPACE_COLUMN]}
-    held = destination.execute(select(table).where(_matching(table, key))).first()
+    held = destination.execute(select(table).where(_matching(table, key))).mappings().first()
     if held is None:
         destination.execute(table.insert().values(**row))
         return True
     content = [c.name for c in table.columns if c.name != WORKSPACE_COLUMN and not isinstance(c.type, UtcDateTime)]
-    theirs, ours = {n: row[n] for n in content}, {n: held._mapping[n] for n in content}
+    theirs, ours = {n: row[n] for n in content}, {n: held[n] for n in content}
     if theirs != ours:
         raise WorkspacePromptConflict(str(row[WORKSPACE_COLUMN]), held=_shown(ours), offered=_shown(theirs))
     return False

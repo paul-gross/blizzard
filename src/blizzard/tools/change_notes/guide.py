@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from blizzard.tools.change_notes.contract import Kind, Note
-from blizzard.tools.change_notes.render import UPGRADE_DOC_URL, _split
+from blizzard.tools.change_notes.render import UPGRADE_DOC_URL, split
 from blizzard.tools.change_notes.schedule import latest_released_schedule, release_line
 from blizzard.tools.change_notes.tree import UNRELEASED
 
@@ -16,7 +16,7 @@ def _version(note: Note) -> tuple[int, int, int, str]:
 
 
 def _entry(note: Note, tag: str | None, *, level: int = 3) -> str:
-    prose, upgrade = _split(note)
+    prose, upgrade = split(note)
     guide = note.fields.get("upgrade-guide")
     link = (
         (UPGRADE_DOC_URL.format(tag=tag, anchor=guide) if tag else f"docs/upgrade.md#{guide}")

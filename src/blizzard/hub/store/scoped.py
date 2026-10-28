@@ -152,10 +152,10 @@ def _names_project(insert: Insert, table: TableClause, rows: Sequence[Mapping[st
     ``values()``, among its ``from_select()`` names, in each row of a multi-row ``VALUES``, or in each parameter row.
 
     SQLAlchemy keeps what a statement names itself only on private attributes until it compiles the statement."""
-    named = [*(insert._values or {}), *(insert._select_names or ())]
+    named = [*(insert._values or {}), *(insert._select_names or ())]  # pyright: ignore[reportPrivateUsage]  # Uncompiled insert names.
     if any(key_name(key) == PROJECT_COLUMN for key in named):
         return True
-    entries = [entry for batch in insert._multi_values for entry in batch]
+    entries = [entry for batch in insert._multi_values for entry in batch]  # pyright: ignore[reportPrivateUsage]  # Uncompiled multi-row values.
     if entries and all(PROJECT_COLUMN in _entry_names(entry, table) for entry in entries):
         return True
     return all(PROJECT_COLUMN in row for row in rows)

@@ -75,12 +75,9 @@ class ChunkWorkRefsStore:
                     self._store.select(table, func.max(table.c.id)).scalar_subquery().label(f"{table.name}__max_id")
                 )
         with self._store.read("live_work_refs_signature") as conn:
-            row = conn.execute(select(*columns)).one()
+            row = conn.execute(select(*columns)).mappings().one()
         return WorkRefsSignature(
-            marks=tuple(
-                (table.name, row._mapping[f"{table.name}__count"], row._mapping.get(f"{table.name}__max_id"))
-                for table in tables
-            )
+            marks=tuple((table.name, row[f"{table.name}__count"], row.get(f"{table.name}__max_id")) for table in tables)
         )
 
     def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:

@@ -40,15 +40,15 @@ def list_escalations(
     service = wiring.status()
     environments = wiring.read_stores().environments
     if state == "closed":
-        return _escalation_items(service.closed_escalations(limit), environments)
-    return _escalation_list(service, environments)
+        return escalation_items(service.closed_escalations(limit), environments)
+    return escalation_list(service, environments)
 
 
-def _escalation_list(service: RunnerStatusService, environments: IReadEnvironmentRepository) -> EscalationListResponse:
-    return _escalation_items(service.escalations(), environments)
+def escalation_list(service: RunnerStatusService, environments: IReadEnvironmentRepository) -> EscalationListResponse:
+    return escalation_items(service.escalations(), environments)
 
 
-def _escalation_items(
+def escalation_items(
     escalations: list[EscalationView], environments: IReadEnvironmentRepository
 ) -> EscalationListResponse:
     projects = environments.chunk_project_ids(sorted({e.chunk_id for e in escalations}))

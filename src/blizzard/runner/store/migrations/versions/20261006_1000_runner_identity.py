@@ -109,7 +109,7 @@ def _collapse(bind: sa.Connection, keyed: sa.Table, singleton: sa.Table, kept: s
     keyed.drop(bind)
     singleton.create(bind)
     if row is not None:
-        bind.execute(singleton.insert().values(**row._mapping))
+        bind.execute(singleton.insert().values(**row._mapping))  # pyright: ignore[reportPrivateUsage]  # Historical row transfer retains its original statements.
 
 
 def _keep_local_brake(bind: sa.Connection, kept: str | None) -> None:
@@ -140,7 +140,7 @@ def _expand(bind: sa.Connection, singleton: sa.Table, keyed: sa.Table, key: str)
     singleton.drop(bind)
     keyed.create(bind)
     if row is not None:
-        bind.execute(keyed.insert().values(runner_id=key, **row._mapping))
+        bind.execute(keyed.insert().values(runner_id=key, **row._mapping))  # pyright: ignore[reportPrivateUsage]  # Historical row transfer retains its original statements.
 
 
 def _downgrade_key(bind: sa.Connection) -> str:

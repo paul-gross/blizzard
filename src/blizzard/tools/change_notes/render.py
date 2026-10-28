@@ -13,7 +13,7 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 _KIND_SECTIONS = ((Kind.ADDED, "Added"), (Kind.CHANGED, "Changed"), (Kind.FIXED, "Fixed"), (Kind.SECURITY, "Security"))
 
 
-def _split(note: Note) -> tuple[str, str]:
+def split(note: Note) -> tuple[str, str]:
     """The body before its ``## Upgrade`` section, and that section's text (empty when there is none)."""
     lines = note.body.splitlines()
     start = next((i for lvl, text, i in headings(note.body) if (lvl, text) == (2, UPGRADE_HEADING)), None)
@@ -57,7 +57,7 @@ def _title(note: Note, tag: str, prose: str) -> str:
 
 def _break_entry(named: NamedBreak, tag: str) -> str:
     entry = named.entry
-    title = _title(named.note, tag, _split(named.note)[0])
+    title = _title(named.note, tag, split(named.note)[0])
     return f"### {title}\n\nBreaks {entry.where} ({entry.surface}) in {entry.release}."
 
 
@@ -74,7 +74,7 @@ def render(
     grouped: dict[str, list[str]] = {}
     upgrades: list[str] = []
     for note in sorted(notes, key=lambda n: n.id):
-        prose, upgrade = _split(note)
+        prose, upgrade = split(note)
         versions = also_in.get(note.id, ())
         marker = f"(also in {', '.join(versions)})" if versions else ""
         line = (schedule or {}).get(note.id, note.fields.get("removes-in"))

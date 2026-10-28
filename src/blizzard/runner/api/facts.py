@@ -28,10 +28,10 @@ def list_facts(
 ) -> FactListResponse:
     """The newest ``limit`` hub-bound facts recorded by this runner, newest first."""
     wiring = RunnerWiring.of(request)
-    return _fact_list(wiring.status(), wiring.read_stores().environments, limit)
+    return fact_list(wiring.status(), wiring.read_stores().environments, limit)
 
 
-def _fact_list(service: RunnerStatusService, environments: IReadEnvironmentRepository, limit: int) -> FactListResponse:
+def fact_list(service: RunnerStatusService, environments: IReadEnvironmentRepository, limit: int) -> FactListResponse:
     facts = service.recent_facts(limit)
     projects = environments.chunk_project_ids(sorted({f.chunk_id for f in facts if f.chunk_id is not None}))
     return FactListResponse(

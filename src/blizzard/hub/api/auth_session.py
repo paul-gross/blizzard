@@ -47,7 +47,7 @@ from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 
-_SESSION_COOKIE_NAME = "bz_session"
+SESSION_COOKIE_NAME = "bz_session"
 
 #: The header a person names the tenant they act in with — the tenant's id, never its name.
 TENANT_HEADER = "X-Blizzard-Tenant"
@@ -106,12 +106,12 @@ class PresentedSession:
     @property
     def id_hash(self) -> str | None:  # ast-grep-ignore: bzh:property-delegates
         """The digest to look the session up by, or ``None`` when none was presented."""
-        session_id = self.request.cookies.get(_SESSION_COOKIE_NAME) or presented_bearer(self.request)
+        session_id = self.request.cookies.get(SESSION_COOKIE_NAME) or presented_bearer(self.request)
         return None if session_id is None else SessionId(session_id).hash
 
     def caller(self) -> Caller:
         """Whom a resolved session speaks for: the board's cookie, else the operator's bearer."""
-        return "board" if self.request.cookies.get(_SESSION_COOKIE_NAME) else "operator"
+        return "board" if self.request.cookies.get(SESSION_COOKIE_NAME) else "operator"
 
 
 def resolve_identity(request: Request, services: HubServices | None) -> ResolvedIdentity | None:

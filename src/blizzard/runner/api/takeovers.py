@@ -57,10 +57,10 @@ def end_takeover(chunk_id: str, takeover_id: str, request: Request) -> TakeoverE
 @router.get("/takeovers", response_model=OpenTakeoverListResponse)
 def list_open_takeovers(request: Request) -> OpenTakeoverListResponse:
     """Every takeover still open — the recovery surface for a stranded one."""
-    return _open_takeover_list(RunnerWiring.of(request).status())
+    return open_takeover_list(RunnerWiring.of(request).status())
 
 
-def _open_takeover_list(service: RunnerStatusService) -> OpenTakeoverListResponse:
+def open_takeover_list(service: RunnerStatusService) -> OpenTakeoverListResponse:
     return OpenTakeoverListResponse(
         items=[
             OpenTakeoverViewWire(

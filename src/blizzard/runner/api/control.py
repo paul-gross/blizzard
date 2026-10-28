@@ -87,10 +87,10 @@ def get_runner(request: Request) -> RunnerStatusView:
 
     Derived entirely from local store facts plus the injected clock — no hub call, so it
     is truthful with the hub unreachable. An unwired service answers 503."""
-    return _runner_status_view(RunnerWiring.of(request).status())
+    return runner_status_view(RunnerWiring.of(request).status())
 
 
-def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
+def runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     summary = service.summary()
     return RunnerStatusView(
         runner_id=summary.runner_id,
@@ -104,7 +104,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             effective=summary.pause.effective,
             local_reason=summary.pause.local_reason,
         ),
-        throttle=_throttle_view(summary.throttle) if summary.throttle is not None else None,
+        throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
         capacities=CapacitiesView(
             used=summary.capacities.used,
             agents=summary.capacities.agents,
@@ -167,7 +167,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     )
 
 
-def _throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
+def throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
     floor = status.verdict.floor
     hold = floor.hold
     clear = floor.clear

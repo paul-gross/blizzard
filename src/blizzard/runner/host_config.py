@@ -68,12 +68,12 @@ from blizzard.runner.config import (
     Throttle,
     Transcripts,
     WorkerStdout,
-    _expanded_path_prepend,
-    _parse_autonomy,
-    _parse_harness_config_dir,
-    _workspace_repos,
     effective_autonomy_source,
+    expanded_path_prepend,
+    parse_autonomy,
+    parse_harness_config_dir,
     resolve_session_secret,
+    workspace_repos,
 )
 from blizzard.runner.config_keys import HOST_REGISTRY, RUNNER_HOME_KEYS
 from blizzard.runner.config_table import ConfigError, Table
@@ -1045,7 +1045,7 @@ def _workspace(entry: ConfigView) -> HostWorkspace:
         provider=provider,
         envs=tuple(str(env) for env in cast(Sequence[object], envs)),
         max_environments=cap,
-        repos=_workspace_repos(entry),
+        repos=workspace_repos(entry),
         base_branch=str(entry.get("base_branch", DEFAULT_BASE_BRANCH)),
         prompt=str(entry.get("prompt", "")),
         prompt_file=str(entry.get("prompt_file", "")),
@@ -1168,9 +1168,9 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
         root=root,
         db_url=db_url,
         harness_sections=sections,
-        autonomy=_parse_autonomy(harness.get("autonomy"), path),
+        autonomy=parse_autonomy(harness.get("autonomy"), path),
         autonomy_source=effective_autonomy_source(sections, "autonomy" in harness.view),
-        harness_config_dir=_parse_harness_config_dir(harness.get("config_dir"), root, path),
+        harness_config_dir=parse_harness_config_dir(harness.get("config_dir"), root, path),
         gates=tuple(str(gate) for gate in gates),
         runner_prompt=str(raw.get("runner_prompt", "")),
         runner_prompt_file=str(raw.get("runner_prompt_file", "")),
@@ -1183,7 +1183,7 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
         context_warn_tokens=context.warn_tokens,
         context_sample_interval_seconds=context.sample_interval_seconds,
         worker_env_passthrough=worker.names("env_passthrough"),
-        worker_path_prepend=_expanded_path_prepend(worker.names("path_prepend")),
+        worker_path_prepend=expanded_path_prepend(worker.names("path_prepend")),
     )
 
 

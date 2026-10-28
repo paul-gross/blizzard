@@ -134,7 +134,7 @@ def effective_autonomy_source(sections: HarnessSections, shared_key_set: bool) -
     return "[harness] autonomy" if shared_key_set else "default"
 
 
-def _parse_autonomy(value: object, path: Path) -> Autonomy:
+def parse_autonomy(value: object, path: Path) -> Autonomy:
     """The ``[harness] autonomy`` value; absent resolves to :attr:`Autonomy.Dangerous`."""
     if value is None:
         return Autonomy.Dangerous
@@ -145,7 +145,7 @@ def _parse_autonomy(value: object, path: Path) -> Autonomy:
         raise ConfigError(f"[harness] autonomy must be one of {allowed}, got {value!r} (in {path})") from None
 
 
-def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | None:
+def parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | None:
     """The ``[harness] config_dir`` operator bundle: ``~`` expands, the path must be absolute,
     and it may not be the runner's own ``harness-config`` root or inside it."""
     if value is None:
@@ -164,7 +164,7 @@ def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | N
     return expanded
 
 
-def _workspace_repos(workspace: ConfigView) -> tuple[WorkspaceRepo, ...]:
+def workspace_repos(workspace: ConfigView) -> tuple[WorkspaceRepo, ...]:
     raw = as_list(workspace.get("repo", []))
     if raw is None:
         raise ConfigError("[[workspace_repo]] must be an array of tables")
@@ -183,7 +183,7 @@ def _workspace_repos(workspace: ConfigView) -> tuple[WorkspaceRepo, ...]:
     return tuple(repos)
 
 
-def _expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
+def expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
     """Expand ``~`` in each ``[worker] path_prepend`` entry and store it absolute; a
     still-relative entry after expansion raises, naming the offending key."""
     expanded: list[str] = []

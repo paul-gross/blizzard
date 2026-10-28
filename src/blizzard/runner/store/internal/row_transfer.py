@@ -71,7 +71,7 @@ def source_rows(table: Table, select: Select[Any], conn: Connection) -> list[dic
     """Every row ``select`` reads from ``table`` on ``conn``, oldest key first, as column-name mappings."""
     key = surrogate_key(table)
     order = [key] if key is not None else list(table.primary_key.columns)
-    return [dict(row._mapping) for row in conn.execute(select.order_by(*order))]
+    return [dict(row) for row in conn.execute(select.order_by(*order)).mappings()]
 
 
 def remapped(table: Table, row: Mapping[str, Any], handle: TransferHandle) -> dict[str, Any]:

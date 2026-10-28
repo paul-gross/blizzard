@@ -23,7 +23,7 @@ from typing import Any, cast
 from sqlalchemy import MetaData, Table
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql import operators
-from sqlalchemy.sql.base import _from_objects
+from sqlalchemy.sql.base import _from_objects  # pyright: ignore[reportPrivateUsage]  # Mirrors compiler FROM expansion.
 from sqlalchemy.sql.dml import Delete, DeleteDMLState, Insert, Update, UpdateDMLState
 from sqlalchemy.sql.elements import (
     BinaryExpression,
@@ -60,8 +60,8 @@ def _named_insert_keys(insert: Insert, table: Table) -> frozenset[str]:
     """The column keys an insert names itself — ``values()`` in each of its forms, or ``from_select()``'s names.
 
     SQLAlchemy keeps these only on private attributes until it compiles the statement."""
-    names: list[object] = [*(insert._values or {}), *(insert._select_names or ())]
-    for row in insert._multi_values:
+    names: list[object] = [*(insert._values or {}), *(insert._select_names or ())]  # pyright: ignore[reportPrivateUsage]  # Uncompiled insert names.
+    for row in insert._multi_values:  # pyright: ignore[reportPrivateUsage]  # Uncompiled multi-row values.
         for entry in row:
             names.extend(entry if isinstance(entry, Mapping) else table.columns[: len(entry)])
     return frozenset(name.key if isinstance(name, ColumnClause) else str(name) for name in names)
@@ -143,7 +143,7 @@ class KeyedStatementGuard:
         if not isinstance(statement, Select | CompoundSelect | Insert | Update | Delete):
             return
         statement = cast("Select[Any] | CompoundSelect[Any] | Insert | Update | Delete", statement)
-        cache_key = statement._generate_cache_key()
+        cache_key = statement._generate_cache_key()  # pyright: ignore[reportPrivateUsage]  # Structural key without compilation.
         key = None if cache_key is None else (cache_key.key, parameter_keys)
         violations = self._remembered(key)
         if violations is None:
@@ -225,11 +225,12 @@ class _Walk:
                 self.visit(child, enclosing)
 
     def _visit_select(self, select: Select[Any], enclosing: _Enclosing, *, asfrom: bool, lateral: bool) -> None:
-        state = select._compile_state_factory(select, select._default_compiler())
+        # Compiler state is needed to reproduce correlation, not just the public final FROMs.
+        state = select._compile_state_factory(select, select._default_compiler())  # pyright: ignore[reportPrivateUsage]
         if asfrom and not lateral:
-            froms = state._get_display_froms([*enclosing.correlate - enclosing.siblings], [])
+            froms = state._get_display_froms([*enclosing.correlate - enclosing.siblings], [])  # pyright: ignore[reportPrivateUsage]  # Compiler correlation.
         else:
-            froms = state._get_display_froms([*enclosing.correlate], [*enclosing.siblings])
+            froms = state._get_display_froms([*enclosing.correlate], [*enclosing.siblings])  # pyright: ignore[reportPrivateUsage]  # Compiler correlation.
         own = frozenset(_from_objects(*froms))
         inner = _Enclosing(enclosing.correlate | own, own)
         self._require_pins(froms, [], select.whereclause, enclosing, "select")
@@ -238,9 +239,10 @@ class _Walk:
         self._visit_expressions(select, inner)
 
     def _visit_dml(self, statement: Update | Delete) -> None:
-        state = statement._compile_state_factory(statement, statement._default_compiler())
+        # Compiler state supplies the DML's implicit extra FROMs.
+        state = statement._compile_state_factory(statement, statement._default_compiler())  # pyright: ignore[reportPrivateUsage]
         assert isinstance(state, UpdateDMLState | DeleteDMLState)
-        extra: Sequence[FromClause] = state._extra_froms
+        extra: Sequence[FromClause] = state._extra_froms  # pyright: ignore[reportPrivateUsage]  # Compiler-discovered FROMs.
         main = [statement.table]
         own = frozenset(_from_objects(*main, *extra))
         inner = _Enclosing(own, own)

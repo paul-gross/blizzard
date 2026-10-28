@@ -16,7 +16,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
-from blizzard.runner.api.control import _throttle_view
+from blizzard.runner.api.control import throttle_view
 from blizzard.runner.cli.control import _Throttle, _throttle_lines
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
@@ -111,9 +111,9 @@ def _hold_subscription(ctx: LoopContext) -> None:
 def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() -> None:
     _store, _hub, ctx = _ctx()
     gate = ThrottleGate(ctx)
-    assert _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False)).state == "admitting"
+    assert throttle_view(ThrottleStatus.of(gate.verdict(), braked=False)).state == "admitting"
     _hold_subscription(ctx)
-    view = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=True))
+    view = throttle_view(ThrottleStatus.of(gate.verdict(), braked=True))
     assert view.state == "braked"
     assert view.declining == ["floor"]
     assert view.floor.subscription == _SLUG
@@ -122,7 +122,7 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
     assert view.levers == []
     assert "declining: floor" in _throttle_lines(cast(_Throttle, view.model_dump()))[0]
     ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW, by="operator"))
-    cleared = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
+    cleared = throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
     assert cleared.floor.admits
     assert cleared.floor.clear is not None
     assert cleared.floor.clear.cleared_at.endswith("Z")
@@ -131,10 +131,10 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
 def test_status_holds_on_both_with_no_settings_and_shows_the_configured_choices() -> None:
     _store, _hub, ctx = _ctx()
     gate = ThrottleGate(ctx)
-    held = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
+    held = throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
     assert (held.on_decline, held.on_usage_limit) == ("hold", "hold")
     releasing = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
-    view = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False, settings=releasing))
+    view = throttle_view(ThrottleStatus.of(gate.verdict(), braked=False, settings=releasing))
     assert (view.on_decline, view.on_usage_limit) == ("release", "hold")
     assert "on_decline: release; on_usage_limit: hold" in "\n".join(_throttle_lines(cast(_Throttle, view.model_dump())))
 
@@ -207,7 +207,7 @@ def test_a_runner_naming_no_subscription_reads_its_own_mark() -> None:
     answer = ThrottleGate(ctx).floor()
     assert not answer.admits
     assert answer.slug is None
-    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
+    view = throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
     assert view.state == "declining"
     assert view.declining == ["floor"]
     assert view.floor.subscription is None
