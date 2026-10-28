@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.flags.flags import Flags
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_list
 
 
 @domain_model
@@ -44,7 +45,8 @@ def without_off_fields[Model: BaseModel](model: Model, flags: Flags) -> Model:
 def _shed(value: Any, flags: Flags) -> Any:
     if isinstance(value, BaseModel):
         return without_off_fields(value, flags)
-    if isinstance(value, list):
-        shed = [_shed(item, flags) for item in value]
-        return shed if any(a is not b for a, b in zip(shed, value, strict=True)) else value
+    items = as_list(value)
+    if items is not None:
+        shed = [_shed(item, flags) for item in items]
+        return shed if any(a is not b for a, b in zip(shed, items, strict=True)) else value
     return value

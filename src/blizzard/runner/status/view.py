@@ -387,7 +387,7 @@ class RunnerStatusService:
 
     def escalations(self) -> list[EscalationView]:
         held_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
-        views = []
+        views: list[EscalationView] = []
         for escalation in self._escalations.open_escalations():
             session = escalation.session
             harness = None  # pragma: no mutate (equivalent: read only with a session; none resumes to "" first)

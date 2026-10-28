@@ -124,12 +124,28 @@ class StoredArtifact:
         if isinstance(artifact, GitCommitArtifact):
             return cls(
                 kind=ArtifactKind.GIT_COMMIT,
+                name=artifact.name,
                 data=f"{artifact.branch_name}:{artifact.commit_hash}",
                 repo=artifact.repo,
                 forge=artifact.forge or None,
-                **common,
+                artifact_id=artifact.artifact_id,
+                chunk_id=produced_by.chunk_id,
+                node_id=produced_by.node_id,
+                node_name=node_name,
+                epoch=produced_by.epoch,
             )
-        return cls(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, forge=None, **common)
+        return cls(
+            kind=ArtifactKind.ASSET,
+            name=artifact.name,
+            data=artifact.content,
+            repo=None,
+            forge=None,
+            artifact_id=artifact.artifact_id,
+            chunk_id=produced_by.chunk_id,
+            node_id=produced_by.node_id,
+            node_name=node_name,
+            epoch=produced_by.epoch,
+        )
 
     @property
     def artifact(self) -> Artifact:  # ast-grep-ignore: bzh:property-delegates

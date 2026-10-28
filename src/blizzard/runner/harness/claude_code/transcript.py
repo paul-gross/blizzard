@@ -67,7 +67,7 @@ class Position:
         # A negative offset is as malformed as a missing one — clamped to 0 on the same
         # tolerant "start over" path, never an `OSError` raised out of `f.seek()`.
         sidecars = (
-            {k: max(v, 0) for k, v in sidecars_raw.items() if isinstance(k, str) and isinstance(v, int)}
+            {k: max(v, 0) for k, v in sidecars_raw.items() if isinstance(v, int)}
             if isinstance(sidecars_raw, dict)
             else {}
         )

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 from blizzard.foundation.host_runner_state import HostRunnerState
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.runner.api.control import _throttle_view
+from blizzard.runner.api.control import throttle_view
 from blizzard.runner.api.wiring import RunnerWiring, ServedWorkspace
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.environments.repository import EnvBinding
@@ -105,7 +105,7 @@ def list_runners(request: Request) -> HostRunnerListResponse:
                     effective=summary.pause.effective,
                     local_reason=summary.pause.local_reason,
                 ),
-                throttle=_throttle_view(summary.throttle) if summary.throttle is not None else None,
+                throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
                 bindings=bindings,
                 agents_in_use=summary.capacities.used,
                 max_agents=summary.capacities.agents,

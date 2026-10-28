@@ -27,9 +27,9 @@ def notes_at(repo: Repository, tag: str, version: str) -> list[Note]:
         path = f"{directory}/{name}"
         parsed = parse_note(repo.show(tag, path) or "", path=path, directory=version, note_id=name.removesuffix(".md"))
         problems = [parsed] if isinstance(parsed, Failure) else check_note(parsed)
-        if problems:
+        if problems or isinstance(parsed, Failure):
             raise ReleasedNoteInvalid("\n".join(f"{tag}:{problem}" for problem in problems))
-        notes.append(parsed)  # type: ignore[arg-type]
+        notes.append(parsed)
     return notes
 
 

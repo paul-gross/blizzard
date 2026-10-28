@@ -257,7 +257,7 @@ def route_spans(
     tracing scope in ``names`` under ``harness``; the CLI's scope against its declared attributes; everything
     else against the wildcard under ``programs``, or the CLI allowlist (refusing it) otherwise —
     so a CLI span's declared attributes are never cut by the wildcard's cap first."""
-    tracing_scopes = {n.traces_scope for n in names} if harness else set()
+    tracing_scopes = {n.traces_scope for n in names} if harness else set[str]()
     own = [span for span in spans if span.scope_name in tracing_scopes]
     rest = [span for span in spans if span.scope_name not in tracing_scopes]
     own_admission = admit(own, lease, _HARNESS_ALLOWLIST, runner=runner)

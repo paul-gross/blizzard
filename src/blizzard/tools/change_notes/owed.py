@@ -86,7 +86,7 @@ def _added_or_edited(changes: Sequence[Change]) -> list[str]:
 
 
 def _newly_breaking(facts: Facts) -> list[Note]:
-    found = []
+    found: list[Note] = []
     for path, note in sorted(facts.head_notes.items()):
         if not _is_unreleased_note(path) or note.fields.get("breaking") is not True:
             continue
@@ -131,7 +131,7 @@ def _surface_trigger(facts: Facts) -> tuple[list[str], list[str]]:
 def _breaking_pair(facts: Facts) -> list[str]:
     marked = [c for c in facts.commits if BREAKING_COMMIT_MARKER.match(c.subject)]
     breaking = _newly_breaking(facts)
-    failures = []
+    failures: list[str] = []
     if marked and not breaking:
         failures.append(
             f"breaking-pair: {marked[0].sha[:12]} is marked `!` but the range adds no unreleased note with"
@@ -152,7 +152,7 @@ def _breaking_pair(facts: Facts) -> list[str]:
 
 def _released_stay_put(facts: Facts) -> list[str]:
     exempt = {v for c in facts.commits for v in c.release_cuts}
-    failures = set()
+    failures: set[str] = set()
 
     def refuse(path: str, what: str) -> None:
         failures.add(

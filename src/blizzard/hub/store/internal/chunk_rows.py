@@ -194,7 +194,7 @@ def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
 def _newest_instants(conn: Connection, column: Column[Any], batch: Sequence[str] | None) -> dict[str, datetime]:
     """The newest ``column`` instant per chunk of ``column``'s fact table, for the chunks in ``batch`` —
     every chunk's when ``batch`` is ``None``."""
-    table = cast(Table, column.table)
+    table = column.table
     stmt = statements_of(conn).select(table, table.c.chunk_id, func.max(column).label("at"))
     if batch is not None:
         stmt = stmt.where(table.c.chunk_id.in_(batch))

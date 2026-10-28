@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Hashable, Mapping
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from yaml.constructor import ConstructorError
@@ -41,7 +41,7 @@ class _StrictLoader(yaml.SafeLoader):
         for key_node, _ in node.value:
             if key_node.tag == "tag:yaml.org,2002:merge":
                 continue
-            key = self.construct_object(key_node, deep=True)
+            key = self.construct_object(key_node, deep=True)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]  # PyYAML stub leaves construct_object untyped
             if isinstance(key, Hashable):
                 if key in seen:
                     raise ConstructorError(None, None, f"duplicate key {key!r}", key_node.start_mark)
@@ -67,7 +67,7 @@ class _StrictDumper(yaml.SafeDumper):
 
 for _cls in (_StrictLoader, _StrictDumper):
     for _tag, _regexp, _first in _CORE_RESOLVERS:
-        _cls.add_implicit_resolver(_tag, _regexp, _first)
+        _cls.add_implicit_resolver(_tag, _regexp, _first)  # pyright: ignore[reportUnknownMemberType]  # PyYAML stub leaves the resolver untyped
 _StrictLoader.add_constructor("tag:yaml.org,2002:int", _StrictLoader.construct_core_int)
 _StrictLoader.add_constructor("tag:yaml.org,2002:float", _StrictLoader.construct_core_float)
 
@@ -89,10 +89,10 @@ class YamlCodec:
         except yaml.YAMLError as exc:
             raise ConfigDecodeError(str(exc)) from exc
         finally:
-            loader.dispose()
+            loader.dispose()  # pyright: ignore[reportUnknownMemberType]  # PyYAML stub leaves dispose untyped
         if not isinstance(loaded, dict):
             raise ConfigDecodeError("document root must be a mapping")
-        return loaded
+        return cast("dict[str, object]", loaded)
 
     def encode(self, document: Mapping[str, object]) -> bytes:
         return yaml.dump(dict(document), Dumper=_StrictDumper, sort_keys=False, encoding="utf-8")

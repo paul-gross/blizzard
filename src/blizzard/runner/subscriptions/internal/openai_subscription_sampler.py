@@ -18,6 +18,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.untyped import as_table
 from blizzard.runner.subscriptions.internal.jwt_expiry import parse_jwt_expiry
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
@@ -100,7 +101,7 @@ class OpenAISubscriptionSampler:
                 return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
             return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         try:
-            body = resp.json()
+            payload = resp.json()
         except ValueError as exc:
             _log.warning(
                 "external subscription usage sample failed: unparseable response body",
@@ -108,11 +109,12 @@ class OpenAISubscriptionSampler:
                 detail=str(exc),
             )
             return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
-        if not isinstance(body, dict):
+        body = as_table(payload)
+        if body is None:
             _log.warning(
                 "external subscription usage sample failed: unexpected response shape",
                 path=self._credentials_path,
-                body_type=type(body).__name__,
+                body_type=type(payload).__name__,
             )
             return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         windows = self._parse_usage_windows(body)
@@ -139,7 +141,7 @@ class OpenAISubscriptionSampler:
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         try:
-            data = json.loads(raw)
+            data = as_table(json.loads(raw))
         except json.JSONDecodeError as exc:
             _log.warning(
                 "external subscription usage sample failed: malformed credentials JSON",
@@ -147,8 +149,8 @@ class OpenAISubscriptionSampler:
                 detail=str(exc),
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
-        tokens = data.get("tokens") if isinstance(data, dict) else None
-        if not isinstance(tokens, dict):
+        tokens = as_table(data.get("tokens")) if data is not None else None
+        if tokens is None:
             _log.warning(
                 "external subscription usage sample failed: no tokens block in credentials",
                 path=self._credentials_path,
@@ -182,13 +184,13 @@ class OpenAISubscriptionSampler:
         """Every window ``body`` reports usable data for. A window that is absent, or whose
         percentage, length, or reset instant is null or unparseable, is skipped rather than
         fabricated as a zero entry."""
-        rate_limit = body.get("rate_limit")
-        if not isinstance(rate_limit, dict):
+        rate_limit = as_table(body.get("rate_limit"))
+        if rate_limit is None:
             return []
         windows: list[ExternalSubscriptionUsageWindow] = []
         for key in _USAGE_WINDOW_KEYS:
-            entry = rate_limit.get(key)
-            if not isinstance(entry, dict):
+            entry = as_table(rate_limit.get(key))
+            if entry is None:
                 continue
             used_percent = entry.get("used_percent")
             window_seconds = self._parse_window_seconds(entry.get("limit_window_seconds"))

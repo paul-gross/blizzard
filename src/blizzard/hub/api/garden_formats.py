@@ -105,7 +105,7 @@ def _review_entry(
 def _summarize(exc: ValidationError) -> str:
     """A short, operator-legible rendering of `exc` — location and message per error,
     never pydantic's own multi-line `str()` with its "further information" links."""
-    parts = []
+    parts: list[str] = []
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "<root>"
         parts.append(f"{loc}: {error['msg']}")

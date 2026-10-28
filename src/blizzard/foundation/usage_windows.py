@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TypeGuard
 
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.untyped import as_table
 
 # A Unix timestamp past this many seconds is read as milliseconds.
 _MILLISECONDS_ABOVE = 2e10
@@ -41,16 +41,17 @@ def admit_usage_window(entry: object) -> AdmittedUsageWindow | str:
     ``utilization_pct`` a finite number from 0 to 100, ``window_seconds`` a positive integer —
     a ``bool`` is never a number here — and ``resets_at`` an ISO-8601 instant or a Unix
     timestamp, read as UTC when naive (``bzh:utc-instants``)."""
-    if not isinstance(entry, Mapping):
+    fields = as_table(entry)
+    if fields is None:
         return "not an object"
-    window, pct, seconds = entry.get("window"), entry.get("utilization_pct"), entry.get("window_seconds")
+    window, pct, seconds = fields.get("window"), fields.get("utilization_pct"), fields.get("window_seconds")
     if not isinstance(window, str):
         return "window"
     if not _is_number(pct) or not math.isfinite(pct) or not 0 <= pct <= 100:
         return "utilization_pct"
     if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
         return "window_seconds"
-    resets_at = _instant(entry.get("resets_at"))
+    resets_at = _instant(fields.get("resets_at"))
     if resets_at is None:
         return "resets_at"
     return AdmittedUsageWindow(window=window, utilization_pct=float(pct), resets_at=resets_at, window_seconds=seconds)

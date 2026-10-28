@@ -71,7 +71,7 @@ class ManualMonotonicClock:
     so a loop bounded by elapsed time terminates without really waiting."""
 
     reading: float = 0.0
-    delays: list[float] = field(default_factory=list)
+    delays: list[float] = field(default_factory=lambda: list[float]())
 
     def monotonic(self) -> float:
         return self.reading

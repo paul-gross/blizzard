@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import MetaData, Table
 from sqlalchemy.engine import Connection
@@ -142,6 +142,7 @@ class KeyedStatementGuard:
         ``parameter_keys`` are the keys of the parameters it executes with, which add to an insert's column list."""
         if not isinstance(statement, Select | CompoundSelect | Insert | Update | Delete):
             return
+        statement = cast("Select[Any] | CompoundSelect[Any] | Insert | Update | Delete", statement)
         cache_key = statement._generate_cache_key()
         key = None if cache_key is None else (cache_key.key, parameter_keys)
         violations = self._remembered(key)
@@ -198,11 +199,13 @@ class _Walk:
             return
         self._seen.add(key)
         if isinstance(element, Select):
-            self._visit_select(element, enclosing, asfrom=asfrom, lateral=lateral)
+            self._visit_select(cast("Select[Any]", element), enclosing, asfrom=asfrom, lateral=lateral)
         elif isinstance(element, CompoundSelect):
             for arm in element.selects:
                 self.visit(arm, enclosing, asfrom=asfrom, lateral=lateral)
-            self._visit_expressions(element, enclosing, skip=frozenset(map(id, element.selects)))
+            self._visit_expressions(
+                cast("CompoundSelect[Any]", element), enclosing, skip=frozenset(map(id, element.selects))
+            )
         elif isinstance(element, Update | Delete):
             self._visit_dml(element)
         elif isinstance(element, Insert):
@@ -312,8 +315,10 @@ class _Walk:
                 )
 
 
-def _parameter_keys(multiparams: Sequence[Mapping[str, Any]], params: Mapping[str, Any]) -> frozenset[str]:
-    first = multiparams[0] if multiparams and isinstance(multiparams[0], Mapping) else {}
+def _parameter_keys(multiparams: Sequence[object], params: Mapping[str, Any]) -> frozenset[str]:
+    first: Mapping[object, Any] = {}
+    if multiparams and isinstance(multiparams[0], Mapping):
+        first = cast("Mapping[object, Any]", multiparams[0])
     return frozenset(str(key) for key in (*params, *first))
 
 
@@ -349,7 +354,7 @@ def _conjuncts(condition: Any) -> Iterator[ClauseElement]:
     if condition is None:
         return
     if isinstance(condition, Grouping):
-        yield from _conjuncts(condition.element)
+        yield from _conjuncts(condition.element)  # pyright: ignore[reportUnknownMemberType]  # SQLAlchemy types Grouping.element with an unparameterized ColumnElement
     elif isinstance(condition, BooleanClauseList) and condition.operator is operators.and_:
         for clause in condition.clauses:
             yield from _conjuncts(clause)
@@ -371,8 +376,8 @@ def _key_leaf(side: ClauseElement, leaves: Iterable[FromClause], column: str) ->
     return next((leaf for leaf in leaves if side.table is leaf), None)
 
 
-def _is_value(side: Any) -> bool:
+def _is_value(side: object) -> bool:
     """Whether ``side`` is a bound value — a parameter or a literal, possibly grouped or cast — naming no column."""
     while isinstance(side, Grouping | Cast | TypeCoerce):
-        side = side.clause if isinstance(side, Cast | TypeCoerce) else side.element
+        side = side.clause if isinstance(side, Cast | TypeCoerce) else cast("object", side.element)  # pyright: ignore[reportUnknownMemberType]  # SQLAlchemy types Grouping.element with an unparameterized ColumnElement
     return isinstance(side, BindParameter)

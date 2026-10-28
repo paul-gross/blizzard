@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
-from blizzard.runner.status.view import RunnerStatusService
+from blizzard.runner.status.view import RunnerStatusService, ThrottleStatus
 from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.report import FLOOR_LEVER
@@ -104,7 +104,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
             effective=summary.pause.effective,
             local_reason=summary.pause.local_reason,
         ),
-        throttle=_throttle_view(summary.throttle) if summary.throttle is not None else None,
+        throttle=throttle_view(summary.throttle) if summary.throttle is not None else None,
         capacities=CapacitiesView(
             used=summary.capacities.used,
             agents=summary.capacities.agents,
@@ -167,7 +167,7 @@ def _runner_status_view(service: RunnerStatusService) -> RunnerStatusView:
     )
 
 
-def _throttle_view(status) -> ThrottleStatusView:
+def throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
     floor = status.verdict.floor
     hold = floor.hold
     clear = floor.clear

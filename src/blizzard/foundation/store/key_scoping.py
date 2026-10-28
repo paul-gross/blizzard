@@ -83,14 +83,16 @@ def base_table(from_: FromClause) -> TableClause | None:
     return from_ if isinstance(from_, TableClause) else None
 
 
-def execute_time_rows(multiparams: Sequence[Any], params: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def execute_time_rows(multiparams: Sequence[object], params: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     """The parameter rows one execute binds: each ``executemany`` row, or its single parameter set."""
     rows: list[Mapping[str, Any]] = []
     for item in multiparams:
         if isinstance(item, Mapping):
-            rows.append(item)
+            rows.append(cast("Mapping[str, Any]", item))
         elif isinstance(item, Sequence) and not isinstance(item, str):
-            rows.extend(row for row in item if isinstance(row, Mapping))
+            rows.extend(
+                cast("Mapping[str, Any]", row) for row in cast("Sequence[object]", item) if isinstance(row, Mapping)
+            )
     return rows or [params]
 
 
@@ -123,7 +125,7 @@ class KeyedStatements:
     def select(self, from_: FromClause, *cols: Any) -> Select[Any]:
         """``SELECT cols`` (every column of ``from_`` when none are named) ``FROM from_``, confined to the key.
         ``from_`` may be a table, an alias, or a join :meth:`scope_join` built."""
-        stmt: Select[Any] = cast("Select[Any]", sa.select(*cols).select_from(from_) if cols else sa.select(from_))
+        stmt: Select[Any] = sa.select(*cols).select_from(from_) if cols else sa.select(from_)
         predicates = self.key_predicates(from_)
         return stmt.where(*predicates) if predicates else stmt
 

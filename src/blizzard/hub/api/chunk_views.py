@@ -557,19 +557,17 @@ class ChunkView:
             artifact = row.artifact
             artifact_id = Id.parse(row.artifact_id)
             attached = artifact_id.minted_at if artifact_id is not None else None
-            common = {
-                "key": row.store_key,
-                "kind": row.kind.value,
-                "name": row.name,
-                "node_id": row.node_id,
-                "node_name": row.node_name,
-                "epoch": row.epoch,
-                "recorded_at": iso_utc(attached) if attached is not None else None,
-            }
+            recorded_at = iso_utc(attached) if attached is not None else None
             if isinstance(artifact, GitCommitArtifact):
                 views.append(
                     ArtifactView(
-                        **common,
+                        key=row.store_key,
+                        kind=row.kind,
+                        name=row.name,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        recorded_at=recorded_at,
                         repo=artifact.repo,
                         branch_name=artifact.branch_name,
                         commit_hash=artifact.commit_hash,
@@ -577,7 +575,18 @@ class ChunkView:
                     )
                 )
             else:
-                views.append(ArtifactView(**common, content=artifact.content))
+                views.append(
+                    ArtifactView(
+                        key=row.store_key,
+                        kind=row.kind,
+                        name=row.name,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        recorded_at=recorded_at,
+                        content=artifact.content,
+                    )
+                )
         return views
 
 

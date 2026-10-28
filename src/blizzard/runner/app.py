@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import os
 import secrets
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
@@ -18,7 +18,7 @@ from urllib.parse import quote
 import httpx2
 from fastapi import APIRouter, Depends, FastAPI, Request, params
 from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import Engine
 from starlette.datastructures import State
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -511,7 +511,7 @@ def create_app(
     if platform_tracing is not None:
 
         @app.middleware("http")
-        async def _suppress_excluded(request: Request, call_next):
+        async def _suppress_excluded(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
             if is_excluded(request.scope):
                 with platform_tracing.suppressed():
                     return await call_next(request)
@@ -524,7 +524,7 @@ def create_app(
 
     # The served shell's half of the human web lane's gate — see :class:`Lane`.
     @app.middleware("http")
-    async def _gate_web_surface(request: Request, call_next):
+    async def _gate_web_surface(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if not is_api_path(request.url.path):
             try:
                 require_human_session(request)

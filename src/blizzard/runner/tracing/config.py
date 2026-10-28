@@ -12,6 +12,7 @@ from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
 from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import SHARED_KEYS, TracingConfig
+from blizzard.foundation.untyped import as_table
 
 RESERVED_SERVICE_NAMES = frozenset({"blizzard-hub", "blizzard-runner", "blizzard-chunk", CLI_SERVICE_NAME})
 
@@ -37,7 +38,7 @@ class RunnerTracingConfig(TracingConfig):
     #: Worker programs' own spans reach the runner's receiver; takes effect only alongside ``platform``.
     worker_programs: bool = False
     #: Scope name to the ``service.name`` its kept worker-program or Claude Code telemetry leaves with.
-    worker_program_services: Mapping[str, str] = field(default_factory=dict)
+    worker_program_services: Mapping[str, str] = field(default_factory=dict[str, str])
     #: Claude Code workers export all three signals to the runner's receivers; needs ``platform``.
     harness_telemetry: bool = False
 
@@ -56,8 +57,9 @@ class RunnerTracingConfig(TracingConfig):
     @staticmethod
     def _services(tracing: ConfigView, invalid: type[Exception]) -> dict[str, str]:
         table = tracing.get("worker_program_services", {})
-        if not isinstance(table, dict):
+        if as_table(table) is None:
             raise invalid(f"tracing.worker_program_services must be a table, got {table!r}")
+        services: dict[str, str] = {}
         for scope, name in tracing.table("worker_program_services").items():
             entry = f"tracing.worker_program_services.{scope}"
             if not scope.strip():
@@ -68,7 +70,8 @@ class RunnerTracingConfig(TracingConfig):
                 raise invalid(f"{entry} must be a non-empty string, got {name!r}")
             if name in RESERVED_SERVICE_NAMES:
                 raise invalid(f"{entry} must not be the reserved service name {name!r}")
-        return dict(table)
+            services[scope] = name
+        return services
 
     def to_toml(self, *, unit: str) -> list[str]:
         """The ``[tracing]`` block with the runner's keys and its services table after the shared ones."""

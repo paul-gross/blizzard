@@ -417,7 +417,12 @@ class NodeDoc(NodeShape):
                 else:
                     malformed.append(str(key))
             else:
-                malformed.append(str(key))
+                items = cast(list[object], value) if isinstance(value, list) else None
+                strings = [v for v in items if isinstance(v, str)] if items is not None else None
+                if strings is not None and len(strings) == len(items or ()):
+                    args[str(key)] = tuple(strings)
+                else:
+                    malformed.append(str(key))
         return args, tuple(sorted(malformed))
 
     @staticmethod

@@ -13,6 +13,7 @@ from enum import StrEnum
 from typing import Any
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_list
 
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 ID_MAX_LENGTH = 60
@@ -70,7 +71,8 @@ type FieldRule = Callable[[Any, Mapping[str, Any]], list[tuple[str, str]]]
 
 
 def _is_string_list(value: object) -> bool:
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+    items = as_list(value)
+    return items is not None and all(isinstance(item, str) for item in items)
 
 
 def _kind(value: Any, _fields: Mapping[str, Any]) -> list[tuple[str, str]]:

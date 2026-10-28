@@ -256,7 +256,7 @@ class QueueEntry:
     chunk_id: str
     graph_id: str
     position: int
-    work_refs: list[QueueWorkRef] = field(default_factory=list)
+    work_refs: list[QueueWorkRef] = field(default_factory=list[QueueWorkRef])
     blocked: QueueBlock | None = None
     #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.
     project_id: str | None = None
@@ -309,7 +309,7 @@ class HubQuestion:
     node_id: str | None = None
     session_id: str | None = None
     harness_id: str | None = None
-    options: list[str] = field(default_factory=list)
+    options: list[str] = field(default_factory=list[str])
     answered: bool = False
     answer: str | None = None
     answered_by: str | None = None
@@ -475,10 +475,10 @@ class TranscriptPushAck:
     lease epoch another holder owns, are acknowledged and never stored."""
 
     high_water: int
-    applied: list[int] = field(default_factory=list)
-    already_applied: list[int] = field(default_factory=list)
-    capped: list[int] = field(default_factory=list)
-    refused: list[int] = field(default_factory=list)
+    applied: list[int] = field(default_factory=list[int])
+    already_applied: list[int] = field(default_factory=list[int])
+    capped: list[int] = field(default_factory=list[int])
+    refused: list[int] = field(default_factory=list[int])
 
 
 @domain_model
@@ -517,7 +517,7 @@ class TokenIdentity:
     runner_name: str
     tenant_id: str | None = None
     tenant_name: str | None = None
-    fleet_flags: Mapping[str, bool] = field(default_factory=dict)
+    fleet_flags: Mapping[str, bool] = field(default_factory=dict[str, bool])
 
     def serves(self, tenant_id: str | None) -> bool:
         """Whether this runner serves ``tenant_id``; naming no tenant, or a hub that names none, settles none."""

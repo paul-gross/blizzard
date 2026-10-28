@@ -624,7 +624,7 @@ class OpenCodeWorkerConfig:
         permission_raw = _object(_required(config, "permission", where), f"{where}.permission")
         permissions: dict[str, str | Mapping[str, str]] = {}
         for name, action in permission_raw.items():
-            if not isinstance(name, str) or not name:
+            if not name:
                 raise OpenCodeShapeError(f"{where}.permission has a non-string rule name")
             if isinstance(action, str):
                 if action not in {"allow", "ask", "deny"}:
@@ -637,7 +637,7 @@ class OpenCodeWorkerConfig:
                 raise OpenCodeShapeError(f"{where}.permission.{name} must be an action or a pattern/action object")
             patterns: dict[str, str] = {}
             for pattern, pattern_action in action.items():
-                if not isinstance(pattern, str) or not pattern:
+                if not pattern:
                     raise OpenCodeShapeError(f"{where}.permission.{name} has a non-string pattern")
                 if not isinstance(pattern_action, str) or pattern_action not in {"allow", "ask", "deny"}:
                     raise UnknownOpenCodeShapeError(

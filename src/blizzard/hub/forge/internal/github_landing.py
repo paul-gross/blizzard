@@ -17,6 +17,7 @@ import httpx2
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.landing import (
@@ -159,7 +160,9 @@ class GitHubLanding:
         if response.status_code == 404 and not await self._repository_missing():
             return None
         payload = await self._answered(response, ForgeObject.BRANCH)
-        sha = (payload.get("object") or {}).get("sha") if isinstance(payload, dict) else None
+        table = as_table(payload)
+        ref = as_table(table.get("object") or {}) if table is not None else None
+        sha = ref.get("sha") if ref is not None else None
         return self._text(sha, "branch tip")
 
     async def compare(self, base: str, head: str) -> Comparison:
@@ -183,7 +186,8 @@ class GitHubLanding:
                 CommitSummary(c["sha"], tuple(p["sha"] for p in c.get("parents") or ())) for c in payload["commits"]
             )
             files = tuple(_file_change(f) for f in payload.get("files") or ())
-            merge_base = (payload.get("merge_base_commit") or {}).get("sha")
+            base_commit: dict[str, Any] = payload.get("merge_base_commit") or {}
+            merge_base: str | None = base_commit.get("sha")
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ForgeUnavailable(f"unreadable comparison {base}...{head}: {exc}") from exc
         return Comparison(
@@ -224,7 +228,8 @@ class GitHubLanding:
         if response.status_code == 422:
             self._refuse_ref(response)
         result = await self._answered(response, ForgeObject.BRANCH)
-        return self._text(result.get("sha") if isinstance(result, dict) else None, "merge commit")
+        merged = as_table(result)
+        return self._text(merged.get("sha") if merged is not None else None, "merge commit")
 
     async def create_ref(self, branch: str, revision: str) -> None:
         response = await self._send(
@@ -265,23 +270,25 @@ class GitHubLanding:
         found: list[Change] = []
         for page in range(1, _PAGE_MAX + 1):
             listed = await self._read("GET", f"{self._repo}/pulls?{query}&page={page}", ForgeObject.REPOSITORY)
-            if not isinstance(listed, list):
+            pulls = as_list(listed)
+            if pulls is None:
                 raise ForgeUnavailable(f"unreadable pull request list into {base}")
             found.extend(
                 change
-                for change in (_change(pull) for pull in listed)
+                for change in (_change(pull) for pull in pulls)
                 if change.base == base and (head is None or change.head == head)
             )
-            if len(listed) < _PAGE_SIZE:
+            if len(pulls) < _PAGE_SIZE:
                 break
         return tuple(found)
 
     async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
         query = f"state=closed&base={base}&sort=updated&direction=desc&per_page={limit}"
         listed = await self._read("GET", f"{self._repo}/pulls?{query}", ForgeObject.REPOSITORY)
-        if not isinstance(listed, list):
+        pulls = as_list(listed)
+        if pulls is None:
             raise ForgeUnavailable(f"unreadable pull request list into {base}")
-        return tuple(change for change in (_change(pull) for pull in listed) if change.base == base)[:limit]
+        return tuple(change for change in (_change(pull) for pull in pulls) if change.base == base)[:limit]
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
         body_json = {"title": title, "head": head, "base": base, "body": body, "user": _HUB_USER}
@@ -309,8 +316,9 @@ class GitHubLanding:
         if response.status_code == 405 and _has_prefix(_message(response), _METHOD_PREFIXES):
             raise ForgeRejected(ForgeRejected.METHOD, _message(response))
         result = await self._answered(response, ForgeObject.CHANGE)
-        if isinstance(result, dict) and result.get("merged") and isinstance(result.get("sha"), str) and result["sha"]:
-            return result["sha"]
+        merged = as_table(result)
+        if merged is not None and merged.get("merged") and isinstance(sha := merged.get("sha"), str) and sha:
+            return sha
         landed = await self.change(number)
         if landed.merged_revision is None:
             raise ForgeRejected(_message(response) or f"pull request {number} did not merge")
@@ -325,10 +333,15 @@ class GitHubLanding:
                 await self._send("GET", f"{self._repo}/commits/{ref}/check-runs?per_page={_PAGE_SIZE}&page={page}"),
                 ForgeObject.REVISION,
             )
-            runs = payload.get("check_runs") if isinstance(payload, dict) else None
-            if not isinstance(runs, list) or not all(isinstance(run, dict) for run in runs):
+            table = as_table(payload)
+            runs = as_list(table.get("check_runs")) if table is not None else None
+            if runs is None:
                 raise ForgeUnavailable(f"unreadable check runs on {ref}")
-            found.extend(_check(run) for run in runs)
+            for run in runs:
+                entry = as_table(run)
+                if entry is None:
+                    raise ForgeUnavailable(f"unreadable check runs on {ref}")
+                found.append(_check(entry))
             if len(runs) < _PAGE_SIZE:
                 break
         return tuple(found)
@@ -494,7 +507,8 @@ def _body(response: httpx2.Response) -> Any:
 
 def _message(response: httpx2.Response) -> str:
     body = _body(response)
-    message = body.get("message") if isinstance(body, dict) else None
+    table = as_table(body)
+    message = table.get("message") if table is not None else None
     return message if isinstance(message, str) else ""
 
 

@@ -18,6 +18,7 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.environments.repository import (
     EnvBinding,
     IReadEnvironmentRepository,
@@ -765,17 +766,18 @@ def _walk_shrinkable_strings(
     shrinkable candidate — e.g. ``MultiEdit.edits``, a list of ``{old_string,
     new_string}`` dicts, not a flat top-level string. Every leaf under one tool's ``input``
     shares that tool's one ``input_truncated`` marker."""
-    items: list[tuple[Any, Any]]
-    if isinstance(container, dict):
-        items = list(container.items())
-    elif isinstance(container, list):
-        items = list(enumerate(container))
+    items: list[tuple[object, object]]
+    table, listed = as_table(container), as_list(container)
+    if table is not None:
+        items = list(table.items())
+    elif listed is not None:
+        items = list(enumerate(listed))
     else:
         return
     for key, value in items:
         if isinstance(value, str) and value:
             candidates.append((container, key, marker_holder, marker_field))
-        elif isinstance(value, (dict, list)):
+        elif as_table(value) is not None or as_list(value) is not None:
             _walk_shrinkable_strings(value, marker_holder, marker_field, candidates)
 
 
@@ -795,7 +797,7 @@ def _shrink_candidates(record: dict[str, Any]) -> list[_ShrinkCandidate]:
         if tool.get("output"):
             candidates.append((tool, "output", tool, "output_truncated"))
         input_ = tool.get("input")
-        if isinstance(input_, dict):
+        if as_table(input_) is not None:
             _walk_shrinkable_strings(input_, tool, "input_truncated", candidates)
         if tool.get("input_unparsed"):
             candidates.append((tool, "input_unparsed", tool, "input_truncated"))

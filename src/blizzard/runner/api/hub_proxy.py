@@ -16,6 +16,7 @@ from fastapi.exceptions import HTTPException
 from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.foundation.untyped import as_table
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.client import HubClientError, ITokenIdentityReader
@@ -241,9 +242,9 @@ class HubProxy:
     def _detail(response: httpx2.Response) -> str:
         """The hub's error detail, unwrapped from its JSON body when present."""
         try:
-            payload = response.json()
+            payload = as_table(response.json())
         except ValueError:
             return response.text
-        if isinstance(payload, dict) and "detail" in payload:
+        if payload is not None and "detail" in payload:
             return str(payload["detail"])
         return response.text

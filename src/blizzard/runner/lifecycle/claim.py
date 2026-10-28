@@ -127,7 +127,7 @@ class ReadyQueue:
 
     ctx: ClaimContext
     bindings: tuple[RoutedBinding, ...]
-    _entries: list[QueueEntry] = field(default_factory=list)
+    _entries: list[QueueEntry] = field(default_factory=list[QueueEntry])
     #: The workspace the last ``claim_one()`` found out of environments, so the caller stops peeking for its projects.
     env_bound_workspace_id: str | None = None
     _binding: RoutedBinding | None = None

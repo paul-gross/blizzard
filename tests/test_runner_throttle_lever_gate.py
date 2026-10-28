@@ -12,7 +12,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.api.control import _throttle_view
+from blizzard.runner.api.control import throttle_view
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -147,7 +147,7 @@ def test_the_status_view_maps_each_lever_in_gate_order_and_names_every_declining
     ctx = _ctx(_ALL)
     _sample(ctx, 96.0, resets_in_h=3.0)
 
-    view = _throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
+    view = throttle_view(ThrottleStatus.of(ThrottleGate(ctx).verdict(), braked=False))
 
     assert [lever.name for lever in view.levers] == ["pace", "utilization", "schedule"]
     assert view.declining == ["pace", "utilization", "schedule"]

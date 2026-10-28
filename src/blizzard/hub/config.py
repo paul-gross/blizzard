@@ -13,7 +13,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, overload
+from typing import Literal, cast, overload
 from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
@@ -30,6 +30,7 @@ from blizzard.foundation.flags import (
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import TracingConfig
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.auth.throttle import DEFAULT_CAPACITY, DEFAULT_REFILL_SECONDS
 from blizzard.hub.config_defaults import (
     AUTH_MODE_NONE,
@@ -176,14 +177,14 @@ class StoreUrl:
 def _work_sources(document: ConfigView) -> tuple[WorkSourceConfig, ...]:
     """Validate and project ``[[work_source]]`` entries; each rejection names
     the offending entry rather than failing generically."""
-    raw_sources = document.get("work_source", [])
-    if not isinstance(raw_sources, list):
+    raw_sources = as_list(document.get("work_source", []))
+    if raw_sources is None:
         return ()
     sources: list[WorkSourceConfig] = []
     seen_names: set[str] = set()
     seen_provider_repo: set[tuple[str, str]] = set()
     for raw_entry in raw_sources:
-        if not isinstance(raw_entry, dict):
+        if as_table(raw_entry) is None:
             raise ConfigError(f"[[work_source]] entry must be a table, got {raw_entry!r}")
         entry = document.element("work_source", raw_entry)
         missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
@@ -274,13 +275,13 @@ class OAuthProviderConfig:
         """Structurally validate and project ``[[auth.oauth.provider]]`` entries — the required
         keys, and ``emails_authoritative`` as a boolean when set; ``type``/``issuer`` and the keys only
         one type takes are validated by whichever consumer first uses a provider."""
-        raw_providers = oauth.get("provider", [])
-        if not isinstance(raw_providers, list):
+        raw_providers = as_list(oauth.get("provider", []))
+        if raw_providers is None:
             return ()
         providers: list[OAuthProviderConfig] = []
         seen_names: set[str] = set()
         for raw_entry in raw_providers:
-            if not isinstance(raw_entry, dict):
+            if as_table(raw_entry) is None:
                 raise ConfigError(f"[[auth.oauth.provider]] entry must be a table, got {raw_entry!r}")
             entry = oauth.element("provider", raw_entry)
             missing = [key for key in _REQUIRED_OAUTH_PROVIDER_KEYS if key not in entry]
@@ -485,10 +486,11 @@ def _egress_path_key_env(raw: ConfigView, default: str) -> str:
 
 def _egress_datasets(raw: ConfigView, default: tuple[str, ...]) -> tuple[str, ...]:
     value = raw.get("datasets", list(default))
-    if not isinstance(value, list) or not value or any(item not in EGRESS_DATASETS for item in value):
+    datasets = as_list(value)
+    if datasets is None or not datasets or any(item not in EGRESS_DATASETS for item in datasets):
         raise ConfigError(f"egress.datasets must be a non-empty list drawn from {list(EGRESS_DATASETS)}, got {value!r}")
     # Pass order, not file order: steps first, once each.
-    return tuple(name for name in EGRESS_DATASETS if name in value)
+    return tuple(name for name in EGRESS_DATASETS if name in datasets)
 
 
 def _egress_integer(raw: ConfigView, key: str, default: int, *, minimum: int) -> int:
@@ -519,8 +521,8 @@ def render_egress_toml(egress: EgressConfig) -> list[str]:
         else f"directory = {json.dumps(str(egress.directory))}\n",
     ]
     for key in _EGRESS_KEYS:
-        value = getattr(egress, key)
-        literal = json.dumps(list(value)) if isinstance(value, tuple) else json.dumps(value)
+        value: object = getattr(egress, key)
+        literal = json.dumps(list(cast("tuple[object, ...]", value))) if isinstance(value, tuple) else json.dumps(value)
         lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
     return lines
 
@@ -576,7 +578,7 @@ class HubConfig:
     #: Absolute ``http(s)`` board origin; ``None`` omits every board link.
     public_url: str | None = None
     #: The ``[flags]`` overrides — flag name to on or off; matched to the registry at composition, not here.
-    flags: Mapping[str, bool] = field(default_factory=dict)
+    flags: Mapping[str, bool] = field(default_factory=lambda: {})
     #: The ``[flags]`` as the load resolved them, applied by composition; ``None`` for a config built in code.
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.

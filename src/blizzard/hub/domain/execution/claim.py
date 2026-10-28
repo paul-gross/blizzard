@@ -174,10 +174,11 @@ class RekeyDeniedNotHolder(Exception):
 
 def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: str) -> RunnerRegistration:
     """Refuse, in order, an unregistered, retired, version-refused, or paused runner; return its registration."""
-    bar = ClaimBar.UNREGISTERED if registration is None else registration.claim_bar()
-    if registration is None or bar is ClaimBar.UNREGISTERED:
+    if registration is None:
         raise ClaimDeniedUnregistered(runner_id=runner_id)
-    match bar:
+    match registration.claim_bar():
+        case ClaimBar.UNREGISTERED:
+            raise ClaimDeniedUnregistered(runner_id=runner_id)
         case ClaimBar.RETIRED:
             registration.refuse_if_retired(action="claim")
         case ClaimBar.VERSION_REFUSED:

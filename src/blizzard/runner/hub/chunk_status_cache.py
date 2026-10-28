@@ -63,7 +63,7 @@ class MemoizingChunkViewCache:
     re-read the hub only to raise the same ``ChunkNotFoundError`` again."""
 
     hub: IChunkStatusReader
-    _cache: dict[str, ChunkState | None] = field(default_factory=dict)
+    _cache: dict[str, ChunkState | None] = field(default_factory=dict[str, ChunkState | None])
 
     def get(self, chunk_id: str) -> ChunkState:
         if chunk_id not in self._cache:

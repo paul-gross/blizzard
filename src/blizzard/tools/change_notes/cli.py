@@ -150,7 +150,7 @@ def render_command(tag: str, breaks_path: Path | None) -> None:
     repo = Repository(Path.cwd())
     try:
         notes = notes_at(repo, tag, version)
-        supported = supported_tags(version) if notes else frozenset()
+        supported: frozenset[str] = supported_tags(version) if notes else frozenset()
         earlier = [r for r in parse_releases(repo.tags()) if r.order() < release.order() and r.tag in supported]
         named = ()
         if breaks_path is not None:

@@ -10,9 +10,10 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Final, Literal, Self
+from typing import Final, Literal, Self
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_table
 
 type FlagScope = Literal["hub", "runner", "fleet"]
 
@@ -45,8 +46,8 @@ class LiveFlag:
 class FlagRegistry:
     """Every flag name the fleet knows: the live ones with their declarations, and the retired ones with their scope."""
 
-    live: Mapping[str, LiveFlag] = field(default_factory=dict)
-    retired: Mapping[str, FlagScope] = field(default_factory=dict)
+    live: Mapping[str, LiveFlag] = field(default_factory=lambda: dict[str, LiveFlag]())
+    retired: Mapping[str, FlagScope] = field(default_factory=lambda: dict[str, FlagScope]())
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "live", MappingProxyType(dict(self.live)))
@@ -77,11 +78,12 @@ class FlagRegistry:
         return self.retired.get(name)
 
 
-def _table(document: Mapping[str, Any], key: str, source: str) -> Mapping[str, Any]:
+def _table(document: Mapping[str, object], key: str, source: str) -> Mapping[str, object]:
     value = document.get(key, {})
-    if not isinstance(value, dict):
+    table = as_table(value)
+    if table is None:
         raise FlagRegistryError(f"{source}: [{key}] must be a table")
-    return value
+    return table
 
 
 def _checked_name(name: str, source: str) -> str:
@@ -94,15 +96,16 @@ def _checked_name(name: str, source: str) -> str:
 
 def _live(name: str, body: object, source: str) -> LiveFlag:
     _checked_name(name, source)
-    if not isinstance(body, dict):
+    fields = as_table(body)
+    if fields is None:
         raise FlagRegistryError(f"{source}: [flag.{name}] must be a table")
-    missing = sorted(_FIELDS - set(body))
+    missing = sorted(_FIELDS - set(fields))
     if missing:
         raise FlagRegistryError(f"{source}: [flag.{name}] is missing {missing}")
-    extra = sorted(set(body) - _FIELDS)
+    extra = sorted(set(fields) - _FIELDS)
     if extra:
         raise FlagRegistryError(f"{source}: [flag.{name}] has unknown key(s) {extra}")
-    owner, summary, scope, default = body["owner"], body["summary"], body["scope"], body["default"]
+    owner, summary, scope, default = fields["owner"], fields["summary"], fields["scope"], fields["default"]
     if not isinstance(owner, str) or _OWNER.fullmatch(owner) is None:
         raise FlagRegistryError(f"{source}: [flag.{name}] owner must be an `epic:` or `initiative:` id, got {owner!r}")
     if not isinstance(summary, str) or not summary.strip() or "\n" in summary:

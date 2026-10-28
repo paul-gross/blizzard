@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from blizzard.cli.collaborators import ClientFactory
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.untyped import as_table
 from blizzard.hub.auth.pkce import Pkce
 
 _CLIENT_ID = "cli"

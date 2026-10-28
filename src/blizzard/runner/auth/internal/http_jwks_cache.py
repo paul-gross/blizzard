@@ -6,6 +6,8 @@ usage is confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
+from typing import cast
+
 import httpx2
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jwt.algorithms import RSAAlgorithm
@@ -42,5 +44,5 @@ class JwksCache:
             kid = jwk.get("kid")
             if not kid:
                 continue
-            keys[kid] = RSAAlgorithm.from_jwk(jwk)  # type: ignore[assignment]
+            keys[kid] = cast(RSAPublicKey, RSAAlgorithm.from_jwk(jwk))
         self._keys = keys

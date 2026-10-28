@@ -93,7 +93,7 @@ class ReleaseRefusals:
     """The offers the hub refused, one per chunk: a refused offer is not repeated at the same epoch and reason, so a
     chunk whose gate keeps declining — or an older hub that does not know the route — is asked once, not every tick."""
 
-    _refused: dict[str, tuple[int, ReleaseReason]] = field(default_factory=dict)
+    _refused: dict[str, tuple[int, ReleaseReason]] = field(default_factory=dict[str, tuple[int, ReleaseReason]])
 
     def refused(self, chunk_id: str, epoch: int, reason: ReleaseReason) -> bool:
         return self._refused.get(chunk_id) == (epoch, reason)

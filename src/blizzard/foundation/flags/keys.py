@@ -14,6 +14,7 @@ from blizzard.foundation.flags.flags import FlagResolution, Flags, FlagSide, res
 from blizzard.foundation.flags.overrides import parse_overrides
 from blizzard.foundation.flags.registry import FlagRegistry
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_list, as_table
 
 
 @domain_model
@@ -65,7 +66,8 @@ def held_keys(registry: ConfigRegistry, document: Mapping[str, Any], flags: Flag
 def _carries(table: object, parts: list[str]) -> bool:
     """Whether ``table`` holds a value at the key path ``parts``; a segment marked ``name[]`` matches any table of the
     array at ``name``."""
-    if not isinstance(table, Mapping):
+    table = as_table(table)
+    if table is None:
         return False
     head, *rest = parts
     name = head.removesuffix("[]")
@@ -74,7 +76,7 @@ def _carries(table: object, parts: list[str]) -> bool:
     if not rest:
         return True
     value = table[name]
-    entries = (value if isinstance(value, list) else []) if head.endswith("[]") else [value]
+    entries = (as_list(value) or []) if head.endswith("[]") else [value]
     return any(_carries(entry, rest) for entry in entries)
 
 

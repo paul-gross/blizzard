@@ -263,7 +263,7 @@ def authorize(
     except UnknownFederationClient:
         raise _unknown_client() from None
     email = user.email if user is not None else None
-    claims = {
+    claims: dict[str, object] = {
         "sub": identity.user_id,
         "username": identity.username,
         "email": email,

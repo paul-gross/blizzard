@@ -310,7 +310,7 @@ class Attempt:
         closure = owner_unresolvable_closure(lease, unavailable=isinstance(exc, UnavailableHarnessError))
         status = closure.owner_status
         message = f"escalated — recorded harness owner {status} ({session.harness_id!r}, via {via})"
-        event = {
+        event: dict[str, object] = {
             "severity": EVENT_LOG_SEVERITY[_OWNER_UNRESOLVABLE],
             "kind": _OWNER_UNRESOLVABLE,
             "chunk_id": lease.chunk_id,
@@ -343,7 +343,7 @@ class Attempt:
         lease = self.lease
         now = self.ctx.clock.now()
         message = f"escalated — no acceptable harness could serve this mint (via {via})"
-        event = {
+        event: dict[str, object] = {
             "severity": EVENT_LOG_SEVERITY[_NO_ACCEPTABLE_HARNESS],
             "kind": _NO_ACCEPTABLE_HARNESS,
             "chunk_id": lease.chunk_id,

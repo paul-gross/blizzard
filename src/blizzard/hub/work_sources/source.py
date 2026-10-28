@@ -59,7 +59,7 @@ class WorkItem:
 
     body: str
     title: str = ""
-    comments: list[str] = field(default_factory=list)
+    comments: list[str] = field(default_factory=lambda: [])
     author: AuthorView | None = None
     stated_priority: str | None = None
 

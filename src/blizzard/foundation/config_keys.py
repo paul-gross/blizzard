@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Final
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_list, as_table
 
 if TYPE_CHECKING:
     from blizzard.foundation.flags import Flags
@@ -150,13 +151,19 @@ class ConfigRegistry:
 
 SCALAR_TYPES: Final = (STRING, INTEGER, NUMBER, BOOLEAN, STRING_LIST, STRING_OR_LIST)
 
+
+def _all_strings(value: object) -> bool:
+    items = as_list(value)
+    return items is not None and all(isinstance(item, str) for item in items)
+
+
 _TYPE_CHECKS: Final[Mapping[str, Callable[[object], bool]]] = {
     STRING: lambda v: isinstance(v, str),
     INTEGER: lambda v: isinstance(v, int) and not isinstance(v, bool),
     NUMBER: lambda v: isinstance(v, int | float) and not isinstance(v, bool),
     BOOLEAN: lambda v: isinstance(v, bool),
-    STRING_LIST: lambda v: isinstance(v, list) and all(isinstance(item, str) for item in v),
-    STRING_OR_LIST: lambda v: isinstance(v, str) or (isinstance(v, list) and all(isinstance(i, str) for i in v)),
+    STRING_LIST: lambda v: _all_strings(v),
+    STRING_OR_LIST: lambda v: isinstance(v, str) or _all_strings(v),
 }
 
 
@@ -205,17 +212,17 @@ class ConfigView:
     def table(self, key: str) -> ConfigView:
         """The sub-table at ``key``; empty when absent or not a table."""
         value = self.get(key)
-        return replace(self, path=self._join(key), body=value if isinstance(value, dict) else {})
+        return replace(self, path=self._join(key), body=as_table(value) or {})
 
     def element(self, key: str, value: object) -> ConfigView:
         """One entry of the array of tables at ``key``, its path marked ``key[]``; empty when not a table."""
-        return replace(self, path=f"{self._join(key)}[]", body=value if isinstance(value, dict) else {})
+        return replace(self, path=f"{self._join(key)}[]", body=as_table(value) or {})
 
     def entries(self, key: str) -> Iterator[ConfigView]:
         """Each table of the array at ``key``; none when absent or not an array."""
-        value = self.get(key)
-        if isinstance(value, list):
-            yield from (self.element(key, entry) for entry in value)
+        entries = as_list(self.get(key))
+        if entries is not None:
+            yield from (self.element(key, entry) for entry in entries)
 
     def items(self) -> Iterator[tuple[str, Any]]:
         """Every entry of an open table, whose keys no registry lists."""

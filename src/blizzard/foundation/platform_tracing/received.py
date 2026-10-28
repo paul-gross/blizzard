@@ -60,7 +60,7 @@ class ReceivedSpan:
     status_code: int
     scope_name: str
     scope_version: str
-    attributes: dict[str, Scalar] = field(default_factory=dict)
+    attributes: dict[str, Scalar] = field(default_factory=lambda: dict[str, Scalar]())
 
 
 def decode_otlp(body: bytes, content_type: str) -> list[ReceivedSpan]:
@@ -117,7 +117,7 @@ class ReceivedDataPoint:
     minimum: float | None = None
     maximum: float | None = None
     exponential: ExponentialBuckets | None = None
-    attributes: dict[str, Scalar] = field(default_factory=dict)
+    attributes: dict[str, Scalar] = field(default_factory=lambda: dict[str, Scalar]())
 
 
 @domain_model
@@ -146,7 +146,7 @@ class ReceivedLogRecord:
     trace_flags: int
     scope_name: str
     scope_version: str
-    attributes: dict[str, Scalar] = field(default_factory=dict)
+    attributes: dict[str, Scalar] = field(default_factory=lambda: dict[str, Scalar]())
 
 
 def decode_metrics(body: bytes, content_type: str) -> ReceivedMetrics:

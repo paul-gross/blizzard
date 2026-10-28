@@ -344,7 +344,7 @@ def _rewrite_keys(bind: sa.Connection, conditions: list[sa.ColumnElement[bool]],
 def _refuse_dangling(bind: sa.Connection) -> None:
     """Refuse — before anything is dropped — a name a row carries that no repository of its tenant holds."""
     dangling: list[str] = []
-    for table, key, *_ in _CHILDREN:
+    for table, *_ in _CHILDREN:
         name = _name_column(table)
         if name not in _columns(bind, table):
             continue

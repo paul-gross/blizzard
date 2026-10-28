@@ -10,6 +10,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -192,25 +193,25 @@ class BasicWorkspaceProvider:
         if self._held_ids is None and not (env / _ACTIVE).is_file():
             return []
         try:
-            recorded = json.loads(self._manifest_path(env).read_text())
+            recorded = as_list(json.loads(self._manifest_path(env).read_text()))
         except (OSError, ValueError):
             return []
-        if not isinstance(recorded, list):
+        if recorded is None:
             return []
-        return [
-            RepoBinding(
-                environment_id,
-                repo["name"],
-                repo["name"],
-                repo["url"],
-            )
-            for repo in recorded
-            if isinstance(repo, dict)
-            and isinstance(repo.get("name"), str)
-            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", repo["name"])
-            and isinstance(repo.get("url"), str)
-            and (env / repo["name"]).is_dir()
-        ]
+        bindings: list[RepoBinding] = []
+        for entry in recorded:
+            repo = as_table(entry)
+            if repo is None:
+                continue
+            name, url = repo.get("name"), repo.get("url")
+            if (
+                isinstance(name, str)
+                and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
+                and isinstance(url, str)
+                and (env / name).is_dir()
+            ):
+                bindings.append(RepoBinding(environment_id, name, name, url))
+        return bindings
 
     def spawn_root(self) -> str:
         # Each worker runs in its acquired workdir, away from the shared clones.

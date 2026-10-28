@@ -30,8 +30,8 @@ class GraphNames:
     lazily, one graph at a time, the first time it's asked for."""
 
     graphs: IReadGraphRepository
-    _summaries: dict[str, GraphSummary | None] = field(default_factory=dict)
-    _node_names: dict[str, dict[str, str]] = field(default_factory=dict)
+    _summaries: dict[str, GraphSummary | None] = field(default_factory=lambda: {})
+    _node_names: dict[str, dict[str, str]] = field(default_factory=lambda: {})
 
     def prime(self, graph_ids: Iterable[str | None]) -> None:
         """Resolve every id in ``graph_ids`` not already resolved, through one

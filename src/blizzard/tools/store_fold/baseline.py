@@ -9,6 +9,7 @@ from datetime import datetime
 from textwrap import indent
 from typing import Any
 
+from blizzard.foundation.untyped import as_table
 from blizzard.tools.store_fold.seeds import classify
 
 _PRELUDE = '''\
@@ -59,12 +60,13 @@ def _column(name: str, values: Sequence[Any]) -> str:
     return f"sa.column({name!r})"
 
 
-def decode(value: Any) -> Any:
+def decode(value: object) -> object:
     """A value as the floor-side renderer transported it."""
-    if isinstance(value, dict) and "$datetime" in value:
-        return datetime.fromisoformat(value["$datetime"])
-    if isinstance(value, dict) and "$bytes" in value:
-        return base64.b64decode(value["$bytes"])
+    table = as_table(value)
+    if table is not None and "$datetime" in table:
+        return datetime.fromisoformat(str(table["$datetime"]))
+    if table is not None and "$bytes" in table:
+        return base64.b64decode(str(table["$bytes"]))
     return value
 
 

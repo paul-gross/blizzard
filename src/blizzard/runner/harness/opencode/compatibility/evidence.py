@@ -132,7 +132,7 @@ def _runtime_identifier_replacements(runtime: Mapping[str, JsonValue]) -> tuple[
     def collect(value: JsonValue | Mapping[str, JsonValue], context_kind: str | None = None) -> None:
         if isinstance(value, Mapping):
             for key, nested in value.items():
-                key_name = re.sub(r"[-.]", "_", key.lower()) if isinstance(key, str) else ""
+                key_name = re.sub(r"[-.]", "_", key.lower())
                 kind = _OBSERVED_IDENTIFIER_KEYS.get(key_name, context_kind)
                 if isinstance(nested, str) and kind in observed and nested:
                     observed[kind].add(nested)

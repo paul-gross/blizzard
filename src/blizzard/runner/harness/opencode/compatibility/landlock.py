@@ -159,7 +159,7 @@ class LandlockPolicy:
         if Path("/dev/null").exists():
             add(Path("/dev/null"), _LANDLOCK_ACCESS_FS_READ_FILE | _LANDLOCK_ACCESS_FS_WRITE_FILE)
 
-        if not argv or not isinstance(argv[0], str) or not argv[0]:
+        if not argv or not argv[0]:
             raise LandlockUnavailable("the OpenCode executable is empty")
         executable = Path(argv[0])
         if not executable.is_absolute():

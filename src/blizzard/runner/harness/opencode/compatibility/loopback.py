@@ -265,8 +265,6 @@ def _safe_headers(headers: Mapping[str, str]) -> dict[str, str]:
 
     safe: dict[str, str] = {}
     for name, value in headers.items():
-        if not isinstance(name, str) or not isinstance(value, str):
-            raise LoopbackTransportError("loopback request headers must be strings")
         normalized = name.lower()
         if normalized in _SENSITIVE_HEADERS or normalized in _HOP_BY_HOP_HEADERS:
             continue
@@ -307,11 +305,7 @@ class UrllibLoopbackTransport:
     @contextmanager
     def request(self, request: LoopbackRequest, *, timeout: float) -> Generator[LoopbackResponse, None, None]:
         _validate_loopback_url(request.url)
-        if (
-            not isinstance(request.method, str)
-            or not request.method
-            or any(character.isspace() for character in request.method)
-        ):
+        if not request.method or any(character.isspace() for character in request.method):
             raise LoopbackTransportError("the loopback request method is invalid")
         if timeout <= 0:
             raise LoopbackTransportError("the loopback request timeout must be positive")
