@@ -687,3 +687,123 @@ def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_p
     assert "does-not-exist.md" in result.output
     # It never claims to be serving a daemon it then fails to build.
     assert "serving blizzard-runner" not in result.output
+
+
+def _host_answering(sock_path: Path, *replies: bytes) -> socket.socket:
+    """A UDS listener answering each connection with the next of ``replies``, closing each after one exchange."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(sock_path))
+    server.listen(len(replies))
+
+    def _answer() -> None:
+        for reply in replies:
+            conn, _ = server.accept()
+            with conn:
+                conn.recv(4096)
+                conn.sendall(reply)
+
+    threading.Thread(target=_answer, daemon=True).start()
+    return server
+
+
+def _json_reply(status: str, body: str) -> bytes:
+    return f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+
+
+_RUNNERS = _json_reply(
+    "200 OK",
+    '{"items":[{"name":"r","runner_id":"rn_1","state":"serving","served":true,"halted_reasons":[]}]}',
+)
+
+
+def _tick_on_running_host(tmp_path: Path, args: list[str], *replies: bytes) -> tuple[int, str]:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    layout = HostLayout(root)
+    server = _host_answering(layout.socket_path, *replies)
+    lock = HostLock.acquire(layout)
+    try:
+        result = init_runner().invoke(blizzard, ["runner", "tick", "--dir", str(root), *args])
+    finally:
+        server.close()
+        lock.release()
+    return result.exit_code, result.output
+
+
+_HEALTH = _json_reply("200 OK", "{}")
+_COMPLETED = _json_reply("200 OK", '{"started_at":"a","finished_at":"b","outcome":"completed","error":null}')
+_FAILED = _json_reply("200 OK", '{"started_at":"a","finished_at":"b","outcome":"failed","error":"hub unreachable"}')
+_BUSY = _json_reply("409 Conflict", '{"code":"tick_in_progress"}')
+
+
+def test_tick_steps_a_running_host_through_its_socket(tmp_path: Path) -> None:
+    code, output = _tick_on_running_host(tmp_path, [], _HEALTH, _RUNNERS, _COMPLETED)
+
+    assert code == 0
+    assert "tick complete" in output
+
+
+def test_tick_host_steps_the_host_wide_pass(tmp_path: Path) -> None:
+    code, output = _tick_on_running_host(tmp_path, ["--host"], _HEALTH, _COMPLETED)
+
+    assert code == 0
+    assert "tick complete" in output
+
+
+@pytest.mark.parametrize(("reply", "said"), [(_FAILED, "hub unreachable"), (_BUSY, "already in progress")])
+def test_tick_on_a_running_host_exits_1_unless_the_pass_completed(tmp_path: Path, reply: bytes, said: str) -> None:
+    code, output = _tick_on_running_host(tmp_path, [], _HEALTH, _RUNNERS, reply)
+
+    assert code == 1
+    assert said in output
+    assert "tick complete" not in output
+
+
+def test_tick_refuses_host_and_runner_together_without_running_work(tmp_path: Path) -> None:
+    code, output = _tick_on_running_host(tmp_path, ["--host", "--runner", "r"])
+
+    assert code == 2
+    assert "mutually exclusive" in output
+
+
+def test_tick_host_is_refused_with_no_host_running(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+
+    result = init_runner().invoke(blizzard, ["runner", "tick", "--host", "--dir", str(root)])
+
+    assert result.exit_code == 1
+    assert "no host is serving" in result.output
+
+
+def test_tick_with_the_lock_held_and_no_answering_socket_still_refuses(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    layout = HostLayout(root)
+    lock = HostLock.acquire(layout)
+    try:
+        result = init_runner().invoke(blizzard, ["runner", "tick", "--dir", str(root)])
+    finally:
+        lock.release()
+
+    assert result.exit_code == 1
+    assert "so this cannot run a tick — stop it first" in result.output
+
+
+def test_tick_with_the_lock_held_and_a_dead_socket_file_still_refuses(tmp_path: Path) -> None:
+    """A socket file an ungraceful exit left behind answers nothing, so it is not a host to step."""
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    layout = HostLayout(root)
+    corpse = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    corpse.bind(str(layout.socket_path))
+    corpse.close()
+    assert layout.socket_path.exists()
+    lock = HostLock.acquire(layout)
+    try:
+        result = init_runner().invoke(blizzard, ["runner", "tick", "--dir", str(root)])
+    finally:
+        lock.release()
+
+    assert result.exit_code == 1
+    assert "so this cannot run a tick — stop it first" in result.output

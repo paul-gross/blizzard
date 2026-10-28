@@ -1826,7 +1826,7 @@
       "short_help": "Take over a chunk this runner holds: resume its session interactively in this terminal."
     },
     "tick": {
-      "help": "Run one pass of the host's runner against the live hub and workspace, then exit.\n\nRefused on a store revision mismatch, like ``host``, while another process holds the directory, or while\nany of the host's runners is halted.",
+      "help": "Run one pass of the host's runner against the live hub and workspace, then exit.\n\nWhile a host serves the directory, the pass is stepped on that host over its socket, by the runner --runner\nnames or the host's only one; --host steps the host-wide pass instead. Exits 0 only when the pass completed.\nWith no host serving, the pass runs here: refused on a store revision mismatch, like ``host``, while another\nprocess holds the directory, or while any of the host's runners is halted.",
       "params": [
         {
           "help": "Host directory (overrides $BZ_RUNNER_DIR).",
@@ -1851,6 +1851,18 @@
           "required": false,
           "secondary_opts": [],
           "type": "text"
+        },
+        {
+          "help": "Run the host-wide pass of a running host instead of a runner's; refused when no host is running.",
+          "hidden": false,
+          "kind": "option",
+          "name": "host_pass",
+          "opts": [
+            "--host"
+          ],
+          "required": false,
+          "secondary_opts": [],
+          "type": "boolean"
         }
       ],
       "path": "runner tick",
