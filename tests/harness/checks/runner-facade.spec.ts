@@ -7,8 +7,12 @@ test.describe('at fresh-tenant', () => {
     const runner = runnerHost.runners['runner-local'];
     const listed = await api.get('/api/runners');
     expect((listed.body.runners as { runner_id: string }[]).map((entry) => entry.runner_id)).toEqual([runner?.id]);
-    const stream = await runnerStream(runnerHost.url);
+    const stream = await runnerStream(runnerHost.url, { fromNow: true });
     expect(stream.contentType).toMatch(/^text\/event-stream/);
+    // A pause is a change the host announces, so its frame is the host's own and reaches the stream.
+    expect((await runner!.setPaused(true)).status).toBe(200);
+    const frame = await stream.waitFor((candidate) => candidate.event === 'fact-changed');
+    expect(frame.id).toBeGreaterThan(0);
     const result = await runnerHost.cli(['tick']);
     expect(result.code, result.stdout + result.stderr).toBe(0);
   });
