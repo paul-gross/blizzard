@@ -138,7 +138,7 @@ class _Run:
 
     visit: Visit
     effects: IEffectSink
-    log: list[str] = field(default_factory=list)
+    log: list[str] = field(default_factory=list[str])
     #: The latest moment a rate-limited forge said to come back, read by a ``pending`` answer.
     resume_at: datetime | None = None
 
