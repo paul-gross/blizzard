@@ -286,7 +286,7 @@ Each binding reads the credential file its own vendor CLI writes: `~/.claude/.cr
 `~/.codex/auth.json` for `openai`, either overridable per declaration with `credentials_path`. Each samples its
 vendor's public usage endpoint — `https://api.anthropic.com` or `https://chatgpt.com/backend-api` — unless the
 declaration sets `usage_api_base` to another `http(s)` base, such as a provider gateway; the adapter keeps its own usage
-path, headers, and failure behavior under it, and a malformed value fails config load. **Blizzard never writes
+path, headers, and failure behavior under it, and a malformed value, or one with credentials, a query or a fragment, fails config load. **Blizzard never writes
 that file** — the vendor CLI owns the refresh flow, its lock, and its refresh-token rotation — but renewal is delegated
 to it, per provider. `openai` carries a renewal binding: once the access token is within ten minutes of its own expiry,
 the runner asks `codex app-server` for a proactive refresh, at most once per the subscription's own sampling interval,

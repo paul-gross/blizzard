@@ -410,7 +410,18 @@ def test_an_undeclared_usage_api_base_is_none(tmp_path: Path) -> None:
     assert chosen.usage_api_base is None
 
 
-@pytest.mark.parametrize("base", ['"gateway.test"', '"ftp://gateway.test"', '"http://"', "7"])
+@pytest.mark.parametrize(
+    "base",
+    [
+        '"gateway.test"',
+        '"ftp://gateway.test"',
+        '"http://"',
+        '"https://h/p?x=1"',
+        '"https://h/p#f"',
+        '"https://u:pw@h/p"',
+        "7",
+    ],
+)
 def test_a_malformed_usage_api_base_is_refused_without_echoing_the_value(tmp_path: Path, base: str) -> None:
     write_minimal_host(tmp_path, top=_subscription_top(base), runner='subscription = "anthropic"\n')
     with pytest.raises(HostConfigError) as raised:

@@ -418,13 +418,27 @@ class Context:
 
 def _usage_api_base(raw: object, slug: str) -> str | None:
     """The validated ``usage_api_base`` of subscription ``slug``: absent is ``None``, otherwise an
-    ``http(s)`` URL with a host. A rejection names the slug, never echoing the value, which may
+    ``http(s)`` URL with a host and no userinfo, query or fragment (the usage path is appended to
+    it). A rejection names the slug, never echoing the value, which may
     embed credentials."""
     if raw is None:
         return None
     parsed = urlsplit(raw) if isinstance(raw, str) else None
-    if not isinstance(raw, str) or parsed is None or parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise ConfigError(f"[[subscription]] {slug!r} usage_api_base must be an http(s) URL with a host")
+    if (
+        not isinstance(raw, str)
+        or parsed is None
+        or parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.query
+        or parsed.fragment
+        or "@" in parsed.netloc
+        or "?" in raw
+        or "#" in raw
+    ):
+        raise ConfigError(
+            f"[[subscription]] {slug!r} usage_api_base must be an http(s) URL with a host "
+            "and no credentials, query or fragment"
+        )
     return raw.rstrip("/")
 
 
