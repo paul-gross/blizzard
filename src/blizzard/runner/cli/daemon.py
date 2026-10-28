@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import click
 
@@ -64,7 +64,7 @@ class RunnerDaemon:
     #: The runner the operator named with ``--runner``, by name or id; ``None`` lets a host of one answer.
     selector: str | None = None
     #: The runner this door reaches, once the host has named it.
-    _runner: dict[str, str] = field(default_factory=dict, compare=False, repr=False)
+    _runner: dict[str, str] = field(default_factory=dict[str, str], compare=False, repr=False)
 
     @classmethod
     def reach(
@@ -202,10 +202,17 @@ class RunnerDaemon:
 def _flag_off(resp: Response) -> bool:
     """Whether a ``404`` is the host's ``flag_off`` refusal: the route is held behind a flag that is off."""
     try:
-        detail = resp.json().get("detail")
+        body: object = resp.json()
     except ValueError:
         return False
-    return isinstance(detail, dict) and detail.get("code") == "flag_off" and isinstance(detail.get("message"), str)
+    if not isinstance(body, dict):
+        return False
+    body_dict = cast(dict[object, object], body)
+    detail = body_dict.get("detail")
+    if not isinstance(detail, dict):
+        return False
+    detail_dict = cast(dict[object, object], detail)
+    return detail_dict.get("code") == "flag_off" and isinstance(detail_dict.get("message"), str)
 
 
 def _named(items: list[dict[str, Any]]) -> str:

@@ -9,6 +9,7 @@ import secrets
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from blizzard.cli.collaborators import ClientFactory
@@ -134,8 +135,8 @@ class Login:
             raise LoginError(
                 "the hub rejected the login exchange — the code, PKCE verifier, or redirect_uri did not match"
             )
-        body = resp.json()
-        token = body.get("token") if isinstance(body, dict) else None
+        body: object = resp.json()
+        token = cast(dict[str, object], body).get("token") if isinstance(body, dict) else None
         if not isinstance(token, str) or not token:
             raise LoginError("the hub's login exchange response carried no token")
         return token

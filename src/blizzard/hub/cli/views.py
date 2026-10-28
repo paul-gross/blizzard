@@ -5,17 +5,17 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.spend import SpendFigure
 
 
-def pointer_label(row: dict[str, Any]) -> str:
+def pointer_label(row: dict[str, object]) -> str:
     """A pointer a response carries, as people read it: its hub-rendered ``label``, else ``{slug}#{ref}`` under the
     source's current slug, else the raw ``{source}#{ref}``."""
-    return row.get("label") or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
+    return cast(str, row.get("label")) or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
 
 
 @dto
@@ -105,7 +105,7 @@ class RunnerLine:
     def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Name which brake is on (pinned by
         tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
-        brakes = []
+        brakes: list[str] = []
         if self.row.get("hub_paused"):
             brakes.append("hub")
         if self.row.get("locally_paused"):
@@ -117,7 +117,7 @@ class RunnerLine:
     def declining(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """The first throttle an online, unbraked runner reported as saying no — the brake wins the slot; nothing for an
         offline runner or one that reported none."""
-        reasons = self.row.get("declining") or []
+        reasons = cast(list[dict[str, Any]], self.row.get("declining") or [])
         if not reasons or self.brake or self.connection != "online":
             return ""
         return f" [declining: {_declining_reason(reasons[0])}]"
@@ -142,7 +142,7 @@ class QuestionLine:
     row: dict[str, Any]
 
     def line(self) -> str:
-        options = self.row.get("options") or []
+        options = cast(list[str], self.row.get("options") or [])
         offered = f"  [{'|'.join(options)}]" if options else ""
         return f"{self.row['question_id']}  (chunk {self.row['chunk_id']}): {self.row['question']}{offered}"
 

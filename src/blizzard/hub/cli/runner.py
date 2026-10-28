@@ -203,7 +203,7 @@ def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None
     )
     body = resp.json()
     lines = [f"runner {runner_id} is retired"]
-    released = body.get("released_chunk_ids") or []
+    released: list[str] = body.get("released_chunk_ids") or []
     if released:
         lines.append(f"released: {', '.join(released)}")
     cli.show_lines(body, *lines)

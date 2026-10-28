@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from structlog.testing import capture_logs
@@ -17,7 +17,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import RUNNER_LOCALLY_PAUSED
 from blizzard.runner.api.control import _throttle_view
-from blizzard.runner.cli.control import _throttle_lines
+from blizzard.runner.cli.control import _Throttle, _throttle_lines
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.lifecycle.spawn import Spawner, SuppressionCause
@@ -120,7 +120,7 @@ def test_status_reads_the_gate_even_under_a_brake_and_projects_utc_instants() ->
     assert view.floor.hold is not None
     assert view.floor.hold.expected_reset.endswith("Z")
     assert view.levers == []
-    assert "declining: floor" in _throttle_lines(view.model_dump())[0]
+    assert "declining: floor" in _throttle_lines(cast(_Throttle, view.model_dump()))[0]
     ctx.host_stores.usage_limits.record_floor_clear(_SLUG, FloorClear(cleared_at=_NOW, by="operator"))
     cleared = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False))
     assert cleared.floor.admits
@@ -136,11 +136,11 @@ def test_status_holds_on_both_with_no_settings_and_shows_the_configured_choices(
     releasing = ThrottleSettings(on_decline=HoldOrRelease.RELEASE)
     view = _throttle_view(ThrottleStatus.of(gate.verdict(), braked=False, settings=releasing))
     assert (view.on_decline, view.on_usage_limit) == ("release", "hold")
-    assert "on_decline: release; on_usage_limit: hold" in "\n".join(_throttle_lines(view.model_dump()))
+    assert "on_decline: release; on_usage_limit: hold" in "\n".join(_throttle_lines(cast(_Throttle, view.model_dump())))
 
 
 def test_cli_renders_configured_lever_setting_reading_answer_and_until() -> None:
-    throttle = {
+    throttle: _Throttle = {
         "state": "declining",
         "declining": ["pace"],
         "floor": {"subscription": None, "admits": True, "hold": None, "clear": None},
@@ -211,7 +211,7 @@ def test_a_runner_naming_no_subscription_reads_its_own_mark() -> None:
     assert view.state == "declining"
     assert view.declining == ["floor"]
     assert view.floor.subscription is None
-    assert "floor (runner): hold" in _throttle_lines(view.model_dump())[1]
+    assert "floor (runner): hold" in _throttle_lines(cast(_Throttle, view.model_dump()))[1]
 
 
 def test_an_unsampled_providers_mark_opens_at_its_reset_alone() -> None:

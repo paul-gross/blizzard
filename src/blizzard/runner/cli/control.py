@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import NotRequired, TypedDict
 
 import click
 
@@ -36,6 +36,62 @@ _SELFTEST_POLL_INTERVAL = 0.2
 _SELFTEST_POLL_TIMEOUT = 600.0
 
 
+class _ServedProject(TypedDict):
+    entry: str
+    resolved: bool
+    slug: NotRequired[str | None]
+    answered: NotRequired[bool]
+
+
+class _Tenant(TypedDict, total=False):
+    tenant_id: str | None
+    tenant_name: str | None
+
+
+class _Hold(TypedDict):
+    kind: str
+    window: NotRequired[str | None]
+    harness_id: NotRequired[str | None]
+    grace_opens_at: NotRequired[str | None]
+    expected_reset: str
+    awaits_sample: bool
+
+
+class _Clear(TypedDict):
+    by: str
+    cleared_at: str
+
+
+class _Floor(TypedDict):
+    admits: bool
+    subscription: NotRequired[str | None]
+    hold: NotRequired[_Hold | None]
+    clear: NotRequired[_Clear | None]
+
+
+class _Lever(TypedDict):
+    name: str
+    setting: str
+    admits: bool
+    reading: str
+    until: str | None
+
+
+class _Throttle(TypedDict):
+    floor: _Floor
+    state: str
+    declining: NotRequired[list[str]]
+    levers: NotRequired[list[_Lever]]
+    on_decline: str
+    on_usage_limit: str
+
+
+class _Session(TypedDict, total=False):
+    session_name: str | None
+    model: str | None
+    effort: str | None
+
+
 def _set_local_paused(
     *, paused: bool, by: str, directory: str, runner_url: str | None, runner: str | None, door: Door
 ) -> None:
@@ -63,7 +119,7 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
-def _served_line(served: list[dict[str, Any]] | None) -> str | None:
+def _served_line(served: list[_ServedProject] | None) -> str | None:
     """The status's ``serves:`` line — each project the hub resolved, by slug, then each entry no project
     answers to and each configured entry not answered yet, marked so — or ``None`` when nothing names any."""
     if served is None:
@@ -79,7 +135,7 @@ def _served_line(served: list[dict[str, Any]] | None) -> str | None:
     return f"  serves: {'; '.join(parts)}"
 
 
-def _tenant_part(view: dict[str, Any]) -> str:
+def _tenant_part(view: _Tenant) -> str:
     """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
     names the runner's tenant has answered."""
     tenant_id = view.get("tenant_id")
@@ -88,7 +144,7 @@ def _tenant_part(view: dict[str, Any]) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
-def _throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
+def _throttle_lines(throttle: _Throttle | None) -> list[str]:
     if throttle is None:
         return []
     declining = ", ".join(throttle.get("declining", [])) or "none"
@@ -101,8 +157,7 @@ def _throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
         detail = f"{hold['kind']} ({hold.get('window') or hold.get('harness_id') or 'usage limit'}), until {until}"
         if hold["awaits_sample"]:
             detail += f"; reset {hold['expected_reset']}, awaiting sample"
-    elif floor.get("clear") is not None:
-        clear = floor["clear"]
+    elif (clear := floor.get("clear")) is not None:
         detail = f"hand clear by {clear['by']} at {clear['cleared_at']}"
     else:
         detail = "open"
@@ -124,7 +179,7 @@ class SessionLabel:
     Empty when the escalation carries none of the three, so a bare line reads as
     "not recorded" rather than inventing one."""
 
-    escalation: dict[str, Any]
+    escalation: _Session
 
     @property
     def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -168,7 +223,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         takeovers_resp = daemon.get("/api/takeovers")
         subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
         escalations = escalations_resp.json().get("items", [])
-        harness_health = (
+        harness_health: list[dict[str, object]] = (
             daemon.get("/api/harness-health").json().get("items", [])
             if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations)
             else []
@@ -228,7 +283,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     for env in envs:
         click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
     # Absent from a runner that predates the field; each one still holds its lease and agent slot.
-    unmatched = view.get("unmatched_bindings") or []
+    unmatched: list[dict[str, object]] = view.get("unmatched_bindings") or []
     if unmatched:
         click.echo(f"\nheld bindings matching no workspace ({len(unmatched)}):")
         for binding in unmatched:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any
+from typing import cast
 from urllib.parse import quote
 
 import click
@@ -28,11 +28,11 @@ class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
 
-    artifact: dict[str, Any]
+    artifact: dict[str, object]
 
     @property
-    def summary(self) -> dict[str, Any]:  # ast-grep-ignore: bzh:property-delegates
-        content = self.artifact.get("content")
+    def summary(self) -> dict[str, object]:  # ast-grep-ignore: bzh:property-delegates
+        content = cast(str | None, self.artifact.get("content"))
         summary = {k: v for k, v in self.artifact.items() if k != "content"}
         summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
         return summary
@@ -50,7 +50,7 @@ def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 
-def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, Any]]:
+def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, object]]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
     excludes node — ``graph`` and ``system`` never have one. Also ``[]``, noted on stderr, on a
     failed read."""
@@ -94,7 +94,8 @@ def artifact_list(content: bool, scope: str | None) -> None:
         params={"scope": scope} if scope else None,
     )
     staged = _staged_for_scope(worker, scope)
-    entries = [{**a, "staged": False} for a in resp.json()] + [{**a, "staged": True} for a in staged]
+    published: list[dict[str, object]] = resp.json()
+    entries = [{**a, "staged": False} for a in published] + [{**a, "staged": True} for a in staged]
     if content:
         click.echo(json.dumps(entries))
         return

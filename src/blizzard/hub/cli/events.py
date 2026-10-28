@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -24,7 +24,7 @@ class FeedListing(Listing):
         node = f" node={row['node_name']}" if row.get("node_name") else ""
         # An escalation row carries its explanation as `detail.detail`; other rows' payloads stay JSON-only.
         payload = row.get("detail")
-        explained = payload.get("detail") if isinstance(payload, dict) else None
+        explained = cast(dict[str, object], payload).get("detail") if isinstance(payload, dict) else None
         why = f" ({explained})" if isinstance(explained, str) and explained else ""
         return f"{row['recorded_at']}  {row['severity']:<8} {row['kind']}{runner}{chunk}{node}  {row['message']}{why}"
 

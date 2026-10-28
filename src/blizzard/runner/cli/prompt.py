@@ -19,7 +19,6 @@ from blizzard.runner.harness.workspace_prompts import (
     PACKAGED,
     WORKSPACE_PROMPT_FILENAME,
     EffectiveWorkspacePrompt,
-    IConfiguredWorkspacePrompts,
     UnknownWorkspacePromptSample,
     WorkspacePromptReader,
 )
