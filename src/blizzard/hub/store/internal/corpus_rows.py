@@ -266,22 +266,27 @@ def _questions(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedQue
 
 
 def _turns(conn: Connection, ids: Sequence[str]) -> dict[str, list[TracedHubTurn]]:
-    turn, submission = s.hub_turns, s.flow_submissions
-    stmt = (
-        select(submission.c.chunk_id, submission.c.node_id, turn)
-        .join(
-            submission,
-            and_(
-                submission.c.submission_id == turn.c.submission_id,
-                submission.c.tenant_id == turn.c.tenant_id,
-            ),
-        )
-        .where(of_chunks(submission, submission.c.chunk_id, ids))
-        .order_by(turn.c.started_at)
-    )
+    """Each chunk's turns, read through its submissions so both reads seek a tenant-led index."""
+    submission, turn = s.flow_submissions.c, s.hub_turns.c
+    visits = {
+        r.submission_id: (r.chunk_id, r.node_id)
+        for r in conn.execute(
+            select(submission.submission_id, submission.chunk_id, submission.node_id).where(
+                of_chunks(s.flow_submissions, submission.chunk_id, ids)
+            )
+        ).all()
+    }
     grouped: dict[str, list[TracedHubTurn]] = defaultdict(list)
-    for r in conn.execute(stmt).all():
-        grouped[r.chunk_id].append(TracedHubTurn(r.turn_id, r.node_id, r.started_at, r.ended_at))
+    chunk_tenants = select(s.chunks.c.tenant_id).where(s.chunks.c.chunk_id.in_(ids))
+    for batch in id_batches(sorted(visits)):
+        rows = conn.execute(
+            select(s.hub_turns)
+            .where(open_tenant(s.hub_turns), turn.tenant_id.in_(chunk_tenants), turn.submission_id.in_(batch))
+            .order_by(turn.started_at)
+        ).all()
+        for r in rows:
+            chunk_id, node_id = visits[r.submission_id]
+            grouped[chunk_id].append(TracedHubTurn(r.turn_id, node_id, r.started_at, r.ended_at))
     return grouped
 
 
