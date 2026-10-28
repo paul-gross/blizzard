@@ -262,6 +262,11 @@ describe('ChunkEscalation', () => {
         'The hub node the chunk stands at names no action the hub can take (epoch 3).',
       ],
       [
+        'hub-action-stuck',
+        'hub node `deliver` action `land` was cut off at its 330s deadline in its last 3 turns',
+        "The hub node's action was cut off at its deadline three turns in a row (epoch 3).",
+      ],
+      [
         'unroutable-outcome',
         'hub node `deliver` answered `landed`, which no edge routes',
         "The hub node's answer has no edge to route the chunk on (epoch 3).",
