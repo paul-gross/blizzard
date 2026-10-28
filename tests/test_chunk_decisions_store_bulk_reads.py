@@ -9,13 +9,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from tests.support import chunk_stores, count_queries, migrate_to, seed_chunk_record, seed_graph
+from blizzard.hub.store import schema as s
+from tests.support import chunk_stores, count_queries, count_rows_read, migrate_to, seed_chunk_record, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
@@ -88,6 +89,39 @@ def test_list_open_decisions_query_count_is_independent_of_fleet_size(tmp_path: 
     assert len(small.decisions.list_open_decisions()) == 3
     assert len(large.decisions.list_open_decisions()) == 9
     assert small_count == large_count
+
+
+@pytest.mark.parametrize("closure", ["transition", "migration", "escalation", "restart"])
+def test_fact_closed_undecided_history_is_filtered_before_hydration(tmp_path: Path, closure: str) -> None:
+    store, engine = _store(tmp_path)
+    _mint(store, "ch_open")
+    _record_decision(store, "ch_open", "dec_open")
+    baseline = count_rows_read(engine, store.decisions.list_open_decisions)
+
+    for i in range(12):
+        chunk_id, decision_id = f"ch_closed_{i}", f"dec_closed_{i}"
+        _mint(store, chunk_id)
+        _record_decision(store, chunk_id, decision_id)
+        if closure == "transition":
+            _transition(store, chunk_id, decision_id, transition_id=f"tr_{i}")
+        else:
+            table, values = {
+                "migration": (
+                    s.chunk_migrations,
+                    {"migration_id": f"mg_{i}", "from_graph_id": "gr_1", "to_graph_id": "gr_1"},
+                ),
+                "escalation": (s.escalations, {"takeover_command": ""}),
+                "restart": (s.chunk_restarts, {"graph_id": "gr_1", "to_node_id": "nd_2", "restarted_by": "op"}),
+            }[closure]
+            with engine.begin() as conn:
+                conn.execute(
+                    insert(table).values(
+                        stamp(table, chunk_id=chunk_id, decision_id=decision_id, epoch=1, recorded_at=_T0, **values)
+                    )
+                )
+
+    assert [d.decision_id for d in store.decisions.list_open_decisions()] == ["dec_open"]
+    assert count_rows_read(engine, store.decisions.list_open_decisions) == baseline
 
 
 def test_decision_for_chunk_query_count_is_independent_of_that_chunks_history_length(tmp_path: Path) -> None:

@@ -149,7 +149,8 @@ def answer_question(
 @router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_open_questions(services: Services, project: QueryProject) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface — or only
-    ``?project=``'s."""
+    ``?project=``'s. Return the whole pending attention set so operators see every
+    question awaiting an answer, rather than only one page."""
     rows = services.chunks.questions.list_open_questions(project=project)
     runner_names = services.registry.names_for(row.runner_id for row in rows)
     labels = ProjectLabels.read(services, (row.project_id for row in rows))

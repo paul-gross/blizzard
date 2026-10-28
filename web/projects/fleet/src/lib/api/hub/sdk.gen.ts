@@ -776,7 +776,8 @@ export const getSchemaApiConfigSchemaKindGet = <ThrowOnError extends boolean = f
 /**
  * List Decisions
  *
- * The fleet's open (unresolved) decisions — gate surfacing — or only ``?project=``'s.
+ * The fleet's open decisions, or only ``?project=``'s. Return the whole pending
+ * attention set: operators need every gate awaiting a choice, not a page of them.
  */
 export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListDecisionsApiDecisionsGetData, ThrowOnError>): RequestResult<ListDecisionsApiDecisionsGetResponses, ListDecisionsApiDecisionsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListDecisionsApiDecisionsGetResponses, ListDecisionsApiDecisionsGetErrors, ThrowOnError>({ url: '/api/decisions', ...options });
 
@@ -2150,7 +2151,8 @@ export const unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost = <ThrowO
  * List Open Questions
  *
  * Every open (unanswered) question across the fleet — the ``hub status`` surface — or only
- * ``?project=``'s.
+ * ``?project=``'s. Return the whole pending attention set so operators see every
+ * question awaiting an answer, rather than only one page.
  */
 export const listOpenQuestionsApiQuestionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListOpenQuestionsApiQuestionsGetData, ThrowOnError>): RequestResult<ListOpenQuestionsApiQuestionsGetResponses, ListOpenQuestionsApiQuestionsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListOpenQuestionsApiQuestionsGetResponses, ListOpenQuestionsApiQuestionsGetErrors, ThrowOnError>({ url: '/api/questions', ...options });
 

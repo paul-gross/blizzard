@@ -74,7 +74,8 @@ def to_decision_view(row: GateDecision, runner_names: Mapping[str, str], project
 
 @router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsResponse:
-    """The fleet's open (unresolved) decisions — gate surfacing — or only ``?project=``'s."""
+    """The fleet's open decisions, or only ``?project=``'s. Return the whole pending
+    attention set: operators need every gate awaiting a choice, not a page of them."""
     rows = services.chunks.decisions.list_open_decisions(project=project)
     runner_names = services.registry.names_for(
         d.imposed_by_runner_id for d in rows if d.imposed_by_runner_id is not None

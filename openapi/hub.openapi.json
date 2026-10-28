@@ -23538,7 +23538,7 @@
     },
     "/api/decisions": {
       "get": {
-        "description": "The fleet's open (unresolved) decisions \u2014 gate surfacing \u2014 or only ``?project=``'s.",
+        "description": "The fleet's open decisions, or only ``?project=``'s. Return the whole pending\nattention set: operators need every gate awaiting a choice, not a page of them.",
         "operationId": "list_decisions_api_decisions_get",
         "parameters": [
           {
@@ -30179,7 +30179,7 @@
     },
     "/api/questions": {
       "get": {
-        "description": "Every open (unanswered) question across the fleet \u2014 the ``hub status`` surface \u2014 or only\n``?project=``'s.",
+        "description": "Every open (unanswered) question across the fleet \u2014 the ``hub status`` surface \u2014 or only\n``?project=``'s. Return the whole pending attention set so operators see every\nquestion awaiting an answer, rather than only one page.",
         "operationId": "list_open_questions_api_questions_get",
         "parameters": [
           {
