@@ -239,7 +239,7 @@ class GardenProposal:
     body: str
     created_at: datetime
     created_by: str | None = None  # set only for `GardenProposalOrigin.OPERATOR`
-    findings: list[str] = field(default_factory=list)  # the finding ids this proposal answers
+    findings: list[str] = field(default_factory=list[str])  # the finding ids this proposal answers
     project_id: str = field(kw_only=True)  # a routine-run's routine's project, or the operator's call's
 
     @classmethod

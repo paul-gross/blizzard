@@ -87,15 +87,17 @@ class ValidatedDelivery:
     run: RunContext
     deltas: list[DeliveredDelta]
     proposals: list[ProposalCandidate]
-    proposal_sources: list[str] = field(default_factory=list)  # proposals[i]'s own artifact name, positionally
+    proposal_sources: list[str] = field(default_factory=list[str])  # proposals[i]'s own artifact name, positionally
     #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
     #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
-    introduced_at: dict[tuple[str, str], datetime | None] = field(default_factory=dict)
+    introduced_at: dict[tuple[str, str], datetime | None] = field(
+        default_factory=dict[tuple[str, str], datetime | None]
+    )
     #: Every citable finding's :meth:`Finding.run_gone`: the fact kind and actor a run's `gone` lands as.
-    gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+    gone_settlements: dict[str, tuple[str, str | None]] = field(default_factory=dict[str, tuple[str, str | None]])
     #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
     #: names — what the write re-checks under the finding's row lock.
-    expect: dict[str, str] = field(default_factory=dict)
+    expect: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @domain_model
@@ -338,7 +340,7 @@ def validate_delivery(
     cited = {op.id for delta in deltas for op in delta.findings if not isinstance(op, FindingAddOp)}
     cited.update(entry for proposal in proposals for entry in proposal.findings)
     absent = frozenset(i for i in cited if is_finding_id_shaped(i) and i not in live_findings)
-    exited_ids = resolve_exited(absent) if absent else frozenset()
+    exited_ids: frozenset[str] = resolve_exited(absent) if absent else frozenset()
 
     introduced_at: dict[tuple[str, str], datetime | None] = {}
     for delta in deltas:

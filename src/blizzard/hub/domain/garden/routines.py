@@ -150,10 +150,10 @@ class Routine:
     default_scope_slug: str
     created_at: datetime
     project_id: str
-    default_model: list[str] = field(default_factory=list)
+    default_model: list[str] = field(default_factory=list[str])
     default_effort: str | None = None
     # The routine's default harness preference, `default_model`'s shape: empty is no preference.
-    default_harnesses: list[str] = field(default_factory=list)
+    default_harnesses: list[str] = field(default_factory=list[str])
     revision: int = 1
     retired: bool = False
 
@@ -287,10 +287,10 @@ class Routine:
                 changes[name] = value
         if isinstance(edit.default_scope_slug, ScopeSlug):
             changes["default_scope_slug"] = edit.default_scope_slug.value
-        if "default_model" in changes:
-            changes["default_model"] = list(changes["default_model"])  # type: ignore[call-overload]
-        if "default_harnesses" in changes:
-            changes["default_harnesses"] = validated_harnesses(list(changes["default_harnesses"]))  # type: ignore[call-overload]
+        if edit.default_model is not UNSET and edit.default_model is not None:
+            changes["default_model"] = list(edit.default_model)
+        if edit.default_harnesses is not UNSET and edit.default_harnesses is not None:
+            changes["default_harnesses"] = validated_harnesses(list(edit.default_harnesses))
         if edit.default_effort is not UNSET:
             changes["default_effort"] = edit.default_effort
         return replace(self, **changes)

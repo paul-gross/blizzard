@@ -99,7 +99,7 @@ class NewProposal:
     body: str
     source_artifact_id: str
     ref: str
-    finding_ids: list[str] = field(default_factory=list)
+    finding_ids: list[str] = field(default_factory=list[str])
 
 
 @domain_model
@@ -111,8 +111,8 @@ class DeltaMaterialization:
     earlier visit) skips only this group, never the whole plan."""
 
     finding_set: NewFindingSet
-    new_findings: list[NewFinding] = field(default_factory=list)
-    facts: list[NewFindingFact] = field(default_factory=list)
+    new_findings: list[NewFinding] = field(default_factory=list[NewFinding])
+    facts: list[NewFindingFact] = field(default_factory=list[NewFindingFact])
 
 
 @domain_model
@@ -133,7 +133,7 @@ class DeliveryPlan:
     proposals: list[NewProposal]
     #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
     #: names — the store re-checks it under the finding's row lock and returns ``GUARD_LOST`` on a move.
-    expect: dict[str, str] = field(default_factory=dict)
+    expect: dict[str, str] = field(default_factory=dict[str, str])
 
 
 # --- Repository seam (I-prefix — bzh:repository-split) ---------------------------

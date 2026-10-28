@@ -10,11 +10,32 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.domain.graph.model import GraphDoc
+from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc, SessionDecl
 from blizzard.hub.domain.graph.validation import Validator
 from tests.support import TEST_CATALOGUE
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("value, expected", [("3", 3), (2.5, 2), (b"4", 4), (True, 1)])
+def test_retry_max_preserves_int_coercion(value: object, expected: int) -> None:
+    assert NodeDoc.of("build", {"retries": {"max": value}}).retries_max == expected
+
+
+def test_retry_max_refuses_non_numeric_values() -> None:
+    with pytest.raises(TypeError):
+        NodeDoc.of("build", {"retries": {"max": []}})
+
+
+def test_action_arguments_record_malformed_lists() -> None:
+    node = NodeDoc.of("build", {"with": {"good": ["a", "b"], "bad": ["a", 1], 2: "value"}})
+    assert node.action_args == {"good": ("a", "b"), "2": ("value",)}
+    assert node.malformed_action_args == ("bad",)
+
+
+def test_session_refuses_non_string_unknown_keys() -> None:
+    with pytest.raises(TypeError):
+        SessionDecl.of("code", {1: "value"})
 
 
 def _min_build_deliver() -> dict[str, Any]:

@@ -53,9 +53,9 @@ class DeliveredDelta:
     routine's measurement, and one op per finding it added, re-observed, or found gone."""
 
     scope: str
-    revisions: Mapping[str, str] = field(default_factory=dict)
+    revisions: Mapping[str, str] = field(default_factory=dict[str, str])
     measurement: str | None = None
-    findings: list[FindingOp] = field(default_factory=list)
+    findings: list[FindingOp] = field(default_factory=list[FindingOp])
 
 
 @domain_model
@@ -68,7 +68,7 @@ class ProposalCandidate:
     class_: str
     title: str
     body: str
-    findings: list[str] = field(default_factory=list)
+    findings: list[str] = field(default_factory=list[str])
 
 
 @domain_model

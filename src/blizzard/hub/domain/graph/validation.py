@@ -58,8 +58,8 @@ class GraphValidationError(Exception):
 class ValidationResult:
     """The outcome of validating a graph definition."""
 
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list[str])
+    warnings: list[str] = field(default_factory=list[str])
 
     @property
     def ok(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
@@ -78,8 +78,8 @@ class Validator:
     catalogue: HubActionCatalogue
     node_names: set[str]
     session_names: set[str]
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list[str])
+    warnings: list[str] = field(default_factory=list[str])
 
     @classmethod
     def of(cls, doc: GraphDoc, catalogue: HubActionCatalogue) -> Validator:
@@ -193,7 +193,7 @@ class NodeCheck:
     catalogue: HubActionCatalogue
     node_names: set[str]
     session_names: set[str]
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list[str])
 
     @classmethod
     def of(
@@ -255,7 +255,7 @@ class NodeCheck:
             self.errors.append(f"hub node `{node.name}`: action `{spec.name}` declares no argument `{key}`")
         for key in sorted(spec.required_args - set(node.action_args) - set(node.malformed_action_args)):
             self.errors.append(f"hub node `{node.name}`: action `{spec.name}` requires argument `with.{key}`")
-        authored = {c.name for c in node.judgement.choices} if node.judgement is not None else set()
+        authored = {c.name for c in node.judgement.choices} if node.judgement is not None else set[str]()
         for answer in sorted(spec.answers_for(node.action_args) - RESERVED_WAITS - authored):
             self.errors.append(
                 f"hub node `{node.name}`: action `{spec.name}` can answer `{answer}`, which the node authors no "

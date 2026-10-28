@@ -91,13 +91,15 @@ class StoredProjects:
     included — each kind with the record that left each referenced slug no record of it holds."""
 
     projects: tuple[Project, ...]
-    former: Mapping[str, Project] = field(default_factory=dict)
-    source_links: Mapping[tuple[str, str], SourceLink] = field(default_factory=dict)
-    repository_links: Mapping[tuple[str, str], RepositoryLink] = field(default_factory=dict)
+    former: Mapping[str, Project] = field(default_factory=dict[str, Project])
+    source_links: Mapping[tuple[str, str], SourceLink] = field(default_factory=dict[tuple[str, str], SourceLink])
+    repository_links: Mapping[tuple[str, str], RepositoryLink] = field(
+        default_factory=dict[tuple[str, str], RepositoryLink]
+    )
     sources: tuple[WorkSourceRef, ...] = ()
-    former_sources: Mapping[str, WorkSourceRef] = field(default_factory=dict)
+    former_sources: Mapping[str, WorkSourceRef] = field(default_factory=dict[str, WorkSourceRef])
     repositories: tuple[RepositoryRef, ...] = ()
-    former_repositories: Mapping[str, RepositoryRef] = field(default_factory=dict)
+    former_repositories: Mapping[str, RepositoryRef] = field(default_factory=dict[str, RepositoryRef])
 
 
 @domain_model
@@ -107,7 +109,7 @@ class ProjectsPlan:
 
     section: ApplyPlan
     projects: tuple[Project, ...]
-    former: Mapping[str, Project] = field(default_factory=dict)
+    former: Mapping[str, Project] = field(default_factory=dict[str, Project])
 
     def project_of(self, section: str, index: int, reference: str | None) -> Project:
         """The project a scope or routine entry acts in: the one ``reference`` names — by id, by slug, or by a slug it
@@ -134,7 +136,7 @@ class PlannedRepositories:
     repositories as the apply leaves them: those stored plus those the document declares."""
 
     repositories: tuple[RepositoryRef, ...]
-    former: Mapping[str, RepositoryRef] = field(default_factory=dict)
+    former: Mapping[str, RepositoryRef] = field(default_factory=dict[str, RepositoryRef])
 
     def get(self, repository_id: RepositoryId) -> RepositoryRef | None:
         return next((r for r in self.repositories if r.repository_id == repository_id), None)
@@ -156,7 +158,7 @@ class PlannedWorkSources:
     as the apply leaves them: those stored plus those the document declares."""
 
     sources: tuple[WorkSourceRef, ...]
-    former: Mapping[str, WorkSourceRef] = field(default_factory=dict)
+    former: Mapping[str, WorkSourceRef] = field(default_factory=dict[str, WorkSourceRef])
 
     def get(self, work_source_id: WorkSourceId) -> WorkSourceRef | None:
         return next((r for r in self.sources if r.work_source_id == work_source_id), None)

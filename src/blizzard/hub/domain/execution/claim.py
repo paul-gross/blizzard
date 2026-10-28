@@ -184,6 +184,8 @@ def refuse_paused_runner(registration: RunnerRegistration | None, *, runner_id: 
             refuse_version_refused(registration)
         case ClaimBar.PAUSED:
             raise ClaimDeniedPaused(runner_id=runner_id)
+        case None:
+            pass
     return registration
 
 

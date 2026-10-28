@@ -7,13 +7,13 @@ compiles into at mint. Every type is dependency-free (``bzh:domain-core``)."""
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Buffer, Collection, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, SupportsIndex, SupportsInt, TypeGuard
 
 from blizzard import __version__ as HUB_VERSION
 from blizzard.foundation.artifacts import ArtifactKind
@@ -25,6 +25,22 @@ from blizzard.foundation.roles import domain_model
 
 class GraphParseError(ValueError):
     """A graph definition is structurally malformed (before validation)."""
+
+
+def _retry_max(value: object) -> int:
+    if isinstance(value, (str, Buffer, SupportsInt, SupportsIndex)):
+        return int(value)
+    raise TypeError(
+        f"int() argument must be a string, a bytes-like object or a real number, not '{type(value).__name__}'"
+    )
+
+
+def _is_mapping(value: object) -> TypeGuard[dict[object, object]]:
+    return isinstance(value, dict)
+
+
+def _is_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 class TargetGraphRetired(Exception):
@@ -141,13 +157,14 @@ class Parser:
     Structural coercion only — a shape that cannot be read raises
     :class:`GraphParseError`; whether a readable value is *legal* is the validator's."""
 
-    body: dict[str, object]
+    body: dict[object, object]
 
     @classmethod
     def of(cls, value: object, where: object) -> Parser:
-        if not isinstance(value, dict):
+        if not _is_mapping(value):
             raise GraphParseError(f"expected a map at {where!r}, got {type(value).__name__}")
-        return cls(value)
+        body: dict[object, object] = value
+        return cls(body)
 
     def get(self, key: str, default: object = None) -> object:
         return self.body.get(key, default)
@@ -170,9 +187,10 @@ class Parser:
         value = self.body.get(key)
         if value is None:
             return []
-        if not isinstance(value, list):
+        if not _is_list(value):
             raise GraphParseError(f"expected a list, got {type(value).__name__}")
-        return value
+        items: list[object] = value
+        return items
 
 
 # --- Authoring doc (parsed from a YAML body, pre-mint) ----------------------
@@ -222,17 +240,19 @@ class JudgementDoc:
     def of(cls, raw: object) -> JudgementDoc | None:
         if raw is None:
             return None
-        if not isinstance(raw, dict):
+        if not _is_mapping(raw):
             raise GraphParseError("`judgement` must be a map")
-        body = Parser(raw)
+        mapping: dict[object, object] = raw
+        body = Parser(mapping)
         by = JudgedBy(str(body.get("by", JudgedBy.WORKER.value)))
         choices_raw = body.get("choices", {})
-        if not isinstance(choices_raw, dict):
+        if not _is_mapping(choices_raw):
             raise GraphParseError("`judgement.choices` must be a map of choice name -> entry")
+        choices: dict[object, object] = choices_raw
         return cls(
             prompt=body.text("prompt"),
             by=by,
-            choices=[ChoiceDoc.of(name, entry) for name, entry in choices_raw.items()],
+            choices=[ChoiceDoc.of(name, entry) for name, entry in choices.items()],
         )
 
 
@@ -315,13 +335,13 @@ class NodeDoc(NodeShape):
     # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
     bounce_cap: int | None = None
     # The hub command node's declared commands (#65, #67); empty on a worker node.
-    run: list[RunStepDoc] = field(default_factory=list)
+    run: list[RunStepDoc] = field(default_factory=list[RunStepDoc])
     # Whether the node declares ``run:`` at all, an empty list included — what mint refuses.
     names_run: bool = False
     # The hub action this node names, in place of ``run:``, and its ``with:`` arguments,
     # each one value or a list read as a tuple.
     action: str | None = None
-    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     # The ``with:`` keys whose value is neither a string nor a list of strings — recorded,
     # not refused, so validation can name each one.
     malformed_action_args: tuple[str, ...] = ()
@@ -377,7 +397,7 @@ class NodeDoc(NodeShape):
             session_malformed=session.malformed,
             checks_cwd=checks_cwd,
             checks_timeout=checks_timeout,
-            retired_keys=tuple(sorted(set(body.body) & RETIRED_NODE_KEYS)),
+            retired_keys=tuple(sorted(key for key in RETIRED_NODE_KEYS if key in body.body)),
         )
 
     @staticmethod
@@ -390,20 +410,25 @@ class NodeDoc(NodeShape):
         for key, value in body.items():
             if isinstance(value, str):
                 args[str(key)] = (value,)
-            elif isinstance(value, list) and all(isinstance(v, str) for v in value):
-                args[str(key)] = tuple(value)
+            elif _is_list(value):
+                values: list[object] = value
+                if all(isinstance(v, str) for v in values):
+                    args[str(key)] = tuple(v for v in values if isinstance(v, str))
+                else:
+                    malformed.append(str(key))
             else:
                 malformed.append(str(key))
         return args, tuple(sorted(malformed))
 
     @staticmethod
     def _retries(raw: object) -> tuple[int | None, str | None]:
-        if not isinstance(raw, dict):
+        if not _is_mapping(raw):
             return (None, None)
-        raw_max = raw.get("max")
-        raw_exhausted = raw.get("exhausted")
+        mapping: dict[object, object] = raw
+        raw_max = mapping.get("max")
+        raw_exhausted = mapping.get("exhausted")
         return (
-            int(raw_max) if raw_max is not None else None,
+            _retry_max(raw_max) if raw_max is not None else None,
             str(raw_exhausted) if raw_exhausted is not None else None,
         )
 
@@ -447,17 +472,20 @@ class SessionDecl:
     ``compaction_window``, and ``harnesses`` (its own acceptable set) are opaque to the hub."""
 
     name: str
-    model: list[str] = field(default_factory=list)
+    model: list[str] = field(default_factory=list[str])
     effort: str | None = None
     rotate: RotatePolicy | None = None
     compaction_window: str | None = None
-    harnesses: list[str] = field(default_factory=list)
+    harnesses: list[str] = field(default_factory=list[str])
 
     @classmethod
     def of(cls, key: object, raw: object) -> SessionDecl:
         body = Parser.of(raw, f"session {key!r}")
         name = str(key)
-        unknown = sorted(set(body.body) - SESSION_KNOWN_KEYS)
+        unknown_keys = [key for key in body.body if key not in SESSION_KNOWN_KEYS]
+        if any(not isinstance(key, str) for key in unknown_keys):
+            raise TypeError("session keys must be strings")
+        unknown = sorted(key for key in unknown_keys if isinstance(key, str))
         if unknown:
             # Pinned by tests/test_graph_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key
             raise GraphParseError(
@@ -499,10 +527,10 @@ class GraphDoc:
     nodes: list[NodeDoc]
     # The graph-level named-session declarations, keyed by name — a top-level
     # sibling of ``nodes:``, empty for every graph that declares none.
-    sessions: dict[str, SessionDecl] = field(default_factory=dict)
+    sessions: dict[str, SessionDecl] = field(default_factory=dict[str, SessionDecl])
     # The graph-scoped `artifacts:` map, name -> baked content — a top-level sibling of
     # `nodes:`/`sessions:`. Every value is already inlined text by the time this parses.
-    artifacts: dict[str, str] = field(default_factory=dict)
+    artifacts: dict[str, str] = field(default_factory=dict[str, str])
 
     @classmethod
     def of(cls, raw: dict[str, object]) -> GraphDoc:
@@ -513,12 +541,13 @@ class GraphDoc:
             nodes_raw = raw["nodes"]
         except KeyError as exc:
             raise GraphParseError(f"graph definition missing required key: {exc}") from exc
-        if not isinstance(nodes_raw, dict):
+        if not _is_mapping(nodes_raw):
             raise GraphParseError("`nodes` must be a map of node name -> node")
+        nodes: dict[object, object] = nodes_raw
         return cls(
             name=name,
             entry=entry,
-            nodes=[NodeDoc.of(node_name, body) for node_name, body in nodes_raw.items()],
+            nodes=[NodeDoc.of(node_name, body) for node_name, body in nodes.items()],
             sessions=cls._sessions(raw.get("sessions")),
             artifacts=cls._artifacts(raw.get("artifacts")),
         )
@@ -602,12 +631,12 @@ class Node(NodeShape):
     retries_max: int | None
     retries_exhausted: str | None
     judgement_prompt: str | None = None
-    choices: list[Choice] = field(default_factory=list)
+    choices: list[Choice] = field(default_factory=list[Choice])
     # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
     bounce_cap: int | None = None
     # See ``NodeDoc.action`` / ``NodeDoc.action_args``.
     action: str | None = None
-    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    action_args: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     # The stored command a hub node carried over with no action still runs, verbatim; never set at mint.
     legacy_run: str | None = None
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
@@ -641,9 +670,9 @@ class Graph:
     edges: list[Edge]
     created_at: datetime
     # The graph-level named-session declarations, in authored order.
-    sessions: list[SessionDecl] = field(default_factory=list)
+    sessions: list[SessionDecl] = field(default_factory=list[SessionDecl])
     # The graph-scoped `artifacts:` declarations, in authored order.
-    artifacts: list[GraphArtifact] = field(default_factory=list)
+    artifacts: list[GraphArtifact] = field(default_factory=list[GraphArtifact])
 
     @property
     def declares_git_commit(self) -> bool:  # ast-grep-ignore: bzh:property-delegates

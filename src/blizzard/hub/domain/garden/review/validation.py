@@ -37,7 +37,7 @@ class ValidatedReviewFindings:
     """What a passing :func:`validate_review_findings` hands the materializer: only the
     `deferred` entries, which alone mint (`fixed`/`refuted` carry nothing further)."""
 
-    deferred: list[DeferredReviewEntry] = field(default_factory=list)
+    deferred: list[DeferredReviewEntry] = field(default_factory=list[DeferredReviewEntry])
 
 
 def validate_review_findings(delta: ReviewDelta) -> ValidatedReviewFindings:

@@ -216,7 +216,7 @@ class StepFacts:
     chunk's current pin."""
 
     chunk_id: str
-    graphs: dict[str, Graph] = field(default_factory=dict)
+    graphs: dict[str, Graph] = field(default_factory=dict[str, Graph])
     pin_graph_id: str | None = None
     #: The ingest instant, where the lifetime root starts.
     minted_at: datetime | None = None
@@ -248,7 +248,7 @@ class StepFacts:
     #: each source's key as read, then its current slug once the facts are completed in their tenant.
     work_sources: tuple[str, ...] = ()
     #: Each named runner's registered name, keyed by runner id; one the hub holds no registration for is absent.
-    runner_names: dict[str, str] = field(default_factory=dict)
+    runner_names: dict[str, str] = field(default_factory=dict[str, str])
     #: The tenant the row was read in — carried beside it, not part of its identity: equality, order and
     #: hashing stay on the fields above. ``None`` where no tenant was read.
     tenant: TenantId | None = field(default=None, compare=False)

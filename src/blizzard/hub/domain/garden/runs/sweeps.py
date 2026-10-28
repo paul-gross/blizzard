@@ -88,7 +88,7 @@ def compute_sweeps(
     scopes already filtered out by the caller — from `newest` (the newest set per scope, already
     picked by the store), beside the windowed `measurements`."""
     by_scope = {fact.scope_slug: fact for fact in newest}
-    last_swept = []
+    last_swept: list[ScopeSweep] = []
     for slug in sorted(set(scope_slugs) | set(by_scope)):
         fact = by_scope.get(slug)
         last_swept.append(
