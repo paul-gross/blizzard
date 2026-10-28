@@ -108,7 +108,7 @@ _DEDICATED_PREFIXES = (
     "resume.",
     "abandon.",
     "pause.",
-    "hubnode.",
+    "flow.",
     "action.",
     "migrate.",
     "attach.",
@@ -129,9 +129,9 @@ _DEDICATED_PREFIXES = (
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
-# `hubnode.*` — the between-polls window (#66) — fires inside the hub's synchronous executor; swept by
-# `test_kill9_at_hub_node_pending_crash_point`.
-_HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.")]
+# `flow.*` fires inside the hub's flow driver and its turns — between a submission, its turn, its pass, its poll
+# and its end, and between two tenants' boot recovery. Swept by `test_kill9_at_flow_crash_point`.
+_FLOW_POINTS = [p for p in _ALL_POINTS if p.startswith("flow.")]
 # `action.*` fires inside the hub's action pass driver, as a pass's effect is written. Swept by
 # `test_kill9_at_action_crash_point`.
 _ACTION_POINTS = [p for p in _ALL_POINTS if p.startswith("action.")]
@@ -214,8 +214,8 @@ _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 # issue's central bug.
 _PAUSE_CI_SUBSET = ("pause.after-interrupt.before-park",)
 
-# The hub-node pending CI subset (#66): the family's lone member is its own CI representative.
-_HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
+# The flow CI subset: a pending poll killed before its turn ends, the window boot recovery most often meets.
+_FLOW_CI_SUBSET = ("flow.after-poll.before-turn-end",)
 _ACTION_CI_SUBSET = ("action.after-effect.before-write",)
 
 # The migrate CI subset (#90): the family's lone member is its own CI representative.
@@ -287,7 +287,7 @@ _POINTS = _select(_GENERIC_POINTS, _CI_SUBSET)
 _RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
 _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
 _PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
-_HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET)
+_FLOW_SWEEP = _select(_FLOW_POINTS, _FLOW_CI_SUBSET)
 _ACTION_SWEEP = _select(_ACTION_POINTS, _ACTION_CI_SUBSET)
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
 _ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
@@ -317,7 +317,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
         | set(_select(_ABANDON_POINTS, _ABANDON_CI_SUBSET))
         | set(_select(_PAUSE_POINTS, _PAUSE_CI_SUBSET))
-        | set(_select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET))
+        | set(_select(_FLOW_POINTS, _FLOW_CI_SUBSET))
         | set(_select(_ACTION_POINTS, _ACTION_CI_SUBSET))
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
         | set(_select(_ATTACH_POINTS, _ATTACH_CI_SUBSET))
@@ -2554,30 +2554,26 @@ def test_kill9_at_release_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         terminate(hub_proc)
 
 
-def _live_exec_slots(hub_dir: Path) -> int:
-    """The number of un-released ``hub_exec_slot`` rows — the ``hub:one-live-exec-slot``
-    invariant's own quantity, read straight off the hub store so a leaked slot is caught
-    directly, not only through the aggregate invariant checker."""
+def _open_turns(hub_dir: Path) -> int:
+    """The number of hub turns with no end, read straight off the hub store — a turn left open after convergence
+    is a turn no task answers for."""
     engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
     try:
         with engine.connect() as conn:
-            rows = conn.execute(
-                hub_scoped(
-                    select(hub_schema.hub_exec_slot.c.slot_id).where(hub_schema.hub_exec_slot.c.released_at.is_(None))
-                )
-            ).all()
+            turns = hub_schema.hub_turns
+            rows = conn.execute(hub_scoped(select(turns.c.turn_id).where(turns.c.ended_at.is_(None)))).all()
         return len(rows)
     finally:
         engine.dispose()
 
 
-# --- Pending hub command node (#66) — the hubnode.after-poll.* between-polls window ---
+# --- Hub turns — the flow.* windows of the flow driver and a pending node's turns ---
 
 
 def _pending_graph_yaml(landed_file: str) -> str:
     """A ``build -> deliver(action) -> done`` graph whose ``deliver`` takes ``test.sequence``, answering the
-    reserved ``pending`` on its first pass and ``done`` on every later one (#66) — a brisk ``poll_interval`` and
-    generous ``poll_timeout`` keep this scenario on the resume path rather than #64's timeout kick-back."""
+    reserved ``pending`` on its first pass and ``done`` on every later one — a brisk ``poll_interval`` and generous
+    ``poll_timeout`` keep this scenario on the resume path rather than the timeout kick-back."""
     import yaml
 
     graph = {
@@ -2626,17 +2622,23 @@ def _ingest_pending_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file:
     return chunk_id
 
 
-@pytest.mark.parametrize("point", _HUBNODE_PENDING_SWEEP)
-def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
-    """A ``kill -9`` in a hub node's between-polls window resumes polling and routes on (#66) —
-    pending-ness is derived from the durable poll fact, so recovery is just "keep polling",
-    releasing the leaked slot and taking the next pass exactly once."""
+#: The point a boot-recovery kill first leaves a turn open at, so the armed boot has a turn to end.
+_OPEN_TURN_POINT = "flow.after-turn-start.before-pass"
+
+
+@pytest.mark.parametrize("point", _FLOW_SWEEP)
+def test_kill9_at_flow_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` in a flow driver window — or in boot recovery, after a kill left a turn open — converges on
+    restart: the open turn ends, the visit is submitted again, its turns poll on from the durable facts, no turn is
+    left open, and the two passes the node needs are each taken exactly once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
+    boot = point == "flow.boot.after-interrupt"
 
-    # A hubnode.* point fires inside the hub's synchronous executor — arm the hub.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    hub_proc = start_hub(
+        hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=_OPEN_TURN_POINT if boot else point
+    )
     runner_proc = None
     hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
@@ -2647,26 +2649,24 @@ def test_kill9_at_hub_node_pending_crash_point(crash_env: CrashEnv, tmp_path: Pa
         )
         runner_proc = start_runner(runner_dir, crash_point=None)
 
-        # The hub self-SIGKILLs in the between-polls window: poll fact durable, slot
-        # release not yet run.
         code = wait_death(hub_proc)
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        if boot:
+            assert _open_turns(hub_dir) == 1, "the first kill must leave a turn open for boot to end"
+            hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+            code = wait_death(hub_proc)
+            assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+            _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
-        # Restart the hub UNARMED: pending-ness is derived from the durable poll fact, so
-        # the chunk just resumes polling and routes `done`.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        assert _open_turns(hub_dir) == 0, f"a hub turn was left open after convergence past {point}"
 
-        # The serialization slot is released — no leaked live slot after the crash-and-resume
-        # (the ``hub:one-live-exec-slot`` invariant, asserted directly off the store).
-        assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
-
-        # One pass answered `pending` before the kill and one answered `done` after it: the
-        # re-poll counted past the durable first pass rather than re-taking it.
+        # One pass answered `pending` and one `done`: a re-taken pass counted past every durable marker.
         names = [a["name"] for a in hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
         recorded = sorted(n for n in names if n.startswith("test-sequence/"))
         assert recorded == ["test-sequence/0", "test-sequence/1"], f"the re-poll must count past it: {recorded}"
@@ -2775,7 +2775,7 @@ def _action_graph_yaml(landed_file: str) -> str:
 def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` while a pass's effect is written recovers: a crash before the effect is durable re-takes
     the pass and writes it once, a crash after it finds it durable and the next pass counts past it, and no
-    hub-execution slot leaks."""
+    turn is left open."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
@@ -2802,13 +2802,13 @@ def test_kill9_at_action_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
 
-        # Restart unarmed: the runner re-flushes the build completion, whose replay re-drives the hub node.
+        # Restart unarmed: boot ends the open turn and the flow driver takes the hub node's next turn.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
-        assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
+        assert _open_turns(hub_dir) == 0, f"a hub turn was left open after convergence past {point}"
 
         names = [a["name"] for a in hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]]
         recorded = sorted(n for n in names if n.startswith("test-sequence/"))
@@ -2920,13 +2920,13 @@ def _kill_two_repo_land(crash_env: CrashEnv, tmp_path: Path, point: str, *, merg
         landed_at_kill = _landed_repos(hub_dir, chunk_id)
         assert len(landed_at_kill) == merged_at_kill, f"{point}: {landed_at_kill} were durable at the kill"
 
-        # Restart unarmed: the runner re-flushes the build completion, whose replay re-drives the hub node.
+        # Restart unarmed: boot ends the open turn and the flow driver takes the hub node's next turn.
         hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
         await_http(hub, "/api/health", proc=hub_proc)
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
-        assert _live_exec_slots(hub_dir) == 0, f"a hub_exec_slot leaked live after convergence past {point}"
+        assert _open_turns(hub_dir) == 0, f"a hub turn was left open after convergence past {point}"
 
         assert _merged_markers(hub, chunk_id) == sorted(
             [f"merged/{OWNER}/{REPO_NAME}", f"merged/{OWNER}/{_WEB_REPO_NAME}"]
