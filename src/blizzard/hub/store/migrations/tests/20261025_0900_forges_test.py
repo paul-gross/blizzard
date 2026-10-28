@@ -311,7 +311,8 @@ def test_a_forge_only_retired_records_name_is_created_retired_with_its_change_ro
 
 def test_a_carried_over_store_holds_every_forge_invariant(tmp_path: Path) -> None:
     with _before(tmp_path) as (runner, engine, _tenant):
-        runner.upgrade(_FORGES)
+        # The invariants read every table the live schema declares, so the store walks on to head.
+        runner.upgrade("head")
 
         assert [v for v in HubInvariants(engine).run() if v.invariant in _FORGE_INVARIANTS] == []
 

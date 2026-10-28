@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IReadWorkRefsCorpus
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
@@ -704,6 +705,31 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     ),
     IndexWalkAllowance(
         IReadTranscriptEvents, "visible_segment_ids", ("chunks", "transcript_segments"), _DERIVATION_SWEEP_REASON
+    ),
+    IndexWalkAllowance(
+        IReadFlowLinesCorpus,
+        "flow_lines_signature",
+        (
+            "chunk_completed",
+            "chunk_demoted",
+            "chunk_migrations",
+            "chunk_pause_facts",
+            "chunk_promoted",
+            "chunk_restarts",
+            "chunk_stopped",
+            "chunks",
+            "decision_resolutions",
+            "decisions",
+            "escalations",
+            "lease_facts",
+            "question_answers",
+            "questions",
+            "requeues",
+            "route_created",
+            "route_released",
+            "transitions",
+        ),
+        _SIGNATURE_REASON,
     ),
     IndexWalkAllowance(
         IReadWorkRefsCorpus,

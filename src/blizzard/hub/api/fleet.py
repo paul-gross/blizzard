@@ -47,11 +47,11 @@ from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.scopes import scope_view
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
 )
+from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,

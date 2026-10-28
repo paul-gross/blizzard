@@ -1447,6 +1447,133 @@ hub_node_poll = Table(
 )
 Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
+# --- Flows: each branch's delivery line, and the hub-node visits standing in it ---
+# Made by the work reaching them. Open (no closure) and busy (an unended turn) are derived, never stored.
+
+flows = Table(
+    "flows",
+    metadata,
+    Column("flow_id", String, nullable=False, info={"hub_unique": True}),  # flw_<ulid>
+    Column("resource", String, nullable=False),  # repo:<repository_id>/<branch>
+    Column("repository_id", String, nullable=False),
+    Column("branch", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flows_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("flow_id", name="pk_flows"),
+    UniqueConstraint("tenant_id", "resource", name="uq_flows_tenant_resource"),
+)
+
+# One per hub-node visit that reaches the hub; a second generation only when a turn found its resources changed.
+flow_submissions = Table(
+    "flow_submissions",
+    metadata,
+    Column("submission_id", String, nullable=False, info={"hub_unique": True}),  # fsub_<ulid>
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id", name="fk_flow_submissions_chunks"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),
+    Column("arrival", Integer, nullable=False),  # the tenant's newest plus one, under the tenant row lock
+    Column("submitted_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flow_submissions_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("submission_id", name="pk_flow_submissions"),
+    UniqueConstraint(
+        "tenant_id", "chunk_id", "node_id", "epoch", "generation", name="uq_flow_submissions_tenant_visit_generation"
+    ),
+    UniqueConstraint("tenant_id", "arrival", name="uq_flow_submissions_tenant_arrival"),
+)
+
+# The flows a submission holds; none for a visit that holds nothing.
+flow_submission_flows = Table(
+    "flow_submission_flows",
+    metadata,
+    Column(
+        "submission_id",
+        String,
+        ForeignKey("flow_submissions.submission_id", name="fk_flow_submission_flows_submissions"),
+        nullable=False,
+    ),
+    Column("flow_id", String, ForeignKey("flows.flow_id", name="fk_flow_submission_flows_flows"), nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flow_submission_flows_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("submission_id", "flow_id", name="pk_flow_submission_flows"),
+)
+# By flow: who holds a branch. By submission: the flows a visit holds, tenant-led so the read is never a tenant scan.
+Index("ix_flow_submission_flows_tenant_flow_id", flow_submission_flows.c.tenant_id, flow_submission_flows.c.flow_id)
+Index(
+    "ix_flow_submission_flows_tenant_submission_id",
+    flow_submission_flows.c.tenant_id,
+    flow_submission_flows.c.submission_id,
+)
+
+# Append-only; at most one per submission, inserted only when none exists.
+flow_submission_closures = Table(
+    "flow_submission_closures",
+    metadata,
+    Column(
+        "submission_id",
+        String,
+        ForeignKey("flow_submissions.submission_id", name="fk_flow_submission_closures_submissions"),
+        nullable=False,
+    ),
+    Column("outcome", String, nullable=False),  # the verdict's choice, or stopped | restarted | completed | superseded
+    Column("closed_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_flow_submission_closures_tenant_id"),
+        nullable=False,
+    ),
+    PrimaryKeyConstraint("submission_id", name="pk_flow_submission_closures"),
+)
+Index(
+    "ix_flow_submission_closures_tenant_submission_id",
+    flow_submission_closures.c.tenant_id,
+    flow_submission_closures.c.submission_id,
+)
+
+# One turn a submission takes at the head of its flows; open while ``ended_at`` is null.
+hub_turns = Table(
+    "hub_turns",
+    metadata,
+    Column("turn_id", String, nullable=False, info={"hub_unique": True}),  # htn_<ulid>
+    Column(
+        "submission_id",
+        String,
+        ForeignKey("flow_submissions.submission_id", name="fk_hub_turns_submissions"),
+        nullable=False,
+    ),
+    Column("started_at", UtcDateTime, nullable=False),
+    Column("ended_at", UtcDateTime, nullable=True),  # null while the turn runs
+    Column("outcome", String, nullable=True),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_turns_tenant_id"), nullable=False),
+    PrimaryKeyConstraint("turn_id", name="pk_hub_turns"),
+)
+Index("ix_hub_turns_tenant_submission_id", hub_turns.c.tenant_id, hub_turns.c.submission_id)
+Index("ix_hub_turns_tenant_ended_at", hub_turns.c.tenant_id, hub_turns.c.ended_at)
+
+# Append-only; each flow's record. A submission's facts are written to every flow it holds.
+flow_facts = Table(
+    "flow_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("flow_id", String, ForeignKey("flows.flow_id", name="fk_flow_facts_flows"), nullable=False),
+    Column(
+        "submission_id",
+        String,
+        ForeignKey("flow_submissions.submission_id", name="fk_flow_facts_submissions"),
+        nullable=False,
+    ),
+    Column("chunk_id", String, nullable=False),
+    Column("kind", String, nullable=False),  # submitted | turn-started | turn-ended | landed | withdrawn
+    Column("outcome", String, nullable=True),  # turn-ended: the turn's; withdrawn: why
+    Column("revision", String, nullable=True),  # landed: the revision the branch now carries
+    Column("at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flow_facts_tenant_id"), nullable=False),
+)
+Index("ix_flow_facts_tenant_flow_id_id", flow_facts.c.tenant_id, flow_facts.c.flow_id, flow_facts.c.id)
+Index("ix_flow_facts_tenant_submission_id", flow_facts.c.tenant_id, flow_facts.c.submission_id)
+
 # --- Readiness: the not-ready resting state, its promotion and demotion --------
 # A chunk is currently promoted when its newest ``chunk_promoted`` row is later than its newest
 # ``chunk_demoted`` row; any other chunk derives ``not_ready`` and is never claimed.

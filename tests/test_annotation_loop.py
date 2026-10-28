@@ -152,11 +152,12 @@ class _FakeState:
         self.config = config
         self.shutdown = asyncio.Event()
         self.platform_tracing = DisabledPlatformTracing()
+        self.flow_driver = None
 
 
 class _FakeApp:
     """Duck-types the two attributes ``_lifespan`` reads off a real ``FastAPI``
-    instance — ``app.state.{services,config,shutdown,platform_tracing}`` — with no ASGI machinery."""
+    instance — ``app.state.{services,config,shutdown,platform_tracing,flow_driver}`` — with no ASGI machinery."""
 
     def __init__(self, services: _FakeServices, config: HubConfig) -> None:
         self.state = _FakeState(services, config)

@@ -59,6 +59,9 @@ class IdPrefix(StrEnum):
     REPOSITORY = "repo"  # a repository — its slug and name never stand in for it
     WORK_SOURCE = "wsrc"  # a configured work source — its slug and name never stand in for it
     FORGE = "frg"  # a forge — its slug, name, and origin never stand in for it
+    FLOW = "flw"  # a flow — one branch's delivery line, named by its resource
+    FLOW_SUBMISSION = "fsub"  # one hub-node visit's place in the flows it lands on
+    HUB_TURN = "htn"  # one turn a submission takes at the head of its flows
 
 
 @domain_model

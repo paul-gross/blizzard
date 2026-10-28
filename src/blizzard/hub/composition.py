@@ -68,6 +68,7 @@ from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
+from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
@@ -84,6 +85,8 @@ from blizzard.hub.domain.config.repositories import IReadRepositoryRecordReposit
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
@@ -211,6 +214,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -354,6 +358,10 @@ class TenantServices:
     repository_records: IReadRepositoryRecordRepository
     #: Stored forge records (the read half).
     forge_records: IReadForgeRepository
+    #: Each branch's delivery line and the visits submitted to it (the read half).
+    flows: IReadFlows
+    #: Converges the tenant's flow lines on where its chunks stand — driven by the hosted hub's flow driver alone.
+    flow_lines: FlowLineReconciler
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: Stored projects (the read half).
@@ -541,6 +549,8 @@ class TenantStores:
     repository_records: RepositoryRecordStore
     #: Forge records — composition-only write half; ``HubServices`` carries the read half.
     forge_records: ForgeRecordStore
+    #: Each branch's delivery line — composition-only write half; ``TenantServices`` carries the read half.
+    flows: FlowStore
     #: Which active configured records name each secret, across every referring kind.
     secret_referrers: SecretReferrersStore
     config_changes: ConfigChangeStore
@@ -591,6 +601,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         work_source_records=WorkSourceRecordStore(connections),
         repository_records=RepositoryRecordStore(connections),
         forge_records=ForgeRecordStore(connections),
+        flows=FlowStore(connections, clock),
         secret_referrers=SecretReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
@@ -1225,6 +1236,20 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_source_records=stores.work_source_records,
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
+        flows=stores.flows,
+        flow_lines=FlowLineReconciler(
+            flows=stores.flows,
+            facts=chunk_facts,
+            record=chunk_record,
+            graphs=graph_store,
+            artifacts=chunk_artifacts,
+            repositories=stores.repository_records,
+            forge_records=stores.forge_records,
+            projects=stores.projects,
+            links=stores.project_links,
+            catalogue=parts.actions.catalogue,
+            clock=clock,
+        ),
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
@@ -1637,4 +1662,17 @@ def build_services(
             locks=SweepLocks(),
             clock=clock,
         ),
+    )
+
+
+def build_flow_driver(services: HubServices) -> FlowDriver:
+    """The hosted hub's flow driver, over every open tenant's lines — built by ``build_hosted_app`` alone, never by
+    :func:`build_services`, so no CLI or test build over a live hub's store reconciles that hub's lines."""
+    return FlowDriver(
+        FlowLineStores(
+            corpus=services.hub_scoped_reads.corpus,
+            tenants=lambda: services.tenants.open_tenants.every().keys(),
+            lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
+        ),
+        services.clock,
     )

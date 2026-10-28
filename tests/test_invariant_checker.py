@@ -15,6 +15,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.auth_core import Role
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
@@ -3046,3 +3047,157 @@ def test_a_forge_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> 
     assert _project_breaches(engine, "hub:slug-not-current-and-former") == [
         f"tenant {tenant}: slug frg_a is forge frg_a's and forge frg_b's former slug"
     ]
+
+
+def _flow_line_breaches(engine: sa.Engine, *, now: datetime = _NOW + timedelta(hours=1)) -> list[str]:
+    """The three flow invariants' breaches alone, judged at ``now``."""
+    flow_invariants = {"hub:one-turn-per-flow", "hub:one-turn-per-visit", "hub:flow-line-standing"}
+    return [v.invariant for v in HubInvariants(engine, clock=FixedClock(now)).run() if v.invariant in flow_invariants]
+
+
+def _seed_at_deliver(conn: sa.Connection, chunk_id: str = "ch_1") -> None:
+    """A chunk whose newest movement entered ``nd_deliver`` at epoch 1."""
+    conn.execute(
+        insert(hub.chunks).values(stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m"))
+    )
+    conn.execute(
+        insert(hub.lease_facts).values(
+            stamp(hub.lease_facts, chunk_id=chunk_id, epoch=1, runner_id="r", minted_at=_NOW)
+        )
+    )
+    conn.execute(
+        insert(hub.transitions).values(
+            stamp(
+                hub.transitions,
+                transition_id=f"tr_{chunk_id}",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                from_node_id="nd_build",
+                to_node_id="nd_deliver",
+                choice_name="pass",
+                epoch=1,
+                runner_id="r",
+                recorded_at=_NOW,
+            )
+        )
+    )
+
+
+def _submit(
+    conn: sa.Connection, submission_id: str, *, chunk_id: str, node_id: str, arrival: int, flow_id: str
+) -> None:
+    conn.execute(
+        insert(hub.flow_submissions).values(
+            stamp(
+                hub.flow_submissions,
+                submission_id=submission_id,
+                chunk_id=chunk_id,
+                node_id=node_id,
+                epoch=1,
+                generation=0,
+                arrival=arrival,
+                submitted_at=_NOW,
+            )
+        )
+    )
+    conn.execute(
+        insert(hub.flow_submission_flows).values(
+            stamp(hub.flow_submission_flows, submission_id=submission_id, flow_id=flow_id)
+        )
+    )
+
+
+def _flow(conn: sa.Connection, flow_id: str = "flw_main") -> None:
+    conn.execute(
+        insert(hub.flows).values(
+            stamp(
+                hub.flows,
+                flow_id=flow_id,
+                resource="repo:repo_a/main",
+                repository_id="repo_a",
+                branch="main",
+                created_at=_NOW,
+            )
+        )
+    )
+
+
+def _open_turn(conn: sa.Connection, turn_id: str, submission_id: str) -> None:
+    conn.execute(
+        insert(hub.hub_turns).values(
+            stamp(hub.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=_NOW)
+        )
+    )
+
+
+def test_a_line_whose_visits_stand_at_their_node_holds_every_flow_invariant(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn, "ch_1")
+        _seed_at_deliver(conn, "ch_2")
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        _submit(conn, "fsub_2", chunk_id="ch_2", node_id="nd_deliver", arrival=2, flow_id="flw_main")
+        _open_turn(conn, "htn_1", "fsub_1")
+        conn.execute(
+            insert(hub.hub_turns).values(
+                stamp(
+                    hub.hub_turns,
+                    turn_id="htn_0",
+                    submission_id="fsub_2",
+                    started_at=_NOW,
+                    ended_at=_NOW,
+                    outcome="pending",
+                )
+            )
+        )
+
+    assert _flow_line_breaches(engine) == []
+
+
+def test_two_open_turns_on_one_flow_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn, "ch_1")
+        _seed_at_deliver(conn, "ch_2")
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        _submit(conn, "fsub_2", chunk_id="ch_2", node_id="nd_deliver", arrival=2, flow_id="flw_main")
+        _open_turn(conn, "htn_1", "fsub_1")
+        _open_turn(conn, "htn_2", "fsub_2")
+
+    assert _flow_line_breaches(engine) == ["hub:one-turn-per-flow"]
+
+
+def test_two_open_turns_for_one_visit_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn)
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        _open_turn(conn, "htn_1", "fsub_1")
+        _open_turn(conn, "htn_2", "fsub_1")
+
+    assert sorted(_flow_line_breaches(engine)) == ["hub:one-turn-per-flow", "hub:one-turn-per-visit"]
+
+
+def test_an_open_submission_whose_chunk_left_its_node_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn)
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_review", arrival=1, flow_id="flw_main")
+
+    assert _flow_line_breaches(engine) == ["hub:flow-line-standing"]
+    assert _flow_line_breaches(engine, now=_NOW + timedelta(seconds=30)) == []
+
+
+def test_an_open_submission_whose_chunk_left_is_exempt_while_its_turn_is_open(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn)
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_review", arrival=1, flow_id="flw_main")
+        _open_turn(conn, "htn_1", "fsub_1")
+
+    assert _flow_line_breaches(engine) == []

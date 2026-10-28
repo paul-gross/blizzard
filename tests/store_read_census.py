@@ -87,6 +87,8 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceId,
     WorkSourceSlug,
 )
+from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     DeltaMaterialization,
@@ -146,12 +148,14 @@ from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
@@ -237,6 +241,7 @@ from tests.support import (
     seed_chunk_record,
     seed_runner,
     seed_work_item,
+    stamp,
 )
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
@@ -1207,6 +1212,9 @@ class HubWorld:
     work_source_id: WorkSourceId
     #: The forge both name, created ``census-forge`` and renamed ``census-github``.
     forge_id: ForgeId
+    #: A visit submitted to two flows, with an open turn; a second visit beside it is closed.
+    flow_chunk: str
+    flow_submission_id: str
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -2071,6 +2079,40 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     invitation_store.record(InvitationOutcome("inv_census_2", InvitationOutcomeKind.REVOKED, user_1.user_id, _ht(110)))
 
+    # --- flows: one open submission holding two flows, with a turn planted open; one closed -----------
+    flow_store = FlowStore(store_connections, clock)
+    flow_chunk = "ch_hub_flow_open"
+    flow_closed_chunk = "ch_hub_flow_closed"
+    _mint(flow_chunk, "1040", at=_ht(111))
+    _mint(flow_closed_chunk, "1041", at=_ht(112))
+    flow_submission = flow_store.submit(
+        flow_chunk,
+        node_id=deliver_node.node_id,
+        epoch=1,
+        generation=0,
+        resources=[FlowResource("repo_census", "main"), FlowResource("repo_census_2", "main")],
+        at=_ht(113),
+    )
+    closed_submission = flow_store.submit(
+        flow_closed_chunk,
+        node_id=deliver_node.node_id,
+        epoch=1,
+        generation=0,
+        resources=[FlowResource("repo_census", "main")],
+        at=_ht(114),
+    )
+    assert flow_submission is not None and closed_submission is not None
+    flow_store.close(closed_submission.submission_id, outcome="superseded", at=_ht(115))
+    # No production write starts a turn yet, so the census plants the one open turn it reads.
+    with engine.begin() as conn:
+        conn.execute(
+            s.hub_turns.insert().values(
+                stamp(
+                    s.hub_turns, turn_id="htn_census", submission_id=flow_submission.submission_id, started_at=_ht(116)
+                )
+            )
+        )
+
     # --- projects and their links: last, so every write above lands in the tenant's one project ----
     [project] = hub.services.projects.list_all()
     census_source = hub.services.work_source_records.resolve("census-source")
@@ -2158,6 +2200,8 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         repository_id=census_repo.repository_id,
         work_source_id=census_source.work_source_id,
         forge_id=census_forge.forge_id,
+        flow_chunk=flow_chunk,
+        flow_submission_id=flow_submission.submission_id,
     )
 
 
@@ -2220,6 +2264,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
     (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
+    ),
+    (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.flow_lines_signature()
     ),
     (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
@@ -2363,6 +2410,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
     (IReadChunkHubExecRepository, "count_live_hub_exec_slots"): lambda w: w.read.hub_exec.count_live_hub_exec_slots(),
+    (IReadFlows, "open_submissions_from"): lambda w: w.hub.services.flows.open_submissions_from(1),
+    (IReadFlows, "open_turns"): lambda w: w.hub.services.flows.open_turns(),
+    (IReadFlows, "submission_for_visit"): lambda w: w.hub.services.flows.submission_for_visit(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2

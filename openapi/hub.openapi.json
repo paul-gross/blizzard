@@ -9032,7 +9032,10 @@
           "proj",
           "repo",
           "wsrc",
-          "frg"
+          "frg",
+          "flw",
+          "fsub",
+          "htn"
         ],
         "title": "IdPrefix",
         "type": "string"

@@ -18,7 +18,6 @@ from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import BlockedMarking
@@ -34,6 +33,7 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
+from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable

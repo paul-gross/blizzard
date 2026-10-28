@@ -15,8 +15,17 @@ from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.config.repositories import CommitOrigin, RepositoryResolution, ResolvedRepository
-from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.config.forges import ConfiguredForge
+from blizzard.hub.domain.config.repositories import (
+    CommitOrigin,
+    ConfiguredRepository,
+    RepositoryOutcome,
+    RepositoryResolution,
+    ResolvedRepository,
+    resolve_chunk_repositories,
+)
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 
 
 @domain_model
@@ -28,6 +37,20 @@ class LandingProject:
     project_id: str = ""
     slug: str = ""
     linked: frozenset[str] = frozenset()
+
+    @classmethod
+    def read(
+        cls, project_id: ProjectId | None, *, projects: IReadProjectRepository, links: IReadProjectLinks
+    ) -> LandingProject:
+        """The chunk's project and the repository records it links, read now."""
+        if project_id is None:
+            return cls()
+        project = projects.get(project_id)
+        return cls(
+            project_id=project_id,
+            slug=project.slug if project is not None else project_id,
+            linked=frozenset(link.repository_id for link in links.repositories_of(project_id)),
+        )
 
 
 class UnconvergedDeliveryError(RuntimeError):
@@ -107,6 +130,76 @@ class GitCommits:
     @staticmethod
     def _qualified(row: StoredArtifact) -> str:
         return repo_identity(row.forge, row.repo or row.name)
+
+
+@domain_model
+@dataclass(frozen=True)
+class VisitRepositories:
+    """A visit's commits and the repository records they resolved to, once nothing refused them."""
+
+    git_commits: GitCommits
+    resolution: RepositoryResolution
+
+
+@domain_model
+@dataclass(frozen=True)
+class VisitRefusal:
+    """Why a visit cannot run, named before any pass: the hub-log ``step`` it is refused under and its ``detail``.
+    ``resolution`` is the resolution that refused, ``None`` when the commits never converged to be resolved."""
+
+    step: str
+    detail: str
+    resolution: RepositoryResolution | None = None
+
+
+#: The resolution outcomes a visit is refused under, by their own hub-log step.
+_REFUSED_OUTCOMES = frozenset({RepositoryOutcome.UNRESOLVED, RepositoryOutcome.NOT_LINKED})
+
+
+def resolve_visit(
+    artifacts: Iterable[StoredArtifact],
+    *,
+    project: LandingProject,
+    minted_at: datetime,
+    repositories: list[ConfiguredRepository],
+    forges: Iterable[ConfiguredForge],
+    lands: bool,
+) -> VisitRepositories | VisitRefusal:
+    """Resolve a visit's repositories, or name why it is refused: commits that never converged, a resolution that
+    refused, or — only for an action that ``lands``, since only a landing writes ``merged/<repo>`` markers — one
+    ``owner/repo`` resolved to two records. The one home of these refusals: every reader resolving a visit asks here."""
+    try:
+        git_commits = GitCommits.of(artifacts)
+    except UnconvergedDeliveryError as exc:
+        return VisitRefusal("unconverged-delivery", str(exc))
+    resolution = resolve_chunk_repositories(
+        git_commits.origins(),
+        repositories,
+        forges,
+        minted_at=minted_at,
+        linked=project.linked,
+        project=project.slug,
+    )
+    if resolution.outcome in _REFUSED_OUTCOMES:
+        return VisitRefusal(resolution.outcome.value, resolution.detail, resolution)
+    if lands and (ambiguity := _ambiguity(resolution)) is not None:
+        return VisitRefusal("repository-ambiguous", ambiguity, resolution)
+    return VisitRepositories(git_commits, resolution)
+
+
+def _ambiguity(resolution: RepositoryResolution) -> str | None:
+    """Why a resolution holding one ``owner/repo`` for two records is refused: both landings would write the one
+    ``merged/<repo>`` marker. ``None`` when every ``owner/repo`` is one record's."""
+    held: dict[str, ResolvedRepository] = {}
+    for repo, target in zip(resolution.qualified, resolution.targets, strict=True):
+        first = held.setdefault(repo, target)
+        if first.record != target.record:
+            return (
+                f"the repo {repo!r} resolves to two repository records, and so to one marker name: "
+                f"record {first.record!r} ({resolution.forge_of(first).fields.api_base}) and record "
+                f"{target.record!r} ({resolution.forge_of(target).fields.api_base})"
+            )
+    return None
 
 
 @domain_model

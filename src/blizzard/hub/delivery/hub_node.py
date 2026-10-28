@@ -41,10 +41,11 @@ from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requir
 from blizzard.hub.domain.actions.visit import (
     GitCommits,
     LandingProject,
-    UnconvergedDeliveryError,
     Visit,
     VisitChunk,
     VisitNode,
+    VisitRefusal,
+    resolve_visit,
 )
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -74,6 +75,7 @@ from blizzard.hub.domain.config.repositories import (
     ResolvedRepository,
     resolve_chunk_repositories,
 )
+from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
@@ -115,10 +117,6 @@ _LANDED_PAST_FENCE_DETAIL = "the chunk is terminal or has moved past this visit"
 
 # Generous bound: reclaim only a slot abandoned without a matching release.
 DEFAULT_SLOT_STALE_AFTER = timedelta(minutes=30)
-
-# Pending-poll cadence defaults (#66), overridable per node.
-DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
-DEFAULT_POLL_TIMEOUT = timedelta(hours=3)
 
 # A kill leaves the slot live; the stale bound reclaims it, with pending derived from the poll fact.
 _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
@@ -238,37 +236,6 @@ class HubRunResult:
     wrote_transition: bool
     detail: str = ""
     transition_id: str | None = None
-
-
-@domain_model
-@dataclass(frozen=True)
-class PollPolicy:
-    """A hub command node's pending-poll cadence and give-up bound (#66)."""
-
-    interval: timedelta = DEFAULT_POLL_INTERVAL
-    timeout: timedelta = DEFAULT_POLL_TIMEOUT
-
-    @classmethod
-    def of(cls, node: Node) -> PollPolicy:
-        """The node's own overrides, else the module defaults."""
-        return cls(
-            interval=(
-                timedelta(seconds=node.poll_interval_seconds)
-                if node.poll_interval_seconds is not None
-                else DEFAULT_POLL_INTERVAL
-            ),
-            timeout=(
-                timedelta(seconds=node.poll_timeout_seconds)
-                if node.poll_timeout_seconds is not None
-                else DEFAULT_POLL_TIMEOUT
-            ),
-        )
-
-    def due_at(self, row: HubNodePollFact) -> datetime:
-        """When a visit waiting since ``row`` is next due: the later of its interval elapsing and
-        the row's own ``next_poll_at``, which only ever postpones. Every reader of due-ness asks here."""
-        due = row.polled_at + self.interval
-        return max(due, row.next_poll_at) if row.next_poll_at is not None else due
 
 
 class HubNodeExecutor:
@@ -574,34 +541,31 @@ class HubNodeExecutor:
             )
         spec = action.spec
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        try:
-            git_commits = GitCommits.of(artifacts)
-        except UnconvergedDeliveryError as exc:
-            return self._refuse(chunk, graph, node, epoch=epoch, step="unconverged-delivery", detail=str(exc))
-        project = self._landing_project(chunk)
-        resolution = resolve_chunk_repositories(
-            git_commits.origins(),
-            self._repositories.list_all(include_retired=True),
-            self._forge_records.list_all(include_retired=True),
+        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
+        resolved = resolve_visit(
+            artifacts,
+            project=project,
             minted_at=chunk.minted_at,
-            linked=project.linked,
-            project=project.slug,
+            repositories=self._repositories.list_all(include_retired=True),
+            forges=self._forge_records.list_all(include_retired=True),
+            lands=spec.lands,
         )
-        refusal = self._resolution_refusal(resolution)
-        forges: dict[RepositoryId, RepositoryForge] = {}
-        if refusal is None and spec.lands:
-            refusal = self._ambiguity_refusal(resolution)
-        if refusal is None and (missing := self._missing_capability(action_name, resolution)) is not None:
+        if isinstance(resolved, VisitRefusal):
+            if resolved.resolution is not None:
+                self._record_refusal_event(chunk, node, resolved.resolution, epoch=epoch)
+            return self._refuse(chunk, graph, node, epoch=epoch, step=resolved.step, detail=resolved.detail)
+        git_commits, resolution = resolved.git_commits, resolved.resolution
+        if (missing := self._missing_capability(action_name, resolution)) is not None:
             target, capability = missing
             return self._escalate_capability_missing(
                 chunk, node, action_name, target, capability, forge=resolution.forge_of(target), epoch=epoch
             )
-        if refusal is None and spec.lands:
+        forges: dict[RepositoryId, RepositoryForge] = {}
+        if spec.lands:
             forges, refusal = self._visit_forges(resolution)
-        if refusal is not None:
-            step, detail = refusal
-            self._record_refusal_event(chunk, node, resolution, epoch=epoch)
-            return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
+            if refusal is not None:
+                step, detail = refusal
+                return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
         visit = Visit(
             chunk=VisitChunk(
                 chunk_id=chunk.chunk_id,
@@ -779,40 +743,6 @@ class HubNodeExecutor:
         read = self._artifacts.delivery_sources_for([chunk.chunk_id]).get(chunk.chunk_id, DeliverySources())
         return DeliverySources(markers=read.markers, pr_markers=read.pr_markers)
 
-    def _landing_project(self, chunk: Chunk) -> LandingProject:
-        """The chunk's project and the repository records it links, read now."""
-        if chunk.project_id is None:
-            return LandingProject()
-        project = self._projects.get(chunk.project_id)
-        return LandingProject(
-            project_id=chunk.project_id,
-            slug=project.slug if project is not None else chunk.project_id,
-            linked=frozenset(link.repository_id for link in self._links.repositories_of(chunk.project_id)),
-        )
-
-    @staticmethod
-    def _resolution_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
-        """The ``(hub-log step, detail)`` a refused resolution routes with, or ``None`` when it stands."""
-        if REFUSAL_EVENT[resolution.outcome] is None:
-            return None
-        return resolution.outcome.value, resolution.detail
-
-    @staticmethod
-    def _ambiguity_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
-        """The refusal a resolution holding one ``owner/repo`` for two records routes with: both landings
-        would write the one ``merged/<repo>`` marker. ``None`` when every ``owner/repo`` is one record's."""
-        held: dict[str, ResolvedRepository] = {}
-        for repo, target in zip(resolution.qualified, resolution.targets, strict=True):
-            first = held.setdefault(repo, target)
-            if first.record != target.record:
-                return (
-                    "repository-ambiguous",
-                    f"the repo {repo!r} resolves to two repository records, and so to one marker name: "
-                    f"record {first.record!r} ({resolution.forge_of(first).fields.api_base}) and record "
-                    f"{target.record!r} ({resolution.forge_of(target).fields.api_base})",
-                )
-        return None
-
     def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
         kind = REFUSAL_EVENT[resolution.outcome]
         if kind is None:
@@ -875,7 +805,7 @@ class HubNodeExecutor:
         cause = "poll-timeout"
         loaded = self._artifacts.load_artifacts(chunk.chunk_id)
         rows = GitCommits.of(loaded)
-        project = self._landing_project(chunk)
+        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
         resolution = resolve_chunk_repositories(
             rows.origins(),
             self._repositories.list_all(include_retired=True),

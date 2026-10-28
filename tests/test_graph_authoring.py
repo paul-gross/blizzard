@@ -9,7 +9,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
-from blizzard.hub.delivery.hub_node import PollPolicy
+from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.actions import LAND, RESERVED_WAITS
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, GraphDoc, GraphParseError, ProducesSpec
