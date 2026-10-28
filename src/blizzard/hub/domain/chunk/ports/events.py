@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
@@ -77,7 +77,7 @@ class IWriteChunkEventsRepository(IReadChunkEventsRepository, Protocol):
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict | None,
+        detail: dict[str, Any] | None,
         at: datetime,
     ) -> int:
         """Append one ``event_log`` row — never mutated once written.

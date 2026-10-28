@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import click
 
@@ -62,7 +63,7 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
-def _served_line(served: list[dict] | None) -> str | None:
+def _served_line(served: list[dict[str, Any]] | None) -> str | None:
     """The status's ``serves:`` line — each project the hub resolved, by slug, then each entry no project
     answers to and each configured entry not answered yet, marked so — or ``None`` when nothing names any."""
     if served is None:
@@ -78,7 +79,7 @@ def _served_line(served: list[dict] | None) -> str | None:
     return f"  serves: {'; '.join(parts)}"
 
 
-def _tenant_part(view: dict) -> str:
+def _tenant_part(view: dict[str, Any]) -> str:
     """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
     names the runner's tenant has answered."""
     tenant_id = view.get("tenant_id")
@@ -87,7 +88,7 @@ def _tenant_part(view: dict) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
-def _throttle_lines(throttle: dict | None) -> list[str]:
+def _throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
     if throttle is None:
         return []
     declining = ", ".join(throttle.get("declining", [])) or "none"
@@ -123,7 +124,7 @@ class SessionLabel:
     Empty when the escalation carries none of the three, so a bare line reads as
     "not recorded" rather than inventing one."""
 
-    escalation: dict
+    escalation: dict[str, Any]
 
     @property
     def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -554,7 +555,7 @@ def selftest(
     click.echo(f"selftest {run['id']} passed for {coding_harness}")
 
 
-def renewal_text(sub: dict[str, object]) -> str | None:
+def renewal_text(sub: dict[str, Any]) -> str | None:
     """One subscription's newest credential renewal in operator words, from the wire's typed
     fields alone — ``None`` when it was never renewed."""
     result = RenewalResult.recognized(sub.get("renewal_result"))

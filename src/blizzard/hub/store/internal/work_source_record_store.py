@@ -86,7 +86,7 @@ def _locator_holder(conn: Connection, record: ConfiguredWorkSource) -> str | Non
     return None if row is None else row.slug
 
 
-def _columns(record: ConfiguredWorkSource, forge: StandingForge) -> dict[str, object]:
+def _columns(record: ConfiguredWorkSource, forge: StandingForge) -> dict[str, Any]:
     f = record.fields
     return {
         "slug": record.slug,

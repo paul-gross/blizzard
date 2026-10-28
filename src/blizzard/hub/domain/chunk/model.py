@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
@@ -592,7 +592,7 @@ class OperationalEvent:
     lease_id: str | None
     node_name: str | None
     message: str
-    detail: dict | None
+    detail: dict[str, Any] | None
 
 
 @domain_model

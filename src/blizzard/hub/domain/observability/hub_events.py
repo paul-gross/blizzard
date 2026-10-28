@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, cast, get_args
+from typing import Any, Literal, Protocol, cast, get_args
 
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.roles import domain_model
@@ -75,7 +75,7 @@ class HubEventEntry:
     kind: HubEventKind
     at: datetime
     message: str
-    detail: dict | None
+    detail: dict[str, Any] | None
 
 
 class IReadHubEventLog(Protocol):
@@ -93,7 +93,13 @@ class IReadHubEventLog(Protocol):
 
 class IWriteHubEventLog(IReadHubEventLog, Protocol):
     def append(
-        self, *, severity: EventLogSeverity, kind: HubEventKind, message: str, detail: dict | None, at: datetime
+        self,
+        *,
+        severity: EventLogSeverity,
+        kind: HubEventKind,
+        message: str,
+        detail: dict[str, Any] | None,
+        at: datetime,
     ) -> int:
         """Append one ``hub_event_log`` row — never mutated once written; ``detail`` is serialized to JSON text by
         the store. Returns the row's id."""
@@ -106,7 +112,7 @@ class HubEventLogService:
     def __init__(self, *, events: IWriteHubEventLog) -> None:
         self._events = events
 
-    def record(self, *, kind: HubEventKind, message: str, detail: dict | None, at: datetime) -> int:
+    def record(self, *, kind: HubEventKind, message: str, detail: dict[str, Any] | None, at: datetime) -> int:
         """Append the row and return its id."""
         return self._events.append(severity=HUB_EVENT_SEVERITY[kind], kind=kind, message=message, detail=detail, at=at)
 

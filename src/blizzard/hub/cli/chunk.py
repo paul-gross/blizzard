@@ -135,7 +135,7 @@ def chunk_show(cli: CliContext, chunk_id: str) -> None:
     cli.show(detail, ChunkDetail(detail))
 
 
-class Pointer(click.ParamType):
+class Pointer(click.ParamType[str]):
     """One ``ingest`` argument as typed, bound to the token the hub is handed. The CLI carries no
     pointer grammar of its own, so a token travels through verbatim — bar a deprecated prefix."""
 
@@ -170,7 +170,7 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     configured work source claims a token, a pointer's source is not linked to the
     project, or another chunk already holds a pointer."""
     tokens = list(pointers)
-    request: dict[str, object] = {"tokens": tokens}
+    request: dict[str, Any] = {"tokens": tokens}
     if project is not None:
         request["project"] = project
     resp = cli.send("post", "/api/chunks", json_body=request)
@@ -229,7 +229,7 @@ def chunk_set(
         raise click.UsageError(
             "at least one of --graph/--default-model/--default-effort/--default-harnesses is required"
         )
-    body: dict[str, object] = {}
+    body: dict[str, Any] = {}
     if graph_id is not None:
         body["graph_id"] = graph_id
     if default_model:
@@ -531,7 +531,7 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
         raise click.UsageError("--to-graph is required unless --cancel")
 
     if cancel:
-        body: dict[str, object] = {"intended_migration": None}
+        body: dict[str, Any] = {"intended_migration": None}
     else:
         assert to_graph is not None, "checked above: --to-graph is required unless --cancel"
         intended: dict[str, str] = {"to_graph": to_graph}

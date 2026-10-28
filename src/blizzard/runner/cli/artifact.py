@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from http import HTTPStatus
+from typing import Any
 from urllib.parse import quote
 
 import click
@@ -27,10 +28,10 @@ class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
 
-    artifact: dict
+    artifact: dict[str, Any]
 
     @property
-    def summary(self) -> dict:  # ast-grep-ignore: bzh:property-delegates
+    def summary(self) -> dict[str, Any]:  # ast-grep-ignore: bzh:property-delegates
         content = self.artifact.get("content")
         summary = {k: v for k, v in self.artifact.items() if k != "content"}
         summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
@@ -49,7 +50,7 @@ def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 
-def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict]:
+def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, Any]]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
     excludes node — ``graph`` and ``system`` never have one. Also ``[]``, noted on stderr, on a
     failed read."""

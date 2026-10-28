@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from typing import Any
 
 import click
 
@@ -13,7 +14,7 @@ from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
 
 
-class WorkToken(click.ParamType):
+class WorkToken(click.ParamType[tuple[str, str]]):
     """A work-item token as typed (``hub:<n>``, ``<repo>#<n>``), parsed once here at
     the CLI edge into the plain ``(source, ref)`` path segments the wire carries."""
 
@@ -97,7 +98,7 @@ def item_edit(
 ) -> None:
     """Edit the item at TOKEN (e.g. hub:<n>) in place — only the given fields change."""
     source, ref = token
-    json_body: dict[str, object] = {}
+    json_body: dict[str, Any] = {}
     if title is not None:
         json_body["title"] = title
     if body_file is not None:

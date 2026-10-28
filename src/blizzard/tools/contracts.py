@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 from sqlalchemy import MetaData
@@ -36,7 +37,7 @@ STORES: tuple[tuple[str, MetaData, Path], ...] = (
 CONFIGS: tuple[tuple[str, ConfigRegistry], ...] = (("hub", HUB_REGISTRY), ("host", HOST_REGISTRY))
 
 
-def _dump(document: dict) -> str:
+def _dump(document: dict[str, Any]) -> str:
     return json.dumps(document, indent=2, sort_keys=True) + "\n"
 
 
