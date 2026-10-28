@@ -1049,6 +1049,14 @@
     },
     {
       "default": null,
+      "deprecated": false,
+      "path": "subscription[].usage_api_base",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
       "deprecated": true,
       "path": "token_env",
       "replaced_by": null,

@@ -98,13 +98,16 @@ class SampleMiss:
 
 class SubscriptionSource(Protocol):
     """What a binding selector reads off one declared subscription: the ``provider`` it binds
-    to and the ``credentials_path`` override, if any."""
+    to, the ``credentials_path`` override, and the ``usage_api_base`` override, if any."""
 
     @property
     def provider(self) -> str: ...
 
     @property
     def credentials_path(self) -> str | None: ...
+
+    @property
+    def usage_api_base(self) -> str | None: ...
 
 
 class ISubscriptionSampler(Protocol):

@@ -6,7 +6,10 @@ this is unit-tested directly rather than only through a wired loop context."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import base64
+import json
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx2
@@ -89,3 +92,70 @@ def test_the_sampled_providers_are_exactly_those_selecting_a_sampler(provider: s
     selected = select_sampler(declaration, clock=FixedClock(_NOW), http_client=_unreachable_client)
 
     assert (selected is not None) is (provider in SAMPLED_PROVIDERS)
+
+
+def _live_credentials(provider: str, path: Path) -> Path:
+    """A credentials file the provider's binding reads as live, so a sample proceeds to its request."""
+    if provider == PROVIDER_ANTHROPIC:
+        expires_at = int((_NOW + timedelta(days=5)).timestamp() * 1000)
+        path.write_text(json.dumps({"claudeAiOauth": {"accessToken": "tok", "expiresAt": expires_at}}))
+    else:
+        claims = base64.urlsafe_b64encode(json.dumps({"exp": (_NOW + timedelta(days=5)).timestamp()}).encode())
+        token = f"h.{claims.decode().rstrip('=')}.s"
+        path.write_text(json.dumps({"tokens": {"access_token": token, "account_id": "acct"}}))
+    return path
+
+
+def _requested_url(declaration: SubscriptionDeclaration) -> str:
+    """The URL the selected sampler calls on one sample, through a transport that answers 500."""
+    seen: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(str(request.url))
+        return httpx2.Response(500)
+
+    transport = httpx2.MockTransport(handler)
+    sampler = select_sampler(
+        declaration, clock=FixedClock(_NOW), http_client=lambda: httpx2.Client(transport=transport)
+    )
+    assert sampler is not None
+    sampler.sample()
+    (url,) = seen
+    return url
+
+
+@pytest.mark.parametrize(
+    ("provider", "default_origin", "path"),
+    [
+        (PROVIDER_ANTHROPIC, "https://api.anthropic.com", "/api/oauth/usage"),
+        (PROVIDER_OPENAI, "https://chatgpt.com/backend-api", "/codex/usage"),
+    ],
+)
+def test_a_declared_usage_api_base_replaces_the_provider_default_and_absent_keeps_it(
+    provider: str, default_origin: str, path: str, tmp_path: Path
+) -> None:
+    credentials = str(_live_credentials(provider, tmp_path / "creds.json"))
+    default = SubscriptionDeclaration(slug="s", name="S", provider=provider, credentials_path=credentials)
+    overridden = replace(default, usage_api_base="http://127.0.0.1:9999/vendor")
+
+    assert _requested_url(default) == f"{default_origin}{path}"
+    assert _requested_url(overridden) == f"http://127.0.0.1:9999/vendor{path}"
+
+
+def test_each_subscription_carries_its_own_usage_api_base(tmp_path: Path) -> None:
+    credentials = str(_live_credentials(PROVIDER_ANTHROPIC, tmp_path / "creds.json"))
+    first = SubscriptionDeclaration(
+        slug="a", name="A", provider=PROVIDER_ANTHROPIC, credentials_path=credentials, usage_api_base="http://one.test"
+    )
+    second = replace(first, slug="b", usage_api_base="http://two.test")
+
+    assert _requested_url(first).startswith("http://one.test/")
+    assert _requested_url(second).startswith("http://two.test/")
+
+
+def test_an_unknown_provider_with_a_usage_api_base_is_still_unsampled() -> None:
+    declaration = SubscriptionDeclaration(
+        slug="m", name="M", provider="some-unshipped-provider", usage_api_base="http://x.test"
+    )
+
+    assert select_sampler(declaration, clock=FixedClock(_NOW), http_client=_unreachable_client) is None

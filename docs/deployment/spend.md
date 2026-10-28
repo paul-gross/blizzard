@@ -299,6 +299,11 @@ one-shot (haiku, one turn, no tools, MCP servers, settings or session) and count
 before it sends. It needs the `claude` binary reachable from the runner's environment. An expired refresh token still
 needs an operator login and shows the lapsed condition below.
 
+Each binding samples its vendor's public usage endpoint — `https://api.anthropic.com` or
+`https://chatgpt.com/backend-api` — unless the declaration sets `usage_api_base` to another `http(s)` base, such as a
+provider gateway. The adapter keeps its own usage path, headers, and failure behavior under it. A value that is not an
+`http(s)` URL with a host, or that carries credentials, a query, or a fragment, fails config load.
+
 A sample that produces nothing carries one of four reasons: `credential_lapsed` (a token past its own expiry, or a 401
 from the provider), `credential_unreadable` (a missing or unparseable credential file), `endpoint_unreachable` (a
 connection failure, a timeout, or any other non-2xx status), and `response_unparseable` (a body the binding could not
