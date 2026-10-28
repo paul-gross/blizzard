@@ -41,10 +41,11 @@ from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requir
 from blizzard.hub.domain.actions.visit import (
     GitCommits,
     LandingProject,
-    UnconvergedDeliveryError,
     Visit,
     VisitChunk,
     VisitNode,
+    VisitRefusal,
+    resolve_visit,
 )
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -540,34 +541,31 @@ class HubNodeExecutor:
             )
         spec = action.spec
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        try:
-            git_commits = GitCommits.of(artifacts)
-        except UnconvergedDeliveryError as exc:
-            return self._refuse(chunk, graph, node, epoch=epoch, step="unconverged-delivery", detail=str(exc))
         project = self._landing_project(chunk)
-        resolution = resolve_chunk_repositories(
-            git_commits.origins(),
-            self._repositories.list_all(include_retired=True),
-            self._forge_records.list_all(include_retired=True),
+        resolved = resolve_visit(
+            artifacts,
+            project=project,
             minted_at=chunk.minted_at,
-            linked=project.linked,
-            project=project.slug,
+            repositories=self._repositories.list_all(include_retired=True),
+            forges=self._forge_records.list_all(include_retired=True),
+            lands=spec.lands,
         )
-        refusal = self._resolution_refusal(resolution)
-        forges: dict[RepositoryId, RepositoryForge] = {}
-        if refusal is None and spec.lands:
-            refusal = self._ambiguity_refusal(resolution)
-        if refusal is None and (missing := self._missing_capability(action_name, resolution)) is not None:
+        if isinstance(resolved, VisitRefusal):
+            if resolved.resolution is not None:
+                self._record_refusal_event(chunk, node, resolved.resolution, epoch=epoch)
+            return self._refuse(chunk, graph, node, epoch=epoch, step=resolved.step, detail=resolved.detail)
+        git_commits, resolution = resolved.git_commits, resolved.resolution
+        if (missing := self._missing_capability(action_name, resolution)) is not None:
             target, capability = missing
             return self._escalate_capability_missing(
                 chunk, node, action_name, target, capability, forge=resolution.forge_of(target), epoch=epoch
             )
-        if refusal is None and spec.lands:
+        forges: dict[RepositoryId, RepositoryForge] = {}
+        if spec.lands:
             forges, refusal = self._visit_forges(resolution)
-        if refusal is not None:
-            step, detail = refusal
-            self._record_refusal_event(chunk, node, resolution, epoch=epoch)
-            return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
+            if refusal is not None:
+                step, detail = refusal
+                return self._refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail)
         visit = Visit(
             chunk=VisitChunk(
                 chunk_id=chunk.chunk_id,
@@ -755,29 +753,6 @@ class HubNodeExecutor:
             slug=project.slug if project is not None else chunk.project_id,
             linked=frozenset(link.repository_id for link in self._links.repositories_of(chunk.project_id)),
         )
-
-    @staticmethod
-    def _resolution_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
-        """The ``(hub-log step, detail)`` a refused resolution routes with, or ``None`` when it stands."""
-        if REFUSAL_EVENT[resolution.outcome] is None:
-            return None
-        return resolution.outcome.value, resolution.detail
-
-    @staticmethod
-    def _ambiguity_refusal(resolution: RepositoryResolution) -> tuple[str, str] | None:
-        """The refusal a resolution holding one ``owner/repo`` for two records routes with: both landings
-        would write the one ``merged/<repo>`` marker. ``None`` when every ``owner/repo`` is one record's."""
-        held: dict[str, ResolvedRepository] = {}
-        for repo, target in zip(resolution.qualified, resolution.targets, strict=True):
-            first = held.setdefault(repo, target)
-            if first.record != target.record:
-                return (
-                    "repository-ambiguous",
-                    f"the repo {repo!r} resolves to two repository records, and so to one marker name: "
-                    f"record {first.record!r} ({resolution.forge_of(first).fields.api_base}) and record "
-                    f"{target.record!r} ({resolution.forge_of(target).fields.api_base})",
-                )
-        return None
 
     def _record_refusal_event(self, chunk: Chunk, node: Node, resolution: RepositoryResolution, *, epoch: int) -> None:
         kind = REFUSAL_EVENT[resolution.outcome]
