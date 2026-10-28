@@ -788,3 +788,22 @@ def test_tick_with_the_lock_held_and_no_answering_socket_still_refuses(tmp_path:
 
     assert result.exit_code == 1
     assert "so this cannot run a tick — stop it first" in result.output
+
+
+def test_tick_with_the_lock_held_and_a_dead_socket_file_still_refuses(tmp_path: Path) -> None:
+    """A socket file an ungraceful exit left behind answers nothing, so it is not a host to step."""
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    layout = HostLayout(root)
+    corpse = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    corpse.bind(str(layout.socket_path))
+    corpse.close()
+    assert layout.socket_path.exists()
+    lock = HostLock.acquire(layout)
+    try:
+        result = init_runner().invoke(blizzard, ["runner", "tick", "--dir", str(root)])
+    finally:
+        lock.release()
+
+    assert result.exit_code == 1
+    assert "so this cannot run a tick — stop it first" in result.output
