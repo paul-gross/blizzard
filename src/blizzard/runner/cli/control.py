@@ -555,7 +555,7 @@ def selftest(
     click.echo(f"selftest {run['id']} passed for {coding_harness}")
 
 
-def renewal_text(sub: dict[str, Any]) -> str | None:
+def renewal_text(sub: dict[str, object]) -> str | None:
     """One subscription's newest credential renewal in operator words, from the wire's typed
     fields alone — ``None`` when it was never renewed."""
     result = RenewalResult.recognized(sub.get("renewal_result"))

@@ -4,8 +4,8 @@ event-authoring call site gets the live broadcast without knowing the broker exi
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
@@ -36,7 +36,7 @@ class EventLogService:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict[str, Any] | None,
+        detail: Mapping[str, object] | None,
         at: datetime,
         runner_name: str | None = None,
     ) -> int:
@@ -72,7 +72,7 @@ class EventLogService:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict[str, Any] | None,
+        detail: Mapping[str, object] | None,
         at: datetime,
     ) -> int:
         row_id = self._events.record_event(

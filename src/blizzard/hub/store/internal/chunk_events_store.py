@@ -7,7 +7,7 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -757,7 +757,7 @@ class ChunkEventsStore:
         lease_id: str | None,
         node_name: str | None,
         message: str,
-        detail: dict[str, Any] | None,
+        detail: Mapping[str, object] | None,
         at: datetime,
     ) -> int:
         # Append-only operational fact, no epoch fence. `detail` serializes

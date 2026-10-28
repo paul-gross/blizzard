@@ -50,7 +50,7 @@ MODEL = ModelColumn()
 HARNESSES = ModelColumn()
 
 
-def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, Any]:
+def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
     return {
         "graph_name": routine.graph_name,
         "default_scope_id": scope_id_of(stmts, routine.default_scope_slug, routine.project_id),

@@ -6,8 +6,8 @@ is one complete, directly-callable pass (``bzh:steppable-loop``)."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import Any
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
@@ -37,7 +37,7 @@ _RECOVERED: HubEventKind = "trace-export-recovered"
 _SKIPPED: HubEventKind = "trace-window-skipped"
 
 
-def _key_detail(key: CursorKey) -> dict[str, Any]:
+def _key_detail(key: CursorKey) -> dict[str, object]:
     return {"at": iso_utc(key.at), "chunk_id": key.chunk_id, "epoch": key.epoch, "decision_id": key.decision_id}
 
 
@@ -139,7 +139,7 @@ class TraceExportSweep:
                 {"reason": jump.reason.value, "since": _key_detail(since), "until": iso_utc(jump.to.at)},
             )
 
-    def _record(self, kind: HubEventKind, message: str, detail: dict[str, Any] | None) -> None:
+    def _record(self, kind: HubEventKind, message: str, detail: Mapping[str, object] | None) -> None:
         self._events.record(
             kind=kind,
             message=message,

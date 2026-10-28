@@ -11,9 +11,9 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date, datetime, timedelta
-from typing import Any
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
@@ -257,7 +257,7 @@ class EgressSweep:
         )
         if not opens:
             return
-        detail: dict[str, Any] = {"dataset": dataset, "cause": failure.cause.value, "message": failure.message}
+        detail: dict[str, object] = {"dataset": dataset, "cause": failure.cause.value, "message": failure.message}
         if failure.free_bytes is not None:
             detail["free_bytes"] = failure.free_bytes
             detail["required_bytes"] = failure.required_bytes
@@ -267,7 +267,7 @@ class EgressSweep:
         if self._latch.succeeded():
             self._record(_RECOVERED, "fact egress recovered; held rows are being written", None)
 
-    def _record(self, kind: HubEventKind, message: str, detail: dict[str, Any] | None) -> None:
+    def _record(self, kind: HubEventKind, message: str, detail: Mapping[str, object] | None) -> None:
         self._events.record(
             kind=kind,
             message=message,

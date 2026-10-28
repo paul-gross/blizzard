@@ -48,7 +48,7 @@ def content_digest(*, turn_range_start: int, rejected: bool, content: bytes | No
     return digest.hexdigest()
 
 
-def _identity_values(record: TranscriptSlice) -> dict[str, Any]:
+def _identity_values(record: TranscriptSlice) -> dict[str, object]:
     return {
         "segment_id": record.segment_id,
         "chunk_id": record.chunk_id,

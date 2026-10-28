@@ -7,6 +7,7 @@ A tenant holding what a service test creates deletes in well under a second, mea
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -90,7 +91,7 @@ def _deletions(hub: HubHarness) -> list[sa.Row]:
         return list(conn.execute(sa.select(schema.tenant_deletions)).all())
 
 
-def _hub_events(hub: HubHarness) -> list[tuple[str, dict | None]]:  # type: ignore[type-arg]
+def _hub_events(hub: HubHarness) -> list[tuple[str, Mapping[str, object] | None]]:
     return [(e.kind, e.detail) for e in reversed(hub.hub_services.hub_events.recent(50)) if e.kind.startswith("tenant")]
 
 

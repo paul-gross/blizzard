@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any
 
 import click
 
@@ -98,7 +97,7 @@ def item_edit(
 ) -> None:
     """Edit the item at TOKEN (e.g. hub:<n>) in place — only the given fields change."""
     source, ref = token
-    json_body: dict[str, Any] = {}
+    json_body: dict[str, object] = {}
     if title is not None:
         json_body["title"] = title
     if body_file is not None:

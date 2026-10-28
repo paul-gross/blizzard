@@ -122,7 +122,7 @@ def _origin_holder(conn: Connection, record: ConfiguredForge) -> str | None:
     return None if row is None else row.slug
 
 
-def _columns(record: ConfiguredForge) -> dict[str, Any]:
+def _columns(record: ConfiguredForge) -> dict[str, object]:
     f = record.fields
     return {
         "slug": record.slug,

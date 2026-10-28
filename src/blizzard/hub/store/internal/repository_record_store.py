@@ -89,7 +89,7 @@ def _coordinate_taken(conn: Connection, record: ConfiguredRepository, holder: st
     return RepositoryCoordinateTaken(forge.label if forge else f.forge_id, f.owner, f.repo, holder=holder)
 
 
-def _columns(record: ConfiguredRepository, forge: StandingForge) -> dict[str, Any]:
+def _columns(record: ConfiguredRepository, forge: StandingForge) -> dict[str, object]:
     f = record.fields
     return {
         "slug": record.slug,
