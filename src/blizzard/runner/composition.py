@@ -1172,7 +1172,7 @@ class DotenvTokenFiles:
         HubTokenFile.of(root, token_env).remove()
 
 
-_ken_files_conforms: type[ITokenFiles] = DotenvTokenFiles
+_token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
 
 
 def runner_store_migrations(url: str) -> MigrationRunner:

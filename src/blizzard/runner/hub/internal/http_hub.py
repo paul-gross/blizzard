@@ -735,7 +735,7 @@ def _refusal_code(resp: httpx2.Response) -> str | None:
 _hub_client_conforms: type[IHubClient] = HttpHubClient
 
 
-_ken_identity_reader_conforms: type[ITokenIdentityReader] = HttpHubClient
+_token_identity_reader_conforms: type[ITokenIdentityReader] = HttpHubClient
 
 
 _hub_runner_admin_conforms: type[IHubRunnerAdmin] = HttpHubRunnerAdmin

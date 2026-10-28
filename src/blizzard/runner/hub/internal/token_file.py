@@ -81,7 +81,7 @@ class HubTokenFile:
         return True
 
 
-_ken_writer_conforms: type[ITokenWriter] = HubTokenFile
+_token_writer_conforms: type[ITokenWriter] = HubTokenFile
 
 
 _hub_token_file_conforms: type[IHubTokenFile] = HubTokenFile
