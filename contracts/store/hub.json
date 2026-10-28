@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261025_0900_forges",
+  "head_revision": "20261027_0900_flows",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -2692,6 +2692,385 @@
       ],
       "unique": []
     },
+    "flow_facts": {
+      "checks": [],
+      "columns": {
+        "at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "flow_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "outcome": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "revision": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "flow_id"
+          ],
+          "references": {
+            "columns": [
+              "flow_id"
+            ],
+            "table": "flows"
+          }
+        },
+        {
+          "columns": [
+            "submission_id"
+          ],
+          "references": {
+            "columns": [
+              "submission_id"
+            ],
+            "table": "flow_submissions"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "flow_submission_closures": {
+      "checks": [],
+      "columns": {
+        "closed_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "outcome": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "submission_id"
+          ],
+          "references": {
+            "columns": [
+              "submission_id"
+            ],
+            "table": "flow_submissions"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "submission_id"
+      ],
+      "unique": []
+    },
+    "flow_submission_flows": {
+      "checks": [],
+      "columns": {
+        "flow_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "flow_id"
+          ],
+          "references": {
+            "columns": [
+              "flow_id"
+            ],
+            "table": "flows"
+          }
+        },
+        {
+          "columns": [
+            "submission_id"
+          ],
+          "references": {
+            "columns": [
+              "submission_id"
+            ],
+            "table": "flow_submissions"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "submission_id",
+        "flow_id"
+      ],
+      "unique": []
+    },
+    "flow_submissions": {
+      "checks": [],
+      "columns": {
+        "arrival": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "epoch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "generation": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "node_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "submitted_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "chunk_id"
+          ],
+          "references": {
+            "columns": [
+              "chunk_id"
+            ],
+            "table": "chunks"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "submission_id"
+      ],
+      "unique": [
+        [
+          "tenant_id",
+          "arrival"
+        ],
+        [
+          "tenant_id",
+          "chunk_id",
+          "node_id",
+          "epoch",
+          "generation"
+        ]
+      ]
+    },
+    "flows": {
+      "checks": [],
+      "columns": {
+        "branch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "created_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "flow_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repository_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "resource": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "flow_id"
+      ],
+      "unique": [
+        [
+          "tenant_id",
+          "resource"
+        ]
+      ]
+    },
     "forge_annotation_facts": {
       "checks": [],
       "columns": {
@@ -4589,6 +4968,76 @@
       ],
       "primary_key": [
         "id"
+      ],
+      "unique": []
+    },
+    "hub_turns": {
+      "checks": [],
+      "columns": {
+        "ended_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "outcome": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "started_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "turn_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "submission_id"
+          ],
+          "references": {
+            "columns": [
+              "submission_id"
+            ],
+            "table": "flow_submissions"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "turn_id"
       ],
       "unique": []
     },
