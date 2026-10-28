@@ -7,6 +7,7 @@ rendering — the per-chunk cost column, the fleet total, and the ``~``-estimate
 
 from __future__ import annotations
 
+import json
 from typing import cast
 
 import pytest
@@ -224,6 +225,33 @@ def test_status_drains_every_page_of_chunks() -> None:
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
     assert "ch_2" in result.output
+
+
+def test_status_json_keeps_raw_fields_across_pages_and_old_server_defaults() -> None:
+    first = {"chunk_id": "one", "extra": {"untouched": [1, None]}}
+    second = {"chunk_id": "two", "extra": False}
+    responses = _responses({}, {})
+    responses[f"{DEFAULT_HUB_URL}/api/runners"] = {"server_extra": [1, 2]}
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        if url.endswith("/api/chunks"):
+            calls.append(dict(params or {}))
+            return _FakeResponse(
+                {"chunks": [second]} if params and params.get("cursor") else {"chunks": [first], "next_cursor": "c"}
+            )
+        return _FakeResponse(responses[url])
+
+    result = bind_stubs(get=fake_get).runner.invoke(hub_group, ["status", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "chunks": [first, second],
+        "runners": {"server_extra": [1, 2]},
+        "questions": [],
+        "spend": responses[f"{DEFAULT_HUB_URL}/api/spend"],
+    }
+    assert calls == [{"limit": "1000"}, {"limit": "1000", "cursor": "c"}]
 
 
 def test_status_marks_a_blocked_chunk_naming_the_prerequisite() -> None:

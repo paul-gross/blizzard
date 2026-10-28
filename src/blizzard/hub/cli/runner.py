@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -13,7 +13,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, RunnerLine
+from blizzard.hub.cli.views import Listing, RunnerLine, RunnerRow
 
 #: How a hub from before ``hub runner add`` answers ``POST /api/runners`` — with no detail worth showing.
 _PREDATES_ADD = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED})
@@ -35,7 +35,7 @@ class RunnerDetail:
     body: dict[str, Any]
 
     def lines(self) -> Iterator[str]:
-        runner = RunnerLine(self.body)
+        runner = RunnerLine(cast(RunnerRow, self.body))
         yield f"{self.body['runner_id']}  {runner.name}  {runner.connection}  ws={runner.workspace}"
         yield f"  added={self.body.get('added_at') or '-'} by {self.body.get('added_by') or '-'}"
         yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"

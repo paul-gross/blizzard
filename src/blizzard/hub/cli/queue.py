@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -62,7 +62,7 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
 
     No other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included."""
     entries = cli.get_all("/api/queue", "GET /queue", key="entries")
-    rest = [entry["chunk_id"] for entry in entries if entry["chunk_id"] != chunk_id]
+    rest = [cast(str, entry["chunk_id"]) for entry in entries if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))
     after_chunk_id = rest[index - 1] if index > 0 else None
     resp = cli.post(

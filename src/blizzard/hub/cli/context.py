@@ -26,6 +26,10 @@ class ValidationDetail(TypedDict, total=False):
     msg: object
 
 
+class PaginationCursor(TypedDict, total=False):
+    next_cursor: str | None
+
+
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the colocated default (band +2).
 ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
@@ -113,19 +117,19 @@ class CliContext:
         key: str,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
-    ) -> list[Any]:
+    ) -> list[dict[str, object]]:
         """Every row of a cursor-paginated list read: ``key``'s rows concatenated across
         pages of up to 1000, following ``next_cursor`` until it is absent."""
         page_params = dict(params or {})
         page_params["limit"] = "1000"
-        rows: list[Any] = []
+        rows: list[dict[str, object]] = []
         cursor: str | None = None
         while True:
             if cursor is not None:
                 page_params["cursor"] = cursor
-            body = self.get(path, operation, params=page_params, on_status=on_status).json()
-            rows.extend(body[key])
-            cursor = body.get("next_cursor")
+            body: dict[str, object] = self.get(path, operation, params=page_params, on_status=on_status).json()
+            rows.extend(cast(list[dict[str, object]], body[key]))
+            cursor = cast(PaginationCursor, body).get("next_cursor")
             if cursor is None:
                 return rows
 

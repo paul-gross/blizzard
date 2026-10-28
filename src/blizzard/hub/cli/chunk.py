@@ -14,7 +14,7 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import ChunkLine, Cost, Listing, pointer_label
+from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
 
 
 class Neighbor(TypedDict):
@@ -42,7 +42,7 @@ class ChunkDetail:
     def lines(self) -> Iterator[str]:
         body = self.body
         yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
-        yield f"  node: {ChunkLine(body).node}"
+        yield f"  node: {ChunkLine(cast(ChunkRow, body)).node}"
         # Both defaults on their own line: `chunk set` can write either, so a text-mode
         # read-back exists for both. `-` is "express no preference", not unknown.
         models = ", ".join(body.get("default_model") or []) or "-"

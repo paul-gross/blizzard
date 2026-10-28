@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import cast
+from typing import NotRequired, TypedDict, cast
 from urllib.parse import quote
 
 import click
@@ -22,17 +22,28 @@ def artifact_group() -> None:
     ``create`` *stages* a submission, published on completion."""
 
 
+class _PublishedArtifact(TypedDict):
+    name: str
+    kind: str
+    content: NotRequired[str | None]
+
+
+class _StagedArtifact(TypedDict):
+    name: str
+    content: str
+
+
 @dto
 @dataclass(frozen=True)
 class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
 
-    artifact: dict[str, object]
+    artifact: _PublishedArtifact | _StagedArtifact
 
     @property
     def summary(self) -> dict[str, object]:  # ast-grep-ignore: bzh:property-delegates
-        content = cast(str | None, self.artifact.get("content"))
+        content = self.artifact.get("content")
         summary = {k: v for k, v in self.artifact.items() if k != "content"}
         summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
         return summary
@@ -50,7 +61,7 @@ def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 
-def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, object]]:
+def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[_StagedArtifact]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
     excludes node — ``graph`` and ``system`` never have one. Also ``[]``, noted on stderr, on a
     failed read."""
@@ -94,8 +105,11 @@ def artifact_list(content: bool, scope: str | None) -> None:
         params={"scope": scope} if scope else None,
     )
     staged = _staged_for_scope(worker, scope)
-    published: list[dict[str, object]] = resp.json()
-    entries = [{**a, "staged": False} for a in published] + [{**a, "staged": True} for a in staged]
+    published: list[_PublishedArtifact] = resp.json()
+    entries: list[_PublishedArtifact | _StagedArtifact] = [
+        *(cast(_PublishedArtifact, {**a, "staged": False}) for a in published),
+        *(cast(_StagedArtifact, {**a, "staged": True}) for a in staged),
+    ]
     if content:
         click.echo(json.dumps(entries))
         return
@@ -109,7 +123,8 @@ def _staged_names(worker: WorkerCall) -> set[str] | None:
         resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
     except click.ClickException:
         return None
-    return {a["name"] for a in resp.json()}
+    staged: list[_StagedArtifact] = resp.json()
+    return {a["name"] for a in staged}
 
 
 def _is_not_found(exc: click.ClickException) -> bool:
@@ -191,7 +206,7 @@ def artifact_get(
     if not content:
         click.echo(resp.text)
         return
-    artifact = resp.json()
+    artifact: _PublishedArtifact = resp.json()
     try:
         kind: ArtifactKind | None = ArtifactKind(artifact["kind"])
     except ValueError:
@@ -264,7 +279,7 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     if content:
         click.echo(resp.text)
         return
-    staged = resp.json()
+    staged: list[_StagedArtifact] = resp.json()
     click.echo(json.dumps([{"name": a["name"], "bytes": len(a["content"].encode("utf-8"))} for a in staged]))
 
 
