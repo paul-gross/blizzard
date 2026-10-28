@@ -96,7 +96,7 @@ class _Repositories:
 
     stored: dict[str, ConfiguredRepository]
     former: dict[str, ConfiguredRepository]
-    ids: dict[str, RepositoryId] = field(default_factory=dict)
+    ids: dict[str, RepositoryId] = field(default_factory=dict[str, RepositoryId])
 
     def planned(self) -> PlannedRepositories:
         """The repositories as the apply leaves them: those stored, and those the document creates."""
@@ -117,7 +117,7 @@ class _WorkSources:
 
     stored: dict[str, ConfiguredWorkSource]
     former: dict[str, ConfiguredWorkSource]
-    ids: dict[str, WorkSourceId] = field(default_factory=dict)
+    ids: dict[str, WorkSourceId] = field(default_factory=dict[str, WorkSourceId])
 
     def planned(self) -> tuple[tuple[WorkSourceRef, ...], dict[str, WorkSourceRef]]:
         """The work sources as the apply leaves them — those stored, and those the document creates — and the one that
@@ -460,8 +460,8 @@ class ConfigApplication:
         former_forges: dict[str, ConfiguredForge],
     ) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))
-        declared_slugs = {d.slug for d in declaration.repositories if isinstance(d, RepositoryDeclaration)}
-        source_slugs = {d.slug for d in declaration.work_sources if isinstance(d, WorkSourceDeclaration)}
+        declared_slugs = {d.slug for d in declaration.repositories}
+        source_slugs = {d.slug for d in declaration.work_sources}
         retired = self._secrets.retired_names(list(secrets))
         scopes: dict[tuple[str, str], DeclarableRecord] = {
             (scope.project_id, scope.slug): scope for scope in self._scopes.list_all()

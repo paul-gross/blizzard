@@ -194,7 +194,9 @@ class DeclaredReferences:
 
     scopes: frozenset[tuple[str, str]] = frozenset()
     enabled_graphs: frozenset[str] = frozenset()
-    linked_scopes: Mapping[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
+    linked_scopes: Mapping[tuple[str, str], tuple[str, ...]] = field(
+        default_factory=dict[tuple[str, str], tuple[str, ...]]
+    )
 
 
 class RecordDeclaration(Protocol):
@@ -283,15 +285,17 @@ class StoredConfig:
     repositories: Mapping[str, ConfiguredRepository]
     #: The lifecycle state of each listed secret that exists; an absent name is unknown.
     secrets: Mapping[str, RecordState]
-    forges: Mapping[str, ConfiguredForge] = field(default_factory=dict)
-    former_forges: Mapping[str, ConfiguredForge] = field(default_factory=dict)
+    forges: Mapping[str, ConfiguredForge] = field(default_factory=dict[str, ConfiguredForge])
+    former_forges: Mapping[str, ConfiguredForge] = field(default_factory=dict[str, ConfiguredForge])
     #: For each declared repository slug no repository holds, the repository that left it.
-    former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict)
+    former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict[str, ConfiguredRepository])
     #: For each declared work-source slug no work source holds, the work source that left it.
-    former_work_sources: Mapping[str, ConfiguredWorkSource] = field(default_factory=dict)
+    former_work_sources: Mapping[str, ConfiguredWorkSource] = field(default_factory=dict[str, ConfiguredWorkSource])
     #: Stored scopes and routines, by their entries' ``key``.
-    scopes: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
-    routines: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict)
+    scopes: Mapping[tuple[str, str], DeclarableRecord] = field(default_factory=dict[tuple[str, str], DeclarableRecord])
+    routines: Mapping[tuple[str, str], DeclarableRecord] = field(
+        default_factory=dict[tuple[str, str], DeclarableRecord]
+    )
     references: DeclaredReferences = DeclaredReferences()
 
 

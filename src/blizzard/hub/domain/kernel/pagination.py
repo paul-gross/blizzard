@@ -7,6 +7,8 @@ from __future__ import annotations
 import base64
 import json
 
+from typing_extensions import TypeIs
+
 #: The page size a caller gets by omitting `limit`.
 DEFAULT_LIMIT = 200
 
@@ -21,6 +23,10 @@ class MalformedCursor(ValueError):
     def __init__(self, cursor: str) -> None:
         super().__init__(f"malformed cursor {cursor!r}")
         self.cursor = cursor
+
+
+def _decoded_parts(value: object) -> TypeIs[list[object]]:
+    return isinstance(value, list)
 
 
 def encode_cursor(*parts: str | int | float) -> str:
@@ -38,6 +44,6 @@ def decode_cursor(cursor: str) -> list[object]:
         parts = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
     except Exception:
         raise MalformedCursor(cursor) from None
-    if not isinstance(parts, list):
+    if not _decoded_parts(parts):
         raise MalformedCursor(cursor)
     return parts

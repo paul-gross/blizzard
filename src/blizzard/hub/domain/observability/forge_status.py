@@ -44,7 +44,7 @@ def marker_action(desired: WorkStatusMarker | None, actual: frozenset[WorkStatus
     marker, set when the forge carries anything but exactly the desired marker, else nothing."""
     if desired is None:
         return "clear" if actual else "skip"
-    return "skip" if actual == {desired} else "set"
+    return "skip" if actual == frozenset({desired}) else "set"
 
 
 def departed(previous: Iterable[str], annotating: Iterable[str]) -> list[str]:
@@ -125,7 +125,7 @@ class AnnotationTally:
     cleared: int = 0
     failed: int = 0
     considered: int = 0
-    sources_skipped: list[str] = field(default_factory=list)
+    sources_skipped: list[str] = field(default_factory=list[str])
 
 
 class TenantAnnotation:

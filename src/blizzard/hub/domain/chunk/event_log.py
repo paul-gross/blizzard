@@ -56,7 +56,7 @@ class EventLogService:
             lease_id=lease_id,
             node_name=node_name,
             message=message,
-            detail=detail,
+            detail=dict(detail) if detail is not None else None,
             at=at,
         )
 

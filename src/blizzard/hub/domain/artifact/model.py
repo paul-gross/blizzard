@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TypedDict
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.roles import domain_model
@@ -81,6 +82,15 @@ class AssetArtifact:
 Artifact = GitCommitArtifact | AssetArtifact
 
 
+class _StoredCommon(TypedDict):
+    name: str
+    artifact_id: str
+    chunk_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+
+
 @domain_model
 @dataclass(frozen=True)
 class StoredArtifact:
@@ -103,7 +113,7 @@ class StoredArtifact:
     @classmethod
     def of(cls, artifact: Artifact, *, node_name: str) -> StoredArtifact:
         """Compress a typed artifact to its storage row (lossless)."""
-        common = {
+        common: _StoredCommon = {
             "name": artifact.name,
             "artifact_id": artifact.artifact_id,
             "chunk_id": artifact.produced_by.chunk_id,

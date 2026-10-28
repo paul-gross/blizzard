@@ -48,8 +48,8 @@ class GraphPins:
     pass. Owns the "newest matching transition, else mint pin" rule
     :meth:`EventDerivationService.derive_segment` applies per node-step."""
 
-    transitions_by_chunk: dict[str, list[TransitionFact]] = field(default_factory=dict)
-    mint_pin_by_chunk: dict[str, str] = field(default_factory=dict)
+    transitions_by_chunk: dict[str, list[TransitionFact]] = field(default_factory=dict[str, list[TransitionFact]])
+    mint_pin_by_chunk: dict[str, str] = field(default_factory=dict[str, str])
 
     def graph_id_for(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
         """The node-step's graph: the newest transition among this chunk's

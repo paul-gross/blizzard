@@ -191,10 +191,10 @@ class Chunk:
     minted_at: datetime
     # The chunk's **default** model preference and effort — what a surface
     # declaring neither inherits; empty/``None`` means *express no preference*.
-    default_model: list[str] = field(default_factory=list)
+    default_model: list[str] = field(default_factory=list[str])
     default_effort: str | None = None
     # The chunk's default harness preference, `default_model`'s shape: empty is no preference.
-    default_harnesses: list[str] = field(default_factory=list)
+    default_harnesses: list[str] = field(default_factory=list[str])
     # The chunk's standing intent to migrate onto another graph at its next transition
     # — ``None`` while no intent is set.
     intended_migration: IntendedMigration | None = None
@@ -849,7 +849,7 @@ class GateDecision:
     project_id: ProjectId | None = None
     #: The checks the runner ran at the gated step's exit; empty when the node declares none or the
     #: submitting runner predates them.
-    check_results: list[DecisionCheck] = field(default_factory=list)
+    check_results: list[DecisionCheck] = field(default_factory=list[DecisionCheck])
     #: Whether the resolution took a ``requires_checks`` choice over a red check.
     overrode_red_checks: bool = False
     #: The resolver's note to every later session; ``None`` when none was left.
@@ -1064,31 +1064,31 @@ class ChunkFacts:
     delivery_landed: bool = False
     # The chunk's per-repo ``delivery.repo_landed`` facts, independent of whether delivery
     # has reached a terminal transition; the derivation reads only non-emptiness.
-    landed_repos: frozenset[str] = field(default_factory=frozenset)
-    escalations: list[EscalationFact] = field(default_factory=list)
-    leases: list[LeaseFact] = field(default_factory=list)
+    landed_repos: frozenset[str] = field(default_factory=frozenset[str])
+    escalations: list[EscalationFact] = field(default_factory=list[EscalationFact])
+    leases: list[LeaseFact] = field(default_factory=list[LeaseFact])
     # The chunk's epoch owners — a claim's reservation among them, so it raises the fence.
-    epoch_owners: list[EpochOwnerFact] = field(default_factory=list)
-    transitions: list[TransitionFact] = field(default_factory=list)
-    routes_created: list[RouteCreatedFact] = field(default_factory=list)
-    routes_released: list[RouteReleasedFact] = field(default_factory=list)
-    route_tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list)
-    questions: list[QuestionFact] = field(default_factory=list)
-    decisions: list[DecisionFact] = field(default_factory=list)
-    requeues: list[RequeueFact] = field(default_factory=list)
+    epoch_owners: list[EpochOwnerFact] = field(default_factory=list[EpochOwnerFact])
+    transitions: list[TransitionFact] = field(default_factory=list[TransitionFact])
+    routes_created: list[RouteCreatedFact] = field(default_factory=list[RouteCreatedFact])
+    routes_released: list[RouteReleasedFact] = field(default_factory=list[RouteReleasedFact])
+    route_tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list[RouteTokenMintedFact])
+    questions: list[QuestionFact] = field(default_factory=list[QuestionFact])
+    decisions: list[DecisionFact] = field(default_factory=list[DecisionFact])
+    requeues: list[RequeueFact] = field(default_factory=list[RequeueFact])
     # The chunk's cross-graph migration facts — each re-pins the chunk and
     # re-queues it, superseding an earlier transition for the terminal/hub-node checks.
-    migrations: list[MigrationFact] = field(default_factory=list)
+    migrations: list[MigrationFact] = field(default_factory=list[MigrationFact])
     # The chunk's operator restart facts (#370) — a third movement family beside the two above.
-    restarts: list[RestartFact] = field(default_factory=list)
-    pauses: list[PauseFact] = field(default_factory=list)
-    usage: list[UsageFact] = field(default_factory=list)
+    restarts: list[RestartFact] = field(default_factory=list[RestartFact])
+    pauses: list[PauseFact] = field(default_factory=list[PauseFact])
+    usage: list[UsageFact] = field(default_factory=list[UsageFact])
     # The chunk's recorded delivery kick-backs (#64) — feeds :meth:`ChunkFacts.bounce_count` /
     # :meth:`ChunkFacts.bounces_over_cap` and the chunk-detail bounce history. Never a status.
-    bounces: list[BounceFact] = field(default_factory=list)
+    bounces: list[BounceFact] = field(default_factory=list[BounceFact])
     # The chunk's recorded hub-node poll attempts (#66) — feeds :meth:`ChunkFacts.hub_node_pending`.
     # Never a status: pending is a facet of ``delivering``.
-    hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
+    hub_node_polls: list[HubNodePollFact] = field(default_factory=list[HubNodePollFact])
 
     @staticmethod
     def or_default(facts: ChunkFacts | None) -> ChunkFacts:
@@ -1553,9 +1553,9 @@ class LandedRepos:
 class RouteHistory:
     """A chunk's route facts and the liveness they derive."""
 
-    created: list[RouteCreatedFact] = field(default_factory=list)
-    released: list[RouteReleasedFact] = field(default_factory=list)
-    tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list)
+    created: list[RouteCreatedFact] = field(default_factory=list[RouteCreatedFact])
+    released: list[RouteReleasedFact] = field(default_factory=list[RouteReleasedFact])
+    tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list[RouteTokenMintedFact])
 
     @classmethod
     def of(cls, facts: ChunkFacts) -> RouteHistory:

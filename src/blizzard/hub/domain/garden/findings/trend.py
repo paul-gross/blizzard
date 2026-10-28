@@ -118,7 +118,7 @@ class IReadGardenTrendRepository(Protocol):
 
 def _periods(since: datetime, until: datetime, period_days: int) -> list[tuple[datetime, datetime]]:
     step = timedelta(days=period_days)
-    bounds = []
+    bounds: list[tuple[datetime, datetime]] = []
     start = since
     while start < until:
         end = min(start + step, until)

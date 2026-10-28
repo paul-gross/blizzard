@@ -125,7 +125,7 @@ class _Run:
     until: datetime
     writer: IEgressWriter | None
     now: datetime
-    tallies: dict[str, _Tally] = field(default_factory=dict)
+    tallies: dict[str, _Tally] = field(default_factory=dict[str, _Tally])
 
     def result(self, failure: EgressFailure | None = None) -> BackfillResult:
         counts = tuple(DatasetCount(name, tally.rows, tally.files) for name, tally in self.tallies.items())
@@ -257,7 +257,8 @@ class EgressBackfill:
         for partition, row in rows:
             by_partition[partition].append(row)
         tally = run.tallies[schema.name]
-        if run.writer is None:
+        writer = run.writer
+        if writer is None:
             tally.rows += len(rows)
             tally.files += files_needed([len(part) for part in by_partition.values()], self._max_rows_per_file)
             return None
@@ -265,14 +266,14 @@ class EgressBackfill:
         placed: list[PlacedFile] = []
         for partition in sorted(by_partition):
             written = guarded(
-                lambda partition=partition: run.writer.write(  # type: ignore[union-attr, misc]
+                lambda partition=partition: writer.write(
                     EgressBatch(schema, partition, egress_pass, by_partition[partition])
                 )
             )
             if isinstance(written, EgressFailure):
                 return written
             placed.extend(written.files)
-        committed = guarded(lambda: run.writer.commit_pass(egress_pass, placed))  # type: ignore[union-attr]
+        committed = guarded(lambda: writer.commit_pass(egress_pass, placed))
         if isinstance(committed, EgressFailure):
             return committed
         tally.rows += len(rows)
