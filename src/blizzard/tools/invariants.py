@@ -23,6 +23,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import ChunkFacts, RouteHistory
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, last_moved_at, withdrawal_for
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
@@ -30,6 +32,7 @@ from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 from blizzard.runner.composition import build_host_stores
@@ -911,6 +914,82 @@ class OneLiveExecSlot(HubQueryCheck):
             )
             for row in crowded
         ]
+
+
+class OneTurnPerFlow(HubQueryCheck):
+    """``hub:one-turn-per-flow`` — no flow has two open turns (``ended_at IS NULL``) holding it at once."""
+
+    def run(self) -> list[Violation]:
+        turns, held = hub.hub_turns, hub.flow_submission_flows
+        open_turns = func.count()
+        crowded = self.rows(
+            select(held.c.tenant_id, held.c.flow_id, open_turns)
+            .join(turns, turns.c.submission_id == held.c.submission_id)
+            .where(turns.c.ended_at.is_(None))
+            .group_by(held.c.tenant_id, held.c.flow_id)
+            .having(open_turns > 1)
+            .order_by(held.c.tenant_id, held.c.flow_id)
+        ).all()
+        return [
+            Violation("hub:one-turn-per-flow", f"tenant {row.tenant_id}: flow {row.flow_id} has {row[2]} open turns")
+            for row in crowded
+        ]
+
+
+class OneTurnPerVisit(HubQueryCheck):
+    """``hub:one-turn-per-visit`` — no submission has two open turns at once."""
+
+    def run(self) -> list[Violation]:
+        turns = hub.hub_turns
+        open_turns = func.count()
+        crowded = self.rows(
+            select(turns.c.tenant_id, turns.c.submission_id, open_turns)
+            .where(turns.c.ended_at.is_(None))
+            .group_by(turns.c.tenant_id, turns.c.submission_id)
+            .having(open_turns > 1)
+            .order_by(turns.c.tenant_id, turns.c.submission_id)
+        ).all()
+        return [
+            Violation(
+                "hub:one-turn-per-visit",
+                f"tenant {row.tenant_id}: submission {row.submission_id} has {row[2]} open turns",
+            )
+            for row in crowded
+        ]
+
+
+@dataclass(frozen=True)
+class FlowLineStanding(Check):
+    """``hub:flow-line-standing`` — every open submission's chunk still stands where its line holds it: at its node,
+    at its epoch, or at a later one while a person holds the chunk — ``withdrawal_for`` answering nothing. The line
+    converges on two kinds by design, so both are exempt: one with an open turn, whose end writes its closure, and
+    one whose chunk moved within :data:`RECONCILE_FLOOR`, the longest a full reconcile is ever skipped. Standing is
+    derived through the chunk's loaded facts, never re-derived here."""
+
+    flows: IReadFlows
+    facts: IReadChunkFactsRepository
+    clock: IClock
+
+    def run(self) -> list[Violation]:
+        turning = {turn.submission_id for turn in self.flows.open_turns()}
+        submissions = [sub for sub in self.flows.open_submissions_from(0) if sub.submission_id not in turning]
+        facts_by_id = self.facts.load_facts_for(sorted({sub.chunk_id for sub in submissions}))
+        settled_before = self.clock.now() - RECONCILE_FLOOR
+        violations: list[Violation] = []
+        for sub in submissions:
+            facts = ChunkFacts.or_default(facts_by_id.get(sub.chunk_id))
+            withdrawal = withdrawal_for(facts, sub)
+            moved = last_moved_at(facts)
+            if withdrawal is None or (moved is not None and moved > settled_before):
+                continue
+            violations.append(
+                Violation(
+                    "hub:flow-line-standing",
+                    f"submission {sub.submission_id} of chunk {sub.chunk_id} at node {sub.node_id} epoch {sub.epoch} "
+                    f"is still open, but its chunk has left the visit ({withdrawal})",
+                )
+            )
+        return violations
 
 
 class HubNodeHasAction(HubQueryCheck):
@@ -1886,6 +1965,8 @@ class HubInvariants:
                 PerRepoMarkerIdempotent(conn),
                 NoDoubleDelivery(conn),
                 OneLiveExecSlot(conn),
+                OneTurnPerFlow(conn),
+                OneTurnPerVisit(conn),
                 HubNodeHasAction(conn),
                 NoDoubleTerminalClosure(conn),
                 NoPendingIntentAgainstATerminalRef(conn),
@@ -1929,6 +2010,8 @@ class HubInvariants:
                 violations.extend(
                     Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
                 )
+            line = FlowLineStanding(FlowStore(connections, self.clock), facts_store, self.clock)
+            violations.extend(Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in line.run())
         return violations
 
 

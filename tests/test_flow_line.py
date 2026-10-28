@@ -1,13 +1,15 @@
 """The line's rules (unit tier): who is eligible and who is next on a flow, what a visit holds, the one judge of a
-closure's outcome."""
+closure's outcome, and ``hub:flow-line-standing`` over planted flows and facts."""
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
@@ -21,15 +23,19 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
 from blizzard.hub.domain.delivery.flows import (
+    RECONCILE_FLOOR,
     Flow,
+    FlowFact,
     FlowLine,
     FlowResource,
     PollPolicy,
     Submission,
+    Turn,
     held_resources,
     withdrawal_for,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.tools.invariants import FlowLineStanding
 
 pytestmark = pytest.mark.unit
 
@@ -270,3 +276,71 @@ def test_a_person_holding_the_chunk_after_it_left_the_node_does_not_keep_its_pla
     )
 
     assert withdrawal_for(left, _submission("ch_1", 1, _MAIN)) == "superseded"
+
+
+# --- hub:flow-line-standing ------------------------------------------------------------------------------------------
+
+
+@dataclass
+class _Flows:
+    submissions: list[Submission]
+    turns: list[Turn] = field(default_factory=list)
+
+    def open_submissions_from(self, floor: int) -> list[Submission]:
+        return [sub for sub in self.submissions if sub.arrival >= floor]
+
+    def open_turns(self) -> list[Turn]:
+        return self.turns
+
+    def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
+        raise NotImplementedError
+
+    def facts_of(self, submission_id: str) -> list[FlowFact]:
+        raise NotImplementedError
+
+
+@dataclass
+class _Facts:
+    by_id: dict[str, ChunkFacts]
+
+    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+        return {chunk_id: self.by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.by_id}
+
+
+_SETTLED = _AT + RECONCILE_FLOOR + timedelta(seconds=1)
+
+
+def _standing(flows: _Flows, facts: dict[str, ChunkFacts], *, now: datetime = _SETTLED) -> list[str]:
+    check = FlowLineStanding(flows, _Facts(facts), FixedClock(now))  # type: ignore[arg-type]
+    return [found.invariant for found in check.run()]
+
+
+def test_flow_line_standing_holds_for_a_current_visit() -> None:
+    assert _standing(_Flows([_submission("ch_1", 1, _MAIN)]), {"ch_1": _at_node()}) == []
+
+
+def test_flow_line_standing_holds_for_a_person_holding_the_chunk_at_a_later_epoch() -> None:
+    held = _at_node(leases=[LeaseFact(2, _AT)], escalations=[EscalationFact(epoch=2, recorded_at=_AT)])
+
+    assert _standing(_Flows([_submission("ch_1", 1, _MAIN)]), {"ch_1": held}) == []
+
+
+def test_flow_line_standing_fails_on_an_open_submission_whose_chunk_left() -> None:
+    left = _submission("ch_1", 1, _MAIN, node_id="nd_review")
+
+    assert _standing(_Flows([left]), {"ch_1": _at_node()}) == ["hub:flow-line-standing"]
+
+
+def test_flow_line_standing_exempts_a_submission_with_an_open_turn() -> None:
+    left = _submission("ch_1", 1, _MAIN, node_id="nd_review")
+    flows = _Flows([left], turns=[Turn("htn_1", left.submission_id, _AT)])
+
+    assert _standing(flows, {"ch_1": _at_node()}) == []
+
+
+def test_flow_line_standing_exempts_a_chunk_that_moved_within_the_reconcile_floor() -> None:
+    left = _submission("ch_1", 1, _MAIN, node_id="nd_review")
+    within = _AT + RECONCILE_FLOOR - timedelta(seconds=1)
+
+    assert _standing(_Flows([left]), {"ch_1": _at_node()}, now=within) == []
+    assert _standing(_Flows([left]), {"ch_1": _at_node()}, now=_SETTLED) == ["hub:flow-line-standing"]
