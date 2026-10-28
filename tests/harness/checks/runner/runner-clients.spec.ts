@@ -107,10 +107,10 @@ async function hostStub(options: { failStatus?: boolean } = {}): Promise<{
   };
 }
 
-test('facts come back with seq, kind, chunk_id and acked_at intact', async ({ runnerHost }) => {
+test('facts come back with seq, kind, chunk_id and acked_at intact', async ({ runnerHostClient }) => {
   const stub = await hostStub();
   try {
-    const runner = runnerHost(stub.url).runner(RUNNER);
+    const runner = runnerHostClient(stub.url).runner(RUNNER);
     const answer = await runner.facts({ limit: 50 });
     expect(answer.status).toBe(200);
     expect(answer.body).toEqual(facts);
@@ -124,10 +124,10 @@ test('facts come back with seq, kind, chunk_id and acked_at intact', async ({ ru
   }
 });
 
-test('bufferDepth reads hub.buffer_depth from the status, apart from the facts', async ({ runnerHost }) => {
+test('bufferDepth reads hub.buffer_depth from the status, apart from the facts', async ({ runnerHostClient }) => {
   const stub = await hostStub();
   try {
-    const runner = runnerHost(stub.url).runner(RUNNER);
+    const runner = runnerHostClient(stub.url).runner(RUNNER);
     expect(await runner.bufferDepth()).toBe(7);
     expect(stub.seen.map((request) => request.url)).toEqual([`${PREFIX}/api/runner`]);
   } finally {
@@ -135,10 +135,10 @@ test('bufferDepth reads hub.buffer_depth from the status, apart from the facts',
   }
 });
 
-test('the host, lease, escalation and control calls reach their routes', async ({ runnerHost }) => {
+test('the host, lease, escalation and control calls reach their routes', async ({ runnerHostClient }) => {
   const stub = await hostStub();
   try {
-    const host = runnerHost(stub.url);
+    const host = runnerHostClient(stub.url);
     const runner = host.runner(RUNNER);
     await host.runners();
     await host.subscriptions();
@@ -170,10 +170,10 @@ test('the host, lease, escalation and control calls reach their routes', async (
   }
 });
 
-test('a 5xx fails the call with the host log attached, unless expected', async ({ runnerHost }, testInfo) => {
+test('a 5xx fails the call with the host log attached, unless expected', async ({ runnerHostClient }, testInfo) => {
   const stub = await hostStub({ failStatus: true });
   try {
-    const host = runnerHost(stub.url, { logContext: () => 'host log line' });
+    const host = runnerHostClient(stub.url, { logContext: () => 'host log line' });
     const runner = host.runner(RUNNER);
     await expect(runner.status()).rejects.toThrow(new RegExp(`GET .*${PREFIX}/api/runner answered 500, a server error`));
     expect(testInfo.attachments.some((attachment) => attachment.name.startsWith('runner host log around GET'))).toBe(true);

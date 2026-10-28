@@ -10,6 +10,8 @@ import { isAlive, killLive, type LiveDaemon, logTail, stopDaemon, stopLive } fro
 import { runDir } from './env';
 import { type Barrier, type BarrierSubscription, openRunnerStream, type Subscription } from './events';
 import { scanLog } from './logs';
+import { DEFAULT_RUNNER_OPTIONS, type RunnerHost, type RunnerHostOptions, runnerHostBuilder } from './runner-host';
+import { startVendorUsage, type VendorUsage } from './vendor-usage';
 
 /** A test's own mock hub: its process, stopped, killed, and started again under the URL it first held, and its clients. */
 export interface MockHub extends MockHubClient {
@@ -27,12 +29,34 @@ export interface MockHub extends MockHubClient {
   logTail(): string;
 }
 
-interface MockWorldFixtures {
+/** The options a runner host is built with; `test.use({ … })` sets them for a file or a describe, `runnerHosts.create` per host. */
+export interface RunnerHostFixtureOptions {
+  runnerConfig: RunnerHostOptions['runnerConfig'];
+  runnerEnv: RunnerHostOptions['runnerEnv'];
+  runnerLoop: RunnerHostOptions['runnerLoop'];
+  runnerStarted: RunnerHostOptions['runnerStarted'];
+  runnerSampling: RunnerHostOptions['runnerSampling'];
+}
+
+/** Makes further runner hosts beside the test's own, each with options of its own over the test's. */
+export interface RunnerHosts {
+  create(options?: Partial<RunnerHostOptions>): Promise<RunnerHost>;
+}
+
+interface MockWorldFixtures extends RunnerHostFixtureOptions {
   mockHub: MockHub;
+  /** A loopback stand-in for the vendors' usage endpoints, closed when the test ends. */
+  vendorUsage: VendorUsage;
+  /** The test's runner host: a real `blizzard-runner host` enrolled at `mockHub`, built through the CLI and the documented files. */
+  runnerHost: RunnerHost;
+  /** Further runner hosts, each its own directory, port and runners. */
+  runnerHosts: RunnerHosts;
+  /** Internal: the builder every runner host of the test comes from, stopped when the test ends. */
+  runnerHostBuilder: ReturnType<typeof runnerHostBuilder>;
   /** A loopback hub-auth stub with the key set the test gives it, closed when the test ends. */
   authStub: (keys?: unknown[]) => Promise<AuthStub>;
   /** A client for a runner host's local API at `url`; `logContext` names the host log a failure attaches. */
-  runnerHost: (url: string, options?: { logContext?: () => string; headers?: Record<string, string> }) => RunnerHostClient;
+  runnerHostClient: (url: string, options?: { logContext?: () => string; headers?: Record<string, string> }) => RunnerHostClient;
   /** A runner host's event stream, closed when the test ends. */
   runnerStream: (
     hostUrl: string,
@@ -100,7 +124,34 @@ export const mockWorld = base.extend<MockWorldFixtures>({
     await Promise.all(started.map((stub) => stub.close()));
   },
 
-  runnerHost: async ({ worldContext, ledger }, use, testInfo) => {
+  runnerConfig: [DEFAULT_RUNNER_OPTIONS.runnerConfig, { option: true }],
+  runnerEnv: [DEFAULT_RUNNER_OPTIONS.runnerEnv, { option: true }],
+  runnerLoop: [DEFAULT_RUNNER_OPTIONS.runnerLoop, { option: true }],
+  runnerStarted: [DEFAULT_RUNNER_OPTIONS.runnerStarted, { option: true }],
+  runnerSampling: [DEFAULT_RUNNER_OPTIONS.runnerSampling, { option: true }],
+
+  vendorUsage: async ({}, use) => {
+    const vendor = await startVendorUsage();
+    await use(vendor);
+    await vendor.close();
+  },
+
+  runnerHostBuilder: async ({ mockHub, worldContext, ledger, vendorUsage }, use, testInfo) => {
+    const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage });
+    await use(builder);
+    await builder.disposeAll();
+  },
+
+  runnerHosts: async ({ runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling }, use) => {
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling };
+    await use({ create: (options = {}) => builder.create({ ...defaults, ...options }) });
+  },
+
+  runnerHost: async ({ runnerHosts }, use) => {
+    await use(await runnerHosts.create());
+  },
+
+  runnerHostClient: async ({ worldContext, ledger }, use, testInfo) => {
     await use((url, options = {}) =>
       runnerHostApi({ context: worldContext, testInfo, url, ledger, logContext: options.logContext ?? (() => ''), headers: options.headers }),
     );

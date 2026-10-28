@@ -1,3 +1,4 @@
+import * as http from 'node:http';
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { type ApiResponse, type Engine, expecting, type LogContext, type Verbs, verbs } from './engine';
 import type { Ledger } from './ledger';
@@ -10,6 +11,7 @@ import type {
   LeaseListResponse,
   RunnerControlView,
   RunnerStatusView,
+  TickPassResponse,
 } from './wire/runner/types.gen';
 
 /** The calls one runner of a host answers, under `<host>/runners/<id>`. Types come from `wire/runner`. */
@@ -110,5 +112,42 @@ export function runnerHostApi(options: {
     },
     expecting: (status) => runnerHostApi({ ...options, expected: status }),
     raw: host,
+  };
+}
+
+/** The pass a step ran: when it started and finished, how it ended, and the error a failed pass recorded. */
+export type TickPass = TickPassResponse;
+
+/** The step routes a runner host answers over its Unix socket. */
+export interface HostSocketClient {
+  /** `POST /runners/{id}/api/ticks`: one pass of one runner, answered once the pass has completed. */
+  stepRunner(runnerId: string): Promise<TickPass>;
+  /** `POST /api/host/ticks`: one pass of the host's own sweeps, answered once the pass has completed. */
+  stepHost(): Promise<TickPass>;
+}
+
+/**
+ * The step routes over the host's Unix socket, which the human-lane gate always admits, so stepping works on a host whose
+ * hub offers an IdP. A request has no client timeout of its own: the test's bounds it. An answer other than `200`
+ * rejects with the route, the status and body, and the host log from `logContext`.
+ */
+export function hostSocketApi(options: { socket: string; logContext: LogContext }): HostSocketClient {
+  const post = (route: string): Promise<TickPass> =>
+    new Promise((resolve, reject) => {
+      const request = http.request({ socketPath: options.socket, path: route, method: 'POST', headers: { 'content-length': '0' } }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          if (response.statusCode === 200) return resolve(JSON.parse(text) as TickPass);
+          reject(new Error(`POST ${route} over ${options.socket} answered ${response.statusCode}: ${text}\nhost log:\n${options.logContext()}`));
+        });
+      });
+      request.on('error', (error) => reject(new Error(`POST ${route} over ${options.socket} failed: ${error.message}\nhost log:\n${options.logContext()}`, { cause: error })));
+      request.end();
+    });
+  return {
+    stepRunner: (runnerId) => post(`/runners/${encodeURIComponent(runnerId)}/api/ticks`),
+    stepHost: () => post('/api/host/ticks'),
   };
 }
