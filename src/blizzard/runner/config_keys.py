@@ -163,6 +163,7 @@ _HOST_KEYS = (
     ConfigKey("subscription[].name", STRING, required=True),
     ConfigKey("subscription[].provider", STRING, required=True),
     ConfigKey("subscription[].credentials_path", STRING),
+    ConfigKey("subscription[].usage_api_base", STRING),
     ConfigKey(
         "subscription[].sample_interval_seconds",
         INTEGER,

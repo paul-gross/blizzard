@@ -11,6 +11,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.flags import FlagRegistry, FlagResolution, HeldKey
@@ -415,6 +416,18 @@ class Context:
         return self.table.count("sample_interval_seconds", DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS)
 
 
+def _usage_api_base(raw: object, slug: str) -> str | None:
+    """The validated ``usage_api_base`` of subscription ``slug``: absent is ``None``, otherwise an
+    ``http(s)`` URL with a host. A rejection names the slug, never echoing the value, which may
+    embed credentials."""
+    if raw is None:
+        return None
+    parsed = urlsplit(raw) if isinstance(raw, str) else None
+    if not isinstance(raw, str) or parsed is None or parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ConfigError(f"[[subscription]] {slug!r} usage_api_base must be an http(s) URL with a host")
+    return raw.rstrip("/")
+
+
 @domain_model
 @dataclass(frozen=True)
 class SubscriptionDeclaration:
@@ -430,6 +443,9 @@ class SubscriptionDeclaration:
     #: binding's own default.
     credentials_path: str | None = None
     sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
+    #: An HTTP(S) base for the sampler's usage endpoint — ``None`` means the binding's own
+    #: provider URL.
+    usage_api_base: str | None = None
 
     @classmethod
     def declared(cls, document: ConfigView) -> tuple[SubscriptionDeclaration, ...]:
@@ -458,6 +474,7 @@ class SubscriptionDeclaration:
                 raise ConfigError(f"duplicate [[subscription]] slug {slug!r}")
             seen_slugs.add(slug)
             credentials_path = str(entry.get("credentials_path")) if entry.get("credentials_path") else None
+            usage_api_base = _usage_api_base(entry.get("usage_api_base"), slug)
             declarations.append(
                 cls(
                     slug=slug,
@@ -467,6 +484,7 @@ class SubscriptionDeclaration:
                     sample_interval_seconds=int(
                         entry.get("sample_interval_seconds", DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS)
                     ),
+                    usage_api_base=usage_api_base,
                 )
             )
         return tuple(declarations)

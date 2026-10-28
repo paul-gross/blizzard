@@ -1251,6 +1251,11 @@ def _subscription_toml(subscription: SubscriptionDeclaration) -> str:
             if subscription.credentials_path is not None
             else ""
         )
+        + (
+            f"usage_api_base = {json.dumps(subscription.usage_api_base)}\n"
+            if subscription.usage_api_base is not None
+            else ""
+        )
     )
 
 

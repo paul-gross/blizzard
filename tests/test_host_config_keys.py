@@ -302,6 +302,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "workspace[].repo[].name": "repo",
     "runner[].subscription": "sub",
     "subscription[].slug": "sub",
+    "subscription[].usage_api_base": "http://usage.test",
     "runner[].projects[].workspace": "ws",
     "workspace[].id": "ws",
     "runner[].harness.autonomy": "dangerous",
@@ -385,3 +386,36 @@ def test_an_undeclared_host_key_read_names_the_key_and_the_host_registry(
 def test_a_host_file_carrying_an_undeclared_key_loads_when_read_leniently(tmp_path: Path) -> None:
     write_minimal_host(tmp_path, top="undeclared_probe = 1\n[flags]\nprobe = true\n")
     assert load_host_config(tmp_path, strict=False).runner_config(_TOKEN).name == "runner-local"
+
+
+def _subscription_top(base: str) -> str:
+    return (
+        f'[[subscription]]\nslug = "anthropic"\nname = "Anthropic"\nprovider = "anthropic"\nusage_api_base = {base}\n'
+    )
+
+
+def test_a_declared_usage_api_base_round_trips_without_its_trailing_slash(tmp_path: Path) -> None:
+    top = _subscription_top('"https://gateway.test/anthropic/"')
+    config = _config(tmp_path, top=top, runner='subscription = "anthropic"\n')
+
+    (chosen,) = config.resolved_subscriptions()
+    assert chosen.usage_api_base == "https://gateway.test/anthropic"
+    assert _round_tripped(tmp_path) == replace(config, autonomy_source="")
+
+
+def test_an_undeclared_usage_api_base_is_none(tmp_path: Path) -> None:
+    top = '[[subscription]]\nslug = "anthropic"\nname = "Anthropic"\nprovider = "anthropic"\n'
+    (chosen,) = _config(tmp_path, top=top, runner='subscription = "anthropic"\n').resolved_subscriptions()
+
+    assert chosen.usage_api_base is None
+
+
+@pytest.mark.parametrize("base", ['"gateway.test"', '"ftp://gateway.test"', '"http://"', "7"])
+def test_a_malformed_usage_api_base_is_refused_without_echoing_the_value(tmp_path: Path, base: str) -> None:
+    write_minimal_host(tmp_path, top=_subscription_top(base), runner='subscription = "anthropic"\n')
+    with pytest.raises(HostConfigError) as raised:
+        load_host_config(tmp_path)
+
+    errors = str(raised.value)
+    assert "usage_api_base must be an http(s) URL" in errors
+    assert base.strip('"') not in errors.replace("http(s)", "")
