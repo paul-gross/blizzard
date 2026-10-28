@@ -263,7 +263,11 @@ export const getDashboardRunnersRunnerIdApiDashboardGet = <ThrowOnError extends 
 /**
  * List Escalations
  *
- * Every escalation still open — no later lease mint, and the hub has not ended the chunk.
+ * Every escalation still open — no later lease mint, and the hub has not ended the chunk — or, under
+ * ``state=closed``, the newest ``limit`` the hub ended, newest closure first, one per chunk.
+ *
+ * ``limit`` pages only the closed history: the open set is bounded by the chunks parked on this
+ * runner now, not by its history, and the dashboard renders it whole.
  */
 export const listEscalationsRunnersRunnerIdApiEscalationsGet = <ThrowOnError extends boolean = false>(options: Options<ListEscalationsRunnersRunnerIdApiEscalationsGetData, ThrowOnError>): RequestResult<ListEscalationsRunnersRunnerIdApiEscalationsGetResponses, ListEscalationsRunnersRunnerIdApiEscalationsGetErrors, ThrowOnError> => (options.client ?? client).get<ListEscalationsRunnersRunnerIdApiEscalationsGetResponses, ListEscalationsRunnersRunnerIdApiEscalationsGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/escalations', ...options });
 

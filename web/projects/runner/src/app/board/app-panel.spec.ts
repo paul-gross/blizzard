@@ -167,6 +167,7 @@ const ESCALATION = {
   project_id: null,
   session_name: null,
   wrapped_takeover_command: null,
+  closure: null,
 };
 
 describe('LocalPanel', () => {

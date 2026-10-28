@@ -54,6 +54,7 @@ const ESCALATION: runnerApi.EscalationView = {
   project_id: null,
   session_name: null,
   wrapped_takeover_command: null,
+  closure: null,
 };
 
 describe('app-panel escalation harness-provenance layout shell sweep (web:shell-sweep)', () => {

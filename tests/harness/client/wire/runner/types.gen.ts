@@ -1177,9 +1177,28 @@ export type EscalationChangedPayload = {
 };
 
 /**
+ * EscalationClosureView
+ *
+ * The hub having ended an escalated chunk — ``reason`` is the hub status observed, ``stopped`` or ``done``;
+ * ``closed_at`` is when the runner recorded that closure, distinct from the escalation's own park-time
+ * ``closed_at``.
+ */
+export type EscalationClosureView = {
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * EscalationListResponse
  *
- * Every escalation still open — no later lease mint, and the hub has not ended the chunk.
+ * Every escalation still open — no later lease mint, and the hub has not ended the chunk — or, under
+ * ``state=closed``, the newest page of escalations the hub ended.
  */
 export type EscalationListResponse = {
     /**
@@ -1206,6 +1225,7 @@ export type EscalationView = {
      * Closed At
      */
     closed_at: string;
+    closure: EscalationClosureView | null;
     /**
      * Effort
      */
@@ -5030,7 +5050,16 @@ export type ListEscalationsRunnersRunnerIdApiEscalationsGetData = {
          */
         runner_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * State
+         */
+        state?: 'open' | 'closed';
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
     url: '/runners/{runner_id}/api/escalations';
 };
 

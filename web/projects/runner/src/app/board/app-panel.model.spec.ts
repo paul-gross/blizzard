@@ -52,6 +52,7 @@ function escalation(chunkId: string, runnerId: string): runnerApi.EscalationView
     project_id: null,
     session_name: null,
     wrapped_takeover_command: null,
+    closure: null,
   };
 }
 
