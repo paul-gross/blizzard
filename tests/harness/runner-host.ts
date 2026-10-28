@@ -366,8 +366,9 @@ export function isolatedEnv(home: string, configHome: string, runnerEnv: Record<
   for (const name of Object.keys(env)) {
     // Every `BZ_*` the host reads is a seed or a credential; the pinned ones stay, and `runnerEnv` names the rest.
     if (name.startsWith('BZ_') && !pinned.includes(name)) delete env[name];
+    // The mock's own knobs never reach the host; only the fence set below does.
+    if (name.startsWith('BLIZZARD_MOCK_')) delete env[name];
   }
-  delete env.BLIZZARD_MOCK_WINTER_SOURCE;
   Object.assign(env, runnerEnv);
   return { ...env, [FENCE_VAR]: '1' };
 }
