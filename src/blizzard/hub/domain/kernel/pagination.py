@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import cast
 
 from typing_extensions import TypeIs
 
@@ -47,4 +46,4 @@ def decode_cursor(cursor: str) -> list[object]:
         raise MalformedCursor(cursor) from None
     if not _decoded_parts(parts):
         raise MalformedCursor(cursor)
-    return cast(list[object], parts)
+    return parts
