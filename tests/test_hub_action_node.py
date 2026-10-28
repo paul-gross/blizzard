@@ -10,10 +10,10 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.delivery.hub_node import PollPolicy
 from blizzard.hub.domain.chunk.model import HubNodePollFact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ANSWER
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator

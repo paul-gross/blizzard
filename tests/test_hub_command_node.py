@@ -21,11 +21,6 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.delivery.action_registry import HubActions
-from blizzard.hub.delivery.hub_node import (
-    DEFAULT_POLL_INTERVAL,
-    DEFAULT_POLL_TIMEOUT,
-    PollPolicy,
-)
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError, Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -38,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.delivery.flows import DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, PollPolicy
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
