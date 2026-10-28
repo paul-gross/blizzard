@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import click
 
@@ -47,10 +47,11 @@ class Problem:
     @property
     def detail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         try:
-            body = self.response.json()
+            body: object = self.response.json()
         except ValueError:
             return ""
-        detail = body.get("detail") if isinstance(body, dict) else None
+        body_dict = cast(dict[object, object], body) if isinstance(body, dict) else {}
+        detail = body_dict.get("detail")
         return str(detail) if detail else ""
 
 

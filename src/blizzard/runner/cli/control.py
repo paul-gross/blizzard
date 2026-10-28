@@ -4,9 +4,10 @@ requeue, selftest."""
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import NotRequired, TypedDict
 
 import click
 
@@ -36,6 +37,193 @@ _SELFTEST_POLL_INTERVAL = 0.2
 _SELFTEST_POLL_TIMEOUT = 600.0
 
 
+class _ServedProject(TypedDict):
+    entry: str
+    resolved: bool
+    slug: NotRequired[str | None]
+    answered: NotRequired[bool]
+
+
+class _Tenant(TypedDict, total=False):
+    tenant_id: str | None
+    tenant_name: str | None
+
+
+class _Hold(TypedDict):
+    kind: str
+    window: NotRequired[str | None]
+    harness_id: NotRequired[str | None]
+    grace_opens_at: NotRequired[str | None]
+    expected_reset: str
+    awaits_sample: bool
+
+
+class _Clear(TypedDict):
+    by: str
+    cleared_at: str
+
+
+class _Floor(TypedDict):
+    admits: bool
+    subscription: NotRequired[str | None]
+    hold: NotRequired[_Hold | None]
+    clear: NotRequired[_Clear | None]
+
+
+class _Lever(TypedDict):
+    name: str
+    setting: str
+    admits: bool
+    reading: str
+    until: str | None
+
+
+class _Throttle(TypedDict):
+    floor: _Floor
+    state: str
+    declining: NotRequired[list[str]]
+    levers: NotRequired[list[_Lever]]
+    on_decline: str
+    on_usage_limit: str
+
+
+class _Session(TypedDict, total=False):
+    session_name: str | None
+    model: str | None
+    effort: str | None
+
+
+class _Pause(TypedDict):
+    local: bool
+    hub: bool
+    effective: bool
+    local_reason: NotRequired[str | None]
+
+
+class _Binding(TypedDict):
+    project: str
+    project_id: NotRequired[str | None]
+    workspace_id: str
+    used: int
+
+
+class _Capacities(TypedDict):
+    used: int
+    agents: int
+    bindings: NotRequired[list[_Binding]]
+
+
+class _Conflict(TypedDict):
+    entries: list[str]
+    project_id: str
+
+
+class _Hub(TypedDict):
+    reachable: bool
+    last_contact_at: str | None
+    buffer_depth: int
+
+
+class _UnmatchedBinding(TypedDict):
+    environment_id: str
+    chunk_id: str
+    workdir: str
+    held_since: str
+
+
+class _RunnerView(_Tenant):
+    runner_name: str
+    runner_id: NotRequired[str | None]
+    workspace_id: str
+    identity: NotRequired[object | None]
+    pause: _Pause
+    throttle: NotRequired[_Throttle | None]
+    capacities: _Capacities
+    routing_conflicts: NotRequired[list[_Conflict]]
+    hub: _Hub
+    last_tick_at: str | None
+    gates: list[str]
+    served_projects: NotRequired[list[_ServedProject] | None]
+    unmatched_bindings: NotRequired[list[_UnmatchedBinding] | None]
+
+
+class _Lease(TypedDict):
+    lease_id: str
+    state: str
+    chunk_id: str
+    node_name: str
+
+
+class _Environment(TypedDict):
+    environment_id: str
+    chunk_id: str | None
+    held_since: str | None
+    held: NotRequired[bool]
+    runner_id: NotRequired[str | None]
+
+
+class _WorkspaceEnvironments(TypedDict):
+    items: NotRequired[list[_Environment]]
+
+
+class _EnvironmentsResponse(TypedDict):
+    workspaces: NotRequired[list[_WorkspaceEnvironments]]
+
+
+class _Ask(TypedDict):
+    question_id: str
+    chunk_id: str
+    question: str
+    options: NotRequired[list[str] | None]
+
+
+class _Escalation(_Session):
+    chunk_id: str
+    node_id: str
+    closed_at: str
+    wrapped_takeover_command: NotRequired[str | None]
+    resume_command: str
+    cause: NotRequired[str | None]
+
+
+class _Takeover(TypedDict):
+    chunk_id: str
+    takeover_id: str
+    held_since: str
+
+
+class _Subscription(TypedDict):
+    slug: str
+    provider: str
+    sampled_at: str | None
+    ok: bool
+    miss_reason: str
+    spenders: NotRequired[list[str]]
+    renewal_result: NotRequired[str | None]
+    renewal_attempted_at: NotRequired[str | None]
+    renewal_failure_reason: NotRequired[str | None]
+
+
+class _HarnessHealth(TypedDict):
+    harness_id: str
+    available: bool
+    cause: str | None
+
+
+class _ItemsResponse[T](TypedDict):
+    items: NotRequired[list[T]]
+
+
+class _TelemetrySignal(TypedDict):
+    outcome: str
+    accepted: int
+    dropped: int
+
+
+class _TracesResponse(TypedDict):
+    harness_telemetry: NotRequired[dict[str, _TelemetrySignal] | None]
+
+
 def _set_local_paused(
     *, paused: bool, by: str, directory: str, runner_url: str | None, runner: str | None, door: Door
 ) -> None:
@@ -63,7 +251,7 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
-def _served_line(served: list[dict[str, Any]] | None) -> str | None:
+def _served_line(served: list[_ServedProject] | None) -> str | None:
     """The status's ``serves:`` line — each project the hub resolved, by slug, then each entry no project
     answers to and each configured entry not answered yet, marked so — or ``None`` when nothing names any."""
     if served is None:
@@ -79,7 +267,7 @@ def _served_line(served: list[dict[str, Any]] | None) -> str | None:
     return f"  serves: {'; '.join(parts)}"
 
 
-def _tenant_part(view: dict[str, Any]) -> str:
+def _tenant_part(view: _Tenant) -> str:
     """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
     names the runner's tenant has answered."""
     tenant_id = view.get("tenant_id")
@@ -88,7 +276,7 @@ def _tenant_part(view: dict[str, Any]) -> str:
     return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
 
 
-def _throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
+def _throttle_lines(throttle: _Throttle | None) -> list[str]:
     if throttle is None:
         return []
     declining = ", ".join(throttle.get("declining", [])) or "none"
@@ -101,8 +289,7 @@ def _throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
         detail = f"{hold['kind']} ({hold.get('window') or hold.get('harness_id') or 'usage limit'}), until {until}"
         if hold["awaits_sample"]:
             detail += f"; reset {hold['expected_reset']}, awaiting sample"
-    elif floor.get("clear") is not None:
-        clear = floor["clear"]
+    elif (clear := floor.get("clear")) is not None:
         detail = f"hand clear by {clear['by']} at {clear['cleared_at']}"
     else:
         detail = "open"
@@ -124,7 +311,7 @@ class SessionLabel:
     Empty when the escalation carries none of the three, so a bare line reads as
     "not recorded" rather than inventing one."""
 
-    escalation: dict[str, Any]
+    escalation: _Session
 
     @property
     def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -160,19 +347,19 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     hub unreachable; hub reachability is itself reported, not assumed."""
     with RunnerDaemon.reach("status", directory, runner_url, Door.of(ctx), runner) as daemon:
         runner_id = daemon.runner_id()
-        view = daemon.get("/api/runner").json()
+        view: _RunnerView = daemon.get("/api/runner").json()
         leases_resp = daemon.get("/api/leases")
         envs_resp = daemon.get_from_host("/api/host/environments")
         asks_resp = daemon.get("/api/asks", params={"open": "true"})
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
         subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
-        escalations = escalations_resp.json().get("items", [])
-        harness_health = (
-            daemon.get("/api/harness-health").json().get("items", [])
-            if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations)
-            else []
-        )
+        escalations_data: _ItemsResponse[_Escalation] = escalations_resp.json()
+        escalations = escalations_data.get("items", [])
+        harness_health: list[_HarnessHealth] = []
+        if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations):
+            health_data: _ItemsResponse[_HarnessHealth] = daemon.get("/api/harness-health").json()
+            harness_health = health_data.get("items", [])
         # Not raised on: a runner that cannot serve its trace status still renders every other section.
         traces_resp = daemon.send("get", "/api/traces/status")
 
@@ -186,7 +373,7 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     pause = view["pause"]
     brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
     brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
-    reason = f" — {pause['local_reason']}" if pause.get("local_reason") else ""
+    reason = f" — {pause.get('local_reason')}" if pause.get("local_reason") else ""
     click.echo(f"  {brake_state}{reason}")
     for line in _throttle_lines(view.get("throttle")):
         click.echo(line)
@@ -211,16 +398,18 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
     if served is not None:
         click.echo(served)
 
-    leases = [lease for lease in leases_resp.json().get("items", []) if lease.get("state") != "closed"]
+    leases_data: _ItemsResponse[_Lease] = leases_resp.json()
+    leases = [lease for lease in leases_data.get("items", []) if lease.get("state") != "closed"]
     click.echo(f"\nleases ({len(leases)}):")
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
     # `GET /api/host/environments` carries every workspace's whole pool; this section
     # is this runner's *held*-environments view, so it keeps the slots this runner holds.
+    envs_data: _EnvironmentsResponse = envs_resp.json()
     envs = [
         env
-        for workspace in envs_resp.json().get("workspaces", [])
+        for workspace in envs_data.get("workspaces", [])
         for env in workspace.get("items", [])
         if env.get("held") and env.get("runner_id") == runner_id
     ]
@@ -237,7 +426,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
                 f"  held since {binding['held_since']}"
             )
 
-    asks = asks_resp.json().get("items", [])
+    asks_data: _ItemsResponse[_Ask] = asks_resp.json()
+    asks = asks_data.get("items", [])
     click.echo(f"\nopen asks ({len(asks)}):")
     for ask in asks:
         opts = f"  [{'|'.join(ask.get('options') or [])}]" if ask.get("options") else ""
@@ -249,21 +439,23 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
             f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{SessionLabel(esc).text}"
         )
         if esc.get("wrapped_takeover_command"):
-            click.echo(f"    takeover: {esc['wrapped_takeover_command']}")
+            click.echo(f"    takeover: {esc.get('wrapped_takeover_command')}")
         click.echo(f"    resume: {esc['resume_command']}")
         if esc.get("cause"):
-            click.echo(f"    cause: {esc['cause']}")
+            click.echo(f"    cause: {esc.get('cause')}")
         if esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS:
             for health in harness_health:
                 availability = "available" if health["available"] else "unavailable"
                 click.echo(f"    harness {health['harness_id']}: {availability}, cause={health['cause'] or 'none'}")
 
-    takeovers = takeovers_resp.json().get("items", [])
+    takeovers_data: _ItemsResponse[_Takeover] = takeovers_resp.json()
+    takeovers = takeovers_data.get("items", [])
     click.echo(f"\nopen takeovers ({len(takeovers)}):")
     for tko in takeovers:
         click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
 
-    subscriptions = [sub for sub in subscriptions_resp.json().get("items", []) if runner_id in sub.get("spenders", [])]
+    subscriptions_data: _ItemsResponse[_Subscription] = subscriptions_resp.json()
+    subscriptions = [sub for sub in subscriptions_data.get("items", []) if runner_id in sub.get("spenders", [])]
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
         if sub["sampled_at"] is None:
@@ -278,7 +470,8 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         if renewal is not None:
             click.echo(f"    renewal: {renewal}")
 
-    harness = traces_resp.json().get("harness_telemetry") if traces_resp.is_success else None
+    traces_data: _TracesResponse = traces_resp.json() if traces_resp.is_success else {}
+    harness = traces_data.get("harness_telemetry")
     harness_lines = harness_telemetry_lines(harness)
     if harness_lines:
         click.echo()
@@ -555,7 +748,7 @@ def selftest(
     click.echo(f"selftest {run['id']} passed for {coding_harness}")
 
 
-def renewal_text(sub: dict[str, object]) -> str | None:
+def renewal_text(sub: Mapping[str, object]) -> str | None:
     """One subscription's newest credential renewal in operator words, from the wire's typed
     fields alone — ``None`` when it was never renewed."""
     result = RenewalResult.recognized(sub.get("renewal_result"))

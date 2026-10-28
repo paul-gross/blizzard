@@ -856,13 +856,17 @@ def migrate_cmd(ctx: click.Context, directory: str, down: str | None, head: bool
     `data/runner.db` and no `data/host.db` adopts that store first. Adoption and --down hold the directory and are
     refused while a host is running; a plain upgrade is refused only while a pre-host daemon answers."""
     door = Door.of(ctx)
+
+    def migrate(root: Path, down: str | None) -> None:
+        runtime_of(root, door).migrate(down=down)
+
     run_migrate(
         Path(directory),
         down,
         head=head,
         knows=knows,
         script_location=MIGRATIONS_DIR,
-        migrate=lambda root, down: runtime_of(root, door).migrate(down=down),
+        migrate=migrate,
         config_error=ConfigError,
     )
 

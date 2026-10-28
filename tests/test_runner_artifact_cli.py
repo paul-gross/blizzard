@@ -148,6 +148,27 @@ def test_list_includes_staged_submissions_marked_as_such() -> None:
 
 
 @pytest.mark.unit
+def test_list_preserves_extra_fields_and_counts_utf8_with_missing_git_content() -> None:
+    published = [{"name": "ref", "kind": "git_commit", "extra": {"x": 1}}]
+    staged = [{"name": "draft", "content": "é☃", "extra": [1, 2]}]
+    bound = bind_stubs(
+        get=_fake_get_by_suffix(
+            {"artifacts": _FakeResponse(payload=published), "attachments": _FakeResponse(payload=staged)}
+        )
+    )
+
+    summary = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
+    full = bound.runner.invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
+
+    assert summary.exit_code == full.exit_code == 0
+    assert json.loads(summary.stdout) == [
+        {**published[0], "staged": False, "bytes": None},
+        {"name": "draft", "extra": [1, 2], "staged": True, "bytes": 5},
+    ]
+    assert json.loads(full.stdout) == [{**published[0], "staged": False}, {**staged[0], "staged": True}]
+
+
+@pytest.mark.unit
 def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """A transient failure reading the runner's own local `attachments` store must not take
     down a `list` call whose primary `artifacts` read already succeeded: the staged half is

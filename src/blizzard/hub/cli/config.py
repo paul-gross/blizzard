@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict, cast
 
 import click
 
@@ -47,6 +47,13 @@ class ApplyListing(Listing):
 _REFUSED = (409, 415, 422)
 
 
+class ValidationEntry(TypedDict):
+    loc: NotRequired[list[object]]
+    line: NotRequired[int | None]
+    column: int
+    msg: str
+
+
 def _refusal(cli: CliContext, resp: Response) -> str:
     """The hub's refusal, each validation entry located by its path inside the document
     (``work_sources.1.provider: …``)."""
@@ -55,10 +62,10 @@ def _refusal(cli: CliContext, resp: Response) -> str:
     except ValueError:
         detail = None
     if isinstance(detail, list):
-        lines = []
-        for entry in detail:
+        lines: list[str] = []
+        for entry in cast(list[ValidationEntry], detail):
             where = ".".join(str(part) for part in entry.get("loc", [])[1:])
-            at = f" (line {entry['line']}, column {entry['column']})" if entry.get("line") is not None else ""
+            at = f" (line {entry.get('line')}, column {entry['column']})" if entry.get("line") is not None else ""
             lines.append(f"{where}: {entry['msg']}{at}" if where else f"{entry['msg']}{at}")
         return "; ".join(lines)
     return cli.detail(resp, f"refused with {resp.status_code}")

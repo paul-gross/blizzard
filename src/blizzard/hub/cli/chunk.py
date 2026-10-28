@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any
+from typing import Any, TypedDict, cast
 
 import click
 
@@ -14,7 +14,17 @@ from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import ChunkLine, Cost, Listing, pointer_label
+from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
+
+
+class Neighbor(TypedDict):
+    chunk_id: str
+    satisfied: bool
+
+
+class Neighborhood(TypedDict, total=False):
+    prerequisites: list[Neighbor]
+    dependents: list[Neighbor]
 
 
 class ChunkListing(Listing):
@@ -32,14 +42,14 @@ class ChunkDetail:
     def lines(self) -> Iterator[str]:
         body = self.body
         yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
-        yield f"  node: {ChunkLine(body).node}"
+        yield f"  node: {ChunkLine(cast(ChunkRow, body)).node}"
         # Both defaults on their own line: `chunk set` can write either, so a text-mode
         # read-back exists for both. `-` is "express no preference", not unknown.
         models = ", ".join(body.get("default_model") or []) or "-"
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
         harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
         yield f"  default harnesses: {harnesses}"
-        pointers = body.get("work_refs") or []
+        pointers = cast(list[dict[str, object]], body.get("work_refs") or [])
         if pointers:
             labels = ", ".join(pointer_label(p) for p in pointers)
             yield f"  pointers: {labels}"
@@ -50,7 +60,7 @@ class ChunkDetail:
         blocked = body.get("blocked")
         if blocked:
             yield f"  blocked: waiting on {blocked['prerequisite_chunk_id']}"
-        neighborhood = body.get("neighborhood") or {}
+        neighborhood = cast(Neighborhood, body.get("neighborhood") or {})
         prerequisites = neighborhood.get("prerequisites") or []
         dependents = neighborhood.get("dependents") or []
         if prerequisites:
@@ -75,7 +85,7 @@ def _escalation_lines(escalation: dict[str, Any]) -> Iterator[str]:
         yield f"    takeover: {escalation['takeover_command']}"
 
 
-def _neighbor_label(neighbor: dict[str, Any]) -> str:
+def _neighbor_label(neighbor: Neighbor) -> str:
     marker = "satisfied" if neighbor.get("satisfied") else "unsatisfied"
     return f"{neighbor['chunk_id']} ({marker})"
 
@@ -245,7 +255,7 @@ def chunk_set(
         on_status={404: f"unknown chunk {chunk_id}", 409: "chunk is not editable", 422: "invalid request"},
     )
     view = resp.json()
-    parts = []
+    parts: list[str] = []
     if graph_id is not None:
         parts.append(f"graph → {view['graph_id']}")
     if default_model:

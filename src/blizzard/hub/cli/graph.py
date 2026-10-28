@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -69,7 +69,7 @@ class GraphDetail:
 
 
 def _session_summary(session: dict[str, Any]) -> str:
-    parts = []
+    parts: list[str] = []
     if session.get("model"):
         parts.append(f"model={','.join(session['model'])}")
     if session.get("effort"):
@@ -78,7 +78,7 @@ def _session_summary(session: dict[str, Any]) -> str:
         parts.append(f"compaction_window={session['compaction_window']}")
     if session.get("harnesses"):
         parts.append(f"harnesses={','.join(session['harnesses'])}")
-    rotate = session.get("rotate") or {}
+    rotate = cast(dict[str, object], session.get("rotate") or {})
     bounds = ", ".join(f"{k}={v}" for k, v in rotate.items() if v is not None)
     if bounds:
         parts.append(f"rotate=({bounds})")

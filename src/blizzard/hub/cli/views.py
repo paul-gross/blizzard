@@ -5,17 +5,65 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict, cast
 
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.spend import SpendFigure
 
 
-def pointer_label(row: dict[str, Any]) -> str:
+class CostRow(TypedDict, total=False):
+    cost_usd: float
+    estimated_cost_usd: float | None
+    cost_partial: bool
+
+
+class BlockedRow(TypedDict):
+    prerequisite_chunk_id: str
+
+
+class ChunkRow(TypedDict):
+    chunk_id: str
+    status: str
+    current_node_name: NotRequired[str | None]
+    current_node_id: NotRequired[str | None]
+    cost: NotRequired[CostRow | None]
+    blocked: NotRequired[BlockedRow | None]
+
+
+class DecliningRow(TypedDict):
+    lever: str
+    detail: str
+    until: NotRequired[str | None]
+    subscription: NotRequired[str | None]
+
+
+class RunnerRow(TypedDict):
+    runner_id: str
+    runner_name: NotRequired[str | None]
+    connection: NotRequired[str | None]
+    online: NotRequired[bool]
+    workspace_id: NotRequired[str | None]
+    hub_paused: NotRequired[bool]
+    locally_paused: NotRequired[bool]
+    locally_paused_reason: NotRequired[str | None]
+    declining: NotRequired[list[DecliningRow] | None]
+    retired: NotRequired[bool]
+    retired_at: NotRequired[str | None]
+    retired_by: NotRequired[str | None]
+
+
+class QuestionRow(TypedDict):
+    question_id: str
+    chunk_id: str
+    question: str
+    options: NotRequired[list[str] | None]
+
+
+def pointer_label(row: dict[str, object]) -> str:
     """A pointer a response carries, as people read it: its hub-rendered ``label``, else ``{slug}#{ref}`` under the
     source's current slug, else the raw ``{source}#{ref}``."""
-    return row.get("label") or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
+    return cast(str, row.get("label")) or f"{row.get('slug') or row.get('source')}#{row.get('ref')}"
 
 
 @dto
@@ -29,7 +77,7 @@ class Cost:
     partial: bool
 
     @classmethod
-    def of(cls, cost: dict[str, Any] | None) -> Cost:
+    def of(cls, cost: CostRow | dict[str, Any] | None) -> Cost:
         cost = cost or {}
         return cls(
             cost.get("cost_usd", 0.0),
@@ -45,7 +93,7 @@ class Cost:
 @dto
 @dataclass(frozen=True)
 class ChunkLine:
-    row: dict[str, Any]
+    row: ChunkRow
     #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
 
@@ -61,14 +109,14 @@ class ChunkLine:
         return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
 
 
-def _declining_reason(reason: dict[str, Any]) -> str:
+def _declining_reason(reason: DecliningRow) -> str:
     """One declining reason as a line carries it: the floor as ``floor — <subscription> <detail>, resets <instant>``,
     any other lever, and a lever this CLI has no wording for, as ``<lever> — <detail>`` with its ``until`` after."""
     until = reason.get("until")
     clock = datetime.fromisoformat(until).strftime("%H:%MZ") if until else None
     lever, detail = reason["lever"], reason["detail"]
     if lever == "floor":
-        named = f"{reason['subscription']} {detail}" if reason.get("subscription") else detail
+        named = f"{reason.get('subscription')} {detail}" if reason.get("subscription") else detail
         return f"floor — {named}" + (f", resets {clock}" if clock else "")
     return f"{lever} — {detail}" + (f", until {clock}" if clock else "")
 
@@ -76,7 +124,7 @@ def _declining_reason(reason: dict[str, Any]) -> str:
 @dto
 @dataclass(frozen=True)
 class RunnerLine:
-    row: dict[str, Any]
+    row: RunnerRow
     #: The name column's width; a listing widens it to the longest name it shows.
     name_width: int = 16
 
@@ -105,7 +153,7 @@ class RunnerLine:
     def brake(self) -> str:  # ast-grep-ignore: bzh:property-delegates
         """Name which brake is on (pinned by
         tests/test_hub_cli_status.py::test_status_names_a_hub_pause_with_no_local_brake)."""
-        brakes = []
+        brakes: list[str] = []
         if self.row.get("hub_paused"):
             brakes.append("hub")
         if self.row.get("locally_paused"):
@@ -139,7 +187,7 @@ class RunnerLine:
 @dto
 @dataclass(frozen=True)
 class QuestionLine:
-    row: dict[str, Any]
+    row: QuestionRow
 
     def line(self) -> str:
         options = self.row.get("options") or []

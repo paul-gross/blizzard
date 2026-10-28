@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict, cast
 
 import click
 
@@ -14,6 +14,14 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+
+
+class WorkspaceRow(TypedDict):
+    workspace_id: str
+
+
+class SubscriptionRow(TypedDict):
+    slug: str
 
 
 @dto
@@ -69,9 +77,11 @@ class HostDetail:
         yield HostLine(self.body).line()
         yield f"  added={self.body.get('added_at') or '-'} by {self.body.get('added_by') or '-'}"
         yield f"  url={self.body.get('url') or '-'}  enrolled={self.body.get('enrolled')}"
-        workspaces = ", ".join(w["workspace_id"] for w in self.body.get("workspaces") or []) or "-"
+        workspace_rows = cast(list[WorkspaceRow], self.body.get("workspaces") or [])
+        workspaces = ", ".join(w["workspace_id"] for w in workspace_rows) or "-"
         yield f"  workspaces={workspaces}"
-        subscriptions = ", ".join(s["slug"] for s in self.body.get("subscriptions") or []) or "-"
+        subscription_rows = cast(list[SubscriptionRow], self.body.get("subscriptions") or [])
+        subscriptions = ", ".join(s["slug"] for s in subscription_rows) or "-"
         yield f"  subscriptions={subscriptions}"
         yield f"  runners={', '.join(self.body.get('runner_ids') or []) or '-'}"
 
@@ -227,7 +237,7 @@ def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
     )
     body = resp.json()
     lines = [f"host {host_id} is retired"]
-    released = body.get("released_chunk_ids") or []
+    released = cast(list[str], body.get("released_chunk_ids") or [])
     if released:
         lines.append(f"released: {', '.join(released)}")
     cli.show_lines(body, *lines)

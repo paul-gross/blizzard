@@ -7,7 +7,7 @@ import os
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from http import HTTPStatus
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict, cast
 
 import click
 
@@ -19,6 +19,15 @@ from blizzard.foundation.roles import dto
 
 class View(Protocol):
     def lines(self) -> Iterable[str]: ...
+
+
+class ValidationDetail(TypedDict, total=False):
+    loc: list[object]
+    msg: object
+
+
+class PaginationCursor(TypedDict, total=False):
+    next_cursor: str | None
 
 
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the colocated default (band +2).
@@ -108,19 +117,19 @@ class CliContext:
         key: str,
         params: dict[str, str] | None = None,
         on_status: dict[int, str] | None = None,
-    ) -> list[Any]:
+    ) -> list[dict[str, object]]:
         """Every row of a cursor-paginated list read: ``key``'s rows concatenated across
         pages of up to 1000, following ``next_cursor`` until it is absent."""
         page_params = dict(params or {})
         page_params["limit"] = "1000"
-        rows: list[Any] = []
+        rows: list[dict[str, object]] = []
         cursor: str | None = None
         while True:
             if cursor is not None:
                 page_params["cursor"] = cursor
-            body = self.get(path, operation, params=page_params, on_status=on_status).json()
-            rows.extend(body[key])
-            cursor = body.get("next_cursor")
+            body: dict[str, object] = self.get(path, operation, params=page_params, on_status=on_status).json()
+            rows.extend(cast(list[dict[str, object]], body[key]))
+            cursor = cast(PaginationCursor, body).get("next_cursor")
             if cursor is None:
                 return rows
 
@@ -276,16 +285,22 @@ class CliContext:
         except ValueError:
             return fallback
         if isinstance(body, dict):
+            body = cast(dict[str, object], body)
             detail = body.get("detail")
             if isinstance(detail, str):
                 return detail
-            if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+            if isinstance(detail, dict) and isinstance(cast(dict[str, object], detail).get("message"), str):
                 # A structured refusal: its code beside a sentence naming what was refused.
-                return detail["message"]
+                return cast(str, cast(dict[str, object], detail)["message"])
             if isinstance(detail, list):
+                entries = cast(list[object], detail)
                 # A validation refusal: one "field: message" per entry.
                 parts = [
-                    f"{e['loc'][-1]}: {e['msg']}" for e in detail if isinstance(e, dict) and e.get("loc") and "msg" in e
+                    f"{e.get('loc', [])[-1]}: {e['msg']}"
+                    for entry in entries
+                    if isinstance(entry, dict)
+                    for e in [cast(ValidationDetail, entry)]
+                    if e.get("loc") and "msg" in e
                 ]
                 if parts:
                     return "; ".join(parts)
@@ -416,8 +431,8 @@ def _error_code(resp: Response) -> str | None:
         body = resp.json()
     except ValueError:
         return None
-    detail = body.get("detail") if isinstance(body, dict) else None
-    code = detail.get("code") if isinstance(detail, dict) else None
+    detail = cast(dict[str, object], body).get("detail") if isinstance(body, dict) else None
+    code = cast(dict[str, object], detail).get("code") if isinstance(detail, dict) else None
     return code if isinstance(code, str) else None
 
 
@@ -427,18 +442,30 @@ def _tenants_of(me: Response) -> list[dict[str, str]]:
         body = me.json()
     except ValueError:
         return []
-    rows = body.get("tenants") if isinstance(body, dict) else None
+    rows = cast(dict[str, object], body).get("tenants") if isinstance(body, dict) else None
     if not isinstance(rows, list):
         return []
     keys = ("tenant_id", "name", "role")
-    return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]
+    return [
+        {k: str(row[k]) for k in keys}
+        for entry in cast(list[object], rows)
+        if isinstance(entry, dict)
+        for row in [cast(dict[str, object], entry)]
+        if all(row.get(k) for k in keys)
+    ]
 
 
 def _projects_of(refusal: Response) -> list[dict[str, str]]:
     """The ``projects`` rows of a ``project_required`` refusal that carry an id, a slug and a name."""
     detail = refusal.json().get("detail")
-    rows = detail.get("projects") if isinstance(detail, dict) else None
+    rows = cast(dict[str, object], detail).get("projects") if isinstance(detail, dict) else None
     if not isinstance(rows, list):
         return []
     keys = ("project_id", "slug", "name")
-    return [{k: str(row[k]) for k in keys} for row in rows if isinstance(row, dict) and all(row.get(k) for k in keys)]
+    return [
+        {k: str(row[k]) for k in keys}
+        for entry in cast(list[object], rows)
+        if isinstance(entry, dict)
+        for row in [cast(dict[str, object], entry)]
+        if all(row.get(k) for k in keys)
+    ]
