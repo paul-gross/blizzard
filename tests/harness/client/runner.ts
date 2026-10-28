@@ -17,6 +17,7 @@ import type {
   FloorClearView,
   HeartbeatResponse,
   HostRunnerListResponse,
+  HostRegistrationView,
   HostSubscriptionListResponse,
   LeaseListResponse,
   LeaseUsageResponse,
@@ -24,6 +25,7 @@ import type {
   TranscriptSegmentContentView,
   RunnerControlView,
   RunnerStatusView,
+  ReadinessResponse,
   TickPassResponse,
   TranscriptResponse,
   WorkerArtifact,
@@ -118,6 +120,8 @@ export interface HostRoutes {
 /** The calls the runner host answers for itself, and the way to one of its runners. */
 export interface RunnerHostClient extends HostRoutes {
   readonly url: string;
+  ready(): Promise<ApiResponse<ReadinessResponse>>;
+  registration(): Promise<ApiResponse<HostRegistrationView>>;
   /** `GET /api/host/runners`. */
   runners(): Promise<ApiResponse<HostRunnerListResponse>>;
   /** `GET /api/host/subscriptions`. */
@@ -166,6 +170,8 @@ export function runnerHostApi(options: {
         data: Buffer.from(telemetry.body),
         headers: { 'content-type': telemetry.contentType, ...telemetry.headers },
       }),
+    ready: () => host.get('/api/ready'),
+    registration: () => host.get('/api/host/registration'),
     runners: () => host.get('/api/host/runners'),
     subscriptions: () => host.get('/api/host/subscriptions'),
     clearSubscriptionFloor: (slug, by) => host.post(`/api/host/subscriptions/${encodeURIComponent(slug)}/floor/clear`, { data: by === undefined ? {} : { by } }),

@@ -12,6 +12,19 @@ import type {
 } from './mock';
 import type { HostAddRequest, HostAddResponse, RunnerAddRequest, RunnerAddResponse, RunnerEnrollmentResponse } from './wire/hub/types.gen';
 
+/** The mock fleet's host and runner read payloads, limited to the fields exercised by runner service specs. */
+export interface MockFleetHostView {
+  host_id: string;
+  runners: { runner_id: string }[];
+  last_seen_at: string | null;
+}
+export interface MockFleetRunnerView {
+  runner_id: string;
+  bindings: { workspace_id: string; workspace_unreported: boolean }[];
+  subscription: string;
+  subscription_unrostered: boolean;
+}
+
 /** The mock hub's control plane, enrollment routes, and a fleet client for any token: everything its README documents. */
 export interface MockHubClient {
   readonly url: string;
@@ -53,6 +66,8 @@ export interface MockHubClient {
   };
   /** The `/api/fleet` plane under a bearer token. A `5xx` fails the test with the call and the mock hub's log. */
   fleet(token: string): Verbs & { expecting(status: number): Verbs };
+  host(token: string): Promise<ApiResponse<MockFleetHostView>>;
+  runner(token: string, runnerId: string, expected?: number): Promise<ApiResponse<MockFleetRunnerView>>;
   /** Raw verbs over the mock hub's own URL, for a route not yet named. */
   readonly raw: Verbs;
 }
@@ -114,6 +129,11 @@ export function mockHubApi(options: { context: APIRequestContext; testInfo: Test
     fleet: (token) => {
       const fleetEngine: Engine = { ...engine, headers: { Authorization: `Bearer ${token}` } };
       return { ...atUrl(verbs(fleetEngine, false)), expecting: (status) => atUrl(expecting(fleetEngine, false, status)) };
+    },
+    host: (token) => atUrl(verbs({ ...engine, headers: { Authorization: `Bearer ${token}` } }, false)).get('/api/fleet/host'),
+    runner: (token, runnerId, expected) => {
+      const scoped = { ...engine, headers: { Authorization: `Bearer ${token}` } };
+      return atUrl(expected === undefined ? verbs(scoped, false) : expecting(scoped, false, expected)).get(`/api/fleet/runners/${runnerId}`);
     },
     raw: atUrl(verbs(engine, false)),
   };

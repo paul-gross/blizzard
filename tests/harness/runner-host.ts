@@ -136,6 +136,8 @@ export interface RunnerHost {
    * the result, not an error.
    */
   cli(args: string[]): Promise<CliResult>;
+  /** Change documented host files only while stopped; tokens must have been minted by enrollment, not this seam. */
+  prepareStopped(layout: { hostToken?: string; runnerTokens?: Record<string, string>; runnerSubscriptions?: Record<string, string>; runnerIds?: Record<string, string> }): void;
   /** The commit a branch of the minted world's bare origin `repo` points at, or `undefined` when the branch is not there. */
   originHead(repo: string, branch: string): Promise<string | undefined>;
   /** The session records the mock harness kept in the minted workspace, each parsed, in file-name order. */
@@ -583,6 +585,38 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         },
         rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),
         cli: (args) => runCommand(runner, args, { env: { ...hostEnv(), BZ_RUNNER_DIR: dir }, cwd: root }),
+        prepareStopped(layout) {
+          if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('stop the host before changing its documented files');
+          const file = readHostFile(dir);
+          const configured = (file.runner ?? []) as TomlTable[];
+          for (const [name, subscription] of Object.entries(layout.runnerSubscriptions ?? {})) {
+            const entry = configured.find((item) => item.name === name);
+            if (entry === undefined) throw new Error(`the host has no runner ${name}`);
+            entry.subscription = subscription;
+          }
+          for (const [name, id] of Object.entries(layout.runnerIds ?? {})) {
+            const entry = configured.find((item) => item.name === name);
+            if (entry === undefined) throw new Error(`the host has no runner ${name}`);
+            entry.id = id;
+            runners[name] = { ...api.runner(id), id, name };
+          }
+          if (layout.runnerSubscriptions !== undefined || layout.runnerIds !== undefined) fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
+          const tokens: Record<string, string> = {};
+          if (layout.hostToken !== undefined) tokens.BZ_HOST_TOKEN = layout.hostToken;
+          for (const [name, token] of Object.entries(layout.runnerTokens ?? {})) {
+            if (!configured.some((entry) => entry.name === name)) throw new Error(`the host has no runner ${name}`);
+            tokens[`BZ_HUB_TOKEN_${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`] = token;
+          }
+          if (Object.keys(tokens).length > 0) {
+            const envFile = path.join(dir, '.env');
+            let text = fs.readFileSync(envFile, 'utf8');
+            for (const [key, token] of Object.entries(tokens)) {
+              if (/\r|\n/.test(token)) throw new Error(`token for ${key} contains a newline`);
+              text = text.split('\n').filter((line) => !line.startsWith(`${key}=`)).join('\n').trimEnd() + `\n${key}=${token}\n`;
+            }
+            fs.writeFileSync(envFile, text, { mode: 0o600 });
+          }
+        },
         async originHead(repo, branch) {
           const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;
