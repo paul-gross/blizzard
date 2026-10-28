@@ -7,6 +7,7 @@ unique keys are the backstop, not the guard."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Any
 from sqlalchemy import Connection, Row, func
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.event_log import EVENT_LOG_SEVERITY
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.delivery.flows import (
@@ -24,6 +26,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     Submission,
     Turn,
+    TurnEvent,
     Withdrawal,
 )
 from blizzard.hub.store import schema as s
@@ -165,7 +168,9 @@ class FlowStore:
                 return False
             return self._close(conn, submission_id, outcome=outcome, at=at)
 
-    def end_turn_interrupted(self, turn_id: str, *, withdrawal: Withdrawal | None, at: datetime) -> bool:
+    def end_turn_interrupted(
+        self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime
+    ) -> bool:
         with self._store.write("end_turn_interrupted") as conn:
             turn = conn.execute(
                 self._store.select(s.hub_turns, s.hub_turns.c.submission_id).where(
@@ -182,6 +187,19 @@ class FlowStore:
             chunk_id, flows = self._held_by(conn, turn.submission_id)
             self._write_facts(
                 conn, flows, turn.submission_id, chunk_id, kind="turn-ended", outcome=TURN_INTERRUPTED, at=at
+            )
+            conn.execute(
+                self._store.insert(s.event_log).values(
+                    severity=EVENT_LOG_SEVERITY[event.kind],
+                    kind=event.kind,
+                    runner_id=None,
+                    chunk_id=event.chunk_id,
+                    lease_id=None,
+                    node_name=event.node_name,
+                    message=event.message,
+                    detail=json.dumps(dict(event.detail)),
+                    recorded_at=at,
+                )
             )
             if withdrawal is not None:
                 self._close(conn, turn.submission_id, outcome=withdrawal, at=at)

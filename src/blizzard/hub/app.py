@@ -105,11 +105,13 @@ from blizzard.hub.composition import (
     LiveConfig,
     TenantStores,
     build_config_authoring,
+    build_flow_driver,
     build_hub_flags,
     build_process_core,
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
+from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
@@ -419,6 +421,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     if services is not None:
         services.action_loop.start()
     tasks = [asyncio.create_task(sweep.run()) for sweep in Sweep.all(app)]
+    flow_driver: FlowDriver | None = app.state.flow_driver
+    if flow_driver is not None:
+        tasks.append(asyncio.create_task(flow_driver.run(app.state.shutdown)))
     yield
     app.state.shutdown.set()
     for task in tasks:
@@ -459,6 +464,8 @@ def create_app(
     app.state.services = services
     # Set on shutdown by ``_lifespan``; every SSE stream races it.
     app.state.shutdown = asyncio.Event()
+    # The hosted hub's flow driver, set by ``build_hosted_app`` alone; ``_lifespan`` runs it beside the sweeps.
+    app.state.flow_driver = None
 
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
     app.add_exception_handler(HostRetired, _refuse_retired_host)
@@ -644,6 +651,7 @@ def build_hosted_app(
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
+    flow_driver: FlowDriver | None = None
     if readiness.evaluate().ready:
         tenants = core.every_open()
         try:
@@ -656,11 +664,14 @@ def build_hosted_app(
         OrphanedProviders.of(config, services).check()
         warn_forge_refusals(engine)
         KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
-        # Before the hub serves, in each open tenant.
+        # Before the hub serves, in each open tenant: the slot first, then the actionless escalations, so the
+        # flow driver's boot reconcile finds those chunks escalated and submits none of them.
+        flow_driver = build_flow_driver(services)
         for stores in tenants:
             hub_node = services.tenants.open_services(stores.scope).hub_node
             hub_node.release_orphaned_slots()
             hub_node.escalate_actionless()
+            flow_driver.recover_turns(stores.scope.tenant)
         Superuser(email=config.auth.superuser, auth=services.auth).ensure()
         _announce_started(expected, services)
         _announce_rejected_tracing(tracing, services)
@@ -674,6 +685,8 @@ def build_hosted_app(
     )
     # `host` disposes this on `app.state` — carried here.
     app.state.engine = engine
+    # Only a store at the expected head is reconciled; `_lifespan` runs the driver it finds here.
+    app.state.flow_driver = flow_driver
     return app
 
 

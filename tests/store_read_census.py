@@ -88,7 +88,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlug,
 )
 from blizzard.hub.domain.delivery.flows import FlowResource
-from blizzard.hub.domain.delivery.ports.flows import IReadFlows
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     DeltaMaterialization,
@@ -2264,6 +2264,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
     (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
+    ),
+    (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.flow_lines_signature()
     ),
     (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()

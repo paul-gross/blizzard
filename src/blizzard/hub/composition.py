@@ -68,6 +68,7 @@ from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
+from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
@@ -85,6 +86,7 @@ from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, 
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.delivery.ports.flows import IReadFlows
+from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
 from blizzard.hub.domain.execution.decisions import DecisionService, RequeueService
@@ -358,6 +360,8 @@ class TenantServices:
     forge_records: IReadForgeRepository
     #: Each branch's delivery line and the visits submitted to it (the read half).
     flows: IReadFlows
+    #: Converges the tenant's flow lines on where its chunks stand — driven by the hosted hub's flow driver alone.
+    flow_lines: FlowLineReconciler
     #: The configuration change log.
     config_changes: IReadConfigChanges
     #: Stored projects (the read half).
@@ -1233,6 +1237,19 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
         flows=stores.flows,
+        flow_lines=FlowLineReconciler(
+            flows=stores.flows,
+            facts=chunk_facts,
+            record=chunk_record,
+            graphs=graph_store,
+            artifacts=chunk_artifacts,
+            repositories=stores.repository_records,
+            forge_records=stores.forge_records,
+            projects=stores.projects,
+            links=stores.project_links,
+            catalogue=parts.actions.catalogue,
+            clock=clock,
+        ),
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
@@ -1645,4 +1662,17 @@ def build_services(
             locks=SweepLocks(),
             clock=clock,
         ),
+    )
+
+
+def build_flow_driver(services: HubServices) -> FlowDriver:
+    """The hosted hub's flow driver, over every open tenant's lines — built by ``build_hosted_app`` alone, never by
+    :func:`build_services`, so no CLI or test build over a live hub's store reconciles that hub's lines."""
+    return FlowDriver(
+        FlowLineStores(
+            corpus=services.hub_scoped_reads.corpus,
+            tenants=lambda: services.tenants.open_tenants.every().keys(),
+            lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
+        ),
+        services.clock,
     )

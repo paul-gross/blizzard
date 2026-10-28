@@ -1,6 +1,6 @@
 """The sweep corpus member group of :class:`HubScopedReads` — the reads a hub sweep's one pass
 takes its corpus from, across every tenant: forge-status annotation, the close drain, event
-derivation, and the trace and egress exports.
+derivation, and the trace and egress exports — and the flow driver's change probe.
 
 Each corpus read answers, beside every row, the tenant the row belongs to, and leaves out every
 closed tenant — one with a ``tenant_deletions`` row, whether its drain is still running or done —
@@ -21,10 +21,11 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Select, and_, func, literal, null, select, union_all
+from sqlalchemy import Connection, Select, Table, and_, func, literal, null, select, union_all
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, LineSignature
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import (
     CandidacyRead,
@@ -88,7 +89,8 @@ def _visible_segments() -> Select[Any]:
 
 
 class SweepCorpusReads:
-    """The forge-status, close-drain, event-derivation, trace and egress sweeps' corpus reads and probes."""
+    """The forge-status, close-drain, event-derivation, trace and egress sweeps' corpus reads and probes, and the flow
+    driver's probe."""
 
     def __init__(self, read: MarkedRead) -> None:
         self._read = read
@@ -115,6 +117,21 @@ class SweepCorpusReads:
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
         """One grouped statement of append-only aggregates per tenant; closed tenants included."""
         tables = sorted((*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES), key=lambda t: t.name)
+        marks = self._signature_marks(tables, "corpus live work refs signature")
+        return {tenant: WorkRefsSignature(marks=by_table) for tenant, by_table in marks.items()}
+
+    # --- flow driver ------------------------------------------------------------------
+
+    def flow_lines_signature(self) -> dict[TenantId, LineSignature]:
+        """The status families' aggregates, per tenant, in one grouped statement; closed tenants included."""
+        tables = sorted(status_family_tables(), key=lambda t: t.name)
+        marks = self._signature_marks(tables, "corpus flow lines signature")
+        return {tenant: LineSignature(marks=by_table) for tenant, by_table in marks.items()}
+
+    def _signature_marks(
+        self, tables: Sequence[Table], operation: str
+    ) -> dict[TenantId, tuple[tuple[str, int, int | None], ...]]:
+        """Each tenant's ``(table, count, max(id))`` per table of ``tables``, read hub-wide in one statement."""
         per_table = [
             select(
                 table.c.tenant_id.label("tenant_id"),
@@ -124,15 +141,13 @@ class SweepCorpusReads:
             ).group_by(table.c.tenant_id)
             for table in tables
         ]
-        with self._read("corpus live work refs signature") as conn:
+        with self._read(operation) as conn:
             rows = conn.execute(union_all(*per_table)).all()
         seen: dict[str, dict[str, tuple[int, int | None]]] = {}
         for row in rows:
             seen.setdefault(row.tenant_id, {})[row.table_name] = (row.row_count, row.max_id)
         return {
-            TenantId(tenant): WorkRefsSignature(
-                marks=tuple((table.name, *by_table.get(table.name, (0, None))) for table in tables)
-            )
+            TenantId(tenant): tuple((table.name, *by_table.get(table.name, (0, None))) for table in tables)
             for tenant, by_table in seen.items()
         }
 
@@ -325,5 +340,6 @@ def _conforms_sweep_corpus(
     IReadStepCorpus,
     IReadUsageCorpus,
     IReadEgressEvents,
+    IReadFlowLinesCorpus,
 ]:
-    return x, x, x, x, x, x
+    return x, x, x, x, x, x, x

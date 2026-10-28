@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.repositories import RepositoryResolution
@@ -29,8 +30,7 @@ TURN_INTERRUPTED = "interrupted"
 # Pending-poll cadence defaults, overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
 DEFAULT_POLL_TIMEOUT = timedelta(hours=3)
-#: The longest a tenant's full reconcile is ever skipped, whatever its change probe says — so a chunk that moved longer
-#: ago than this stands where its line says.
+#: The longest a tenant's full reconcile is ever skipped, whatever its change probe says.
 RECONCILE_FLOOR = timedelta(minutes=1)
 #: The statuses in which a person holds a chunk: a visit they hold at a later epoch keeps its place.
 _HELD_BY_A_PERSON = frozenset({ChunkStatus.NEEDS_HUMAN, ChunkStatus.PAUSED})
@@ -105,6 +105,18 @@ class FlowFact:
     at: datetime
     outcome: str | None = None
     revision: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class TurnEvent:
+    """The event a turn's end records in the transaction that ends it, about the turn's chunk at its node."""
+
+    kind: EventLogKind
+    chunk_id: str | None
+    node_name: str | None
+    message: str
+    detail: Mapping[str, object]
 
 
 @domain_model

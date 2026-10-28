@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import Engine, Table, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.delivery.flows import FlowResource, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
@@ -23,6 +23,7 @@ pytestmark = pytest.mark.component
 _AT = datetime(2026, 10, 27, 12, 0, 0, tzinfo=UTC)
 _MAIN = FlowResource("repo_a", "main")
 _OTHER = FlowResource("repo_b", "master")
+_INTERRUPTED = TurnEvent(kind="turn-interrupted", chunk_id="ch_1", node_name="deliver", message="ended", detail={})
 
 
 @dataclass(frozen=True)
@@ -149,9 +150,10 @@ def test_ending_a_turn_interrupted_writes_its_facts_and_closure_once(world: _Wor
     _plant_turn(world.engine, submission.submission_id)
     assert [t.turn_id for t in flows.open_turns()] == ["htn_1"]
 
-    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", at=_AT) is True
-    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", at=_AT) is False
+    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is True
+    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is False
 
+    assert _count(world.engine, s.event_log) == 1
     assert flows.open_turns() == []
     assert [(f.kind, f.outcome) for f in flows.facts_of(submission.submission_id)] == [
         ("submitted", None),
@@ -166,6 +168,6 @@ def test_ending_a_turn_without_a_withdrawal_leaves_the_submission_open(world: _W
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
-    assert flows.end_turn_interrupted("htn_1", withdrawal=None, at=_AT) is True
+    assert flows.end_turn_interrupted("htn_1", withdrawal=None, event=_INTERRUPTED, at=_AT) is True
 
     assert [sub.submission_id for sub in flows.open_submissions_from(0)] == [submission.submission_id]
