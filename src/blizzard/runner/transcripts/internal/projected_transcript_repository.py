@@ -154,5 +154,4 @@ class ProjectedTranscriptRepository:
 
 # Typecheck-time Protocol/adapter conformance sentinel
 # (`exemplars/python/exemplar/hub/store/internal/permit_store.py`).
-def _conforms_read_transcript_repository(x: ProjectedTranscriptRepository) -> IReadTranscriptRepository:
-    return x
+_read_transcript_repository_conforms: type[IReadTranscriptRepository] = ProjectedTranscriptRepository

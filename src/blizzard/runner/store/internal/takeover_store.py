@@ -142,5 +142,4 @@ class TakeoverStore:
         )
 
 
-def _conforms_takeover_store(x: TakeoverStore) -> IWriteTakeoverRepository:
-    return x
+_takeover_store_conforms: type[IWriteTakeoverRepository] = TakeoverStore

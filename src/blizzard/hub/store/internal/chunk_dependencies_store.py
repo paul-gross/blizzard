@@ -219,5 +219,4 @@ def release_outgoing_edges_conn(conn: Connection, chunk_id: str, *, by: str, at:
     )
 
 
-def _conforms_dependencies(x: ChunkDependenciesStore) -> IWriteChunkDependenciesRepository:
-    return x
+_dependencies_conforms: type[IWriteChunkDependenciesRepository] = ChunkDependenciesStore

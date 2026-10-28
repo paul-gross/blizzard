@@ -73,5 +73,4 @@ class ServedProjectsStore:
         )
 
 
-def _conforms_served_projects_store(x: ServedProjectsStore) -> IWriteServedProjectsRepository:
-    return x
+_served_projects_store_conforms: type[IWriteServedProjectsRepository] = ServedProjectsStore

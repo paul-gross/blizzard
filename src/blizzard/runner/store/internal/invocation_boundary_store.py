@@ -201,5 +201,4 @@ class InvocationBoundaryStore:
         )
 
 
-def _conforms_invocation_boundary_store(x: InvocationBoundaryStore) -> IWriteInvocationBoundaryRepository:
-    return x
+_invocation_boundary_store_conforms: type[IWriteInvocationBoundaryRepository] = InvocationBoundaryStore

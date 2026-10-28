@@ -85,5 +85,4 @@ class RoutineScopeStore:
         return routine
 
 
-def _conforms_routine_scope_store(x: RoutineScopeStore) -> IWriteRoutineScopeRepository:
-    return x
+_routine_scope_store_conforms: type[IWriteRoutineScopeRepository] = RoutineScopeStore

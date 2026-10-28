@@ -105,5 +105,4 @@ class ChunkLifecycleStore:
         return int(key[0]) if key is not None else 0
 
 
-def _conforms_lifecycle(x: ChunkLifecycleStore) -> IWriteChunkLifecycleRepository:
-    return x
+_lifecycle_conforms: type[IWriteChunkLifecycleRepository] = ChunkLifecycleStore

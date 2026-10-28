@@ -154,5 +154,4 @@ class WorkspaceRegistry:
         return self._workspaces.get(workspace_id) if workspace_id is not None else None
 
 
-def _conforms_workspace_registry(x: WorkspaceRegistry) -> IWorkspaces:
-    return x
+_workspace_registry_conforms: type[IWorkspaces] = WorkspaceRegistry

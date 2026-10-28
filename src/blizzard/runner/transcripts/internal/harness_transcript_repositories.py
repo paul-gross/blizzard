@@ -24,5 +24,4 @@ class HarnessTranscriptRepositories:
 
 # Typecheck-time Protocol/adapter conformance sentinel
 # (`exemplars/python/exemplar/hub/store/internal/permit_store.py`).
-def _conforms_transcript_repository_resolver(x: HarnessTranscriptRepositories) -> ITranscriptRepositoryResolver:
-    return x
+_transcript_repository_resolver_conforms: type[ITranscriptRepositoryResolver] = HarnessTranscriptRepositories

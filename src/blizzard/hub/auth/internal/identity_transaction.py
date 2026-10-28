@@ -114,5 +114,4 @@ class IdentityTransactions:
         )
 
 
-def _conforms_identity_transactions(x: IdentityTransactions) -> IIdentityTransactions:
-    return x
+_identity_transactions_conforms: type[IIdentityTransactions] = IdentityTransactions

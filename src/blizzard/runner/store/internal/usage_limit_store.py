@@ -71,5 +71,4 @@ class RunnerUsageLimitStore:
         return conn.execute(self._store.delete(table).where(and_(table.c[at] < cutoff, table.c[at] < latest))).rowcount
 
 
-def _conforms_runner_usage_limit_store(x: RunnerUsageLimitStore) -> IWriteRunnerUsageLimitRepository:
-    return x
+_runner_usage_limit_store_conforms: type[IWriteRunnerUsageLimitRepository] = RunnerUsageLimitStore

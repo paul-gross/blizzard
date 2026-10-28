@@ -357,5 +357,4 @@ def _of(row: Row[Any], *, retired: bool) -> ConfiguredForge:
     )
 
 
-def _conforms_forge_store(x: ForgeRecordStore) -> IWriteForgeRepository:
-    return x
+_forge_store_conforms: type[IWriteForgeRepository] = ForgeRecordStore

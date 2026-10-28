@@ -35,5 +35,4 @@ class JtiCacheRepository:
         return True
 
 
-def _conforms(x: JtiCacheRepository) -> IJtiCache:
-    return x
+_jti_cache_conforms: type[IJtiCache] = JtiCacheRepository

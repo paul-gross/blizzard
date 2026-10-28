@@ -93,5 +93,4 @@ class GardenSweepsStore:
         ]
 
 
-def _conforms_garden_sweeps_store(x: GardenSweepsStore) -> IReadGardenSweepsRepository:
-    return x
+_garden_sweeps_store_conforms: type[IReadGardenSweepsRepository] = GardenSweepsStore

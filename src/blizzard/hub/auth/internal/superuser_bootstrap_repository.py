@@ -54,5 +54,4 @@ class SuperuserBootstrapRepository:
         return SuperuserBootstrap(email=row.email, claimed_user_id=row.claimed_user_id, updated_at=row.updated_at)
 
 
-def _conforms_superuser_bootstrap_repository(x: SuperuserBootstrapRepository) -> IWriteSuperuserBootstrapRepository:
-    return x
+_superuser_bootstrap_repository_conforms: type[IWriteSuperuserBootstrapRepository] = SuperuserBootstrapRepository

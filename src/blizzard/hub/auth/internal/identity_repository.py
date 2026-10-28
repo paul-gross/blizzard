@@ -108,5 +108,4 @@ class IdentityRepository:
         )
 
 
-def _conforms_identity_repository(x: IdentityRepository) -> IWriteIdentityRepository:
-    return x
+_identity_repository_conforms: type[IWriteIdentityRepository] = IdentityRepository

@@ -142,9 +142,7 @@ class ReviewFindingsStore:
             return ReviewFindingsOutcome.RECORDED
 
 
-def _conforms_review_findings_store(x: ReviewFindingsStore) -> IWriteReviewFindingsRepository:
-    return x
+_review_findings_store_conforms: type[IWriteReviewFindingsRepository] = ReviewFindingsStore
 
 
-def _conforms_review_findings_store_read(x: ReviewFindingsStore) -> IReadReviewFindingsRepository:
-    return x
+_review_findings_store_read_conforms: type[IReadReviewFindingsRepository] = ReviewFindingsStore

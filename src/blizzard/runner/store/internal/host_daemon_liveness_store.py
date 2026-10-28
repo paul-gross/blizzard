@@ -39,5 +39,4 @@ class DaemonLivenessStore:
         _log.debug("daemon liveness stamped")
 
 
-def _conforms_daemon_liveness_store(x: DaemonLivenessStore) -> IWriteDaemonLivenessRepository:
-    return x
+_daemon_liveness_store_conforms: type[IWriteDaemonLivenessRepository] = DaemonLivenessStore

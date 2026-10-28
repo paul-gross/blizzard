@@ -37,5 +37,4 @@ class ForgeAnnotationStore:
             conn.execute(self._store.insert(forge_annotation_facts), rows)
 
 
-def _conforms_forge_annotation_store(x: ForgeAnnotationStore) -> IWriteAnnotatedSources:
-    return x
+_forge_annotation_store_conforms: type[IWriteAnnotatedSources] = ForgeAnnotationStore

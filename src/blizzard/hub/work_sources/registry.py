@@ -182,5 +182,4 @@ class StoreWorkSourceRegistry:
         return self._built_in.parse(token)
 
 
-def _conforms_work_source_registry(x: StoreWorkSourceRegistry) -> IWorkSourceRegistry:
-    return x
+_work_source_registry_conforms: type[IWorkSourceRegistry] = StoreWorkSourceRegistry

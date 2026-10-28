@@ -241,5 +241,4 @@ class EnvironmentStore:
         )
 
 
-def _conforms_environment_store(x: EnvironmentStore) -> IWriteEnvironmentRepository:
-    return x
+_environment_store_conforms: type[IWriteEnvironmentRepository] = EnvironmentStore

@@ -62,5 +62,4 @@ class GraphArtifactStore:
         _log.info("graph artifacts pinned", graph_id=graph_id, count=len(artifacts))
 
 
-def _conforms_graph_artifact_store(x: GraphArtifactStore) -> IWriteGraphArtifactRepository:
-    return x
+_graph_artifact_store_conforms: type[IWriteGraphArtifactRepository] = GraphArtifactStore

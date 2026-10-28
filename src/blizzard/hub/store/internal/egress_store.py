@@ -125,8 +125,7 @@ def _cursor(row: Row[Any]) -> EgressCheckpoint:
     )
 
 
-def _conforms_egress_store(x: EgressStore) -> IWriteEgressCursor:
-    return x
+_egress_store_conforms: type[IWriteEgressCursor] = EgressStore
 
 
 def _tenant(value: str | None) -> TenantId | None:

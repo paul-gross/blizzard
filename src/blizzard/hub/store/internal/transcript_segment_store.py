@@ -457,5 +457,4 @@ class TranscriptSegmentStore:
         )
 
 
-def _conforms_transcript_segment_store(x: TranscriptSegmentStore) -> IWriteTranscriptSegments:
-    return x
+_transcript_segment_store_conforms: type[IWriteTranscriptSegments] = TranscriptSegmentStore

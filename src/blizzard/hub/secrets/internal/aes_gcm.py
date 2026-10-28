@@ -58,5 +58,4 @@ class AesGcmSecretCipher:
         return SecretValue(plaintext.decode())
 
 
-def _conforms_aes_gcm_secret_cipher(x: AesGcmSecretCipher) -> ISecretCipher:
-    return x
+_aes_gcm_secret_cipher_conforms: type[ISecretCipher] = AesGcmSecretCipher

@@ -78,5 +78,4 @@ class SessionRepository:
         )
 
 
-def _conforms_session_repository(x: SessionRepository) -> IWriteSessionRepository:
-    return x
+_session_repository_conforms: type[IWriteSessionRepository] = SessionRepository

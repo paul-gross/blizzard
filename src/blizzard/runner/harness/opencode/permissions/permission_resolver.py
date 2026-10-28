@@ -88,5 +88,4 @@ class SubprocessOpenCodePermissionResolver:
 
 
 # Typecheck-time Protocol conformance sentinel (the exemplar's shape).
-def _conforms_resolver(x: SubprocessOpenCodePermissionResolver) -> IOpenCodePermissionResolver:
-    return x
+_resolver_conforms: type[IOpenCodePermissionResolver] = SubprocessOpenCodePermissionResolver

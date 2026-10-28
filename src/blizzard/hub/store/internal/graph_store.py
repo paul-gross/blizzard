@@ -636,5 +636,4 @@ class GraphStore:
         )
 
 
-def _conforms_graph_store(x: GraphStore) -> IWriteGraphRepository:
-    return x
+_graph_store_conforms: type[IWriteGraphRepository] = GraphStore

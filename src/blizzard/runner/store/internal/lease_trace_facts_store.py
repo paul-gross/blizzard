@@ -452,5 +452,4 @@ class LeaseTraceFactsStore:
             )
 
 
-def _conforms_lease_trace_facts_store(x: LeaseTraceFactsStore) -> IWriteLeaseTraces:
-    return x
+_lease_trace_facts_store_conforms: type[IWriteLeaseTraces] = LeaseTraceFactsStore

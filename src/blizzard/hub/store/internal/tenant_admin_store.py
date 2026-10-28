@@ -134,5 +134,4 @@ class TenantAdministrationStore:
             yield _TenantCreation(tenant, connections, writes)
 
 
-def _conforms_tenant_administration_store(x: TenantAdministrationStore) -> IWriteTenantDirectory:
-    return x
+_tenant_administration_store_conforms: type[IWriteTenantDirectory] = TenantAdministrationStore

@@ -88,5 +88,4 @@ class WorkerStdoutFiles:
             return ""
 
 
-def _conforms_worker_stdout_files(x: WorkerStdoutFiles) -> IWorkerStdoutFiles:
-    return x
+_worker_stdout_files_conforms: type[IWorkerStdoutFiles] = WorkerStdoutFiles

@@ -401,5 +401,4 @@ class ProjectLinkStore:
         return {project_id: sorted(held) for project_id, held in found.items()}
 
 
-def _conforms_link_store(x: ProjectLinkStore) -> IWriteProjectLinks:
-    return x
+_link_store_conforms: type[IWriteProjectLinks] = ProjectLinkStore

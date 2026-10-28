@@ -343,5 +343,4 @@ def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
     )
 
 
-def _conforms_repository_store(x: RepositoryRecordStore) -> IWriteRepositoryRecordRepository:
-    return x
+_repository_store_conforms: type[IWriteRepositoryRecordRepository] = RepositoryRecordStore

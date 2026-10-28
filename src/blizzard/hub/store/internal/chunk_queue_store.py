@@ -115,5 +115,4 @@ class ChunkQueueStore:
                 conn.execute(self._store.insert(s.queue_positions), rows)
 
 
-def _conforms_queue(x: ChunkQueueStore) -> IWriteChunkQueueRepository:
-    return x
+_queue_conforms: type[IWriteChunkQueueRepository] = ChunkQueueStore

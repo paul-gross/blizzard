@@ -29,5 +29,4 @@ class SessionService:
         self._store.delete(hub_url)
 
 
-def _conforms_session_service_read(x: SessionService) -> IReadSessionStore:
-    return x
+_session_service_read_conforms: type[IReadSessionStore] = SessionService

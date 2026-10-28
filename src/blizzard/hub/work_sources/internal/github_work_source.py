@@ -253,13 +253,10 @@ def _trace_comment(trace: DeliveryTrace, marker: str) -> str:
     return f"Delivered by blizzard {chunk}: {landed}\n\n{marker}"
 
 
-def _conforms_work_source(x: GitHubWorkSource) -> IWorkSource:
-    return x
+_work_source_conforms: type[IWorkSource] = GitHubWorkSource
 
 
-def _conforms_work_annotator(x: GitHubWorkSource) -> IWorkAnnotator:
-    return x
+_work_annotator_conforms: type[IWorkAnnotator] = GitHubWorkSource
 
 
-def _conforms_work_closer(x: GitHubWorkSource) -> IWorkCloser:
-    return x
+_work_closer_conforms: type[IWorkCloser] = GitHubWorkSource

@@ -169,8 +169,7 @@ class ExternalUsageAttemptLane:
             events.publish_fact_changed(seq=seq, kind=report_kind, chunk_id=None, lease_id=None)
 
 
-def _conforms_attempt_lane(x: ExternalUsageAttemptLane) -> IExternalUsageAttemptSink:
-    return x
+_attempt_lane_conforms: type[IExternalUsageAttemptSink] = ExternalUsageAttemptLane
 
 
 class ExternalUsageSamplePass:

@@ -142,5 +142,4 @@ def _find_response(stdout: str, request_id: int) -> dict[str, object] | None:
     return None
 
 
-def _conforms_credential_renewer(x: OpenAICredentialRenewer) -> ICredentialRenewer:
-    return x
+_credential_renewer_conforms: type[ICredentialRenewer] = OpenAICredentialRenewer

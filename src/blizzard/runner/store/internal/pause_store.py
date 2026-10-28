@@ -257,5 +257,4 @@ def _lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> None:
     conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
 
 
-def _conforms_pause_store(x: PauseStore) -> IWritePauseRepository:
-    return x
+_pause_store_conforms: type[IWritePauseRepository] = PauseStore

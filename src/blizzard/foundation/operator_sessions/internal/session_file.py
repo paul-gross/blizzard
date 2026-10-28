@@ -66,9 +66,7 @@ def _key(hub_url: str) -> str:
     return hub_url.rstrip("/")
 
 
-def _conforms_session_file_read(x: SessionFile) -> IReadSessionStore:
-    return x
+_session_file_read_conforms: type[IReadSessionStore] = SessionFile
 
 
-def _conforms_session_file_write(x: SessionFile) -> IWriteSessionStore:
-    return x
+_session_file_write_conforms: type[IWriteSessionStore] = SessionFile

@@ -61,5 +61,4 @@ class GardenTrendStore:
         ]
 
 
-def _conforms_garden_trend_store(x: GardenTrendStore) -> IReadGardenTrendRepository:
-    return x
+_garden_trend_store_conforms: type[IReadGardenTrendRepository] = GardenTrendStore

@@ -144,5 +144,4 @@ class TenantTeardownStore:
             return None
 
 
-def _conforms_tenant_teardown_store(x: TenantTeardownStore) -> IWriteTenantTeardowns:
-    return x
+_tenant_teardown_store_conforms: type[IWriteTenantTeardowns] = TenantTeardownStore

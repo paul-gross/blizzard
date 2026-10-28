@@ -483,5 +483,4 @@ class AnalyticsOperationalStore:
         return summarize_outcomes(judged, failures)
 
 
-def _conforms_analytics_operational_store(x: AnalyticsOperationalStore) -> IReadOperationalAnalytics:
-    return x
+_analytics_operational_store_conforms: type[IReadOperationalAnalytics] = AnalyticsOperationalStore

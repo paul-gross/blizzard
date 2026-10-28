@@ -343,5 +343,4 @@ def _of(row: Row[Any], *, retired: bool) -> ConfiguredWorkSource:
     )
 
 
-def _conforms_work_source_store(x: WorkSourceRecordStore) -> IWriteWorkSourceRepository:
-    return x
+_work_source_store_conforms: type[IWriteWorkSourceRepository] = WorkSourceRecordStore

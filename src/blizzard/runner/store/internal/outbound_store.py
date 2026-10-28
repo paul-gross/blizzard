@@ -121,5 +121,4 @@ class OutboundStore:
         return result.rowcount
 
 
-def _conforms_outbound_store(x: OutboundStore) -> IWriteOutboundRepository:
-    return x
+_outbound_store_conforms: type[IWriteOutboundRepository] = OutboundStore

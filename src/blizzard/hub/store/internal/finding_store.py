@@ -524,8 +524,7 @@ class FindingStore:
         )
 
 
-def _conforms_finding_store(x: FindingStore) -> IWriteFindingRepository:
-    return x
+_finding_store_conforms: type[IWriteFindingRepository] = FindingStore
 
 
 class FindingSetStore:
@@ -633,5 +632,4 @@ class FindingSetStore:
         )
 
 
-def _conforms_finding_set_store(x: FindingSetStore) -> IWriteFindingSetRepository:
-    return x
+_finding_set_store_conforms: type[IWriteFindingSetRepository] = FindingSetStore

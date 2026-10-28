@@ -113,5 +113,4 @@ class ConfigChangeStore:
         )
 
 
-def _conforms_config_change_store(x: ConfigChangeStore) -> IReadConfigChanges:
-    return x
+_config_change_store_conforms: type[IReadConfigChanges] = ConfigChangeStore

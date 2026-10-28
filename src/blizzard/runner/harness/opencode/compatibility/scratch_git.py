@@ -114,8 +114,7 @@ class SubprocessOpenCodeScratchGit:
         )
 
 
-def _conforms_scratch_git(x: SubprocessOpenCodeScratchGit) -> IOpenCodeScratchGit:
-    return x
+_scratch_git_conforms: type[IOpenCodeScratchGit] = SubprocessOpenCodeScratchGit
 
 
 __all__ = [

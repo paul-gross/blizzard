@@ -62,5 +62,4 @@ class TokenStore:
         _log.info("lease token minted", lease_id=lease_id)
 
 
-def _conforms_token_store(x: TokenStore) -> IWriteTokenRepository:
-    return x
+_ken_store_conforms: type[IWriteTokenRepository] = TokenStore

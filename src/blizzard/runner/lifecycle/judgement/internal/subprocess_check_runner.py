@@ -62,5 +62,4 @@ class SubprocessCheckRunner:
         return CheckOutcome(passed=passed, output_tail=CheckOutput.of(result.stdout, result.stderr).tail)
 
 
-def _conforms_check_runner(x: SubprocessCheckRunner) -> ICheckRunner:
-    return x
+_check_runner_conforms: type[ICheckRunner] = SubprocessCheckRunner

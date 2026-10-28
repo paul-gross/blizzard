@@ -103,5 +103,4 @@ class ChunkUsageStore:
             )
 
 
-def _conforms_usage(x: ChunkUsageStore) -> IWriteChunkUsageRepository:
-    return x
+_usage_conforms: type[IWriteChunkUsageRepository] = ChunkUsageStore

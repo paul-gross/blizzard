@@ -238,5 +238,4 @@ class SubprocessChildProcesses:
         return subprocess.call(command.script, shell=True, cwd=cwd, env=env.variables)
 
 
-def _conforms_child_processes(x: SubprocessChildProcesses) -> IChildProcesses:
-    return x
+_child_processes_conforms: type[IChildProcesses] = SubprocessChildProcesses

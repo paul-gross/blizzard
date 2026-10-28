@@ -331,15 +331,10 @@ class SweepCorpusReads:
             return corpus_rows.epoch_drops(conn, epochs)
 
 
-def _conforms_sweep_corpus(
-    x: SweepCorpusReads,
-) -> tuple[
-    IReadWorkRefsCorpus,
-    IReadCloseIntentCorpus,
-    IReadDerivationCorpus,
-    IReadStepCorpus,
-    IReadUsageCorpus,
-    IReadEgressEvents,
-    IReadFlowLinesCorpus,
-]:
-    return x, x, x, x, x, x, x
+_read_work_refs_corpus_conforms: type[IReadWorkRefsCorpus] = SweepCorpusReads
+_read_close_intent_corpus_conforms: type[IReadCloseIntentCorpus] = SweepCorpusReads
+_read_derivation_corpus_conforms: type[IReadDerivationCorpus] = SweepCorpusReads
+_read_step_corpus_conforms: type[IReadStepCorpus] = SweepCorpusReads
+_read_usage_corpus_conforms: type[IReadUsageCorpus] = SweepCorpusReads
+_read_egress_events_conforms: type[IReadEgressEvents] = SweepCorpusReads
+_read_flow_lines_corpus_conforms: type[IReadFlowLinesCorpus] = SweepCorpusReads

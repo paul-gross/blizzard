@@ -38,5 +38,4 @@ class FloorResampleTriggers:
         return last_attempt_at is None or last_attempt_at < hold.expected_reset
 
 
-def _conforms_floor_resample_triggers(x: FloorResampleTriggers) -> IEarlySampleTriggers:
-    return x
+_floor_resample_triggers_conforms: type[IEarlySampleTriggers] = FloorResampleTriggers

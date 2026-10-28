@@ -474,5 +474,4 @@ def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -
     return closed
 
 
-def _conforms_decisions(x: ChunkDecisionsStore) -> IWriteChunkDecisionsRepository:
-    return x
+_decisions_conforms: type[IWriteChunkDecisionsRepository] = ChunkDecisionsStore

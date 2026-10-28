@@ -38,5 +38,4 @@ class LoopContext:
 if TYPE_CHECKING:
     from exemplar.runner.disk.floor import DiskFloorContext
 
-    def _conforms_to_disk_floor(ctx: LoopContext) -> DiskFloorContext:
-        return ctx
+    _disk_floor_conforms: type[DiskFloorContext] = LoopContext

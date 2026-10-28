@@ -82,5 +82,4 @@ class AuthStateRepository:
         )
 
 
-def _conforms_auth_state_repository(x: AuthStateRepository) -> IWriteAuthStateRepository:
-    return x
+_auth_state_repository_conforms: type[IWriteAuthStateRepository] = AuthStateRepository

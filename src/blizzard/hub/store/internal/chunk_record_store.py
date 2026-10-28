@@ -368,5 +368,4 @@ class ChunkRecordStore:
         )
 
 
-def _conforms_record(x: ChunkRecordStore) -> IWriteChunkRecordRepository:
-    return x
+_record_conforms: type[IWriteChunkRecordRepository] = ChunkRecordStore

@@ -284,9 +284,7 @@ class GardenDeliveryStore:
             return DeliveryOutcome.ALREADY_RECORDED
 
 
-def _conforms_garden_delivery_store(x: GardenDeliveryStore) -> IWriteGardenDeliveryRepository:
-    return x
+_garden_delivery_store_conforms: type[IWriteGardenDeliveryRepository] = GardenDeliveryStore
 
 
-def _conforms_garden_delivery_store_read(x: GardenDeliveryStore) -> IReadGardenDeliveryRepository:
-    return x
+_garden_delivery_store_read_conforms: type[IReadGardenDeliveryRepository] = GardenDeliveryStore

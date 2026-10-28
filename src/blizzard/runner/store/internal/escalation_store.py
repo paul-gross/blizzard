@@ -114,5 +114,4 @@ class EscalationStore:
         )
 
 
-def _conforms_escalation_store(x: EscalationStore) -> IWriteEscalationRepository:
-    return x
+_escalation_store_conforms: type[IWriteEscalationRepository] = EscalationStore

@@ -185,5 +185,4 @@ class ChunkHubExecStore:
             )
 
 
-def _conforms_hub_exec(x: ChunkHubExecStore) -> IWriteChunkHubExecRepository:
-    return x
+_hub_exec_conforms: type[IWriteChunkHubExecRepository] = ChunkHubExecStore

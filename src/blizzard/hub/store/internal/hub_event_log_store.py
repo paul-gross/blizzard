@@ -99,5 +99,4 @@ class HubEventLogStore:
             return int(key[0]) if key is not None else 0
 
 
-def _conforms_hub_event_log_store(x: HubEventLogStore) -> IWriteHubEventLog:
-    return x
+_hub_event_log_store_conforms: type[IWriteHubEventLog] = HubEventLogStore

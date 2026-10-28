@@ -485,8 +485,7 @@ class EverySpawnRootProbe:
         return self._first.declared_degradations()
 
 
-def _conforms_every_spawn_root_probe(x: EverySpawnRootProbe) -> IHarnessHealthProbe:
-    return x
+_every_spawn_root_probe_conforms: type[IHarnessHealthProbe] = EverySpawnRootProbe
 
 
 class IHarnessLifecycleAndVerdict(IHarnessWorkerLifecycle, IHarnessVerdictParsing, Protocol):

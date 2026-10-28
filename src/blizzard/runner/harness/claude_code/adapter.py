@@ -782,5 +782,4 @@ class ClaudeCodeAdapter:
         return self.identity_env(preamble, envelope.chunk_id, session_id)
 
 
-def _conforms_harness_adapter(x: ClaudeCodeAdapter) -> IHarnessAdapter:
-    return x
+_harness_adapter_conforms: type[IHarnessAdapter] = ClaudeCodeAdapter

@@ -40,5 +40,4 @@ class HubVersionHolder:
             self._current = HubVersion(hub_version=reply.hub_version, window=reply.window)
 
 
-def _conforms_current_hub_version(x: HubVersionHolder) -> ICurrentHubVersion:
-    return x
+_current_hub_version_conforms: type[ICurrentHubVersion] = HubVersionHolder

@@ -385,5 +385,4 @@ class LeaseLivenessStore:
         _log.info("worker identity failed — provisional generation closed unidentified", lease_id=lease_id)
 
 
-def _conforms_lease_liveness_store(x: LeaseLivenessStore) -> IWriteLeaseLivenessRepository:
-    return x
+_lease_liveness_store_conforms: type[IWriteLeaseLivenessRepository] = LeaseLivenessStore

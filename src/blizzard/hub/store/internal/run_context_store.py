@@ -73,5 +73,4 @@ class RunContextStore:
             insert_run_context_row(conn, work_item_id, context)
 
 
-def _conforms_run_context_store(x: RunContextStore) -> IWriteRunContextRepository:
-    return x
+_run_context_store_conforms: type[IWriteRunContextRepository] = RunContextStore

@@ -164,5 +164,4 @@ class ElicitationStore:
         _log.info("elicitation cleared", lease_id=lease_id, epoch=epoch)
 
 
-def _conforms_elicitation_store(x: ElicitationStore) -> IWriteElicitationRepository:
-    return x
+_elicitation_store_conforms: type[IWriteElicitationRepository] = ElicitationStore

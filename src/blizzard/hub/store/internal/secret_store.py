@@ -247,13 +247,10 @@ def _sealed_columns(sealed: SealedValue) -> dict[str, str]:
     }
 
 
-def _conforms_secret_store(x: SecretStore) -> IWriteSecretRepository:
-    return x
+_secret_store_conforms: type[IWriteSecretRepository] = SecretStore
 
 
-def _conforms_sealed_secret_store(x: SecretStore) -> ISealedSecretRepository:
-    return x
+_sealed_secret_store_conforms: type[ISealedSecretRepository] = SecretStore
 
 
-def _conforms_reseal_secret_store(x: SecretStore) -> IResealSecretRepository:
-    return x
+_reseal_secret_store_conforms: type[IResealSecretRepository] = SecretStore

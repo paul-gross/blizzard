@@ -77,5 +77,4 @@ def _prune(conn: Connection, table: Table, at: str, cutoff: datetime) -> int:
     return conn.execute(table.delete().where(and_(table.c[at] < cutoff, table.c[at] < latest))).rowcount
 
 
-def _conforms_subscription_usage_limit_store(x: SubscriptionUsageLimitStore) -> IWriteSubscriptionUsageLimitRepository:
-    return x
+_subscription_usage_limit_store_conforms: type[IWriteSubscriptionUsageLimitRepository] = SubscriptionUsageLimitStore

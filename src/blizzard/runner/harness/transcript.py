@@ -264,5 +264,4 @@ class NullTranscriptSource:
 
 # Typecheck-time Protocol conformance sentinel (the exemplar's shape): pyright rejects the return if
 # `NullTranscriptSource` drifts from `IHarnessTranscriptSource`.
-def _conforms_harness_transcript_source(x: NullTranscriptSource) -> IHarnessTranscriptSource:
-    return x
+_harness_transcript_source_conforms: type[IHarnessTranscriptSource] = NullTranscriptSource

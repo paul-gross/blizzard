@@ -46,5 +46,4 @@ class ElicitationFiles:
                 os.remove(self.output_path(lease_id, epoch, attempt))
 
 
-def _conforms_elicitation_files(x: ElicitationFiles) -> IElicitationFiles:
-    return x
+_elicitation_files_conforms: type[IElicitationFiles] = ElicitationFiles

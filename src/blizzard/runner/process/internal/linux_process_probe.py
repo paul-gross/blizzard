@@ -46,5 +46,4 @@ class LinuxProcessProbe:
             signal_group(pgid, signal.SIGINT)
 
 
-def _conforms_process_probe(x: LinuxProcessProbe) -> IProcessProbe:
-    return x
+_process_probe_conforms: type[IProcessProbe] = LinuxProcessProbe

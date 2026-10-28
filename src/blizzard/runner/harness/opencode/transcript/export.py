@@ -80,5 +80,4 @@ class SubprocessOpenCodeExporter:
 
 # Typecheck-time Protocol conformance sentinel (the exemplar's shape): pyright rejects the
 # return if `SubprocessOpenCodeExporter` drifts from `IOpenCodeExporter`.
-def _conforms_exporter(x: SubprocessOpenCodeExporter) -> IOpenCodeExporter:
-    return x
+_exporter_conforms: type[IOpenCodeExporter] = SubprocessOpenCodeExporter

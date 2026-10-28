@@ -209,9 +209,8 @@ def _unrendered(ref: WorkRef) -> str | None:
     return None
 
 
-def _conforms_trace_store(x: TraceStore) -> tuple[IWriteTraceCursor, IReadTraceStatus]:
-    return x, x
+_write_trace_cursor_conforms: type[IWriteTraceCursor] = TraceStore
+_read_trace_status_conforms: type[IReadTraceStatus] = TraceStore
 
 
-def _conforms_project_labels(x: ProjectLabels) -> IReadProjectLabels:
-    return x
+_project_labels_conforms: type[IReadProjectLabels] = ProjectLabels

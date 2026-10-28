@@ -144,5 +144,4 @@ class ChunkQuestionsStore:
             )
 
 
-def _conforms_questions(x: ChunkQuestionsStore) -> IWriteChunkQuestionsRepository:
-    return x
+_questions_conforms: type[IWriteChunkQuestionsRepository] = ChunkQuestionsStore

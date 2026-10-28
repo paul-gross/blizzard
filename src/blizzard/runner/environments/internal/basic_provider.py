@@ -226,5 +226,4 @@ class BasicWorkspaceProvider:
         return {env.name: str(env) for env in self._environments()}
 
 
-def _conforms_workspace_provider(provider: BasicWorkspaceProvider) -> IWorkspaceProvider:
-    return provider
+_workspace_provider_conforms: type[IWorkspaceProvider] = BasicWorkspaceProvider

@@ -173,5 +173,4 @@ class ChunkWorkRefsStore:
             existing.add((pointer.source, pointer.ref))
 
 
-def _conforms_work_refs(x: ChunkWorkRefsStore) -> IWriteChunkWorkRefsRepository:
-    return x
+_work_refs_conforms: type[IWriteChunkWorkRefsRepository] = ChunkWorkRefsStore

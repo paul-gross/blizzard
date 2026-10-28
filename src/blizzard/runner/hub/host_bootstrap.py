@@ -202,5 +202,4 @@ class HostRunnerAdmin:
         raise HubClientError(f"the hub refused the host's credential adding runner {name}: {answer.detail}")
 
 
-def _conforms_runner_adder(x: HostRunnerAdmin) -> IRunnerAdder:
-    return x
+_runner_adder_conforms: type[IRunnerAdder] = HostRunnerAdmin

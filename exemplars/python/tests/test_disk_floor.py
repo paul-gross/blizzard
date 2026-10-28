@@ -47,12 +47,10 @@ class _FakeDiskBrakeRepository:
         self.facts.append(fact)
 
 
-def _conforms_fake_disk_probe(x: _FakeDiskProbe) -> IDiskProbe:
-    return x
+_fake_disk_probe_conforms: type[IDiskProbe] = _FakeDiskProbe
 
 
-def _conforms_fake_disk_brake_repository(x: _FakeDiskBrakeRepository) -> IWriteDiskBrakeRepository:
-    return x
+_fake_disk_brake_repository_conforms: type[IWriteDiskBrakeRepository] = _FakeDiskBrakeRepository
 
 
 def _ctx(probe: _FakeDiskProbe, brake: _FakeDiskBrakeRepository, clock: FixedClock) -> LoopContext:

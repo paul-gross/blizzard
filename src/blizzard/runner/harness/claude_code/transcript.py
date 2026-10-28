@@ -500,5 +500,4 @@ class ClaudeCodeTranscriptSource:
 
 # Typecheck-time conformance sentinel (`blizzard-context:/exemplars/python/`): the
 # return is rejected if this class drifts from the Protocol.
-def _conforms_harness_transcript_source(x: ClaudeCodeTranscriptSource) -> IHarnessTranscriptSource:
-    return x
+_harness_transcript_source_conforms: type[IHarnessTranscriptSource] = ClaudeCodeTranscriptSource

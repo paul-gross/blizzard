@@ -718,8 +718,7 @@ def _set_interactive_terminal_size(fd: int) -> None:
         pass
 
 
-def _conforms_process(x: SubprocessOpenCodeProcess) -> IOpenCodeProcess:
-    return x
+_process_conforms: type[IOpenCodeProcess] = SubprocessOpenCodeProcess
 
 
 __all__ = [

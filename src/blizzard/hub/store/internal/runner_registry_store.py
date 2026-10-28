@@ -791,5 +791,4 @@ def _declining_json(declining: tuple[RunnerDeclining, ...] | None) -> str | None
     )
 
 
-def _conforms_registry(x: RunnerRegistryStore) -> IWriteRunnerRegistry:
-    return x
+_registry_conforms: type[IWriteRunnerRegistry] = RunnerRegistryStore

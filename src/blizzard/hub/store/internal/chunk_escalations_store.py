@@ -198,5 +198,4 @@ class ChunkEscalationsStore:
             return {e.chunk_id: e for e in rows}
 
 
-def _conforms_escalations(x: ChunkEscalationsStore) -> IWriteChunkEscalationsRepository:
-    return x
+_escalations_conforms: type[IWriteChunkEscalationsRepository] = ChunkEscalationsStore

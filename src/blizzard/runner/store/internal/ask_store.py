@@ -145,5 +145,4 @@ class AskStore:
         )
 
 
-def _conforms_ask_store(x: AskStore) -> IWriteAskRepository:
-    return x
+_ask_store_conforms: type[IWriteAskRepository] = AskStore

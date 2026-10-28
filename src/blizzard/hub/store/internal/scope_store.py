@@ -229,5 +229,4 @@ class ScopeStore:
         )
 
 
-def _conforms_scope_store(x: ScopeStore) -> IWriteScopeRepository:
-    return x
+_scope_store_conforms: type[IWriteScopeRepository] = ScopeStore
