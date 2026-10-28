@@ -15,7 +15,7 @@ no member group lands in a namespace another module imports."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -31,7 +31,7 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, Unkn
 
 
 @contextmanager
-def hub_scoped_read(connections: HubStoreConnections, operation: str) -> Iterator[Connection]:
+def hub_scoped_read(connections: HubStoreConnections, operation: str) -> Generator[Connection, None, None]:
     """A read over ``connections`` whose every statement is marked hub-scoped."""
     with connections.read(operation) as conn:
         yield conn.execution_options(**{HUB_SCOPED_OPTION: True})

@@ -9,7 +9,7 @@ here too."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
@@ -69,7 +69,7 @@ class HubStoreConnections:
         return ScopedConnections(self._engine, self._errors, scope)
 
     @contextmanager
-    def read(self, operation: str) -> Iterator[Connection]:
+    def read(self, operation: str) -> Generator[Connection, None, None]:
         try:
             with self._engine.connect() as conn:
                 yield conn
@@ -77,7 +77,9 @@ class HubStoreConnections:
             raise self._errors.from_driver(exc, operation=operation) from exc
 
     @contextmanager
-    def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
+    def write(
+        self, operation: str, *, expect: tuple[type[BaseException], ...] = ()
+    ) -> Generator[Connection, None, None]:
         """Like :meth:`read`, over a transaction. ``expect`` names an exception a
         caller already catches and recovers from locally (a first-write-wins race)
         — passed through unwrapped rather than treated as a driver fault."""

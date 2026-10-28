@@ -8,7 +8,7 @@ time reads it from the clock the runner was given (``migration_clock``), never t
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,7 +51,7 @@ class _RevisionWarnings(logging.Handler):
 
 
 @contextmanager
-def _revision_warnings_surfaced() -> Iterator[None]:
+def _revision_warnings_surfaced() -> Generator[None, None, None]:
     logger, handler = logging.getLogger(REVISION_LOGGER), _RevisionWarnings()
     logger.addHandler(handler)
     try:

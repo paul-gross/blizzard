@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import os
 import secrets
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
@@ -206,7 +206,7 @@ _RUNNER_HUMAN = (
 
 
 @contextlib.asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message — sent *after*
     uvicorn's own graceful-drain wait, so this is the only signal a composer without an
     early-shutdown wrapper gets."""

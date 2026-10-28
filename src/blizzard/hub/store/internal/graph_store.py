@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -285,7 +285,7 @@ class GraphStore:
         self._store = store
 
     @contextmanager
-    def locked_name(self, name: str) -> Iterator[ILockedGraphNameRead]:
+    def locked_name(self, name: str) -> Generator[ILockedGraphNameRead, None, None]:
         with self._store.write("locked_graph_name") as conn:
             lock_keys(conn, _GRAPH_NAME_LOCK_NAMESPACE, [name])
             yield LockedGraphName(conn, self)

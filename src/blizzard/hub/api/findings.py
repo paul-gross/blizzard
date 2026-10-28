@@ -8,7 +8,7 @@ human-driven exit verbs and `reopen`, delegating to `FindingExitService`."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Annotated
 
@@ -293,7 +293,7 @@ def _exit_verb(
 
 
 @contextmanager
-def _refusals_mapped() -> Iterator[None]:
+def _refusals_mapped() -> Generator[None, None, None]:
     """A finding verb's domain refusals, mapped: a state the verb is illegal from, or a write
     that kept losing to concurrent ones, is 409; a blank note, a duplicate id, a self-naming or
     non-live absorber is 422."""

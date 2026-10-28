@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -275,7 +275,7 @@ class RunnerIngest:
             return self._ingest(source, request)
 
     @contextmanager
-    def _held(self, layout: HostLayout, which: str) -> Iterator[None]:
+    def _held(self, layout: HostLayout, which: str) -> Generator[None, None, None]:
         """``layout``'s directory held for the run: its lock taken, and nothing answering on its sockets."""
         with hold_host(
             layout,
@@ -286,7 +286,7 @@ class RunnerIngest:
             yield
 
     @contextmanager
-    def _answering(self, socket: Path) -> Iterator[None]:
+    def _answering(self, socket: Path) -> Generator[None, None, None]:
         """A runner directory that has not graduated, held for the run: a pre-host runner takes no lock, so only
         its ``runner.sock`` tells whether it runs."""
         if (held := self.holder(socket)) is not None:
@@ -437,7 +437,7 @@ class RunnerIngest:
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
 
     @contextmanager
-    def _copy_of(self, store: Path) -> Iterator[_SourceCopy]:
+    def _copy_of(self, store: Path) -> Generator[_SourceCopy, None, None]:
         """A backup copy of the source ``store`` beside this host's store, migrated to head, removed on leaving."""
         data = self.host.layout.data_dir
         # This run holds the host's lock, so a copy left here is one a killed run never removed.

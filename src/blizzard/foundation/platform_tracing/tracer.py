@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol
 
@@ -43,5 +43,5 @@ class NoopPlatformTracer:
 
 
 @contextmanager
-def _nothing() -> Iterator[None]:
+def _nothing() -> Generator[None, None, None]:
     yield

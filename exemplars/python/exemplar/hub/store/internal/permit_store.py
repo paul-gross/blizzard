@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -106,7 +106,7 @@ class PermitStore:
             raise PermitAlreadyRequested(permit.holder, capability=permit.capability) from exc
 
     @contextmanager
-    def locked(self, permit_id: str) -> Iterator[ILockedPermitRead]:
+    def locked(self, permit_id: str) -> Generator[ILockedPermitRead, None, None]:
         with self._store.write("locked") as conn:
             conn.execute(
                 self._store.update(permits).where(permits.c.permit_id == permit_id).values(permit_id=permit_id)

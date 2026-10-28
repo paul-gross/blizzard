@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,7 +22,7 @@ class StepLock:
         self._lock = threading.Lock()
 
     @contextmanager
-    def hold(self) -> Iterator[None]:
+    def hold(self) -> Generator[None, None, None]:
         if not self._lock.acquire(blocking=False):
             raise TickInProgress
         try:

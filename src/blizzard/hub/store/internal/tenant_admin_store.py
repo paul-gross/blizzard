@@ -9,7 +9,7 @@ is written through the unit's own membership repository, so the tenant and its a
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -126,7 +126,7 @@ class TenantAdministrationStore:
         )
 
     @contextmanager
-    def create(self, tenant: TenantId, *, name: str, at: datetime, by: str) -> Iterator[ITenantCreation]:
+    def create(self, tenant: TenantId, *, name: str, at: datetime, by: str) -> Generator[ITenantCreation, None, None]:
         with self._identity.begin() as writes:
             connections = writes.tenant_connections(StoreScope(tenant))
             with connections.founding("create_tenant", name=name, created_at=at, created_by=by):

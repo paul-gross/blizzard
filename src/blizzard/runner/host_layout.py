@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import fcntl
 import os
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -161,7 +161,7 @@ def hold_host(
     sockets: Iterable[Path],
     probe: Callable[[Path], str | None],
     refusal: Callable[[HostHeld], Exception] = lambda held: held,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """``layout``'s directory held for a write: its lock taken, and no daemon answering on any of ``sockets``, the
     ones the caller names — ``probe`` answers what holds a socket, else ``None``. A refusal names its cause as a
     :class:`HostHeld` and raises what ``refusal`` makes of it; only the hold's own refusals are mapped, never an

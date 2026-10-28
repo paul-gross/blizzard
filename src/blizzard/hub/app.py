@@ -12,7 +12,7 @@ import contextlib
 import os
 import random
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import partial
 
@@ -412,7 +412,7 @@ def _annotate_chunk(request: Request) -> None:
 
 
 @contextlib.asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
     and drive the sweeps across the app's lifetime. The tasks are created here — not in
     :func:`build_hosted_app` — because this is the one place that runs for every app the

@@ -11,7 +11,7 @@ import re
 import socket
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -305,7 +305,7 @@ class UrllibLoopbackTransport:
     """Direct, no-proxy urllib transport constrained to loopback HTTP."""
 
     @contextmanager
-    def request(self, request: LoopbackRequest, *, timeout: float) -> Iterator[LoopbackResponse]:
+    def request(self, request: LoopbackRequest, *, timeout: float) -> Generator[LoopbackResponse, None, None]:
         _validate_loopback_url(request.url)
         if (
             not isinstance(request.method, str)

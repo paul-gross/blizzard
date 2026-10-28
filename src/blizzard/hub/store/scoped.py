@@ -51,7 +51,7 @@ deletion fact instead, on the condition that the deletion is still underway."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -240,12 +240,14 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
         return conn
 
     @contextmanager
-    def read(self, operation: str) -> Iterator[Connection]:
+    def read(self, operation: str) -> Generator[Connection, None, None]:
         with super().read(operation) as conn:
             yield self._bind(conn)
 
     @contextmanager
-    def write(self, operation: str, *, expect: tuple[type[BaseException], ...] = ()) -> Iterator[Connection]:
+    def write(
+        self, operation: str, *, expect: tuple[type[BaseException], ...] = ()
+    ) -> Generator[Connection, None, None]:
         """Like :meth:`HubStoreConnections.write`, opened by :meth:`_lock_open_tenant`, so the
         whole transaction runs under the tenant's lock and a closed tenant writes nothing."""
         with super().write(operation, expect=expect) as conn:
@@ -253,7 +255,9 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
             yield self._bind(conn)
 
     @contextmanager
-    def founding(self, operation: str, *, name: str, created_at: datetime, created_by: str) -> Iterator[Connection]:
+    def founding(
+        self, operation: str, *, name: str, created_at: datetime, created_by: str
+    ) -> Generator[Connection, None, None]:
         """Like :meth:`write`, opened by inserting the scope's ``tenants`` row instead of locking it: the write that
         brings its tenant into being. On connections joined to an open transaction it runs on that transaction, so
         each later write there locks the row this one inserted and everything commits or rolls back together."""
@@ -266,7 +270,7 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
             yield self._bind(conn)
 
     @contextmanager
-    def teardown(self, operation: str) -> Iterator[Connection]:
+    def teardown(self, operation: str) -> Generator[Connection, None, None]:
         """Like :meth:`write`, opened by locking the scope's ``tenant_deletions`` row on the condition that its
         deletion is underway, instead of the tenant row on the condition that the tenant is open: the one write a
         closed tenant takes, which removes its rows. Concurrent teardowns of one tenant serialize on that row; a
