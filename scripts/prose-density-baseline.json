@@ -2292,9 +2292,9 @@
   },
   "blizzard/hub/api/fleet.py": {
    "comments": 20,
-   "docstrings": 124,
+   "docstrings": 122,
    "over_cap": 5,
-   "total": 1124
+   "total": 1108
   },
   "blizzard/hub/api/fleet_host.py": {
    "comments": 1,
@@ -3044,7 +3044,7 @@
    "comments": 169,
    "docstrings": 84,
    "over_cap": 24,
-   "total": 1718
+   "total": 1719
   },
   "blizzard/hub/config.py": {
    "comments": 47,
@@ -3150,21 +3150,21 @@
   },
   "blizzard/hub/delivery/flow_driver.py": {
    "comments": 4,
-   "docstrings": 35,
+   "docstrings": 38,
    "over_cap": 0,
-   "total": 280
+   "total": 299
   },
   "blizzard/hub/delivery/flow_turn.py": {
    "comments": 9,
-   "docstrings": 36,
+   "docstrings": 37,
    "over_cap": 0,
-   "total": 695
+   "total": 688
   },
   "blizzard/hub/delivery/hub_node.py": {
    "comments": 7,
-   "docstrings": 45,
+   "docstrings": 43,
    "over_cap": 1,
-   "total": 641
+   "total": 611
   },
   "blizzard/hub/delivery/internal/__init__.py": {
    "comments": 0,
@@ -3240,9 +3240,9 @@
   },
   "blizzard/hub/domain/actions/visit.py": {
    "comments": 2,
-   "docstrings": 39,
+   "docstrings": 40,
    "over_cap": 0,
-   "total": 250
+   "total": 256
   },
   "blizzard/hub/domain/artifact/__init__.py": {
    "comments": 0,
@@ -3330,9 +3330,9 @@
   },
   "blizzard/hub/domain/chunk/ports/escalations.py": {
    "comments": 0,
-   "docstrings": 30,
+   "docstrings": 23,
    "over_cap": 0,
-   "total": 120
+   "total": 96
   },
   "blizzard/hub/domain/chunk/ports/events.py": {
    "comments": 0,
@@ -3360,9 +3360,9 @@
   },
   "blizzard/hub/domain/chunk/ports/hub_exec.py": {
    "comments": 0,
-   "docstrings": 27,
+   "docstrings": 22,
    "over_cap": 0,
-   "total": 106
+   "total": 79
   },
   "blizzard/hub/domain/chunk/ports/lifecycle.py": {
    "comments": 0,
@@ -3540,9 +3540,9 @@
   },
   "blizzard/hub/domain/delivery/flows.py": {
    "comments": 10,
-   "docstrings": 50,
+   "docstrings": 54,
    "over_cap": 0,
-   "total": 348
+   "total": 389
   },
   "blizzard/hub/domain/delivery/ports/__init__.py": {
    "comments": 0,
@@ -3560,7 +3560,7 @@
    "comments": 0,
    "docstrings": 40,
    "over_cap": 0,
-   "total": 358
+   "total": 369
   },
   "blizzard/hub/domain/execution/__init__.py": {
    "comments": 0,
@@ -4722,9 +4722,9 @@
   },
   "blizzard/hub/store/internal/chunk_escalations_store.py": {
    "comments": 0,
-   "docstrings": 29,
-   "over_cap": 2,
-   "total": 285
+   "docstrings": 18,
+   "over_cap": 1,
+   "total": 245
   },
   "blizzard/hub/store/internal/chunk_events_store.py": {
    "comments": 11,
@@ -4746,9 +4746,9 @@
   },
   "blizzard/hub/store/internal/chunk_hub_exec_store.py": {
    "comments": 2,
-   "docstrings": 30,
+   "docstrings": 23,
    "over_cap": 2,
-   "total": 273
+   "total": 229
   },
   "blizzard/hub/store/internal/chunk_lifecycle_store.py": {
    "comments": 0,
@@ -11476,7 +11476,7 @@
    "comments": 60,
    "docstrings": 31,
    "over_cap": 2,
-   "total": 2848
+   "total": 2856
   },
   "store_scan_allowlist.py": {
    "comments": 37,
@@ -11600,9 +11600,9 @@
   },
   "test_analytics_outcomes_api.py": {
    "comments": 34,
-   "docstrings": 34,
+   "docstrings": 33,
    "over_cap": 1,
-   "total": 426
+   "total": 431
   },
   "test_analytics_provenance_api.py": {
    "comments": 12,
@@ -11680,7 +11680,7 @@
    "comments": 5,
    "docstrings": 8,
    "over_cap": 0,
-   "total": 274
+   "total": 266
   },
   "test_auth_config.py": {
    "comments": 0,
@@ -11992,7 +11992,7 @@
    "comments": 73,
    "docstrings": 28,
    "over_cap": 0,
-   "total": 938
+   "total": 943
   },
   "test_chunk_rows_inserted_id.py": {
    "comments": 0,
@@ -12538,7 +12538,7 @@
    "comments": 7,
    "docstrings": 16,
    "over_cap": 0,
-   "total": 258
+   "total": 262
   },
   "test_delivery_incomplete_routing.py": {
    "comments": 4,
@@ -13003,10 +13003,10 @@
    "total": 113
   },
   "test_flow_driver.py": {
-   "comments": 27,
+   "comments": 28,
    "docstrings": 11,
    "over_cap": 0,
-   "total": 664
+   "total": 690
   },
   "test_flow_line.py": {
    "comments": 7,
@@ -13828,7 +13828,7 @@
    "comments": 42,
    "docstrings": 89,
    "over_cap": 0,
-   "total": 1401
+   "total": 1405
   },
   "test_hub_composition_wiring.py": {
    "comments": 1,
@@ -14170,7 +14170,7 @@
    "comments": 10,
    "docstrings": 5,
    "over_cap": 0,
-   "total": 983
+   "total": 982
   },
   "test_land_gates.py": {
    "comments": 8,
@@ -14236,7 +14236,7 @@
    "comments": 31,
    "docstrings": 19,
    "over_cap": 2,
-   "total": 632
+   "total": 641
   },
   "test_load_all_routes_store.py": {
    "comments": 4,
