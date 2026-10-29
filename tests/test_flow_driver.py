@@ -6,24 +6,26 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import func, insert, select, update
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
-from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgePriority
+from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
@@ -691,6 +693,42 @@ def test_a_new_window_drains_its_notice_again(world: _World) -> None:
         world.hub.clock.advance(timedelta(minutes=2))
 
     assert [kind for kind, _, _ in _budget_events(world)] == ["forge-rate-limited", "forge-rate-limited"]
+
+
+def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain() -> None:
+    clock = FixedClock(datetime(2026, 10, 29, 12, 0, tzinfo=UTC))
+    budgets = ForgeBudgets(clock=clock)
+    key = BudgetKey("github", None)
+    budgets.spent(key, clock.now() + timedelta(minutes=1))
+    budgets.learn(
+        key,
+        {
+            "X-RateLimit-Limit": "100",
+            "X-RateLimit-Remaining": "10",
+            "X-RateLimit-Reset": str(int((clock.now() + timedelta(minutes=1)).timestamp())),
+        },
+    )
+    with pytest.raises(ForgeBudgetLow):
+        budgets.admit(key, ForgePriority.SWEEPING)
+
+    class _Log:
+        def __init__(self) -> None:
+            self.kinds: list[str] = []
+            self.fail = True
+
+        def record(self, **kwargs: Any) -> None:
+            if self.fail:
+                self.fail = False
+                raise RuntimeError("store unavailable")
+            self.kinds.append(kwargs["kind"])
+
+    log = _Log()
+    drain = BudgetNoticeDrain(budgets, cast(EventLogService, log))
+    with pytest.raises(RuntimeError):
+        drain.drain(clock.now())
+    recorded = drain.drain(clock.now())
+
+    assert (recorded, log.kinds) == (2, ["forge-rate-limited", "forge-budget-low"])
 
 
 # --- isolation ------------------------------------------------------------------------------------------------------

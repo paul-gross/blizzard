@@ -172,6 +172,11 @@ class ForgeBudgets:
             drained, self._notices = tuple(self._notices), []
         return drained
 
+    def requeue_notices(self, notices: tuple[BudgetNotice, ...]) -> None:
+        """Put back, ahead of any newer ones, notices a drain took but could not record."""
+        with self._guard:
+            self._notices = [*notices, *self._notices]
+
     def _budget(self, key: BudgetKey) -> _Budget:
         with self._guard:
             return self._budgets.setdefault(key, _Budget())

@@ -25,27 +25,32 @@ class BudgetNoticeDrain:
         self._event_log = event_log
 
     def drain(self, at: datetime) -> int:
-        """Record every notice queued since the last drain, oldest first; answers how many it recorded."""
+        """Record every notice queued since the last drain, oldest first; answers how many it recorded. A write that
+        fails puts its notice and the ones after it back in the queue for the next drain."""
         notices = self._budgets.drain_notices()
-        for notice in notices:
-            self._event_log.record(
-                kind=_KINDS[notice.kind],
-                runner_id=None,
-                chunk_id=None,
-                project_id=None,
-                lease_id=None,
-                node_name=None,
-                message=_message(notice),
-                detail={
-                    "forge": notice.key.forge_id,
-                    "secret": notice.key.secret_name,
-                    "bucket": notice.bucket,
-                    "remaining": notice.remaining,
-                    "limit": notice.limit,
-                    "reset": iso_utc(notice.reset),
-                },
-                at=at,
-            )
+        for recorded, notice in enumerate(notices):
+            try:
+                self._event_log.record(
+                    kind=_KINDS[notice.kind],
+                    runner_id=None,
+                    chunk_id=None,
+                    project_id=None,
+                    lease_id=None,
+                    node_name=None,
+                    message=_message(notice),
+                    detail={
+                        "forge": notice.key.forge_id,
+                        "secret": notice.key.secret_name,
+                        "bucket": notice.bucket,
+                        "remaining": notice.remaining,
+                        "limit": notice.limit,
+                        "reset": iso_utc(notice.reset),
+                    },
+                    at=at,
+                )
+            except Exception:
+                self._budgets.requeue_notices(notices[recorded:])
+                raise
         return len(notices)
 
 
