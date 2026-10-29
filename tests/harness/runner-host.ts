@@ -20,7 +20,7 @@ export const SOCKET_PATH_LIMIT = 107;
 /** The variable that arms the mock harness; the host's workers must carry it, and no `runnerEnv` may take it away. */
 export const FENCE_VAR = 'BLIZZARD_MOCK_HARNESS_FENCE';
 const FENCE_FILE = '.blizzard-mock-harness-fence';
-const PLACEHOLDERS = ['workspace', 'origins', 'mockBin', 'usageBase', 'bundle'];
+const PLACEHOLDERS = ['workspace', 'origins', 'mockBin', 'usageBase', 'bundle', 'stubs'];
 const RUNNER_BINARY = 'blizzard-runner';
 const FIRST_RUNNER = 'runner-local';
 
@@ -49,6 +49,12 @@ export interface RunnerHostOptions {
    */
   runnerBundle: Record<string, string>;
   /**
+   * Executable scripts by file name, written into a test-owned directory before the host boots; a profile names the
+   * directory as `${stubs}`, as in `runner[].worker.path_prepend`. A script, and a `runnerBundle` file, names the
+   * host's log directory as `${logs}`; `workerLog` reads what was appended there.
+   */
+  runnerStubs: Record<string, string>;
+  /**
    * Prices OpenCode models for the host: per-token rates by `provider` then `model`, written as the `opencode/models.json`
    * of a test-owned cache home the host's `XDG_CACHE_HOME` names. A `runnerEnv` naming `XDG_CACHE_HOME` wins.
    */
@@ -64,6 +70,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerSubscribed: true,
   runnerOtlp: false,
   runnerBundle: {},
+  runnerStubs: {},
   runnerModelPrices: {},
 };
 
@@ -122,6 +129,8 @@ export interface RunnerHost {
   originHead(repo: string, branch: string): Promise<string | undefined>;
   /** The session records the mock harness kept in the minted workspace, each parsed, in file-name order. */
   mockSessions(): Promise<MockSessionRecord[]>;
+  /** What a stub or a bundle hook appended to the log `name` under the host's `${logs}`, or `undefined` before it wrote any. */
+  workerLog(name: string): string | undefined;
   /** The session documents `mock-opencode` exported under the host's own transcripts root, each parsed, in file-name order. */
   opencodeExports(): Promise<OpencodeExport[]>;
   /** One pass of a runner, answered once it has completed; with no name, the sole runner's. */
@@ -316,11 +325,21 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     try {
       fs.mkdirSync(home, { recursive: true });
       const bundle = path.join(root, 'bundle');
+      const stubs = path.join(root, 'stubs');
+      const logs = path.join(root, 'logs');
+      fs.mkdirSync(logs, { recursive: true });
+      const placed = (content: string): string => content.replaceAll('${logs}', logs);
       for (const [file, content] of Object.entries(options.runnerBundle)) {
         const target = path.join(bundle, file);
         if (!path.resolve(target).startsWith(`${bundle}${path.sep}`)) throw new Error(`runnerBundle ${file}: a bundle file lies under the bundle directory`);
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, content);
+        fs.writeFileSync(target, placed(content));
+      }
+      for (const [file, content] of Object.entries(options.runnerStubs)) {
+        const target = path.join(stubs, file);
+        if (!path.resolve(target).startsWith(`${stubs}${path.sep}`)) throw new Error(`runnerStubs ${file}: a stub lies under the stubs directory`);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, placed(content), { mode: 0o755 });
       }
       const transcripts = path.join(root, 'transcripts');
       if (options.runnerOtlp !== false) otlp = await startOtlpSink({ hang: options.runnerOtlp === 'hung' });
@@ -426,7 +445,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           worker: { env_passthrough: [FENCE_VAR, 'BZ_TRANSCRIPTS_ROOT'] },
         })),
       };
-      const expanded = expandProfile(profile, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle });
+      const expanded = expandProfile(profile, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
@@ -514,6 +533,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;
         },
+        workerLog: (name) => (fs.existsSync(path.join(logs, name)) ? fs.readFileSync(path.join(logs, name), 'utf8') : undefined),
         mockSessions: () => readJsonDocuments(path.join(workspace, '.blizzard-mock-harness', 'sessions')),
         opencodeExports: () => readJsonDocuments(path.join(transcripts, 'mock-opencode')),
         step(name) {
