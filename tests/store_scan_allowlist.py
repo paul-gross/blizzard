@@ -283,10 +283,10 @@ _FLEET_CONFIG_REASON = (
 # A declared singleton (superuser_bootstrap).
 _SINGLETON_REASON = "a declared singleton (superuser_bootstrap) — at most one live row plus a short history."
 
-# Each tenant's hub-exec serialization slot (hub_exec_slot).
+# The deprecated slot table, read only for the history it recorded before turns (hub_exec_slot).
 _HUB_EXEC_SLOT_REASON = (
-    "one tenant's hub-exec serialization slot: the tenant-scoped read sees at most one live row "
-    "plus that tenant's release history, never another tenant's slots."
+    "the trace corpus's read of the deprecated slot table's past rows: nothing writes it now, so the "
+    "tenant-scoped read sees only the history recorded before turns, never another tenant's slots."
 )
 
 # The hub's tenant deletion facts (tenant_deletions), read for the deletions still underway.

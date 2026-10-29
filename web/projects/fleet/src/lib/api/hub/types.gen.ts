@@ -5392,7 +5392,6 @@ export const IdPrefix = {
     LEASE: 'lease',
     TKO: 'tko',
     SELF: 'self',
-    HES: 'hes',
     MG: 'mg',
     USR: 'usr',
     SEG: 'seg',

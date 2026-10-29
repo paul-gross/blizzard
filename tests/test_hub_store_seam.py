@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,6 @@ from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenci
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from blizzard.hub.store.internal.chunk_hub_exec_store import ChunkHubExecStore
 from blizzard.hub.store.internal.chunk_lifecycle_store import ChunkLifecycleStore
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
@@ -177,24 +176,6 @@ _ADAPTER_CASES = [
         lambda store: ChunkDeliveryStore(store),
         lambda a: a.landed_repos("ch_x"),
         "landed_repos",
-    ),
-    _AdapterCase(
-        "ChunkHubExecStore",
-        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
-        lambda a: a.count_live_hub_exec_slots(),
-        "count_live_hub_exec_slots",
-    ),
-    _AdapterCase(
-        "ChunkHubExecStore.acquire",
-        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
-        lambda a: a.acquire_hub_exec_slot("ch_x", node_id="nd_x", at=_NOW, stale_after=timedelta(minutes=1)),
-        "acquire_hub_exec_slot",
-    ),
-    _AdapterCase(
-        "ChunkHubExecStore.release",
-        lambda store: ChunkHubExecStore(store, FixedClock(_NOW)),
-        lambda a: a.release_hub_exec_slot("hes_x", at=_NOW),
-        "release_hub_exec_slot",
     ),
     _AdapterCase(
         "ChunkDependenciesStore",

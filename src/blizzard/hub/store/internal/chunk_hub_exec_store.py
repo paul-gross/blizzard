@@ -1,8 +1,7 @@
 """SQLAlchemy adapter for the chunk hub-exec seam (package-private).
 
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts only
-(``bzh:facts-not-status``): every write appends a row or an atomically-guarded slot
-claim; nothing here derives status. Timestamps arrive already stamped
+(``bzh:facts-not-status``): every write appends a row; nothing here derives status. Timestamps arrive already stamped
 (``bzh:injected-clock``).
 
 ``record_hub_step_transition_locked`` writes on its caller's one locked connection — the
@@ -11,12 +10,11 @@ second one."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from sqlalchemy import Connection, func
+from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -37,66 +35,11 @@ from blizzard.hub.store.scoped import ScopedConnections
 
 
 class ChunkHubExecStore:
-    """The generic hub command node's own execution-slot and step-transition facts (#65)."""
+    """The generic hub command node's own step-transition facts (#65)."""
 
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
-
-    def count_live_hub_exec_slots(self) -> int:
-        with self._store.read("count_live_hub_exec_slots") as conn:
-            return int(
-                conn.execute(
-                    self._store.select(s.hub_exec_slot, func.count()).where(s.hub_exec_slot.c.released_at.is_(None))
-                ).scalar()
-                or 0
-            )
-
-    def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
-        ``IWriteChunkHubExecRepository.acquire_hub_exec_slot``.
-
-        The scoped write opens on the tenant row's lock (``bzh:store-exclusive-write``), so two
-        acquires in one tenant serialize before the read-then-insert below, while another
-        tenant's acquire never waits on this one's slot."""
-        with self._store.write("acquire_hub_exec_slot") as conn:
-            live_rows = conn.execute(
-                self._store.select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
-            ).all()
-            for row in live_rows:
-                if at - row.acquired_at < stale_after:
-                    return None  # held, by this chunk's own run or another's — defer
-                # Stale — a prior holder's run never released it (a kill -9); reclaim.
-                conn.execute(
-                    self._store.update(s.hub_exec_slot)
-                    .where(s.hub_exec_slot.c.slot_id == row.slot_id)
-                    .values(released_at=at)
-                )
-            slot_id = Id.mint(IdPrefix.HUB_EXEC_SLOT, self._clock).value
-            conn.execute(
-                self._store.insert(s.hub_exec_slot).values(
-                    slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at
-                )
-            )
-            return slot_id
-
-    def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
-        with self._store.write("release_hub_exec_slot") as conn:
-            conn.execute(
-                self._store.update(s.hub_exec_slot)
-                .where((s.hub_exec_slot.c.slot_id == slot_id) & (s.hub_exec_slot.c.released_at.is_(None)))
-                .values(released_at=at)
-            )
-
-    def release_live_hub_exec_slots(self, *, at: datetime) -> int:
-        """Release every live slot in this store's tenant — the boot step's release of slots a crash
-        orphaned."""
-        with self._store.write("release_live_hub_exec_slots") as conn:
-            return conn.execute(
-                self._store.update(s.hub_exec_slot)
-                .where(s.hub_exec_slot.c.released_at.is_(None))
-                .values(released_at=at)
-            ).rowcount
 
     def record_hub_step_transition_locked(
         self,

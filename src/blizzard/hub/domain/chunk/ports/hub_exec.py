@@ -1,9 +1,9 @@
 """The chunk-hub-exec repository seam — the generic hub command node's
-per-tenant serialization slot and its transition/poll bookkeeping."""
+transition/poll bookkeeping."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -14,30 +14,9 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 class IReadChunkHubExecRepository(Protocol):
     """Read-only chunk-hub-exec access."""
 
-    def count_live_hub_exec_slots(self) -> int:
-        """The number of this tenant's currently-live hub-execution slots — never more than 1
-        (``hub:one-live-exec-slot``)."""
-        ...
-
 
 class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
     """Read-write chunk-hub-exec access."""
-
-    def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """Acquire this tenant's hub-execution serialization slot, or ``None`` if busy.
-        A FACT-based lease (``bzh:facts-not-status``), not an in-process lock: insert-if-
-        none-live in one transaction. Not reentrant: a live slot defers every request, the
-        holder chunk's own included, unless older than ``stale_after``, when it is reclaimed."""
-        ...
-
-    def release_hub_exec_slot(self, slot_id: str, *, at: datetime) -> None:
-        """Release the hub-execution slot ``slot_id`` — idempotent, and never another run's."""
-        ...
-
-    def release_live_hub_exec_slots(self, *, at: datetime) -> int:
-        """Release every live hub-execution slot of this tenant and return how many — sound only while one
-        hub process serves the store."""
-        ...
 
     def record_hub_step_transition_locked(
         self,

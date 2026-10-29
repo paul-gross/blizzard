@@ -15,7 +15,6 @@ from typing import cast
 
 import pytest
 import yaml
-from sqlalchemy import insert
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
@@ -31,7 +30,6 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.delivery.flows import DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, PollPolicy
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.authoring import Reification
@@ -46,13 +44,9 @@ from tests.support import (
     HubHarness,
     build_hub,
     chunk_stores,
-    default_project,
     hub_store_connections,
-    link_project,
     pointer_token,
     report_lease,
-    seed_project,
-    stamp,
 )
 
 pytestmark = pytest.mark.unit
@@ -984,29 +978,6 @@ def test_a_chunks_own_live_turn_is_never_reentered_and_a_finished_one_never_repl
     assert gate.passes == 1
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert len([t for t in detail["history"] if t["from_node_name"] == "merge"]) == 1
-
-
-@pytest.mark.component
-def test_two_projects_linking_one_repository_share_the_tenants_hub_exec_slot(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    first = default_project(hub.engine)
-    second = seed_project(hub.engine, "second")
-    link_project(hub.engine, project=second, repository="acme-widget")
-    with hub.engine.begin() as conn:
-        for chunk_id, project_id in (("ch_first", first), ("ch_second", second)):
-            row = stamp(s.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=hub.clock.now(), project_id=project_id)
-            conn.execute(insert(s.chunks).values(row))
-    hub_exec = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
-    assert hub_exec.acquire_hub_exec_slot(
-        "ch_first", node_id="nd_merge", at=hub.clock.now(), stale_after=timedelta(hours=1)
-    )
-
-    deferred = hub_exec.acquire_hub_exec_slot(
-        "ch_second", node_id="nd_merge", at=hub.clock.now(), stale_after=timedelta(hours=1)
-    )
-
-    assert deferred is None
-    assert hub_exec.count_live_hub_exec_slots() == 1
 
 
 # Component — pending outcome (#66): polls without blocking the queue

@@ -13,17 +13,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import insert, inspect, text, update
+from sqlalchemy import insert, inspect, select, text, update
 
 import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as hub
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
 from blizzard.runner.store import schema as runner
-from blizzard.tools.invariants import HubInvariants, OneLiveExecSlot, RunnerInvariants, Violation
+from blizzard.tools.invariants import HubInvariants, RunnerInvariants
 from tests.config_inputs import init_host, init_hub
 from tests.runner_fakes import FIXTURE_RUNNER_ID
-from tests.support import add_tenant, default_tenant, hub_scoped, stamp
+from tests.support import hub_scoped, stamp
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
@@ -86,83 +85,94 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
     assert RunnerInvariants(engine).run() == []
 
 
-@pytest.mark.component
-def test_two_live_hub_exec_slots_are_a_violation(tmp_path: Path) -> None:
-    """A tenant's hub-execution slot is a durable fact, so at-most-one-live is a
-    question the store can answer after any crash — two live rows are named (#65)."""
-    engine = _hub_engine(tmp_path)
-    with engine.begin() as conn:
-        for chunk_id in ("ch_1", "ch_2"):
-            conn.execute(
-                insert(hub.chunks).values(
-                    stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m")
-                )
-            )
-            conn.execute(
-                insert(hub.hub_exec_slot).values(
-                    stamp(
-                        hub.hub_exec_slot,
-                        slot_id=f"hes_{chunk_id}",
-                        holder_chunk_id=chunk_id,
-                        node_id="nd_merge",
-                        acquired_at=_NOW,
-                        released_at=None,
-                    )
-                )
-            )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
-    assert "hub:one-live-exec-slot" in slugs
-
-    # The release is itself a durable fact: recording it leaves exactly one live slot.
+def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int) -> None:  # type: ignore[no-untyped-def]
+    """A chunk's one submission, holding ``flow_ids`` — each flow created if it does not yet exist."""
     with engine.begin() as conn:
         conn.execute(
-            hub_scoped(
-                update(hub.hub_exec_slot).where(hub.hub_exec_slot.c.slot_id == "hes_ch_2").values(released_at=_NOW)
+            insert(hub.chunks).values(stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m"))
+        )
+        conn.execute(
+            insert(hub.flow_submissions).values(
+                stamp(
+                    hub.flow_submissions,
+                    submission_id=submission_id,
+                    chunk_id=chunk_id,
+                    node_id="nd_merge",
+                    epoch=1,
+                    generation=1,
+                    arrival=arrival,
+                    submitted_at=_NOW,
+                )
             )
         )
-    assert HubInvariants(engine).run() == []
+        for flow_id in flow_ids:
+            if not conn.execute(hub_scoped(select(hub.flows.c.flow_id).where(hub.flows.c.flow_id == flow_id))).first():
+                conn.execute(
+                    insert(hub.flows).values(
+                        stamp(
+                            hub.flows,
+                            flow_id=flow_id,
+                            resource=f"repo:r/{flow_id}",
+                            repository_id="r",
+                            branch=flow_id,
+                            created_at=_NOW,
+                        )
+                    )
+                )
+            conn.execute(
+                insert(hub.flow_submission_flows).values(
+                    stamp(hub.flow_submission_flows, submission_id=submission_id, flow_id=flow_id)
+                )
+            )
+
+
+def _slugs(engine) -> list[str]:  # type: ignore[no-untyped-def]
+    """The turn invariants' violations only — the seeded submissions carry no graph for the line-standing check."""
+    return [v.invariant for v in HubInvariants(engine).run() if v.invariant.startswith("hub:one-turn-")]
+
+
+def _open_turn(engine, turn_id: str, submission_id: str) -> None:  # type: ignore[no-untyped-def]
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.hub_turns).values(
+                stamp(hub.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=_NOW, ended_at=None)
+            )
+        )
+
+
+def _end_turn(engine, turn_id: str) -> None:  # type: ignore[no-untyped-def]
+    with engine.begin() as conn:
+        conn.execute(hub_scoped(update(hub.hub_turns).where(hub.hub_turns.c.turn_id == turn_id).values(ended_at=_NOW)))
 
 
 @pytest.mark.component
-def test_one_live_hub_exec_slot_holds_per_tenant(tmp_path: Path) -> None:
-    """Each tenant holds its own slot: two tenants' live slots at once are legal, and a
-    tenant with two live slots is named on its own. The check runs alone over the whole
-    store, as the checker's query pass runs it."""
+def test_two_open_turns_holding_one_flow_are_a_violation(tmp_path: Path) -> None:
+    """A flow is held by one open turn at a time: two submissions holding it, each with an open turn, are
+    named — and ending one turn clears the violation."""
     engine = _hub_engine(tmp_path)
-    first = default_tenant(engine)
-    second = add_tenant(engine, "second")
+    _seed_submission(engine, "ch_1", "fsub_1", flow_ids=("flw_a",), arrival=1)
+    _seed_submission(engine, "ch_2", "fsub_2", flow_ids=("flw_a",), arrival=2)
+    _open_turn(engine, "htn_1", "fsub_1")
+    assert _slugs(engine) == []
 
-    def live_slot(tenant: TenantId, chunk_id: str) -> None:
-        with engine.begin() as conn:
-            conn.execute(
-                insert(hub.chunks).values(
-                    stamp(hub.chunks, chunk_id=chunk_id, graph_id="gr_1", minted_at=_NOW, model="m", tenant_id=tenant)
-                )
-            )
-            conn.execute(
-                insert(hub.hub_exec_slot).values(
-                    slot_id=f"hes_{chunk_id}",
-                    holder_chunk_id=chunk_id,
-                    node_id="nd_merge",
-                    acquired_at=_NOW,
-                    released_at=None,
-                    tenant_id=tenant,
-                )
-            )
+    _open_turn(engine, "htn_2", "fsub_2")
+    assert _slugs(engine) == ["hub:one-turn-per-flow"]
 
-    def check() -> list[Violation]:
-        with engine.execution_options(**{HUB_SCOPED_OPTION: True}).connect() as conn:
-            return OneLiveExecSlot(conn).run()
+    _end_turn(engine, "htn_2")
+    assert _slugs(engine) == []
 
-    live_slot(first, "ch_a1")
-    live_slot(second, "ch_b1")
-    assert check() == []
 
-    live_slot(second, "ch_b2")
-    violations = check()
-    assert [v.invariant for v in violations] == ["hub:one-live-exec-slot"]
-    assert second in violations[0].detail
-    assert first not in violations[0].detail
+@pytest.mark.component
+def test_two_open_turns_on_one_submission_are_a_violation(tmp_path: Path) -> None:
+    """A visit takes one turn at a time: two open turns on one submission are named, and ending one clears it."""
+    engine = _hub_engine(tmp_path)
+    _seed_submission(engine, "ch_1", "fsub_1", flow_ids=(), arrival=1)
+    _open_turn(engine, "htn_1", "fsub_1")
+    _open_turn(engine, "htn_2", "fsub_1")
+    assert _slugs(engine) == ["hub:one-turn-per-visit"]
+
+    _end_turn(engine, "htn_2")
+    assert _slugs(engine) == []
 
 
 @pytest.mark.component

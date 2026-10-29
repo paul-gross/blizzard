@@ -5114,7 +5114,7 @@ export type HubMarkerResponse = {
  *
  * One tag per hub entity kind; a member formats as its own value.
  */
-export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'hes' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn';
+export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn';
 
 /**
  * IntendedMigrationPatch
