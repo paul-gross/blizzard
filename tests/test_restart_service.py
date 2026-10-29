@@ -1,5 +1,3 @@
-"""RestartService (unit tier); every fake seam raises when touched, so no call means no write."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence

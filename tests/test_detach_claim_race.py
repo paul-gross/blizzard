@@ -1,5 +1,3 @@
-"""The detach/claim race is atomic (component tier), patterned on ``tests/test_stop_claim_race.py``."""
-
 from __future__ import annotations
 
 import threading

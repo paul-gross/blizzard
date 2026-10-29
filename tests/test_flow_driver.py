@@ -1,8 +1,7 @@
 """``FlowDriver`` (component tier), stepped one ``tick`` at a time against a wired hub whose ``merge`` node holds its
-visit with a ``pending`` landing pass. A chunk standing at the node is submitted within one tick, by whichever path
-it reached it, and never twice; a submission whose chunk left the visit closes with the outcome ``withdrawal_for``
-answers, and one a person holds stays open; the reconcile writes nothing to a chunk; an unchanged probe skips the
-rescan until the floor; boot ends a turn its last process left open; and a raising tenant stops no other."""
+visit with a ``pending`` landing pass. A chunk standing at the node is submitted within one tick, never twice; a
+submission whose chunk left the visit closes with the outcome ``withdrawal_for`` answers, and one a person holds
+stays open; the reconcile writes nothing to a chunk; boot ends a turn its last process left open."""
 
 from __future__ import annotations
 

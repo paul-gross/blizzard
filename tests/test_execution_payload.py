@@ -1,5 +1,3 @@
-"""Coercions applied to pushed fact bodies."""
-
 import pytest
 
 from blizzard.hub.domain.execution.payload import Payload
