@@ -91,6 +91,8 @@ test.describe('at fresh-hub', () => {
   test.use({ isolation: 'fresh-hub', runnerStarted: false });
 
   test('test_after_its_hub_s_data_is_reset_init_re_adds_the_runner_only_with_allow_readd', async ({ runnerHost, freshHub, testHub, anonymous, bearer }) => {
+    // A hub of its own, a stopped-and-reset hub, and three `init` runs: about 22s unloaded, too near the 30s default.
+    test.slow();
     const first = runnerHost.runners[NAME]!;
     const firstToken = runnerHost.hubTokens().runners[NAME]!;
     const held = runnerHost.hubTokens();
