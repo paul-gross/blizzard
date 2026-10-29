@@ -54,7 +54,8 @@ tokens a session-scoped cost figure covers
 ([The two readings of a reported figure](#the-two-readings-of-a-reported-figure) above).
 
 A runner serves the facts one lease recorded at `GET /runners/<id>/api/leases/<lease_id>/usage`, oldest first, each with
-its kind, spawn generation, model, token counts, and billed and estimated cost. A lease the runner never minted is a 404.
+its kind, spawn generation, model, token counts, and billed and estimated cost. A lease the runner never minted is
+a 404.
 
 ## The two caps
 
