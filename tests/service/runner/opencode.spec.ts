@@ -26,7 +26,11 @@ const PUSH_AND_DECLARE = [
   "_branch = subprocess.run(['git', '-C', repo_path, 'rev-parse', '--abbrev-ref', 'HEAD'], check=True, capture_output=True, text=True).stdout.strip()",
   "_commit = subprocess.run(['git', '-C', repo_path, 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True).stdout.strip()",
   "subprocess.run(['git', '-C', repo_path, 'push', 'origin', _branch], check=True, capture_output=True)",
-  `subprocess.run(['blizzard', 'runner', 'artifact', 'commit', '--repo', '${REPO}', '--branch', _branch, '--commit', _commit], capture_output=True)`,
+  // Declaring the commit is best effort: the worker's PATH holds no `blizzard` on every host.
+  'try:',
+  `    subprocess.run(['blizzard', 'runner', 'artifact', 'commit', '--repo', '${REPO}', '--branch', _branch, '--commit', _commit], capture_output=True)`,
+  'except OSError:',
+  '    pass',
 ];
 
 const OPENCODE_BUILD = [
@@ -148,12 +152,7 @@ function crashBuild(beforeCrash: string[]): string {
     ...beforeCrash.map((line) => `    ${line}`),
     "    marker.write_text('crashed once\\n')",
     '    crash(hard=True)',
-    'import traceback',
-    'try:',
-    ...work.map((line) => `    ${line}`),
-    'except BaseException:',
-    "    tool_call('Bash', {'command': 'diagnose'}, output=traceback.format_exc())",
-    '    raise',
+    ...work,
     `pathlib.Path('${DONE_MARKER}').write_text('done\\n')`,
     '',
   ].join('\n');
