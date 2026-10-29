@@ -40,6 +40,7 @@ EventLogKind = Literal[
     "egress-write-recovered",
     "egress-config-rejected",
     "egress-cursor-reset",
+    "forge-status-source-skipped",
 ]
 
 
@@ -84,6 +85,7 @@ EVENT_LOG_SEVERITY: Mapping[EventLogKind, EventLogSeverity] = {
     "egress-write-recovered": EventLogSeverity.INFO,
     "egress-config-rejected": EventLogSeverity.WARNING,
     "egress-cursor-reset": EventLogSeverity.INFO,
+    "forge-status-source-skipped": EventLogSeverity.WARNING,
 }
 
 _EVENT_LOG_KINDS = frozenset(get_args(EventLogKind))

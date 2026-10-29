@@ -1357,6 +1357,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             work_sources=work_sources,
             memory=ForgeAnnotationStore(tenant_connections),
+            events=event_log,
             clock=clock,
         ),
     )

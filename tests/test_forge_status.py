@@ -16,8 +16,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.composition import HubServices, TenantServices
+from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
@@ -36,6 +36,7 @@ from tests.support import (
     hub_level_connections,
     hub_store_connections,
     ingest,
+    scoped_connections,
 )
 from tests.test_store_work_source_registry import _create, _promote, forge
 
@@ -144,6 +145,7 @@ def _reconciler(hub: HubHarness, work_sources: WorkSourceRegistry) -> Annotation
         facts=hub.services.chunks.facts,
         work_sources=work_sources,
         memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
+        events=hub.services.event_log,
         clock=hub.clock,
     )
     return AnnotationReconciler(
@@ -499,6 +501,89 @@ def test_an_unfinished_departure_is_retried_on_the_next_sweep(tmp_path: Path) ->
     restarted.sweep()
 
     assert annotator.clear_calls == [WorkRef(source="default", ref="1")]
+
+
+def _skip_events(services: TenantServices) -> list[OperationalEvent]:
+    return [e for e in services.chunks.events.list_events() if e.kind == "forge-status-source-skipped"]
+
+
+@pytest.mark.component
+def test_an_unreadable_source_is_announced_once_across_repeated_passes(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+    annotator = _FlakyRead()
+    reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": annotator}))
+
+    reconciler.sweep()
+    reconciler.sweep()
+    reconciler.sweep_tenant(default_tenant(hub.engine))
+
+    (event,) = _skip_events(hub.services)
+    assert event.severity == "warning"
+    assert event.detail == {"source": "default", "work_source_id": "default"}
+
+
+@pytest.mark.component
+def test_a_successful_read_re_arms_the_skip_announcement(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+    annotator = _FlakyRead()
+    reconciler = _reconciler(hub, WorkSourceRegistry({}, {"default": annotator}))
+    reconciler.sweep()
+
+    annotator.unreadable = False
+    reconciler.sweep()
+    annotator.unreadable = True
+    hub.clock.advance(_FLOOR)
+    reconciler.sweep()
+
+    assert len(_skip_events(hub.services)) == 2
+
+
+@pytest.mark.component
+def test_a_departed_sources_unreadable_clear_is_announced_once(tmp_path: Path) -> None:
+    hub, annotator, _ = _gated(tmp_path)
+    _reconciler(hub, WorkSourceRegistry({}, {"default": annotator})).sweep()
+    flaky = _FlakyRead()
+    restarted = _reconciler(hub, WorkSourceRegistry({}, {}, label_clearers={"default": flaky}))
+
+    restarted.sweep()
+    restarted.sweep()
+
+    assert len(_skip_events(hub.services)) == 1
+
+
+@pytest.mark.component
+def test_a_skip_is_recorded_in_its_own_tenants_event_log_only(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource(name="default")})
+    other = hub.add_tenant("other")
+    home = default_tenant(hub.engine)
+    halves = {
+        home: TenantAnnotation(
+            facts=hub.services.chunks.facts,
+            work_sources=WorkSourceRegistry({}, {"default": _FlakyRead()}),
+            memory=ForgeAnnotationStore(hub_store_connections(hub.engine)),
+            events=hub.services.event_log,
+            clock=hub.clock,
+        ),
+        other.tenant: TenantAnnotation(
+            facts=other.services.chunks.facts,
+            work_sources=WorkSourceRegistry({}, {"default": FakeAnnotator()}),
+            memory=ForgeAnnotationStore(scoped_connections(hub.engine, other.tenant)),
+            events=other.services.event_log,
+            clock=hub.clock,
+        ),
+    }
+    reconciler = AnnotationReconciler(
+        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        tenants=lambda: list(halves),
+        tenant=halves.__getitem__,
+        clock=hub.clock,
+        full_pass_floor=_FLOOR,
+    )
+
+    reconciler.sweep()
+
+    assert len(_skip_events(hub.services)) == 1
+    assert _skip_events(other.services) == []
 
 
 class _GrowingRegistry(WorkSourceRegistry):

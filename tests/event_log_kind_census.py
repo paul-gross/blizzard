@@ -82,6 +82,9 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "egress-write-recovered": HubOnly("hub/domain/observability/egress/sweep.py:EgressSweep._recovered", "info"),
     "egress-config-rejected": HubOnly("hub/app.py:_announce_rejected_egress", "warning"),
     "egress-cursor-reset": HubOnly("hub/domain/observability/egress/reset.py:EgressReset.reset", "info"),
+    "forge-status-source-skipped": Recorded(
+        "hub/domain/observability/forge_status.py:TenantAnnotation._announce_skipped", "warning"
+    ),
 }
 
 #: One entry per :data:`~blizzard.hub.domain.observability.hub_events.HubEventKind` member: every site that records it in
