@@ -1,4 +1,4 @@
-import { expect, test } from '../../../harness/fixtures';
+import { expect, type RunnerHost, test } from '../../../harness/fixtures';
 
 const stub = {
   name: 'stub', type: 'oidc', display_name: 'Stub', issuer: '${idp}',
@@ -9,12 +9,14 @@ const second = { ...stub, name: 'oidc-b', display_name: 'Stub B' };
 // Provider configuration and key rotation are hub-wide, and the runner declares its public origin before it first boots.
 test.use({ isolation: 'fresh-hub', runnerStarted: false });
 
-test.beforeEach(async ({ runnerHost }) => {
+// Booted once the test has made its people, so no hub call that mutates waits across the boot on an idle connection.
+async function boot(runnerHost: RunnerHost): Promise<void> {
   runnerHost.reconfigure({ public_url: runnerHost.url });
   await runnerHost.restart();
-});
+}
 
 test('test_the_wire_leg_ends_in_an_unlocked_runner_route', async ({ federation, runnerHost, user }) => {
+  await boot(runnerHost);
   const bounce = await federation.begin(runnerHost.url);
   expect([302, 307]).toContain(await bounce.get('/'));
 
@@ -29,12 +31,15 @@ test('test_the_wire_leg_ends_in_an_unlocked_runner_route', async ({ federation, 
 });
 
 test('test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart', async ({ federation, runnerHost, user, api }) => {
+  await boot(runnerHost);
   const pid = runnerHost.pid;
 
   const first = await federation.begin(runnerHost.url);
   const before = (await first.authorize(user)).delivered;
   expect((await first.complete(before!)).status).toBe(303);
 
+  // A read first, so the connection the rotation rides is live after the bounce.
+  expect((await api.get('/api/me')).status).toBe(200);
   expect((await api.post('/api/auth/rotate-signing-key')).status).toBe(204);
 
   // A bounce minted under the rotated key: the live runner's key refetch on a miss must accept it.
@@ -52,10 +57,11 @@ test.describe('with two providers', () => {
 
   test('test_a_two_provider_bounce_resumes_through_the_login_chooser', async ({ federation, runnerHost, people }) => {
     const joined = await people.create({ provider: 'oidc-b' });
+    await boot(runnerHost);
     const bounce = await federation.begin(runnerHost.url);
 
     const chooser = await bounce.authorize();
-    expect(chooser.status).toBeGreaterThanOrEqual(300);
+    expect([302, 307]).toContain(chooser.status);
     expect(chooser.location).toMatch(/^\/login\?return_to=/);
     expect(chooser.pending?.state).toBe(bounce.state);
     expect(chooser.pending?.client).toBeTruthy();
