@@ -153,3 +153,27 @@ test.describe('the auth stub', () => {
     await expect(worldContext.get(`${served}/api/auth/jwks.json`)).rejects.toThrow(/ECONNREFUSED/);
   });
 });
+
+test.describe('the hub relay', () => {
+  test.use({ mockHubRelay: true });
+
+  test('a host enrolls and steps through it; held, a hub call is refused and observed, and released it forwards', async ({ mockHub, runnerHost, worldContext }) => {
+    const relay = mockHub.relay!;
+    expect(relay.url).not.toBe(mockHub.url);
+    expect((await runnerHost.step()).outcome).toBe('completed');
+    // The host's calls rode the relay; the mock's own clients still reach it directly.
+    expect((await mockHub.raw.get('/api/health')).status).toBe(200);
+    expect((await worldContext.get(`${relay.url}/api/health`)).status()).toBe(200);
+
+    relay.hold();
+    await expect(worldContext.get(`${relay.url}/api/health`)).rejects.toThrow(/ECONNRESET|socket hang up/);
+    await relay.refusal();
+    expect(relay.refused).toBe(1);
+
+    relay.release();
+    expect((await worldContext.get(`${relay.url}/api/health`)).status()).toBe(200);
+    // Held again, the count starts over.
+    relay.hold();
+    expect(relay.refused).toBe(0);
+  });
+});

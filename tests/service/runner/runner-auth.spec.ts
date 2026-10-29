@@ -58,9 +58,9 @@ test('test_runner_presents_the_bearer_token_on_every_hub_call', async ({ mockHub
 
   // The work-items proxy is a separately built hub call; it carries the same credential, and the payload survives it.
   await mockHub.captured.reset();
-  const proxied = await runner.raw.get(`/api/chunks/${chunkId}/work-items`);
+  const proxied = await runner.workItems(chunkId);
   expect(proxied.status).toBe(200);
-  expect((proxied.body as { items: { ref: string }[] }).items.map((item) => item.ref)).toEqual([WORK_REF]);
+  expect(proxied.body.items.map((item) => item.ref)).toEqual([WORK_REF]);
   const forwarded = (await mockHub.captured.read()).body.requests.filter((request) => request.path === `/api/fleet/chunks/${chunkId}/work-items`);
   expect(forwarded.length).toBeGreaterThan(0);
   expect(forwarded.at(-1)!.headers.authorization).toBe(`Bearer ${token}`);

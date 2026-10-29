@@ -19,6 +19,7 @@ import type {
   TickPassResponse,
   TranscriptResponse,
   WorkerArtifact,
+  WorkItemsView,
   TranscriptSegmentIndexView,
 } from './wire/runner/types.gen';
 
@@ -50,6 +51,8 @@ export interface RunnerClient {
   leaseTranscript(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<TranscriptResponse>>;
   /** `GET …/api/leases/{id}/analytics/{kind}/{dimension}`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
   leaseAnalytics(leaseId: string, kind: 'counts' | 'spend', dimension: string, options?: { since?: string; params?: Record<string, string>; headers?: Record<string, string> }): Promise<ApiResponse<Record<string, unknown>>>;
+  /** `GET …/api/chunks/{id}/work-items`, proxied to the hub; `headers` act as the chunk's worker (`workerHeaders`). */
+  workItems(chunkId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<WorkItemsView>>;
   /** `GET …/api/leases/{id}/garden/proposals`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
   leaseGardenProposals(leaseId: string, options?: { params?: Record<string, string>; headers?: Record<string, string> }): Promise<ApiResponse<GardenProposalRow[]>>;
   /** `PATCH …/api/runner`: the runner's local pause, or its release. */
@@ -182,6 +185,7 @@ export function runnerHostApi(options: {
             params: { since: analyticsOptions.since ?? '2020-01-01T00:00:00Z', ...analyticsOptions.params },
             headers: analyticsOptions.headers,
           }),
+        workItems: (chunkId, itemOptions = {}) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/work-items`, { headers: itemOptions.headers }),
         leaseGardenProposals: (leaseId, proposalsOptions = {}) =>
           raw.get(`/api/leases/${encodeURIComponent(leaseId)}/garden/proposals`, {
             params: proposalsOptions.params,

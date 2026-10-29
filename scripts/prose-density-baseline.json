@@ -11418,12 +11418,6 @@
    "over_cap": 1,
    "total": 250
   },
-  "service/test_work_items_service.py": {
-   "comments": 13,
-   "docstrings": 14,
-   "over_cap": 2,
-   "total": 155
-  },
   "store_baseline_support.py": {
    "comments": 0,
    "docstrings": 14,
