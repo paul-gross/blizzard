@@ -6229,6 +6229,47 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "ForgeBudgetView": {
+        "description": "One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous\nbudget), and the limit, remaining and reset the forge last answered with.",
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "reset": {
+            "title": "Reset",
+            "type": "string"
+          },
+          "secret_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret Name"
+          }
+        },
+        "required": [
+          "secret_name",
+          "bucket",
+          "limit",
+          "remaining",
+          "reset"
+        ],
+        "title": "ForgeBudgetView",
+        "type": "object"
+      },
       "ForgeCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6280,6 +6321,13 @@
           "api_base": {
             "title": "Api Base",
             "type": "string"
+          },
+          "budgets": {
+            "items": {
+              "$ref": "#/components/schemas/ForgeBudgetView"
+            },
+            "title": "Budgets",
+            "type": "array"
           },
           "created_at": {
             "title": "Created At",
@@ -6368,7 +6416,8 @@
           "created_by_name",
           "retired",
           "repositories",
-          "work_sources"
+          "work_sources",
+          "budgets"
         ],
         "title": "ForgeDetail",
         "type": "object"

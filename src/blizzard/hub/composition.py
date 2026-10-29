@@ -198,6 +198,7 @@ from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
@@ -1696,11 +1697,16 @@ def build_flow_driver(
             tenants=lambda: services.tenants.open_tenants.every().keys(),
             lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
             turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
+            notices=lambda tenant: _notices(services.tenants.open_services(StoreScope(tenant))),
         ),
         services.clock,
     )
     services.step_wake.bind(driver)
     return driver
+
+
+def _notices(tenant: TenantServices) -> BudgetNoticeDrain:
+    return BudgetNoticeDrain(tenant.forge_budgets, tenant.event_log)
 
 
 def _announced(tenant: TenantServices, announce: Callable[[TenantServices, ITurnRunner], ITurnRunner]) -> ITurnRunner:

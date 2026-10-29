@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.forge.budget import BudgetKey
 from tests.support import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
@@ -16,6 +20,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
+from tests.worker_http import bind_stubs
 
 pytestmark = pytest.mark.component
 
@@ -165,3 +170,40 @@ def test_forge_reads_and_writes_require_their_permissions(tmp_path: Path) -> Non
     assert hub.client.patch("/api/forges/ghe", json={}, headers=contributor).status_code == 403
     for verb in ("retire", "enable"):
         assert hub.client.post(f"/api/forges/ghe/{verb}", headers=contributor).status_code == 403
+
+
+def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -> None:
+    forge_id = _create(hub)["forge_id"]
+    assert hub.client.get("/api/forges/ghe").json()["budgets"] == []
+    budgets = hub.services.forge_budgets
+    reset = hub.clock.now().replace(microsecond=0) + timedelta(minutes=5)
+    stamp = str(int(reset.timestamp()))
+    budgets.learn(
+        BudgetKey(forge_id, "gh-token"),
+        {"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "1200", "X-RateLimit-Reset": stamp},
+    )
+    budgets.learn(
+        BudgetKey(forge_id, None), {"X-RateLimit-Limit": "60", "X-RateLimit-Remaining": "7", "X-RateLimit-Reset": stamp}
+    )
+    budgets.learn(
+        BudgetKey("other-forge", None),
+        {"X-RateLimit-Limit": "60", "X-RateLimit-Remaining": "1", "X-RateLimit-Reset": stamp},
+    )
+
+    shown = hub.client.get("/api/forges/ghe").json()["budgets"]
+
+    assert shown == [
+        {"secret_name": None, "bucket": "core", "limit": 60, "remaining": 7, "reset": reset.isoformat()},
+        {"secret_name": "gh-token", "bucket": "core", "limit": 5000, "remaining": 1200, "reset": reset.isoformat()},
+    ]
+
+    def forward(method: str, url: str, *, timeout: float, **kwargs):  # type: ignore[no-untyped-def]
+        return hub.client.request(method.upper(), urlsplit(url).path, **kwargs)
+
+    result = bind_stubs(request=forward).runner.invoke(
+        hub_group, ["forge", "show", "ghe"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert f"budget (anonymous)  core  7/60  resets {reset.isoformat()}" in result.output
+    assert f"budget gh-token  core  1200/5000  resets {reset.isoformat()}" in result.output

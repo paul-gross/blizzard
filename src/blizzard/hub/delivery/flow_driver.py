@@ -53,15 +53,22 @@ class ITurnRunner(Protocol):
     async def take(self, turn: Turn, submission: Submission) -> None: ...
 
 
+class INoticeDrain(Protocol):
+    """Records every notice a tenant has queued since the last drain; answers how many."""
+
+    def drain(self, at: datetime) -> int: ...
+
+
 @dataclass(frozen=True)
 class FlowLineStores:
-    """What a tick reads: the hub-wide probe, the open tenants, each tenant's reconcile, and each tenant's turns,
-    opened through that tenant's own stores (``bzh:sweep-acts-in-row-tenant``)."""
+    """What a tick reads: the hub-wide probe, the open tenants, each tenant's reconcile, its turns, and its forge
+    budget notices, opened through that tenant's own stores (``bzh:sweep-acts-in-row-tenant``)."""
 
     corpus: IReadFlowLinesCorpus
     tenants: Callable[[], Iterable[TenantId]]
     lines: Callable[[TenantId], FlowLineReconciler]
     turns: Callable[[TenantId], ITurnRunner]
+    notices: Callable[[TenantId], INoticeDrain]
 
 
 @domain_model
@@ -78,7 +85,8 @@ class StartedTurn:
 @dataclass(frozen=True)
 class TickResult:
     """One tick: the tenants it reconciled in full, those whose unchanged probe it skipped, and those that raised; how
-    many visits it submitted, submissions it closed, and turns it ended interrupted; and the turns it started."""
+    many visits it submitted, submissions it closed, turns it ended interrupted, and forge budget notices it recorded;
+    and the turns it started."""
 
     reconciled: tuple[TenantId, ...] = ()
     skipped: tuple[TenantId, ...] = ()
@@ -87,6 +95,7 @@ class TickResult:
     closed: int = 0
     interrupted: int = 0
     started: tuple[StartedTurn, ...] = ()
+    noticed: int = 0
 
 
 class FlowDriver:
@@ -142,9 +151,9 @@ class FlowDriver:
         forced: bool = False,
     ) -> TickResult:
         """For every open tenant: reconcile its lines when due — every one, ``forced`` — end every open turn that
-        started before the previous tick began with no task in ``running``, and take the turns its visits may. A
-        tenant that closes mid-tick is skipped for the rest of it; one that raises is logged and left due, and the
-        others still run."""
+        started before the previous tick began with no task in ``running``, take the turns its visits may, and record
+        its queued forge budget notices in its event log. A tenant that closes mid-tick is skipped for the rest of it;
+        one that raises is logged and left due, and the others still run."""
         running = frozenset(self._running) if running is None else running
         tenants = sorted(store.tenants())
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in tenants}
@@ -155,7 +164,7 @@ class FlowDriver:
         skipped: list[TenantId] = []
         failed: list[TenantId] = []
         started: list[StartedTurn] = []
-        submitted = closed = interrupted = 0
+        submitted = closed = interrupted = noticed = 0
         for tenant in tenants:
             signature = signatures.get(tenant, _NO_ROWS)
             with bound_contextvars(tenant_id=tenant):
@@ -175,6 +184,7 @@ class FlowDriver:
                     if swept_before is not None:
                         interrupted += lines.end_unanswered(started_before=swept_before, running=running)
                     admitted = lines.admit(self._floors.get(tenant, 0), now)
+                    noticed += store.notices(tenant).drain(now)
                 except (TenantClosed, UnknownTenant):
                     _log.info("flow driver skipped a closed tenant")
                     continue
@@ -186,7 +196,7 @@ class FlowDriver:
                 _CP_FLOW_AFTER_TURN_START_BEFORE_PASS.reached()
             started.extend(_started(tenant, admitted))
         return TickResult(
-            tuple(reconciled), tuple(skipped), tuple(failed), submitted, closed, interrupted, tuple(started)
+            tuple(reconciled), tuple(skipped), tuple(failed), submitted, closed, interrupted, tuple(started), noticed
         )
 
     async def step(self) -> TickResult:

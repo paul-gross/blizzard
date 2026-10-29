@@ -155,6 +155,13 @@ class ForgeBudgets:
         with budget.lock:
             return tuple(budget.readings[name] for name in sorted(budget.readings))
 
+    def forge_readings(self, forge_id: str) -> tuple[tuple[BudgetKey, BudgetReading], ...]:
+        """The last reading of each bucket of every budget ``forge_id`` has been heard from under, by secret then
+        bucket; the anonymous budget first."""
+        with self._guard:
+            keys = sorted((key for key in self._budgets if key.forge_id == forge_id), key=_by_secret)
+        return tuple((key, reading) for key in keys for reading in self.readings(key))
+
     def sweeping(self, forge_id: str, secret_name: str | None) -> SweepingGate:
         """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, secret_name)``'s budget through."""
         return SweepingGate(self, BudgetKey(forge_id, secret_name), self._clock)
@@ -193,6 +200,10 @@ class ForgeBudgets:
         )
         with self._guard:
             self._notices.append(notice)
+
+
+def _by_secret(key: BudgetKey) -> tuple[bool, str]:
+    return (key.secret_name is not None, key.secret_name or "")
 
 
 @dataclass(frozen=True)
