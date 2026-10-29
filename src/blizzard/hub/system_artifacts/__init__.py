@@ -21,8 +21,8 @@ _NEVER_PUBLISHED = frozenset({"README.md"})
 
 
 class SystemArtifactNameInvalid(ValueError):
-    """A packaged file's derived name fails :func:`is_valid_system_artifact_name` — a
-    packaging bug, not a caller error, so it is raised eagerly rather than silently skipped."""
+    """A packaged file's derived name fails :func:`is_valid_system_artifact_name`, raised eagerly (pinned:
+    ``tests/test_system_artifacts_loader.py::test_a_malformed_derived_name_raises_naming_it_and_its_path``)."""
 
     def __init__(self, name: str, path: Path) -> None:
         super().__init__(f"packaged system artifact at {path} derives an invalid name {name!r}")

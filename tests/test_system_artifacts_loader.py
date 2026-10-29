@@ -70,6 +70,8 @@ def test_a_readme_is_never_published_even_though_it_carries_the_suffix(tmp_path:
 
 
 def test_a_malformed_derived_name_raises_naming_it_and_its_path(tmp_path: Path) -> None:
+    """A malformed derived name is a packaging bug, not a caller error, so the loader raises on it
+    rather than silently skipping the file."""
     garden = tmp_path / "garden "
     garden.mkdir()
     (garden / "finding-format.md").write_text("f")

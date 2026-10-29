@@ -94,8 +94,6 @@ def _set_delta_view(delta: DeliveredSetDelta) -> DeliveredSetDeltaView:
         revisions=delta.revisions,
         measurement=delta.measurement,
         added=[
-            # `class_`'s alias is the Python keyword `class` — constructed by alias via
-            # `model_validate`, the `src/blizzard/hub/api/findings.py` `finding_view` shape.
             AddedFindingView.model_validate(
                 {
                     "finding_id": a.finding_id,
@@ -108,7 +106,6 @@ def _set_delta_view(delta: DeliveredSetDelta) -> DeliveredSetDeltaView:
             for a in delta.added
         ],
         observed=[
-            # `class_`'s alias is the Python keyword `class`, the added group's own shape.
             ObservedFindingView.model_validate(
                 {"finding_id": o.finding_id, "class": o.class_, "locus": o.locus, "summary": o.summary}
             )

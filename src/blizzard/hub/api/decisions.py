@@ -2,8 +2,7 @@
 
 ``GET /decisions`` lists the open decisions; ``POST /decisions/{id}/resolutions``
 records a person's choice first-write-wins. The controller stays read-only over the
-store (``bzh:controller-read-only``), and a runner's bearer token is rejected here
-rather than read as anonymous-plus-credential."""
+store (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
@@ -137,8 +136,6 @@ def resolve_decision(
             key=key,
             project_id=state.chunk.project_id if state.chunk is not None else None,
         )
-        # Hardcoded literal, not a derivation — a resolution always lands the chunk
-        # back at `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
         chunk_events.ChunkChanged.of(services, decision.chunk_id, prev_status=change.prev_status).publish_from(
             state, cause="decision-resolved", status="running", key=key
         )

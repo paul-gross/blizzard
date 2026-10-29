@@ -74,7 +74,7 @@ class ProviderIdentity:
     #: one of them admit the account through an email invitation, link it to the user holding
     #: that address, or claim ``auth.superuser``. A provider that cannot say (a client's own
     #: directory, say) reports ``False``, and signs in only identities already linked to a
-    #: user. ``github`` always reports ``True``.
+    #: user.
     emails_authoritative: bool = False
 
 
@@ -130,8 +130,7 @@ class SuperuserBootstrap:
 @domain_model
 @dataclass(frozen=True)
 class ResolvedIdentity:
-    """The request principal a human-plane edge resolves to — ``src/blizzard/hub/api/auth_session.py``'s
-    ``resolve_identity``/``require()`` return this, never a bare ``User``. It carries the
+    """The request principal a human-plane edge resolves to, never a bare ``User``. It carries the
     expanded permission set (computed once, by :func:`blizzard.hub.auth.permissions.permissions_for`) and
     ``display_name`` so no call site re-expands the role or re-reads the user row. ``role`` is the
     membership's role in ``tenant`` (``None`` without one); ``tenant`` is ``None`` only on hub-level

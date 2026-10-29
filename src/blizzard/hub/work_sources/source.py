@@ -54,8 +54,8 @@ def resolve_author_view(author: WorkItemAuthor, users: IReadUserRepository | Map
 @dataclass(frozen=True)
 class WorkItem:
     """A pass-through work item — title, body, and comment bodies, vendor-native, plus
-    the display-resolved author and stated priority, present only when
-    the binding has them to give — the built-in ``hub`` source alone fills them today."""
+    the display-resolved author and stated priority, ``None`` when the binding has
+    none to give."""
 
     body: str
     title: str = ""
@@ -73,18 +73,15 @@ class IWorkSource(Protocol):
 
     def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token form into a pointer, or ``None`` when
-        ``token`` is not shaped for this source — the registry's :meth:`resolve`
-         tries each configured source in turn and 422s when none claims it."""
+        ``token`` is not shaped for this source."""
         ...
 
     def fetch(self, pointer: WorkRef) -> WorkItem:
-        """A pointer's body + comments, read fresh — from the forge for a configured
-        binding (never stored here), or from this hub's own store for the built-in
-        ``hub`` source, whose row *is* the durable content."""
+        """A pointer's body + comments, read fresh from the source on every call."""
         ...
 
     def label(self, pointer: WorkRef) -> str | None:
-        """The board-legible label for ``pointer`` — ``None`` when it can't be rendered
+        """A short human-readable name for ``pointer`` — ``None`` when it can't be rendered
         (e.g. a URL that isn't shaped like this source's items)."""
         ...
 
@@ -138,8 +135,9 @@ class IWorkSourceRegistry(Protocol):
         ...
 
     def closer(self, source: str) -> IWorkCloser | None:
-        """The close half of the binding keyed ``source``, unconditional for every configured source — ``None`` only
-        when ``source`` names no source at all, which a pending intent can still outlive."""
+        """The close half of the binding keyed ``source``: always for ``hub``; else ``None`` while
+        ``close_forge_writes_enabled`` is false, or when ``source`` names no source or a retired one that no
+        longer builds. Raises :class:`WorkSourceError` when an active source fails to build."""
         ...
 
     def editor(self, source: str) -> IWorkEditor | None:
@@ -148,9 +146,8 @@ class IWorkSourceRegistry(Protocol):
         ...
 
     def resolve(self, token: str) -> WorkRef | None:
-        """The pointer an ingest token names, or ``None`` when no binding claims it. A ``{x}:{n}`` or ``{x}#{n}``
-        token is resolved at the registry first: ``x`` naming a configured source by id, current slug or former slug
-        reaches that source's :meth:`IWorkSource.parse` alone, rewritten to name its id. Any other token — an issue
-        URL among them — is offered to every active binding; config rejects a duplicate ``(provider, locator)``, so at
-        most one claims it."""
+        """The pointer an ingest token names, or ``None`` when no binding claims it. A ``{x}:{n}``/``{x}#{n}`` token
+        whose ``x`` is ``hub`` goes to the built-in source; ``x`` naming a configured source by id, current or former
+        slug reaches its :meth:`IWorkSource.parse` alone, rewritten to its id — none, if retired. Any other token goes
+        to every active binding; config rejects a duplicate ``(provider, locator)``, so one claims it at most."""
         ...

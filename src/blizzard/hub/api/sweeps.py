@@ -1,7 +1,7 @@
 """Sweeps on request: one pass of a hub sweep, answered once it has finished. ``/api/sweeps`` runs a pass over the
 request's tenant alone, under :attr:`~blizzard.auth_core.Permission.ANALYTICS_ADMIN`; ``/api/admin/sweeps`` runs one
 over every tenant, exactly as a timed pass runs, under the hub-level
-:attr:`~blizzard.auth_core.Permission.TENANT_ADMIN`. Both refuse a runner principal and serve a sweep in either mode.
+:attr:`~blizzard.auth_core.Permission.TENANT_ADMIN`. Both serve a sweep in either mode.
 Each handler is sync, so the pass runs off the event loop and every write it makes lands before the answer."""
 
 from __future__ import annotations

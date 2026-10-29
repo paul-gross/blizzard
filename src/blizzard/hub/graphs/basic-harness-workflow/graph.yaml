@@ -32,7 +32,7 @@
 name: bas-hwf
 entry: build
 
-# Named session pools, split across two tiers:
+# Named session pools:
 #
 #   code      the mechanical build lineage, on the frontier tier — the one pass this
 #             lane still spends its strongest model on. BOUNDED: it can accumulate
@@ -51,7 +51,7 @@ entry: build
 # Every pool carries the same `compaction_window` as a ceiling sitting
 # above the bounded lineages' own `rotate:` bounds, and inert on `gate`'s unbounded one
 # for the same reason `rotate:` is absent there — see `advanced-development-workflow`
-# for where the window and the three rotate numbers come from.
+# for where the window and the rotate numbers come from.
 #
 # Declared here rather than inherited — a graph referencing a pool it does not declare
 # is rejected at mint, and `graph_sync` would go red on first boot.

@@ -1,7 +1,6 @@
 """Every key the hub reads from ``blizzard-hub.toml``, and every durable path under its runtime root.
 
-The registry :mod:`blizzard.hub.config` reads through; ``blizzard-export-contracts`` commits it as
-``contracts/config/hub.json``. ``docs/backup.md`` owns the prose behind each durable path."""
+Each key is declared once here, with its type. ``docs/backup.md`` owns the prose behind each durable path."""
 
 from __future__ import annotations
 

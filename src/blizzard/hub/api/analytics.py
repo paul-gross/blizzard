@@ -92,8 +92,7 @@ def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
 @dataclass(frozen=True)
 class NormalizedScope:
     """The four shared filter fields, UTC-normalized — what every route's own criteria
-    type builds from, rather than one minting the other's type just to read four fields
-    out of it and discard the rest."""
+    type builds from."""
 
     graph_id: str | None
     source: str | None
@@ -139,11 +138,7 @@ class ScopeFilters:
 
 
 def operational_criteria(scope: ScopeFilters) -> OperationalCriteria:
-    """The operational routes' own reading of :meth:`ScopeFilters.normalized` — minted
-    here, not on :class:`ScopeFilters` itself, so the shared type stays shared rather
-    than carrying one family's domain-criteria type as though every consumer used it.
-    Shared with the fleet router's own analytics reads, not this
-    module's alone."""
+    """The operational criteria :meth:`ScopeFilters.normalized` reads as."""
     n = scope.normalized()
     return OperationalCriteria(graph_id=n.graph_id, source=n.source, project=n.project, since=n.since, until=n.until)
 

@@ -1,7 +1,6 @@
 """``garden-deliver`` — deliver a routine run's ``delta`` and ``proposals`` artifacts, each a list that may
-be empty, and answer from what the hub made of them: ``recorded``, ``invalid`` with the recorder's
-explanation in the ``garden-delivery-failure`` marker its edge reads back, or ``failure`` when the chunk
-has moved past the visit."""
+be empty, and answer from what the hub made of them
+(``src/blizzard/hub/delivery/actions/delivery_outcome.py::answer_delivery``)."""
 
 from __future__ import annotations
 

@@ -466,10 +466,9 @@ async def gate_head(target: _Target, head: str) -> HeadGate:
 
 
 async def _rerun_once(pull: _PullRequest, check: Check, head_sha: str) -> bool | None:
-    """Ask the forge once to re-run ``check``, then record its signature marker — side effect first: a pass
-    ending before the marker is durable just re-runs it next pass, which is harmless to repeat. Whether the
-    forge accepted; ``None`` when it did not answer, so the next pass asks again. A marker is written only for
-    an accepted re-run, so a refusal never reads as one, and a marker write that fails is not fatal."""
+    """Ask the forge once to re-run ``check``, then record its signature marker. Whether the forge accepted;
+    ``None`` when it did not answer (pinned by
+    ``tests/test_land_action.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``)."""
     target = pull.target
     try:
         accepted = await target.ask(target.forge.checks.rerun_check(check.id))

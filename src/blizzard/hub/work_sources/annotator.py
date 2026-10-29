@@ -1,9 +1,4 @@
-"""The write-half work-source seam — status markers projected onto the forge.
-
-A sibling seam to the read-only ``IWorkSource`` rather than optional methods on it, so
-"this source may not annotate" is a *presence* question the registry answers. Only a
-per-source, opted-in binding builds one (``bzh:dependency-injection``), which makes
-"never written to" a property of the object graph rather than a remembered branch."""
+"""The write-half work-source seam — status markers projected onto the forge."""
 
 from __future__ import annotations
 
@@ -26,8 +21,7 @@ class WorkStatusMarker(StrEnum):
     def of(cls, status: ChunkStatus) -> WorkStatusMarker | None:
         """The marker ``status`` projects, ``None`` for a terminal one — no live holder to show.
 
-        Precedence mirrors ``derive_chunk_status``'s first-match-wins buckets, restated as a lookup
-        exhaustive over :class:`ChunkStatus` (``test_marker_of_is_exhaustive``)."""
+        Pinned by ``tests/test_forge_status.py::test_marker_of_is_exhaustive_over_chunk_status``."""
         return _MARKER_BY_STATUS[status]
 
 
@@ -46,8 +40,7 @@ _MARKER_BY_STATUS: dict[ChunkStatus, WorkStatusMarker | None] = {
 
 class WorkAnnotateError(Exception):
     """The forge write/read for annotation failed — an unreachable forge, a
-    rate limit, or an insufficient-scope token. Degrades to a logged skip; never
-    raised past the reconciler's sweep."""
+    rate limit, or an insufficient-scope token."""
 
 
 class IWorkAnnotator(Protocol):
@@ -64,6 +57,5 @@ class IWorkAnnotator(Protocol):
 
     def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
         """Every ref this binding's forge currently carries a marker on, with the
-        *set* of markers each carries — a ref with more than one marker is visible
-        to the reconciler's diff as wrong, not as already-correct."""
+        *set* of markers each carries, more than one included."""
         ...

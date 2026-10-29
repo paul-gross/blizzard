@@ -46,8 +46,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 
 
 class IForgeAdapter(IForgeRefs, IForgeChanges, IForgeChecks, Protocol):
-    """What a build callable answers: every role at once, closed by the cache when its records move on. Only the
-    registry sees one; callers get its roles."""
+    """What a build callable answers: every role at once, released by :meth:`close`."""
 
     def close(self) -> None:
         """Release the adapter's client on the loop it ran on, returning at once."""

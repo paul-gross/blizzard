@@ -1,7 +1,7 @@
 """The identity unit of work — the identity writes that must commit together, on one transaction.
 
-Each identity repository alone commits every call on its own. A sign-in that claims the hub administrator role, or
-admits a person into a tenant, writes several of them and must land whole or not at all:
+Each identity repository alone commits every call on its own. A change that writes several of them must land whole or
+not at all:
 :meth:`IIdentityTransactions.begin` hands out the write repositories of every global identity table bound to one
 transaction, committed when the block exits and rolled back when it raises. A tenant-owned write the same change makes
 — the fact that an invitation was accepted, a new tenant's own rows — joins that transaction through

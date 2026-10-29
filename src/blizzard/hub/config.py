@@ -220,8 +220,7 @@ def _work_sources(document: ConfigView) -> tuple[WorkSourceConfig, ...]:
             )
         annotate = entry.get("annotate", False)
         if not isinstance(annotate, bool):
-            # Validated rather than coerced, mirroring `follow_latest`: a source that opts
-            # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
+            # Pinned: `tests/test_config.py::test_work_source_annotate_non_bool_raises_naming_the_source`.
             raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
         api_base = str(entry.get("api_base")) if entry.get("api_base") else None
         web_base = str(entry.get("web_base")) if entry.get("web_base") else None
@@ -259,7 +258,7 @@ class OAuthProviderConfig:
     ``oidc`` provider's verified email accept an invitation, claim ``auth.superuser`` and link
     a first sign-in to the user holding that address; without it the provider signs in only
     identities already linked to a user. ``None`` means the entry did not set it; a ``github``
-    provider is always authoritative, so its binding refuses the key when it is set."""
+    entry's handling is ``GithubEntry.provider`` in `src/blizzard/hub/auth/oauth/internal/factory.py`."""
 
     name: str
     type: str
@@ -778,8 +777,7 @@ class HubConfig:
             raise ConfigError(f"produces_mode must be one of {sorted(_KNOWN_PRODUCES_MODES)}, got {produces_mode!r}")
         follow_latest = raw.get("follow_latest", DEFAULT_FOLLOW_LATEST)
         if not isinstance(follow_latest, bool):
-            # Validated rather than coerced: `follow_latest = "true"` is a plausible typo,
-            # and truthy-coercing it would silently arm a fleet-wide migration policy.
+            # Pinned: `tests/test_config.py::test_follow_latest_non_boolean_raises`.
             raise ConfigError(f"follow_latest must be a boolean, got {follow_latest!r}")
         close_forge_writes_enabled = raw.get("close_forge_writes_enabled", DEFAULT_CLOSE_FORGE_WRITES_ENABLED)
         if not isinstance(close_forge_writes_enabled, bool):

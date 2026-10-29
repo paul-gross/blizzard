@@ -11,23 +11,28 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import httpx2
 import pytest
 import uvicorn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeEdit
-from blizzard.hub.domain.config.work_sources import WorkSourceEdit, WorkSourceId, WorkSourceSlug
+from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceId, WorkSourceSlug
+from blizzard.hub.live_config import ConfigObjectCache
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
+from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
 from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import OP, forge_state, free_port, github_double
+from tests.support import OP, forge_state, free_port, github_double, hub_store_connections
 
 pytestmark = pytest.mark.component
 
@@ -352,3 +357,30 @@ def test_a_retired_source_s_former_slug_is_refused_like_its_current_one(
     assert _sources(services).resolve("widget:1") is None
     assert _sources(services).resolve("widget-core:1") is None
     assert _sources(services).resolve(f"{source_id}:1") is None
+
+
+def test_a_key_naming_no_source_has_no_closer(hub: tuple[TestClient, HubServices]) -> None:
+    _client, services = hub
+
+    assert _sources(services).closer("ws_unknown") is None
+
+
+def test_an_active_source_that_cannot_be_built_raises_on_closer(
+    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+) -> None:
+    """Only a retired source's failed build reads as absent; an active one's surfaces."""
+    client, services = hub
+    source_id = _create(client, services, forge[1])
+
+    def unbuildable(record: ConfiguredWorkSource) -> BuiltWorkSource:
+        raise WorkSourceError(f"work source {record.slug} cannot be built")
+
+    registry = StoreWorkSourceRegistry(
+        records=_tenant(services).work_source_records,
+        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(cast(FastAPI, client.app).state.engine))),
+        build=unbuildable,
+        built_in=_sources(services).get("hub"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(WorkSourceError):
+        registry.closer(source_id)

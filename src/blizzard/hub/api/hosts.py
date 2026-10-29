@@ -2,8 +2,8 @@
 and retire. Every verb addresses a host by its hub-minted id and never resolves a name. The host-authenticated half is
 :mod:`blizzard.hub.api.fleet_host`.
 
-Controllers stay read-only over the store (``bzh:controller-read-only``); ``reject_runner_principal`` confines a
-runner's bearer token to the fleet router, and a host's is no session, so it is refused by the permission gate."""
+Controllers stay read-only over the store (``bzh:controller-read-only``); a host's bearer token is no session, so the
+permission gate refuses it."""
 
 from __future__ import annotations
 

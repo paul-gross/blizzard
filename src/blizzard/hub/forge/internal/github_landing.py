@@ -49,7 +49,7 @@ _log = get_logger("blizzard.hub.forge.github_landing")
 # The user the hub names on the pull requests and merges it makes.
 _HUB_USER = "blizzard-hub"
 
-#: Bounds one attempt, as the work-source client's calls are bounded.
+#: Bounds one attempt at a forge call.
 ATTEMPT_TIMEOUT_SECONDS = 30.0
 #: The waits before the second and third attempts at an unavailable forge.
 RETRY_DELAYS_SECONDS = (1.0, 3.0)
@@ -98,7 +98,7 @@ _CONCLUSION_OUTCOME = {
 
 
 def mergeability_of(mergeable_state: object) -> Mergeability:
-    """Only the states ``land`` reads checks through, merges up, or bounces on are named; every other state waits."""
+    """The named mergeable states map to their Mergeability; any other state is ``PENDING``."""
     if not isinstance(mergeable_state, str):
         return Mergeability.PENDING
     return _MERGEABILITY.get(mergeable_state, Mergeability.PENDING)
@@ -382,7 +382,8 @@ class GitHubLanding:
         raise ForgeRejected(_message(response) or f"HTTP {status}")
 
     async def _repository_missing(self) -> bool:
-        """Whether the repository itself answers 404 — read at most once a minute."""
+        """Whether the repository itself answers 404 — read at most once a minute. GitHub hides a repository a
+        credential cannot see, so a 404 here means it does not exist or this credential cannot reach it."""
         now = self._clock.now()
         if self._probed is not None and now - self._probed[1] < PROBE_MEMO:
             return self._probed[0]

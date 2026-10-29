@@ -278,12 +278,9 @@ class TenantServices:
     stop: StopService
     complete: CompleteService
     edit: EditService
-    #: Declare/release a dependency edge between two chunks — declaring under the same
-    #: row lock ``claim``/``edit``/``restart``/``delete`` already take, plus a residual
-    #: fleet-wide lock the cycle check alone still needs.
+    #: Declare/release a dependency edge between two chunks.
     dependencies: DependencyService
-    #: The unacquired-chunk delete/withdraw service — the composite write
-    #: ``WorkItemEditService.withdraw`` also reaches through for an unacquired holder.
+    #: The unacquired-chunk delete/withdraw service.
     delete: DeleteService
     facts: FactIngestService
     #: The host's own fact lane — the host registry's mark and usage, apart from the runner lane's.
@@ -318,23 +315,19 @@ class TenantServices:
     #: stays fresh (``bzh:system-scope-reads-live``); injected rather than a module singleton.
     system_artifacts: PackagedSystemArtifacts
     work_sources: IWorkSourceRegistry
-    #: Each repository's forge roles, built from its records — called by whoever builds a visit, never an action.
+    #: Each repository's forge roles, built from its records.
     forges: ForgeRegistry
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
     users: IReadUserRepository
-    #: The transcript-segment read Protocol — the operator-plane index and
-    #: content routes' own seam (``bzh:controller-read-only``).
+    #: The transcript-segment read Protocol (``bzh:controller-read-only``).
     transcripts: IReadTranscriptSegments
-    #: The same reconciler's own service — the re-derive route's own
-    #: scoped, bounded seam, exposed separately from a full sweep pass.
+    #: The event-derivation reconciler's own service — a scoped, bounded re-derive, apart from a full sweep pass.
     event_derivation_service: EventDerivationService
-    #: The analytics event query Protocol — the events/counts routes'
-    #: own read-only seam (``bzh:controller-read-only``); no write repository backs it.
+    #: The analytics event query Protocol, read-only (``bzh:controller-read-only``); no write repository backs it.
     analytics_events: IReadAnalyticsEventQueries
-    #: The operational-datasets query Protocol — the durations/spend/
-    #: outcomes routes' own read-only seam; no write repository backs it either.
+    #: The operational-datasets query Protocol, read-only; no write repository backs it.
     operational_analytics: IReadOperationalAnalytics
     #: The scope read Protocol — the same store instance as the two
     #: services below's writes.
@@ -350,7 +343,7 @@ class TenantServices:
     #: The one writer of configured records — forges, work sources, repositories and secrets, each write with its change
     #: row.
     config_authoring: ConfigAuthoring
-    #: The use case behind ``POST /api/config/apply``: loads what a document names, mints, plans, and applies it.
+    #: Loads what a config document names, mints, plans, and applies it.
     config_application: ConfigApplication
     #: Stored work-source records (the read half).
     work_source_records: IReadWorkSourceRepository
@@ -386,8 +379,7 @@ class TenantServices:
     routine_lifecycle: RoutineLifecycle
     #: Mint and ingest a hub work item from a routine, in one act.
     routine_run: RunService
-    #: The per-scope delta baseline a routine has swept, and how much has landed since
-    #: — the run dialog's pre-submit read.
+    #: The per-scope delta baseline a routine has swept, and how much has landed since.
     routine_baselines: RoutineBaselineService
     #: The finding read Protocol.
     findings: IReadFindingRepository
@@ -408,9 +400,7 @@ class TenantServices:
     routine_garden_proposals: RoutineGardenProposalReader
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
-    #: The findings a chunk's own accepted, minted garden proposal answers
-    #: — the worker's per-chunk read, distinct from the routine-bucket read
-    #: `findings`/`run_context` back.
+    #: The findings a chunk's own accepted, minted garden proposal answers, read per chunk.
     answered_findings: AnsweredFindingsReader
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
@@ -446,7 +436,7 @@ class HubServices:
     tenant_registry: Callable[[TenantId], IReadRunnerRegistry]
     #: The read host registry of the tenant a host credential resolved to; raises as ``tenant_registry`` does.
     tenant_hosts: Callable[[TenantId], IReadHostRegistry]
-    #: The one thread every tenant's hub action passes run on — started and stopped by the hub's lifespan.
+    #: The one thread every tenant's hub action passes run on.
     action_loop: ActionLoop
     #: Closes every served tenant's configured objects at shutdown, while the action loop still runs.
     close_tenant_objects: Callable[[], None]
@@ -502,12 +492,11 @@ class HubServices:
     hub_admins: HubAdministrators
     #: The configured OAuth provider registry — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
-    #: Per-IP token-bucket throttle shared by the authorize/callback routes.
-    #: ``None`` when ``[auth.login_throttle]`` turns the throttle off.
+    #: Per-IP token-bucket login throttle — ``None`` when ``[auth.login_throttle]`` turns the throttle off.
     auth_throttle: IpThrottle | None
     #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
-    #: The hub's IdP signing-key lifecycle — ``None`` when no keypair exists.
+    #: The hub's IdP signing-key lifecycle — ``None`` when composed without a signing-keys directory.
     signing: SigningKeyService | None
     #: The reverse-proxy trust set — empty by default, so forwarded headers
     #: are ignored from every peer.
@@ -989,8 +978,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # One event-authoring service publishes on the shared broker as it records
     # (``bzh:operational-event-log``).
     event_log = EventLogService(events=chunk_events, publisher=events)
-    # One fleet service, shared: the API's pause routes and the fact ingest both land
-    # registry facts, and two instances would be two of the same thing.
     detach = DetachService(route=chunk_route, exclusive=chunk_exclusive, clock=clock)
     # One id-keyed retired-runner refusal, shared by every runner-contact operation.
     retired = RetiredRunnerGuard(registry=registry_store)
@@ -1029,8 +1016,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_run_store = GardenRunStore(tenant_connections)
     finding_bucket = FindingBucketReader(finding_store)
     garden_formats = GardenFormats()
-    # Bound as `.for_project` (a project to a plain `delivery.validation.CommitResolver` callable),
-    # not the bare instance, so the garden delivery carries no dependency on the concrete class.
+    # A project to a plain `delivery.validation.CommitResolver` callable.
     commit_resolver_for = SeamCommitResolver(
         repositories=stores.repository_records,
         forge_records=stores.forge_records,
@@ -1525,8 +1511,7 @@ def build_services(
     session_store = SessionRepository(store_connections, auth_errors)
     auth_state_store: IWriteAuthStateRepository = AuthStateRepository(store_connections, auth_errors)
     superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
-    # Built ahead of `auth` below, which records role-change facts through
-    # this service rather than a raw write repository.
+    # Built ahead of `auth` below, which takes it.
     auth_facts_service = AuthFactsService(facts=AuthFactsRepository(store_connections), clock=clock)
     memberships = MembershipRepository(store_connections)
     hub_admin_store = HubAdminRepository(store_connections)
@@ -1571,11 +1556,7 @@ def build_services(
 
     teardown_store = TenantTeardownStore(store_connections)
     tenant_teardown = TenantTeardown(teardowns=teardown_store, closed=forget_closed, events=hub_event_log, clock=clock)
-    # The provider-login seam — one registry entry per configured
-    # ``[[auth.oauth.provider]]``, empty when no providers are configured.
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
-    # The hub's IdP signing-key lifecycle — constructed only when a keys
-    # directory is passed; `None` otherwise.
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     login_throttle = login_throttle or LoginThrottleConfig()
     auth_throttle = (

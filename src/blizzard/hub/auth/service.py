@@ -441,11 +441,10 @@ class AuthService:
         return code
 
     def exchange_cli_code(self, code: str, *, code_verifier: str, redirect_uri: str) -> str | None:
-        """Redeem a code minted by :meth:`mint_cli_code` for a fresh hub session token
-        (a session, never a runner-style JWT), or ``None`` on any failure:
-        unknown/consumed/expired code, mismatched ``redirect_uri``, or a bad PKCE verifier.
-        Every failure collapses to the same ``None``, so a caller cannot fingerprint which
-        check failed (pinned by ``tests/test_cli_login_api.py``)."""
+        """Redeem a code minted by :meth:`mint_cli_code` for a fresh hub session token (a session, never a runner-style
+        JWT), or ``None`` on any failure: unknown/consumed/expired code, mismatched ``redirect_uri``, or a bad PKCE
+        verifier. Every failure collapses to the same ``None``, so a caller cannot fingerprint which check failed
+        (``tests/test_cli_login_api.py::test_cli_token_exchange_rejects_a_wrong_verifier``)."""
         entry = self._auth_state.consume(code)
         if entry is None or entry.kind != CLI_LOGIN_STATE_KIND:
             return None

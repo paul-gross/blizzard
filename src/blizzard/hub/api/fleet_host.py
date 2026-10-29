@@ -145,8 +145,8 @@ def retire_host_runner(
 
 
 def _publish_spenders(services: TenantServices, host: Host, slugs: frozenset[str]) -> None:
-    """The ``runner_changed(external-usage)`` frame for each live runner under ``host`` spending a slug the push wrote,
-    so boards reading those runners stay current — the frame the runner lane publishes for a runner's own sample."""
+    """Publish the ``runner_changed(external-usage)`` frame for each live runner under ``host`` spending a slug the
+    push wrote."""
     for runner in services.registry.list_runners(host_id=host.host_id):
         if runner.subscription in slugs:
             services.events.publish_runner_changed(runner.runner_id, kind="external-usage", runner_name=runner.name)

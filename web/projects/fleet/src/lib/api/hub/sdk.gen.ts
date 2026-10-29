@@ -1618,12 +1618,10 @@ export const passGardenProposalApiGardenProposalsProposalIdPassPost = <ThrowOnEr
 /**
  * List Graphs
  *
- * Every minted graph, newest first, newest non-retired per name marked ``effective``.
+ * Every minted graph, unpaged, newest first, newest non-retired per name marked ``effective``.
  *
  * Reads the listing-shape projection — nothing here touches nodes,
- * edges, sessions or artifacts. Unpaged by design: ``effective`` is each name's newest
- * non-retired mint, which a page of mints cannot compute, and mints are insert-only
- * and few.
+ * edges, sessions or artifacts.
  */
 export const listGraphsApiGraphsGet = <ThrowOnError extends boolean = false>(options?: Options<ListGraphsApiGraphsGetData, ThrowOnError>): RequestResult<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListGraphsApiGraphsGetResponses, unknown, ThrowOnError>({ url: '/api/graphs', ...options });
 

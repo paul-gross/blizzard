@@ -1,6 +1,5 @@
-"""Fact-egress operator-plane routes. Never ``/api/fleet/...``; a runner principal is refused. The export is
-hub-wide, shared by every tenant, so status and the writes alike gate on the hub-level
-:attr:`~blizzard.auth_core.Permission.EXPORT_ADMIN`."""
+"""Fact-egress operator-plane routes. The export is hub-wide, shared by every tenant, so status and the writes alike
+gate on the hub-level :attr:`~blizzard.auth_core.Permission.EXPORT_ADMIN`."""
 
 from __future__ import annotations
 

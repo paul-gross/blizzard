@@ -1,7 +1,7 @@
 """The tenant boundary's domain primitives — what names a tenant, and what a store scope is.
 
 A tenant is named by its id alone (``ten_<ulid>``); its display name never stands in for it.
-Nothing here touches the store: the seam that applies a scope lives in ``hub/store``.
+Nothing here touches the store: the seam that applies a scope lives in `src/blizzard/hub/store/`.
 """
 
 from __future__ import annotations

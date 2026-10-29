@@ -27440,7 +27440,7 @@
     },
     "/api/graphs": {
       "get": {
-        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection \u2014 nothing here touches nodes,\nedges, sessions or artifacts. Unpaged by design: ``effective`` is each name's newest\nnon-retired mint, which a page of mints cannot compute, and mints are insert-only\nand few.",
+        "description": "Every minted graph, unpaged, newest first, newest non-retired per name marked ``effective``.\n\nReads the listing-shape projection \u2014 nothing here touches nodes,\nedges, sessions or artifacts.",
         "operationId": "list_graphs_api_graphs_get",
         "responses": {
           "200": {

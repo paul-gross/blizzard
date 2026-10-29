@@ -159,9 +159,8 @@ class ChunkView:
     route: Route | None | _RouteNotInjected = _ROUTE_NOT_INJECTED
     #: Every pointer's live holder — the caller's own already-resolved map.
     live_holders: dict[WorkRef, str] | _LiveHoldersNotInjected = _LIVE_HOLDERS_NOT_INJECTED
-    #: The chunk's blocked marking — the caller's own already-derived value;
-    #: neither constructor derives it itself, so a caller that has no use for it (every verb
-    #: response but the list and detail reads) pays nothing for it.
+    #: The chunk's blocked marking — the caller's own already-derived value; neither
+    #: constructor derives it, and ``None`` when the caller did not derive it.
     blocked: BlockedView | None = None
     #: The chunk's standing-edge neighborhood — the caller's own
     #: already-derived value, the same shape ``blocked`` takes.
@@ -189,9 +188,8 @@ class ChunkView:
         neighborhood: ChunkNeighborhoodView | None = None,
         delete_refusal: ChunkDeleteRefusal | None = None,
     ) -> ChunkView:
-        """``facts`` lets a caller that already loaded the chunk's own facts for another
-        reason hand it in rather than this reloading it a second time; omitted, this
-        loads it as before."""
+        """``facts`` hands in the chunk's own facts a caller already loaded; omitted, this
+        loads them."""
         return cls(
             services=services,
             chunk=chunk,

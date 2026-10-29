@@ -24,12 +24,11 @@ class IOAuthProvider(Protocol):
     name: str
     #: The provider's human-facing display label.
     display_name: str
-    #: ``"oidc"`` or ``"github"`` — echoed on ``GET /api/auth/providers`` so the (#93)
-    #: web client can pick a mark.
+    #: The provider's kind: ``"oidc"`` or ``"github"``.
     type: str
 
     def authorize_url(self, *, state: str, redirect_uri: str) -> str:
-        """The URL ``GET /api/auth/{name}/authorize`` redirects the browser to."""
+        """The provider's authorization URL for one sign-in, carrying ``state`` and ``redirect_uri``."""
         ...
 
     def exchange(self, *, code: str, redirect_uri: str) -> ProviderIdentity:

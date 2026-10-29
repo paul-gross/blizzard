@@ -1,6 +1,5 @@
 """``record-findings`` — deliver the chunk's newest review-finding delta, and answer from what the hub made
-of it: ``recorded``, ``invalid`` with the recorder's explanation in the ``review-findings-failure`` marker
-its edge reads back, or ``failure`` when the chunk has moved past the visit."""
+of it (``src/blizzard/hub/delivery/actions/delivery_outcome.py::answer_delivery``)."""
 
 from __future__ import annotations
 

@@ -2,8 +2,7 @@
 
 A sign-in started from an invitation link accepts that invitation and lands in its tenant; any other sign-in admits a
 person the hub already knows. Nobody else is admitted, and an invitation that is refused is never followed by a plain
-sign-in. The route only resolves the state entry, calls :meth:`SignIn.admit`, and maps what it answers
-(``bzh:domain-orchestration-split``)."""
+sign-in. See ``bzh:domain-orchestration-split``."""
 
 from __future__ import annotations
 

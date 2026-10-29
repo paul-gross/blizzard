@@ -22,7 +22,7 @@ __all__ = [
     "codec_for_path",
 ]
 
-#: Every binding, YAML first. Pure and stateless, so a constant rather than an injected collaborator.
+#: Every binding, YAML first.
 CONFIG_CODECS: tuple[IConfigCodec, ...] = (YAML_CODEC, JSON_CODEC)
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
 from tests.support import build_hub, count_queries
 
 pytestmark = pytest.mark.component
@@ -149,6 +150,25 @@ def test_list_graphs_over_retired_and_superseded_mints_renders_todays_shape(tmp_
     assert by_id[old_id]["lifecycle"] == "retired"
     assert by_id[superseded_id]["lifecycle"] == "superseded"
     assert by_id[newest_id]["lifecycle"] == "effective"
+
+
+def test_list_graphs_returns_every_mint_past_the_default_page_limit(tmp_path: Path) -> None:
+    """``GET /api/graphs`` is unpaged: ``effective`` is each name's newest non-retired mint, which a page of mints
+    cannot compute, and mints are insert-only and few."""
+    hub = build_hub(tmp_path)
+    alpha_ids = []
+    for _ in range(DEFAULT_LIMIT):
+        alpha_ids.append(_mint(hub, _GRAPH_A))
+        hub.clock.advance(timedelta(seconds=1))
+    beta_id = _mint(hub, _GRAPH_B)
+
+    resp = hub.client.get("/api/graphs")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert len(body) == DEFAULT_LIMIT + 1
+    effective = {row["graph_id"] for row in body if row["effective"]}
+    assert effective == {alpha_ids[-1], beta_id}
 
 
 def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -> None:

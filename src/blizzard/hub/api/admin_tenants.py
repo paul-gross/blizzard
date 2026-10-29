@@ -1,6 +1,6 @@
 """Tenant administration routes — hub-level, under ``TENANT_ADMIN``: create, list, rename and delete the hub's tenants,
-and reconcile the packaged graphs into every open tenant. A runner principal is refused; no route resolves a request
-tenant, since each names the tenants it acts on itself."""
+and reconcile the packaged graphs into every open tenant. No route resolves a request tenant,
+since each names the tenants it acts on itself."""
 
 from __future__ import annotations
 

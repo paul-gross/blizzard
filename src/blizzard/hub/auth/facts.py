@@ -1,8 +1,7 @@
 """``auth_facts`` — the append-only non-chunk auth/security event log
 (``bzh:facts-not-status``).
 
-The rest of the fact model is chunk-scoped; login, session, and role events are not, so they get their
-own durable table rather than being shoehorned onto a chunk. ``SSO_REFUSED`` in particular records a
+It holds the login, session, and role events, which are scoped to no chunk. ``SSO_REFUSED`` in particular records a
 ``state`` presented to a callback for a provider other than the one it was minted for."""
 
 from __future__ import annotations
@@ -73,9 +72,7 @@ class AuthFactsService:
         _log.warning("auth fact recorded", kind=kind, actor=actor, subject=subject, detail=detail)
 
     def list_recent(self, *, limit: int = 50) -> list[AuthFact]:
-        """The read passthrough a test (or a future admin surface) inspects the
-        durable log through, rather than reaching past the service into its
-        repository (``bzh:controller-read-only``)."""
+        """The log's newest ``limit`` facts."""
         return self._facts.list_recent(limit=limit)
 
     def login_failed(self, *, actor: str, subject: str, detail: str = "") -> None:

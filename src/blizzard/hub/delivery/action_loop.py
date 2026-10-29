@@ -1,9 +1,7 @@
 """The thread hub actions run on, with an event loop of its own.
 
 Keeping passes off the API's event loop keeps a pass's waits on a forge from slowing a request or the
-board's event stream. One loop serves every pass in the process; because an action touches nothing
-shared, nothing on it needs a lock but the one each forge credential's writes go out under, and the only
-things that cross between it and the rest of the hub are each pass's effect queue and a forge client's close."""
+board's event stream. One loop serves every pass in the process."""
 
 from __future__ import annotations
 
@@ -23,8 +21,7 @@ STOP_SETTLE_SECONDS = 2.0
 
 
 class ActionLoop:
-    """Started and stopped by the hub's lifespan; a pass submitted before the lifespan starts it — an
-    in-process hub that never runs one — starts it then."""
+    """Started explicitly, or by the first :meth:`submit` while stopped."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()

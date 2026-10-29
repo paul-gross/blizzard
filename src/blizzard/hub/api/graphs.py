@@ -2,8 +2,7 @@
 
 The controller stays read-only over the store (``bzh:controller-read-only``), resolving a
 YAML body or a ``graph_id`` into an object before delegating to the domain
-(``bzh:domain-takes-objects``). ``reject_runner_principal`` confines a runner's bearer
-token to the fleet router. The actor recorded on a lifecycle or policy fact is the
+(``bzh:domain-takes-objects``). The actor recorded on a lifecycle or policy fact is the
 authenticated identity, never a request field."""
 
 from __future__ import annotations
@@ -164,12 +163,11 @@ def sync_graphs(services: Services) -> GraphSyncResponse:
 
 @router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_graphs(services: Services) -> list[GraphSummaryView]:
-    """Every minted graph, newest first, newest non-retired per name marked ``effective``.
+    """Every minted graph, unpaged, newest first, newest non-retired per name marked ``effective``.
 
     Reads the listing-shape projection — nothing here touches nodes,
-    edges, sessions or artifacts. Unpaged by design: ``effective`` is each name's newest
-    non-retired mint, which a page of mints cannot compute, and mints are insert-only
-    and few."""
+    edges, sessions or artifacts."""
+    # Unpaged: tests/test_graph_read_routes.py::test_list_graphs_returns_every_mint_past_the_default_page_limit
     graphs = services.graphs.list_summaries()
     retired_ids = services.graphs.retired_graph_ids()
     mints = Mints.of(graphs, retired_ids=retired_ids)

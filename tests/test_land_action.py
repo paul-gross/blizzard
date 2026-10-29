@@ -348,6 +348,13 @@ def test_a_base_red_check_beside_an_own_failure_still_fails_and_names_both() -> 
     assert double.named("rerun_check") == []
 
 
+def test_a_degraded_base_read_charges_a_head_failure_to_the_chunk() -> None:
+    double = _forge(checks={_SUBMITTED: (_failing(),), "main": None})
+    answer, _ = _land(double)
+    assert answer.choice == "failure"
+    assert double.named("rerun_check") == []
+
+
 def test_an_inherited_only_failure_is_re_run_once_and_waits() -> None:
     double = _forge(checks={_SUBMITTED: (_failing(),), "main": (_failing(),)})
     answer, sink = _land(double)
