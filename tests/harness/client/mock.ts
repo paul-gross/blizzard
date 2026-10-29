@@ -78,6 +78,8 @@ export interface MockNodeSpec {
   session_name?: string;
   /** The harnesses the node's session may run under. */
   session_harnesses?: string[];
+  /** The `provider/model` the node's session runs under; the key a runner prices an estimate by. */
+  session_model?: string[];
 }
 
 /** `POST /_seed/chunk`: a scripted chunk. Only the fields a test sets are named. */
@@ -91,6 +93,8 @@ export interface MockChunkSpec {
   work_refs?: { source: string; ref: string }[];
   /** Graph-scoped artifacts baked into the chunk's mint; `asset` is the one kind the hub synthesizes. */
   graph_artifacts?: { name: string; kind?: 'asset'; content: string }[];
+  /** The chunk's derived cost total, as `ChunkUsageTotalView` names its fields; each defaults to zero. */
+  cost?: { cost_usd?: number; estimated_cost_usd?: number | null; cost_partial?: boolean; billed_partial?: boolean };
   status?: 'ready' | 'not_ready' | 'paused' | 'needs_human' | 'delivering' | 'done' | 'stopped';
   /** Makes the chunk a routine run; without it the analytics reads refuse for want of a run context. */
   garden_run?: { routine_name: string; scope_slug: string };

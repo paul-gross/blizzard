@@ -46,6 +46,11 @@ export interface RunnerHostOptions {
    * directory before the host boots. A profile names the directory as `${bundle}`, as in `harness.config_dir`.
    */
   runnerBundle: Record<string, string>;
+  /**
+   * Prices OpenCode models for the host: per-token rates by `provider` then `model`, written as the `opencode/models.json`
+   * of a test-owned cache home the host's `XDG_CACHE_HOME` names. A `runnerEnv` naming `XDG_CACHE_HOME` wins.
+   */
+  runnerModelPrices: Record<string, Record<string, { input: number; output: number; cache_read: number; cache_write: number }>>;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -56,6 +61,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerSampling: false,
   runnerOtlp: false,
   runnerBundle: {},
+  runnerModelPrices: {},
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -270,7 +276,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
   let count = 0;
 
   const create = async (given: Partial<RunnerHostOptions> = {}): Promise<RunnerHost> => {
-    const options: RunnerHostOptions = { ...DEFAULT_RUNNER_OPTIONS, ...given };
+    let options: RunnerHostOptions = { ...DEFAULT_RUNNER_OPTIONS, ...given };
     const profile = profileFor(testInfo.file, options.runnerConfig);
     const problems = checkHostOptions(profile, options.runnerEnv);
     if (problems.length > 0) throw new Error(`the runner host options are unsound:\n${problems.join('\n')}`);
@@ -315,6 +321,14 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       }
       const transcripts = path.join(root, 'transcripts');
       if (options.runnerOtlp !== false) otlp = await startOtlpSink({ hang: options.runnerOtlp === 'hung' });
+      const priced = Object.entries(options.runnerModelPrices);
+      if (priced.length > 0) {
+        const cache = path.join(root, 'priced-cache');
+        fs.mkdirSync(path.join(cache, 'opencode'), { recursive: true });
+        const models = Object.fromEntries(priced.map(([provider, rates]) => [provider, { models: Object.fromEntries(Object.entries(rates).map(([model, cost]) => [model, { cost }])) }]));
+        fs.writeFileSync(path.join(cache, 'opencode', 'models.json'), JSON.stringify(models));
+        options = { ...options, runnerEnv: { XDG_CACHE_HOME: cache, ...options.runnerEnv } };
+      }
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
       const cliEnv = (configHome: string): NodeJS.ProcessEnv => ({ ...env, XDG_CONFIG_HOME: configHome });
       const run = async (command: string, args: string[], cliHome: string): Promise<CliResult> => {
