@@ -164,3 +164,25 @@ test.describe('a mock hub offering an IdP from its start', () => {
 test('a default mock hub offers no IdP', async ({ mockHub }) => {
   expect((await mockHub.raw.get('/api/auth/jwks.json')).status).toBe(404);
 });
+
+test('renameRunner and removeStore refuse a running host; stopped, a rename keeps the id and token, and the store goes', async ({ runnerHost }) => {
+  const id = runnerHost.runners['runner-local']?.id;
+  const token = runnerHost.hubTokens().runners['runner-local'];
+  expect(token).toBeTruthy();
+  expect(() => runnerHost.renameRunner('runner-local', 'renamed')).toThrow(/stop\(\) it before renameRunner/);
+  expect(() => runnerHost.removeStore()).toThrow(/stop\(\) it before removeStore/);
+  await runnerHost.stop();
+  expect(() => runnerHost.renameRunner('nobody', 'renamed')).toThrow(/no runner nobody/);
+  runnerHost.renameRunner('runner-local', 'renamed');
+  expect(Object.keys(runnerHost.runners)).toEqual(['renamed']);
+  expect(runnerHost.runners.renamed?.id).toBe(id);
+  expect(runnerHost.hubTokens().runners).toEqual({ renamed: token });
+  await runnerHost.restart();
+  expect((await runnerHost.step()).outcome).toBe('completed');
+  expect((await runnerHost.runners.renamed?.status())?.body.runner_name).toBe('renamed');
+  await runnerHost.stop();
+  const store = path.join(runnerHost.dir, 'data', 'host.db');
+  expect(fs.existsSync(store)).toBe(true);
+  runnerHost.removeStore();
+  expect(fs.existsSync(store)).toBe(false);
+});

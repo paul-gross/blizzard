@@ -106,6 +106,15 @@ export interface RunnerHost {
   /** Empties the stopped host's `.env`, as a host no hub added holds no token; the next boot reads none. Throws when the host is running. */
   clearHubTokens(): void;
   /**
+   * The operator's rename on the stopped host: the runner `from` is named `to` in the host file, its token moves to the
+   * variable the host contract derives for `to`, and its `runners/<name>` directory, when there is one, follows. The
+   * handle's `runners` and `hubTokens()` follow the new name, under the same id. Throws when the host is running, or
+   * names no runner `from` or one already named `to`.
+   */
+  renameRunner(from: string, to: string): void;
+  /** Deletes the stopped host's store, `data/host.db` and its sidecars; the next boot builds it anew. Throws when the host is running. */
+  removeStore(): void;
+  /**
    * The headers a worker of lease `leaseId` calls the runner with: the lease token the runner exported to it, as the
    * mock harness recorded at spawn, as a bearer or, with `'lease-token'`, in `X-Blizzard-Lease-Token` as the worker's
    * exporter sends it. Throws when no spawned session recorded that lease.
@@ -220,11 +229,22 @@ export function readHubTokens(dir: string, runnerNames: string[]): HostHubTokens
   const file = path.join(dir, contract.file);
   const assigned = fs.existsSync(file) ? parseDotenv(fs.readFileSync(file, 'utf8')) : {};
   const fixed = contract.variables.find((variable) => variable.name_rule === null);
-  const rule = contract.variables.find((variable) => variable.name_rule !== null)?.name_rule;
-  if (fixed === undefined || rule == null) throw new Error(`contracts/config/host.json declares no host and per-runner token variables: ${JSON.stringify(contract)}`);
-  const variableOf = (name: string): string =>
-    rule.prefix + (rule.upper_case ? name.toUpperCase() : name).replace(new RegExp(rule.replace_pattern, 'g'), rule.replacement);
-  return { host: assigned[fixed.name], runners: Object.fromEntries(runnerNames.map((name) => [name, assigned[variableOf(name)]])) };
+  if (fixed === undefined) throw new Error(`contracts/config/host.json declares no host token variable: ${JSON.stringify(contract)}`);
+  return { host: assigned[fixed.name], runners: Object.fromEntries(runnerNames.map((name) => [name, assigned[runnerTokenVariable(name)]])) };
+}
+
+/** The variable the host contract's name rule derives for a runner's hub token. */
+function runnerTokenVariable(runnerName: string): string {
+  const rule = hostEnvContract().variables.find((variable) => variable.name_rule !== null)?.name_rule;
+  if (rule == null) throw new Error('contracts/config/host.json declares no per-runner token variable');
+  return rule.prefix + (rule.upper_case ? runnerName.toUpperCase() : runnerName).replace(new RegExp(rule.replace_pattern, 'g'), rule.replacement);
+}
+
+/** The contract's path entries, for the file a handle edit touches. */
+function hostPath(dir: string, contractPath: string): string {
+  const document = JSON.parse(fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts', 'config', 'host.json'), 'utf8')) as { paths: { path: string }[] };
+  if (!document.paths.some((entry) => entry.path === contractPath)) throw new Error(`contracts/config/host.json declares no path ${contractPath}`);
+  return path.join(dir, ...contractPath.split('/'));
 }
 
 /** The lease credential the mock harness recorded for the session spawned under `leaseId`, scanning `stateDir`. */
@@ -514,6 +534,37 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         clearHubTokens() {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before clearHubTokens()');
           fs.writeFileSync(path.join(dir, hostEnvContract().file), '');
+        },
+        renameRunner(from, to) {
+          if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before renameRunner()');
+          const file = readHostFile(dir);
+          const renamed = ((file.runner ?? []) as TomlTable[]).find((entry) => entry.name === from);
+          if (renamed === undefined) throw new Error(`the host file names no runner ${from}`);
+          if (entries.some((entry) => entry.name === to)) throw new Error(`the host already has a runner named ${to}`);
+          renamed.name = to;
+          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
+          const envFile = hostPath(dir, hostEnvContract().file);
+          if (fs.existsSync(envFile)) {
+            const moved = fs
+              .readFileSync(envFile, 'utf8')
+              .split('\n')
+              .map((line) => (line.trim().startsWith(`${runnerTokenVariable(from)}=`) ? line.replace(runnerTokenVariable(from), runnerTokenVariable(to)) : line));
+            fs.writeFileSync(envFile, moved.join('\n'));
+          }
+          const own = hostPath(dir, 'runners');
+          if (fs.existsSync(path.join(own, from))) fs.renameSync(path.join(own, from), path.join(own, to));
+          const entry = entries.find((candidate) => candidate.name === from);
+          if (entry !== undefined) entry.name = to;
+          const known = runners[from];
+          if (known !== undefined) {
+            delete runners[from];
+            runners[to] = { ...known, name: to };
+          }
+        },
+        removeStore() {
+          if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before removeStore()');
+          const store = hostPath(dir, 'data/host.db');
+          for (const suffix of ['', '-wal', '-shm', '-journal']) fs.rmSync(`${store}${suffix}`, { force: true });
         },
         cliBinary: requireBinary(binDir(), 'blizzard'),
         workerHeaders(leaseId, form = 'bearer'): Record<string, string> {
