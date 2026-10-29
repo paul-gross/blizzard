@@ -1,36 +1,10 @@
-import { expect, HOLD_OPEN, runningLeaseWithWorker, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
+import { expect, holdingChunk, seededLeaseWithWorker, runnerTest as test } from '../../harness/fixtures';
 
 // A worker's analytics reads through a real runner host, proxied to the test's own mock hub: the mock's seeded rows come
 // back as the hub served them, and a chunk that is no routine run is refused rather than answered as an empty bucket.
 // Each lease is a real one, held open by its judgement turn, and the worker calls carry its recorded spawn credential.
 
 const RUNNER = 'runner-local';
-
-function holdingChunk(): MockChunkSpec {
-  return {
-    entry: 'build',
-    nodes: {
-      build: {
-        executor: 'runner',
-        session: 'resume',
-        judged_by: 'worker',
-        prompt: 'pass\n',
-        judgement_prompt: HOLD_OPEN,
-        choices: [{ name: 'pass', description: 'committed and green', to: 'done' }],
-        retries_max: 1,
-      },
-    },
-    work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }],
-  };
-}
-
-/** Seeds `spec` and steps until its sole lease is running with a worker credential that answers. */
-async function seededLeaseWithWorker(mockHub: MockHub, host: RunnerHost, spec: MockChunkSpec) {
-  const seeded = await mockHub.seed.chunk(spec);
-  expect(seeded.status).toBe(201);
-  const { lease, headers } = await runningLeaseWithWorker(host, seeded.body.chunk_id);
-  return { leaseId: lease.lease_id, headers };
-}
 
 test('test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows', async ({ mockHub, runnerHost }) => {
   const runner = runnerHost.runners[RUNNER]!;

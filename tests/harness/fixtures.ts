@@ -299,7 +299,7 @@ export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
 export type { RunnerHosts } from './runner-world';
 export type { RunnerHost, RunnerHostOptions } from './runner-host';
-export { HOLD_OPEN, runningLeaseWithWorker, stepUntil } from './runner-steps';
+export { HOLD_OPEN, holdingChunk, runningLeaseWithWorker, seededLeaseWithWorker, stepUntil } from './runner-steps';
 export type { VendorUsage } from './vendor-usage';
 export { expect };
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
