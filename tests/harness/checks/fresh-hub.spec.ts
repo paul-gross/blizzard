@@ -86,6 +86,17 @@ test.describe('the lifecycle of a fresh hub', () => {
     expect(open.map((candidate) => candidate.tenant_id)).toEqual([tenant.id]);
   });
 
+  test('reset is refused while the hub runs; stopped, it hosts empty data on the same URL with a new tenant', async ({ freshHub, testHub, tenant }) => {
+    const url = testHub.coordinates.url;
+    await expect(freshHub.reset()).rejects.toThrow(/stop\(\) or kill\(\) it before reset/);
+    await freshHub.stop();
+    const reset = await freshHub.reset();
+    expect(reset.url).toBe(url);
+    const open = (await new HubInternal(url).listTenants()).filter((candidate) => candidate.state === 'open');
+    expect(open).toHaveLength(1);
+    expect(open[0]?.tenant_id).not.toBe(tenant.id);
+  });
+
   test('kill leaves no process', async ({ freshHub }) => {
     const pid = freshHub.pid;
     expect(isAlive(pid)).toBe(true);

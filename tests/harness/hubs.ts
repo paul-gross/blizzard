@@ -76,6 +76,8 @@ export function readProjectHubs(project: string): ProjectHubs {
 export interface HubStack {
   coordinates: HubCoordinates;
   hub: LiveDaemon;
+  /** The profile as the hub's file was written, `${forge}` and `${idp}` expanded; a data reset writes it again. */
+  profile: TomlTable;
 }
 
 /**
@@ -102,6 +104,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
   }
   return {
     hub,
+    profile: expanded,
     coordinates: {
       index,
       url: hub.url,

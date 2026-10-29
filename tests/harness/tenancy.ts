@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { APIRequestContext } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../playwright.config';
@@ -5,7 +6,7 @@ import { signInSuperuser, type Superuser } from './auth';
 import { base, uniqueName } from './base';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, recorderFor } from './client/latency';
-import { hostHub } from './daemons/hub';
+import { hostHub, initHub } from './daemons/hub';
 import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
 import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
@@ -90,6 +91,12 @@ export interface FreshHub {
   kill(): Promise<void>;
   /** Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. */
   start(): Promise<HubCoordinates>;
+  /**
+   * Replaces the stopped hub's data with a freshly initialized hub's, under the same profile, `hubConfig` and `hubEnv`,
+   * and hosts it on the same URL: every tenant, runner and token the old data held is gone, and the one seeded tenant
+   * has a new id. Throws when the hub is running.
+   */
+  reset(): Promise<HubCoordinates>;
 }
 
 /** A fresh hub's lifecycle, and the one place that knows which process is the hub's now. */
@@ -236,6 +243,13 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       },
       start: async () => {
         if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
+        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        return coordinates;
+      },
+      reset: async () => {
+        if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before reset()');
+        fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
+        await initHub(dir, stack.profile);
         hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
         return coordinates;
       },

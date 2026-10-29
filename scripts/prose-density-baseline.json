@@ -11394,12 +11394,6 @@
    "over_cap": 0,
    "total": 79
   },
-  "service/test_runner_init_service.py": {
-   "comments": 5,
-   "docstrings": 8,
-   "over_cap": 0,
-   "total": 215
-  },
   "service/test_runner_selftest_mock_service.py": {
    "comments": 2,
    "docstrings": 7,
