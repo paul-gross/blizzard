@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
@@ -27,6 +27,9 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_hub_lease,
 )
 from blizzard.hub.store.scoped import ScopedConnections
+
+#: The attempt outcome a rate-budget refusal writes: it holds the intent to its ``resume_at`` and spends no backoff.
+DEFERRED_ATTEMPT = "deferred"
 
 
 class ChunkDeliveryStore:
@@ -56,16 +59,28 @@ class ChunkDeliveryStore:
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every pending, non-ephemeral intent's own backoff history in one flat, outer-
-        joined, already-aggregated read — never one query per intent."""
+        joined, already-aggregated read — never one query per intent. A ``deferred`` attempt is
+        neither counted nor dated; the newest one's ``resume_at`` rides along instead."""
+        attempt = s.close_intent_attempts
+        spent = attempt.c.outcome != DEFERRED_ATTEMPT
         attempts = (
             self._store.select(
-                s.close_intent_attempts,
-                s.close_intent_attempts.c.intent_id,
-                func.count(s.close_intent_attempts.c.id).label("attempt_count"),
-                func.max(s.close_intent_attempts.c.attempted_at).label("last_attempt_at"),
+                attempt,
+                attempt.c.intent_id,
+                func.count(case((spent, attempt.c.id))).label("attempt_count"),
+                func.max(case((spent, attempt.c.attempted_at))).label("last_attempt_at"),
             )
-            .group_by(s.close_intent_attempts.c.intent_id)
+            .group_by(attempt.c.intent_id)
             .subquery()
+        )
+        resume_at = (
+            self._store.select(attempt, attempt.c.resume_at)
+            .where(attempt.c.intent_id == s.close_intents.c.id, attempt.c.outcome == DEFERRED_ATTEMPT)
+            .order_by(
+                attempt.c.attempted_at.desc(), attempt.c.id.desc()
+            )  # An explicit total order (`bzh:sql-portable`)
+            .limit(1)
+            .scalar_subquery()
         )
         with self._store.read("pending_close_intents") as conn:
             rows = conn.execute(
@@ -79,6 +94,7 @@ class ChunkDeliveryStore:
                     s.close_intents.c.ref,
                     attempts.c.attempt_count,
                     attempts.c.last_attempt_at,
+                    resume_at.label("resume_at"),
                 )
                 .where(s.close_intents.c.retired_at.is_(None))
                 .where(s.close_intents.c.chunk_id.not_in(ephemeral_ids_select(self._store)))
@@ -91,6 +107,7 @@ class ChunkDeliveryStore:
                 intent_id=row.id,
                 attempt_count=row.attempt_count or 0,
                 last_attempt_at=row.last_attempt_at,
+                resume_at=row.resume_at,
             )
             for row in rows
         ]
@@ -100,6 +117,14 @@ class ChunkDeliveryStore:
             conn.execute(
                 self._store.insert(s.close_intent_attempts).values(
                     intent_id=intent_id, attempted_at=at, outcome="skipped"
+                )
+            )
+
+    def record_close_attempt_deferred(self, intent_id: int, *, at: datetime, resume_at: datetime) -> None:
+        with self._store.write("record_close_attempt_deferred") as conn:
+            conn.execute(
+                self._store.insert(s.close_intent_attempts).values(
+                    intent_id=intent_id, attempted_at=at, outcome=DEFERRED_ATTEMPT, resume_at=resume_at
                 )
             )
 

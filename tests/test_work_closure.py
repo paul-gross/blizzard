@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+import sqlalchemy as sa
 from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -41,6 +42,7 @@ from blizzard.hub.domain.work_items.closure import (
     TenantCloseIntent,
     close_intent_is_due,
 )
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -53,6 +55,7 @@ from tests.support import (
     count_queries,
     emitted_events,
     hub_level_connections,
+    hub_scoped,
     hub_store_connections,
     ingest,
 )
@@ -190,6 +193,50 @@ def test_pending_close_intents_carries_each_intents_attempt_history(tmp_path: Pa
     assert backed_off.intent_id == fresh.intent_id
     assert backed_off.attempt_count == 2
     assert backed_off.last_attempt_at == hub.clock.now()
+    assert backed_off.resume_at is None
+
+
+@pytest.mark.component
+def test_pending_close_intents_leaves_deferred_attempts_out_and_carries_the_newest_resume_at(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    [fresh] = delivery.pending_close_intents()
+    failed_at = hub.clock.now()
+    delivery.record_work_item_closure(
+        chunk_id, pointer=fresh.ref, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=failed_at
+    )
+    first_resume, newest_resume = failed_at + timedelta(minutes=30), failed_at + timedelta(minutes=5)
+    hub.clock.advance(timedelta(seconds=10))
+    delivery.record_close_attempt_deferred(fresh.intent_id, at=hub.clock.now(), resume_at=first_resume)
+    hub.clock.advance(timedelta(seconds=10))
+    delivery.record_close_attempt_deferred(fresh.intent_id, at=hub.clock.now(), resume_at=newest_resume)
+
+    [deferred] = delivery.pending_close_intents()
+    assert (deferred.attempt_count, deferred.last_attempt_at, deferred.resume_at) == (1, failed_at, newest_resume)
+    [row] = _corpus(hub).pending_close_intents()
+    assert (row.intent.attempt_count, row.intent.last_attempt_at, row.intent.resume_at) == (
+        1,
+        failed_at,
+        newest_resume,
+    )
+
+
+@pytest.mark.component
+def test_pending_close_intents_of_an_intent_only_ever_deferred_reads_as_never_attempted(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    [fresh] = delivery.pending_close_intents()
+    resume_at = hub.clock.now() + timedelta(minutes=5)
+    delivery.record_close_attempt_deferred(fresh.intent_id, at=hub.clock.now(), resume_at=resume_at)
+
+    [deferred] = delivery.pending_close_intents()
+    assert (deferred.attempt_count, deferred.last_attempt_at, deferred.resume_at) == (0, None, resume_at)
+    [row] = _corpus(hub).pending_close_intents()
+    assert (row.intent.attempt_count, row.intent.last_attempt_at, row.intent.resume_at) == (0, None, resume_at)
 
 
 @pytest.mark.parametrize(
@@ -203,7 +250,9 @@ def test_close_intent_is_due_exactly_at_its_exponential_threshold_capped_at_one_
     last = datetime(2026, 8, 1, tzinfo=UTC)
 
     def due(elapsed: int) -> bool:
-        return close_intent_is_due(last + timedelta(seconds=elapsed), attempt_count=attempt_count, last_attempt_at=last)
+        return close_intent_is_due(
+            last + timedelta(seconds=elapsed), attempt_count=attempt_count, last_attempt_at=last, resume_at=None
+        )
 
     assert not due(threshold_seconds - 1)
     assert due(threshold_seconds)
@@ -212,7 +261,7 @@ def test_close_intent_is_due_exactly_at_its_exponential_threshold_capped_at_one_
 @pytest.mark.parametrize(("attempt_count", "last_attempt_at"), [(0, None), (None, None), (3, None)])
 def test_close_intent_is_due_with_no_prior_attempt(attempt_count: int | None, last_attempt_at: datetime | None) -> None:
     assert close_intent_is_due(
-        datetime(2026, 8, 1, tzinfo=UTC), attempt_count=attempt_count, last_attempt_at=last_attempt_at
+        datetime(2026, 8, 1, tzinfo=UTC), attempt_count=attempt_count, last_attempt_at=last_attempt_at, resume_at=None
     )
 
 
@@ -241,6 +290,8 @@ def test_pending_close_intents_issues_a_flat_query_count_regardless_of_backlog_s
             reason="x",
             at=hub.clock.now(),
         )
+    for intent in delivery.pending_close_intents():
+        delivery.record_close_attempt_deferred(intent.intent_id, at=hub.clock.now(), resume_at=hub.clock.now())
 
     count = count_queries(hub.engine, delivery.pending_close_intents)
     assert count == 1
@@ -271,6 +322,7 @@ class _FakeCloseChunks:
         self.retired: list[tuple[str, WorkRef]] = []
         self.events: list[_RecordedEvent] = []
         self.skipped_attempts: list[int] = []
+        self.deferred_attempts: list[tuple[int, datetime]] = []
         self._written: set[tuple[str, str, str, str]] = set()
         self.delivery_reads: list[list[str]] = []
         self.sources: dict[str, DeliverySources] = {}
@@ -291,6 +343,9 @@ class _FakeCloseChunks:
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: object) -> None:
         self.skipped_attempts.append(intent_id)
+
+    def record_close_attempt_deferred(self, intent_id: int, *, at: object, resume_at: datetime) -> None:
+        self.deferred_attempts.append((intent_id, resume_at))
 
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: object
@@ -504,6 +559,76 @@ def test_sweep_leaves_a_failed_intent_pending_and_retries_it() -> None:
 
     assert chunks.closures == [("ch_1", ref, WorkItemCloseOutcome.FAILED, "boom closing 1")]
     assert chunks.retired == []
+
+
+def test_sweep_defers_a_close_the_rate_budget_turns_away_without_a_closure_fact_or_backoff() -> None:
+    ref = WorkRef(source="default", ref="1")
+    resume_at = _NOW + timedelta(minutes=5)
+    closer = FakeCloser(rate_refs={"1": resume_at})
+    chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=ref, intent_id=7)])
+
+    with capture_logs() as logs:
+        _drainer(chunks, {"default": closer}).sweep()
+
+    assert chunks.deferred_attempts == [(7, resume_at)]
+    assert (chunks.closures, chunks.retired, chunks.events, chunks.skipped_attempts) == ([], [], [], [])
+    [summary] = [entry for entry in logs if entry["event"] == "close intent drain sweep completed"]
+    assert (summary["deferred"], summary["failed"]) == (1, 0)
+
+
+def test_sweep_does_not_attempt_a_deferred_intent_before_its_resume_at() -> None:
+    pointer = WorkRef(source="default", ref="1")
+    closer = FakeCloser()
+    deferred = PendingCloseIntent(chunk_id="ch_1", ref=pointer, resume_at=_NOW + timedelta(minutes=5))
+    clock = FixedClock(_NOW + timedelta(minutes=5) - timedelta(seconds=1))
+    drainer = _drainer(_FakeCloseChunks([deferred]), {"default": closer}, clock)
+
+    drainer.sweep()
+    assert closer.closed == []
+
+    clock.advance(timedelta(seconds=1))
+    drainer.sweep()
+    assert closer.closed == [pointer]
+
+
+@pytest.mark.component
+def test_sweep_against_a_real_store_defers_a_turned_away_close_to_its_resume_at(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    _land(hub, chunk_id)
+    resume_at = hub.clock.now() + timedelta(minutes=5)
+    closer = FakeCloser(rate_refs={"1": resume_at})
+    delivery = cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery)
+    drainer = _sweep_over(
+        _corpus(hub),
+        CloseIntentDrainer(
+            delivery=delivery,
+            artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
+            events=_event_log(hub),
+            work_sources=WorkSourceRegistry({}, closers={"default": closer}),
+            clock=hub.clock,
+        ),
+        hub.clock,
+    )
+
+    drainer.sweep()
+
+    [held] = delivery.pending_close_intents()
+    assert (held.attempt_count, held.last_attempt_at, held.resume_at) == (0, None, resume_at)
+    assert _event_logged_frames(hub) == []
+    with hub.engine.connect() as conn:
+        assert conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(s.work_item_closures))).scalar_one() == 0
+
+    closer.rate_refs.clear()
+    hub.clock.advance(timedelta(minutes=5) - timedelta(seconds=1))
+    drainer.sweep()
+    assert closer.closed == []
+
+    hub.clock.advance(timedelta(seconds=1))
+    drainer.sweep()
+    assert closer.closed == [WorkRef(source="default", ref="1")]
+    assert delivery.pending_close_intents() == []
 
 
 def test_sweep_skips_an_intent_whose_source_has_no_closer_bound() -> None:

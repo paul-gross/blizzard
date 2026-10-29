@@ -53,10 +53,14 @@ CLOSE_DRAIN_BACKOFF_CAP_SECONDS = 3600
 CLOSE_DRAIN_PASS_LIMIT = 100
 
 
-def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
-    """Due with no prior attempt at all; otherwise due once
-    ``backoff_delay(n, base, cap)`` has passed since the last one — a pure domain
-    rule (``bzh:domain-core``)."""
+def close_intent_is_due(
+    now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None, resume_at: datetime | None
+) -> bool:
+    """Never before ``resume_at``, the newest deferral's resume time; otherwise due with no prior
+    attempt at all, else once ``backoff_delay(n, base, cap)`` has passed since the last one — a
+    pure domain rule (``bzh:domain-core``)."""
+    if resume_at is not None and now < resume_at:
+        return False
     if not attempt_count or last_attempt_at is None:
         return True
     threshold = backoff_delay(
@@ -202,6 +206,12 @@ class CloseIntentDrainer:
             except WorkItemGoneError as exc:
                 outcome, reason = WorkItemCloseOutcome.GONE, str(exc)
             except WorkCloseError as exc:
+                if exc.retry_after is not None:
+                    tally.deferred += 1
+                    # The forge's rate budget turned the close away: wait for its reset without
+                    # spending backoff, and write no closure fact.
+                    self._delivery.record_close_attempt_deferred(intent.intent_id, at=at, resume_at=exc.retry_after)
+                    continue
                 outcome, reason = WorkItemCloseOutcome.FAILED, str(exc)
             tally.count(outcome)
             _CP_CLOSE_AFTER_CLOSE_BEFORE_RECORD.reached()
@@ -233,6 +243,7 @@ class CloseDrainTally:
     gone: int = 0
     failed: int = 0
     skipped: int = 0
+    deferred: int = 0
 
     def count(self, outcome: WorkItemCloseOutcome) -> None:
         if outcome is WorkItemCloseOutcome.CLOSED:
@@ -301,6 +312,7 @@ class CloseDrainSweep:
             gone=tally.gone,
             failed=tally.failed,
             skipped=tally.skipped,
+            deferred=tally.deferred,
             tenants=len(by_tenant),
             tenants_failed=sorted(failed),
         )
@@ -319,6 +331,7 @@ class CloseDrainSweep:
                 gone=tally.gone,
                 failed=tally.failed,
                 skipped=tally.skipped,
+                deferred=tally.deferred,
                 tenant_failed=fault is not None,
             )
             return fault
@@ -329,7 +342,10 @@ class CloseDrainSweep:
         due: dict[TenantId, list[PendingCloseIntent]] = {}
         for row in self._corpus.pending_close_intents():
             if close_intent_is_due(
-                now, attempt_count=row.intent.attempt_count, last_attempt_at=row.intent.last_attempt_at
+                now,
+                attempt_count=row.intent.attempt_count,
+                last_attempt_at=row.intent.last_attempt_at,
+                resume_at=row.intent.resume_at,
             ):
                 due.setdefault(row.tenant, []).append(row.intent)
         return due

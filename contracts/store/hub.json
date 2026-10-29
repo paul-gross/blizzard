@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261027_0900_flows",
+  "head_revision": "20261029_0900_close_attempt_resume_at",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -1338,6 +1338,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "resume_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
         },
         "tenant_id": {
           "deprecated": null,

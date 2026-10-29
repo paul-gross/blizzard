@@ -45,6 +45,7 @@ from blizzard.hub.domain.observability.tracing.repository import ClosingCandidat
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus, TenantCloseIntent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import corpus_rows
+from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
 from blizzard.hub.store.internal.corpus_rows import open_tenant
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
@@ -154,8 +155,16 @@ class SweepCorpusReads:
         deleted, with its attempt history, in intent order."""
         attempt, intent = s.close_intent_attempts, s.close_intents
         of_intent = and_(attempt.c.tenant_id == intent.c.tenant_id, attempt.c.intent_id == intent.c.id)
-        attempt_count = select(func.count(attempt.c.id)).where(of_intent).scalar_subquery()
-        last_attempt_at = select(func.max(attempt.c.attempted_at)).where(of_intent).scalar_subquery()
+        spent = attempt.c.outcome != DEFERRED_ATTEMPT
+        attempt_count = select(func.count(attempt.c.id)).where(of_intent, spent).scalar_subquery()
+        last_attempt_at = select(func.max(attempt.c.attempted_at)).where(of_intent, spent).scalar_subquery()
+        resume_at = (
+            select(attempt.c.resume_at)
+            .where(of_intent, attempt.c.outcome == DEFERRED_ATTEMPT)
+            .order_by(attempt.c.attempted_at.desc(), attempt.c.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
         with self._read("corpus pending close intents") as conn:
             rows = conn.execute(
                 select(
@@ -166,6 +175,7 @@ class SweepCorpusReads:
                     intent.c.ref,
                     attempt_count.label("attempt_count"),
                     last_attempt_at.label("last_attempt_at"),
+                    resume_at.label("resume_at"),
                 )
                 .where(open_tenant(intent), intent.c.retired_at.is_(None))
                 .where(intent.c.chunk_id.not_in(_ephemeral_chunk_ids()))
@@ -180,6 +190,7 @@ class SweepCorpusReads:
                     intent_id=row.id,
                     attempt_count=row.attempt_count or 0,
                     last_attempt_at=row.last_attempt_at,
+                    resume_at=row.resume_at,
                 ),
             )
             for row in rows
