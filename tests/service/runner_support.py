@@ -9,6 +9,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import time
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from blizzard.runner.host_config import RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.leases.lease_auth import LeaseToken
+from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import sqlite_store_file
 from blizzard.runner.store.schema import external_usage_samples
 from blizzard.runner.throttle.settings import ThrottleSettings
@@ -46,6 +48,19 @@ def tick_env() -> dict[str, str]:
     fenced = dict(os.environ)
     fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
     return fenced
+
+
+def drive_ticks(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: float = 0.5) -> None:
+    """Run ``ticks`` synchronous reconciliation passes with the harness fence set."""
+    prior = dict(os.environ)
+    os.environ.update(fenced)
+    try:
+        for _ in range(ticks):
+            LoopWiring.of(config).tick_once()
+            time.sleep(pause)
+    finally:
+        os.environ.clear()
+        os.environ.update(prior)
 
 
 def fleet_chunk_status(hub: httpx2.Client, chunk_id: str) -> str:
