@@ -429,7 +429,7 @@ def test_every_action_in_verify_is_pinned_by_commit_sha() -> None:
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _MOCK_ACTION = "./blizzard/.github/actions/resolve-mock-ref"
 _TIER_JOBS = {
-    "upper-tiers.yml": ("service-tier", "crash-sweep", "e2e", "journey"),
+    "upper-tiers.yml": ("service-tier", "crash-sweep", "e2e", "ui", "journey"),
 }
 
 

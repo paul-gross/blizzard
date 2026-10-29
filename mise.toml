@@ -52,9 +52,17 @@ description = "Run the service tier's pytest half — the cases whose subject is
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"
 
 [tasks.playwright]
-description = "Run the Playwright package (tests/) — the service projects, and later the UI project; arguments after -- pass to playwright test"
+description = "Run the Playwright package (tests/) — the service and UI projects; arguments after -- pass to playwright test"
 dir = "tests"
 run = "npx playwright test"
+
+[tasks.ui]
+description = "Run the UI tier (blizzard:ui) — the Playwright package's `ui*` projects, a Chromium page against the board each test's hub serves; needs the sibling blizzard-mock worktree provisioned and Chromium (cd tests && npx playwright install chromium)"
+# The projects drive the *built* bundle the hub serves out of src/blizzard/static/, so a stale bundle silently tests the
+# previous UI; depending on web-build makes that unfireable, as it does for e2e.
+depends = ["web-build"]
+dir = "tests"
+run = "npx playwright test --project='ui*'"
 
 [tasks.playwright-check]
 description = "Run the Playwright package's static checks (the gate's `playwright static` job): npm ci when node_modules is stale, tsc, eslint, and the wire-type regenerate-and-diff"

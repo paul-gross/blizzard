@@ -1,6 +1,6 @@
 # CI
 
-The policy behind CI — the branch and release model, one repo one wheel, the five test tiers — is owned by
+The policy behind CI — the branch and release model, one repo one wheel, the six test tiers — is owned by
 blizzard-context's
 [`verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md); this
 file is the in-repo operator reference for running it.
@@ -89,14 +89,14 @@ and `flip-without-note` (`pr` mode only) fails a flag turned from `off` to `on` 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep (`blizzard:crash-sweep`) over a two-repo checkout of
 `blizzard` + `blizzard-mock`; `pr.yml`, `push.yml` and `release.yml` all call it. Two inputs choose the shape. With
-`full_suite: true` it also runs the e2e acceptance loop (`blizzard:e2e`), the acceptance journey (`blizzard:journey`),
-and the hub image and reference compose smokes (`blizzard:image-smoke`, `blizzard:compose-smoke`) as parallel jobs;
-`crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value the full one. `pr.yml` and `release.yml` pass
-`full_suite: true` and the full sweep; `push.yml` keeps the service tier and the bounded sweep, since the `edge` channel
-is not held behind e2e and an admin's direct push is ungated by design. The two smokes build their own wheel and need
-only docker, compose v2, node and uv, not the mock. A leading `mock-ref` job resolves the mock once, and every tier
-checks out that commit. The resolution — which mock tag or branch a tag run, a release-line pull request, and a `master`
-run each prove against, and when it fails — is owned by
+`full_suite: true` it also runs the e2e acceptance loop (`blizzard:e2e`), the UI tier (`blizzard:ui`), the acceptance
+journey (`blizzard:journey`), and the hub image and reference compose smokes (`blizzard:image-smoke`,
+`blizzard:compose-smoke`) as parallel jobs; `crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value
+the full one. `pr.yml` and `release.yml` pass `full_suite: true` and the full sweep; `push.yml` keeps the service tier
+and the bounded sweep, since the `edge` channel is not held behind e2e and an admin's direct push is ungated by design.
+The two smokes build their own wheel and need only docker, compose v2, node and uv, not the mock. A leading `mock-ref`
+job resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch a tag run,
+a release-line pull request, and a `master` run each prove against, and when it fails — is owned by
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
 `release.yml`'s tier jobs resolve through too. The tiers are winter-free: their runners use the built-in `basic`
 provider over a fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests
@@ -108,13 +108,13 @@ revision is more than 30 days old report as skips in `uv run pytest -n auto`; se
 
 Locally the mock-backed tiers need the sibling `blizzard-mock` worktree provisioned (`winter provision <env>`). One task
 reproduces the unconditional pull-request tiers: `mise run gate-full` (`blizzard:gate-full`) runs the merge gate, then
-`service-test`, the full `crash-sweep`, `e2e`, `journey`, `image-smoke` and `compose-smoke` serially, since the smokes
-bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on any
-red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
+`service-test`, the full `crash-sweep`, `e2e`, `ui`, `journey`, `image-smoke` and `compose-smoke` serially, since the
+smokes bind fixed ports. A red tier does not stop the later ones; it ends with a per-tier verdict and exits non-zero on
+any red. Run the conditional checks separately when applicable: `mise run store-baseline` for store revisions and
 `mise run rehearsal` for a release cut (both need `gh` and Postgres).
 
 Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/`) and
-`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `journey`, `image-smoke` and
+`mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `ui`, `journey`, `image-smoke` and
 `compose-smoke` tasks can also run alone.
 
 **Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
@@ -178,8 +178,8 @@ wheel.
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the whole
-suite as parallel real gate jobs: the service tier, the full crash sweep, e2e, the journey and the two smokes, and on a
-release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
+suite as parallel real gate jobs: the service tier, the full crash sweep, e2e, ui, the journey and the two smokes, and
+on a release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
 [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
 not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
 runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's `versions/` directory also runs the
@@ -221,8 +221,8 @@ candidate to borrow from, so it runs the full suite; a candidate never borrows. 
 `actions: read`, with `contents: read` and nothing else. `wheel` checks out full history so `check-version-tag.sh` can
 hold the commit to `origin/release/X.Y`. Unless the proof is borrowed, the run executes the full suite — gate, the
 `compat` backstop, and `upper-tiers` called with `full_suite: true` and the **full** crash sweep (service tier, crash
-sweep, e2e, journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.` tag
-alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `flag-lifecycle`
+sweep, e2e, ui, journey and the two smokes) — builds the wheel once in `wheel`, rehearses the upgrade to it on an `-rc.`
+tag alone, proves the store baseline on a candidate or patch tag, then runs three jobs. `flag-lifecycle`
 (`release / flag lifecycle`) runs `blizzard-flag-lifecycle tag` with full history before any build, on every tag — a
 stable tag's borrowed-proof run included, which skips `gate` — and `build` waits on it. `compat`
 (`release / compatibility against supported releases`) runs `blizzard-compat --tag <version>` before any build: it

@@ -25,6 +25,7 @@ import { uniqueName } from './base';
 import { mockWorld } from './mock-world';
 import { type RunnerBinding, runnerWorld } from './runner-world';
 import { type Project, sharesTenant, tenancy } from './tenancy';
+import { uiWorld } from './ui';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -75,7 +76,7 @@ export type { ForgeApi, HubApi };
 export type { Repository };
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
-export const test = mergeTests(tenancy, runnerWorld).extend<Fixtures>({
+export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
   api: async ({ testHub, tenant, level, ledger }, use, testInfo) => {
     await use(
       hubApi({
@@ -314,6 +315,7 @@ export { HOLD_OPEN, holdingChunk, runningLeaseWithWorker, seededLeaseWithWorker,
 export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-worker';
 export type { VendorUsage } from './vendor-usage';
 export type { WorkerCheckpoint } from './worker-checkpoint';
+export type { Viewport } from './ui';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';
 export { chunkTraceId } from './trace-ids';

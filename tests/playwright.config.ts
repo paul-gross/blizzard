@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { defineConfig } from '@playwright/test';
 import { discoverProfiles, SERVICE_HUB_DIR } from './harness/profiles';
-import { fleetProfileFolders, serviceProjects } from './harness/projects';
+import { fleetProfileFolders, serviceProjects, uiProfileFolders, uiProjects } from './harness/projects';
 
 /** A run of up to this many workers shares one hub of the default profile. */
 export const WORKERS_PER_HUB = 8;
@@ -26,6 +26,7 @@ export default defineConfig({
   ],
   projects: [
     ...serviceProjects(profiles, fleetProfileFolders(profiles)),
+    ...uiProjects(uiProfileFolders(profiles)),
     {
       // The harness's own proof runs on the default profile's setup and is selected by name, never by `service-*`.
       name: 'harness',

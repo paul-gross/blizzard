@@ -78,21 +78,21 @@ export default tseslint.config(
     },
   },
   {
-    files: ['service/**/*.spec.ts', 'harness/checks/**/*.spec.ts'],
+    files: ['service/**/*.spec.ts', 'ui/**/*.spec.ts', 'harness/checks/**/*.spec.ts'],
     rules: {
       'no-restricted-syntax': ['error', noRequestFixture, noWaitForTimeout, noSharedHooks],
       'no-restricted-globals': ['error', noFetch],
     },
   },
   {
-    files: ['service/**/*.spec.ts', 'harness/checks/runner/round-trip.spec.ts'],
+    files: ['service/**/*.spec.ts', 'ui/**/*.spec.ts', 'harness/checks/runner/round-trip.spec.ts'],
     rules: {
       'no-restricted-globals': ['error', noFetch, noSetTimeout, noSetInterval],
       ...restrictedImports(sharedPaths, noRunnerTest),
     },
   },
   {
-    files: ['service/fleet/**/*.spec.ts'],
+    files: ['service/fleet/**/*.spec.ts', 'ui/**/*.spec.ts'],
     rules: restrictedImports([...sharedPaths, ...fsPaths], noRunnerTest),
   },
   {

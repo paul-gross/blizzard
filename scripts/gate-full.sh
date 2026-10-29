@@ -2,7 +2,7 @@
 # blizzard:gate-full — the local mirror of the unconditional pull-request tiers (.github/workflows/pr.yml).
 #
 # Runs the merge gate (scripts/ci-gate.sh), then every upper tier pr.yml runs as its own job:
-# service, the FULL crash sweep, e2e, journey, image-smoke, compose-smoke. The tiers run
+# service, the FULL crash sweep, e2e, ui, journey, image-smoke, compose-smoke. The tiers run
 # serially, since the smokes bind fixed ports. A red tier does not stop the later ones; the run
 # ends with a per-tier verdict and exits non-zero if any tier was red. The release-cut upgrade
 # rehearsal and the revision-conditional store baseline are not part of it (they need
@@ -14,7 +14,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
-tiers=(gate service-test crash-sweep e2e journey image-smoke compose-smoke)
+tiers=(gate service-test crash-sweep e2e ui journey image-smoke compose-smoke)
 run_gate() { ./scripts/ci-gate.sh; }
 
 if [ -n "${GATE_FULL_TIERS:-}" ]; then

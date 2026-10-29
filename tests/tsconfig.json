@@ -21,6 +21,7 @@
   "include": [
     "harness/**/*.ts",
     "service/**/*.ts",
+    "ui/**/*.ts",
     "playwright.config.ts",
     "openapi-ts.config.ts"
   ],
