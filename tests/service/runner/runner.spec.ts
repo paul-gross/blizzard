@@ -1,4 +1,4 @@
-import { expect, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
+import { expect, HOLD_OPEN, runningLeaseWithWorker, stepUntil, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
 
 // A real runner host stepped against the test's own mock hub, whose levers manufacture the rare states a runner must
 // survive: an unreachable hub, a dropped ack, a stale envelope, a denied claim, a failing or slow transcript route, a
@@ -8,7 +8,6 @@ import { expect, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest a
 
 const REPO = 'toy-api';
 const BRANCH = 'feature/runner-service';
-const MAX_STEPS = 40;
 const RUNNER = 'runner-local';
 
 // The worker is a program: it works the branch in its worktree, commits, and pushes it to the world's origin.
@@ -51,17 +50,6 @@ function buildThenDeliver(build: Partial<MockChunkSpec['nodes'][string]> = {}): 
     },
     work_refs: [{ source: 'mock', ref: `${REPO}/issues/1` }],
   };
-}
-
-/** Steps the host's sole runner until `reached` holds, failing after `MAX_STEPS` passes with the last state it saw. */
-async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean): Promise<T> {
-  let state = await read();
-  for (let pass = 0; !reached(state); pass++) {
-    if (pass === MAX_STEPS) throw new Error(`not reached within ${MAX_STEPS} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
-    expect((await host.step()).outcome).toBe('completed');
-    state = await read();
-  }
-  return state;
 }
 
 /** Steps the host's sole runner `count` times, each pass completing. */
@@ -348,8 +336,6 @@ const TRANSCRIPT_BUILD = [
   '',
 ].join('\n');
 const VERDICT_TEXT = 'the mock harness committed the change; checks are green';
-/** Holds the worker's judgement turn, and so its lease, open: the spawn turn has ended and recorded its session. */
-const HOLD_OPEN = 'import time\ntime.sleep(120)\n';
 
 /** The chunk a release lever names: none by that id exists, so the lever changes nothing the runner does. */
 const RELEASE_CHUNK = 'ch_release_judgement';
@@ -367,30 +353,6 @@ function judgementReleasedBy(mockHub: MockHub): string {
     `verdict('pass', '${VERDICT_TEXT}')`,
     '',
   ].join('\n');
-}
-
-/** Steps until the chunk's sole lease is running and the mock harness has recorded its spawn credential, current as the runner last issued it. */
-async function runningLeaseWithWorker(host: RunnerHost, chunkId: string) {
-  const runner = host.runners[RUNNER]!;
-  const lease = await stepUntil(
-    host,
-    async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'),
-    (found) => found !== undefined,
-  );
-  const headers = await stepUntil(
-    host,
-    async () => {
-      try {
-        // The runner re-mints a lease's token for each resume, so the record is read until the credential it holds answers.
-        const candidate = host.workerHeaders(lease!.lease_id);
-        return (await runner.leaseArtifacts(lease!.lease_id, { scope: 'graph', headers: candidate })).status === 200 ? candidate : undefined;
-      } catch {
-        return undefined;
-      }
-    },
-    (found) => found !== undefined,
-  );
-  return { lease: lease!, headers: headers! };
 }
 
 /** One transcript turn as the wire carries it, at its defaults. */
