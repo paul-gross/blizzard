@@ -15,6 +15,7 @@ from sqlalchemy import insert, select
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -220,6 +221,9 @@ def test_the_sweep_publishes_the_facts_of_a_turn_it_ends_interrupted(tmp_path: P
         lines=lambda tenant: hub.open_services(tenant).flow_lines,
         turns=lambda tenant: hub.open_services(tenant).turns,
         publishers=lambda tenant: hub.open_services(tenant).events,
+        notices=lambda tenant: BudgetNoticeDrain(
+            hub.open_services(tenant).forge_budgets, hub.open_services(tenant).event_log
+        ),
     )
     driver = FlowDriver(stores, hub.clock)
 
