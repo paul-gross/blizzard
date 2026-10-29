@@ -1,5 +1,4 @@
-"""The answer a delivering action gives from its record's result — the outcome dispatch both
-``record-findings`` and ``garden-deliver`` share."""
+"""The answer a delivering action gives from its record's result."""
 
 from __future__ import annotations
 

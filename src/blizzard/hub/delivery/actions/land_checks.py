@@ -105,8 +105,8 @@ class Route:
 
 def inherited(base_red: bool | None) -> bool:
     """Whether a head-failing check is inherited from the base, given the base's own reading of that same
-    check name. A degraded base read (``None``) is conservative: unknown counts as base-green, so the
-    failure is charged to this chunk exactly like a clean base-green read, never silently waived."""
+    check name; a degraded base read (``None``) is not inherited
+    (``tests/test_land_action.py::test_a_degraded_base_read_charges_a_head_failure_to_the_chunk``)."""
     return base_red is True
 
 

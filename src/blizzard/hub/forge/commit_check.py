@@ -29,7 +29,7 @@ COMMIT_CHECK_SECONDS = 10.0
 
 
 class IForgeRefsSource(Protocol):
-    """The part of the forge registry the commit check reads."""
+    """Which capabilities a configured forge offers, and a repository's refs."""
 
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]: ...
 

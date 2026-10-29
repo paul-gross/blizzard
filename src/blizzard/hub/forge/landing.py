@@ -173,8 +173,7 @@ class ForgeError(Exception):
 
 
 class ForgeNotFound(ForgeError):
-    """Something the call named does not exist. GitHub hides a repository a credential cannot see, so a missing
-    repository always means it does not exist or this credential cannot reach it."""
+    """Something the call named does not exist, or this credential cannot reach it."""
 
     def __init__(self, what: ForgeObject, message: str = "") -> None:
         super().__init__(message or f"{what} not found")
@@ -320,5 +319,5 @@ class RepositoryForge:
     offered: frozenset[Capability]
 
 
-#: Each resolved repository's forge — handed only to an action that lands.
+#: Each resolved repository's forge.
 type VisitForges = Mapping[RepositoryId, RepositoryForge]
