@@ -1,8 +1,7 @@
 """Host-reported fact intake — a host's own subscription usage samples and misses.
 
-:class:`HostFactIngestService` is the host's store-and-forward push: idempotent against a per-host **high-water mark**
-of the host's own, never the runner's. A host's lane carries no chunk, route, or lease, so the runner lane's
-route-token gating, chunk fencing, and ``route_ended`` do not reach it."""
+:class:`HostFactIngestService` is the host's store-and-forward push, idempotent against a per-host **high-water
+mark**. A host's lane carries no chunk, route, or lease."""
 
 from __future__ import annotations
 

@@ -64,8 +64,7 @@ class DemoteService:
         self._record = record
         self._queue = queue
         self._facts = facts
-        # The locked-transaction seam (``bzh:store-exclusive-write``): demotability is judged from facts
-        # read under the chunk's row lock, so a claim racing a demote resolves one way, never both.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
 

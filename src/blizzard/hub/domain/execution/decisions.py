@@ -93,7 +93,7 @@ class DecisionService:
         self._facts = facts
         self._route = route
         self._decisions = decisions
-        # Re-derives the current-node rule under the row lock (``bzh:store-exclusive-write``).
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._retired = retired
         self._clock = clock
@@ -227,9 +227,7 @@ class RequeueService:
     ) -> None:
         self._movement = movement
         self._route = route
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the route release
-        # races claim's own ``route_of`` read, so it and the requeue fact it always
-        # accompanies both land inside the same row-locked transaction.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
 

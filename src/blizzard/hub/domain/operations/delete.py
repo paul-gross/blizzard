@@ -1,7 +1,7 @@
 """Chunk deletion — the operator's withdrawal of an unacquired chunk's hub items, and
 the chunk itself. A hub item and its chunk live and die together: deleting
 the chunk withdraws every open ``hub:``-source pointer it holds, in one composite store
-write — reached from both a direct chunk delete and an unacquired holder's withdrawal.
+write.
 Gated the same way grouping is: a paused or human-held chunk is refused too, not only a
 runner-held one."""
 
@@ -73,9 +73,7 @@ def require_deletable(chunk_id: str, facts: ChunkFacts, standing: Iterable[Depen
 
 
 class DeleteService:
-    """Delete an unacquired chunk, withdrawing the hub items it holds — the one pairing
-    behind both a direct chunk delete and ``WorkItemEditService.withdraw``'s own
-    cascading delete of an unacquired holder."""
+    """Delete an unacquired chunk, withdrawing the hub items it holds."""
 
     def __init__(
         self,
@@ -87,11 +85,9 @@ class DeleteService:
     ) -> None:
         self._items = items
         self._clock = clock
-        # The locked-transaction seam (``bzh:store-exclusive-write``) shared with
-        # ClaimService/EditService/RestartService, so a claim can't land on a chunk this
-        # write is mid-way through deleting.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
-        # The residual fleet-wide lock GroupService's own fold also shares: releasing this
+        # The residual per-tenant lock GroupService's own fold also shares: releasing this
         # chunk's own outgoing edges races a concurrent fold rewriting the same edges onto a
         # chunk neither one's row lock names — a row lock alone cannot close it.
         self._cycle_lock = cycle_lock

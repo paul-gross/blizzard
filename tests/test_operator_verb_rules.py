@@ -384,11 +384,15 @@ def test_restart_landing_name_matches_the_current_node_across_graphs() -> None:
     assert restart_landing(_GRAPH, _OTHER, "nd_build", None).node_id == "nd_build2"
 
 
-def test_restart_landing_refuses_an_unknown_name_and_an_unmatched_current_node() -> None:
+def test_restart_landing_refuses_an_unknown_name() -> None:
     with pytest.raises(RestartNodeUnknown):
         restart_landing(_GRAPH, None, None, "nope")
     with pytest.raises(RestartNodeUnknown):
         restart_landing(_GRAPH, _OTHER, "nd_plan", None)
+
+
+def test_restart_landing_refuses_an_unmatched_current_node() -> None:
+    """Refused, never rewound to the entry node: that would discard every node already come through."""
     with pytest.raises(RestartCurrentNodeUnknown):
         restart_landing(_GRAPH, None, "nd_gone", None)
 

@@ -1,7 +1,7 @@
 """Chunk stop — the operator's terminal abandonment of a chunk.
 
-Appends the ``chunk_stopped`` fact, which ``derive_chunk_status`` honors above every other
-state (``bzh:facts-not-status``), and conditionally releases a live route — both in one
+Appends the ``chunk_stopped`` fact (its precedence is ``ChunkFacts.status``'s,
+``bzh:facts-not-status``) and conditionally releases a live route — both in one
 store transaction, so a ``kill -9`` cannot leave a chunk stopped with its route still
 live. Terminal and one-way: an already done or stopped chunk is refused."""
 
@@ -38,9 +38,7 @@ class StopService:
     ) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the terminal-status
-        # guard this stop refuses on is re-derived here, under the same row lock the write
-        # lands under, never trusted from a caller's pre-lock snapshot.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
     def stop(self, chunk: Chunk, *, by: str) -> int:

@@ -41,8 +41,7 @@ class PauseService:
     ) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the status the pause
-        # refusal reads is re-derived under the row lock, never a caller's pre-lock snapshot.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
     def pause(self, chunk: Chunk, *, by: str) -> int:

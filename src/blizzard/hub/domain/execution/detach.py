@@ -56,9 +56,7 @@ class DetachService:
 
     def __init__(self, *, route: IWriteChunkRouteRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
         self._route = route
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the route-of check
-        # and the release it guards race claim's own ``route_of`` read, so both run
-        # inside the same row-locked transaction rather than two separate connections.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
 
@@ -67,7 +65,7 @@ class DetachService:
 
         Raises :class:`NotRouted` if the chunk has no live route, or its route is left on a
         terminal chunk — there is nothing to release. Returns the freshly-written
-        ``route_released.id`` (the activity-feed's key)."""
+        ``route_released.id``."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             route = handle.route_of(chunk.chunk_id)
             status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
