@@ -150,7 +150,14 @@ test.describe('an unstarted host', () => {
 
   test('rejects unknown runner names and carries enrolled tokens and an explicit id into first boot', async ({ runnerHost, mockHub }) => {
     const name = 'runner-local';
-    expect(() => runnerHost.prepareStopped({ runnerIds: { absent: 'rn_wrong' } })).toThrow(/no runner absent/);
+    const configFile = path.join(runnerHost.dir, 'blizzard-host.toml');
+    const envFile = path.join(runnerHost.dir, '.env');
+    const before = { config: fs.readFileSync(configFile, 'utf8'), env: fs.readFileSync(envFile, 'utf8'), id: runnerHost.runners[name]?.id };
+    expect(() => runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'missing' }, runnerIds: { absent: 'rn_wrong' } })).toThrow(/no runner absent/);
+    expect(() => runnerHost.prepareStopped({ runnerIds: { [name]: 'rn_wrong' }, runnerTokens: { [name]: 'bad\ntoken' } })).toThrow(/contains a newline/);
+    expect(fs.readFileSync(configFile, 'utf8')).toBe(before.config);
+    expect(fs.readFileSync(envFile, 'utf8')).toBe(before.env);
+    expect(runnerHost.runners[name]?.id).toBe(before.id);
     const enrolled = (await mockHub.seed.runner({ name: 'standalone' })).body;
     runnerHost.prepareStopped({ runnerIds: { [name]: enrolled.runner_id }, runnerTokens: { [name]: enrolled.token } });
     expect(runnerHost.runners[name]?.id).toBe(enrolled.runner_id);

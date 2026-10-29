@@ -56,15 +56,17 @@ test('test_a_host_with_a_token_reports_itself_and_records_its_identity', async (
   expect((await host.stepHost()).outcome).toBe('completed');
   const registration = (await host.api.registration()).body;
   expect(registration.state).toBe('registered');
-  expect(registration.held_runner_ids).toEqual(expect.arrayContaining(Object.values(host.runners).map((runner) => runner.id)));
+  const runnerIds = Object.values(host.runners).map((runner) => runner.id).sort();
+  expect(registration.held_runner_ids.sort()).toEqual(runnerIds);
   const record = (await mockHub.host(token)).body;
   expect(record.host_id).toBe(registration.host_id);
-  expect(record.runners.map((runner) => runner.runner_id)).toEqual(expect.arrayContaining(Object.values(host.runners).map((runner) => runner.id)));
+  expect(record.runners.map((runner) => runner.runner_id).sort()).toEqual(runnerIds);
   expect(record.last_seen_at).not.toBeNull();
   for (const runner of Object.values(host.runners)) {
     await host.step(runner.name);
     const own = (await mockHub.runner(tokenFor(host.dir, `BZ_HUB_TOKEN_${runner.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`), runner.id)).body;
-    expect(own.bindings).toContainEqual(expect.objectContaining({ workspace_id: 'workspace-local', workspace_unreported: false }));
+    expect(own.bindings).toEqual([{ project: 'default', workspace_id: 'workspace-local', agents: 1, workspace_unreported: false }]);
+    expect(own.subscription).toBe('anthropic');
     expect(own.subscription_unrostered).toBe(false);
   }
   await host.stop();

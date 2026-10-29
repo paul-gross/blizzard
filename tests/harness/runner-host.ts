@@ -589,32 +589,40 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('stop the host before changing its documented files');
           const file = readHostFile(dir);
           const configured = (file.runner ?? []) as TomlTable[];
-          for (const [name, subscription] of Object.entries(layout.runnerSubscriptions ?? {})) {
-            const entry = configured.find((item) => item.name === name);
-            if (entry === undefined) throw new Error(`the host has no runner ${name}`);
-            entry.subscription = subscription;
+          const names = new Set(configured.map((entry) => entry.name));
+          for (const name of [
+            ...Object.keys(layout.runnerSubscriptions ?? {}),
+            ...Object.keys(layout.runnerIds ?? {}),
+            ...Object.keys(layout.runnerTokens ?? {}),
+          ]) {
+            if (!names.has(name)) throw new Error(`the host has no runner ${name}`);
           }
-          for (const [name, id] of Object.entries(layout.runnerIds ?? {})) {
-            const entry = configured.find((item) => item.name === name);
-            if (entry === undefined) throw new Error(`the host has no runner ${name}`);
-            entry.id = id;
-            runners[name] = { ...api.runner(id), id, name };
-          }
-          if (layout.runnerSubscriptions !== undefined || layout.runnerIds !== undefined) fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
           const tokens: Record<string, string> = {};
           if (layout.hostToken !== undefined) tokens.BZ_HOST_TOKEN = layout.hostToken;
           for (const [name, token] of Object.entries(layout.runnerTokens ?? {})) {
-            if (!configured.some((entry) => entry.name === name)) throw new Error(`the host has no runner ${name}`);
             tokens[`BZ_HUB_TOKEN_${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`] = token;
           }
+          for (const [key, token] of Object.entries(tokens)) {
+            if (/\r|\n/.test(token)) throw new Error(`token for ${key} contains a newline`);
+          }
+          for (const [name, subscription] of Object.entries(layout.runnerSubscriptions ?? {})) {
+            configured.find((item) => item.name === name)!.subscription = subscription;
+          }
+          for (const [name, id] of Object.entries(layout.runnerIds ?? {})) {
+            configured.find((item) => item.name === name)!.id = id;
+          }
+          let envText: string | undefined;
           if (Object.keys(tokens).length > 0) {
             const envFile = path.join(dir, '.env');
-            let text = fs.readFileSync(envFile, 'utf8');
+            envText = fs.readFileSync(envFile, 'utf8');
             for (const [key, token] of Object.entries(tokens)) {
-              if (/\r|\n/.test(token)) throw new Error(`token for ${key} contains a newline`);
-              text = text.split('\n').filter((line) => !line.startsWith(`${key}=`)).join('\n').trimEnd() + `\n${key}=${token}\n`;
+              envText = envText.split('\n').filter((line) => !line.startsWith(`${key}=`)).join('\n').trimEnd() + `\n${key}=${token}\n`;
             }
-            fs.writeFileSync(envFile, text, { mode: 0o600 });
+          }
+          if (layout.runnerSubscriptions !== undefined || layout.runnerIds !== undefined) fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(file));
+          if (envText !== undefined) fs.writeFileSync(path.join(dir, '.env'), envText, { mode: 0o600 });
+          for (const [name, id] of Object.entries(layout.runnerIds ?? {})) {
+            runners[name] = { ...api.runner(id), id, name };
           }
         },
         async originHead(repo, branch) {

@@ -20,7 +20,7 @@ export interface MockFleetHostView {
 }
 export interface MockFleetRunnerView {
   runner_id: string;
-  bindings: { workspace_id: string; workspace_unreported: boolean }[];
+  bindings: { project: string; workspace_id: string; agents: number; workspace_unreported: boolean }[];
   subscription: string;
   subscription_unrostered: boolean;
 }
