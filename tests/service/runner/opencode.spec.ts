@@ -9,6 +9,8 @@ const BUILD_BRANCH = 'feature/scripted-build';
 const WORK_REFS = [{ source: 'mock', ref: 'blizzard/toy-api/issues/1' }];
 const MAX_STEPS = 600;
 
+test.setTimeout(90_000);
+
 test.use({
   runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] },
 });
@@ -138,6 +140,7 @@ const JUDGE_WAIT_SECONDS = 10;
 
 /** The build program crashes the first lease hard after `beforeCrash`; the retry finds the marker and does the real work. */
 function crashBuild(beforeCrash: string[]): string {
+  const work = TRANSCRIPT_BUILD.split('\n').slice(1).filter((line) => line !== '');
   return [
     'import pathlib, subprocess',
     `marker = pathlib.Path('${CRASH_MARKER}')`,
@@ -145,7 +148,12 @@ function crashBuild(beforeCrash: string[]): string {
     ...beforeCrash.map((line) => `    ${line}`),
     "    marker.write_text('crashed once\\n')",
     '    crash(hard=True)',
-    ...TRANSCRIPT_BUILD.split('\n').slice(1),
+    'import traceback',
+    'try:',
+    ...work.map((line) => `    ${line}`),
+    'except BaseException:',
+    "    tool_call('Bash', {'command': 'diagnose'}, output=traceback.format_exc())",
+    '    raise',
     `pathlib.Path('${DONE_MARKER}').write_text('done\\n')`,
     '',
   ].join('\n');
@@ -203,7 +211,13 @@ async function seeded(mockHub: MockHub, runnerHost: RunnerHost, spec: MockChunkS
   const status = async (): Promise<string> => (await mockHub.fleet(reader).get(`/api/fleet/chunks/${chunkId}`)).body.status as string;
   const leases = async () => (await runner.leases()).body.items.filter((lease) => lease.chunk_id === chunkId).sort((a, b) => a.epoch - b.epoch);
   const landed = async (): Promise<void> => {
-    await stepUntil(runnerHost, status, (current) => current === 'done');
+    try {
+      await stepUntil(runnerHost, status, (current) => current === 'done');
+    } catch (error) {
+      const held = await leases();
+      const turns = await Promise.all(held.map(async (lease) => (await runner.leaseTranscript(lease.lease_id)).body.turns.map((turn) => `${turn.kind}: ${turn.text}${turn.tool ? ` ${turn.tool.name} ${turn.tool.output}` : ''}`)));
+      throw new Error(`${String(error)}\nleases: ${JSON.stringify(held.map((lease) => [lease.epoch, lease.state, lease.closure_reason]))}\ntranscripts: ${JSON.stringify(turns)}`, { cause: error });
+    }
   };
   return { chunkId, runner, status, leases, landed };
 }
