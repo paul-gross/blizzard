@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { BoardShell, type BoardLayout } from './board-shell/board-shell';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, injectChunkUrlSelection, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
+import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
@@ -25,6 +25,9 @@ import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skele
 import { injectProjectsQuery } from '../core/projects.query';
 import { UnservedBanner } from './unserved/unserved-banner';
 import { injectBoardWorkItemsQuery } from './work-items/board-work-items.query';
+import { DeliveryBand } from './flows/delivery-band';
+import { injectDockUrlSelection } from './flows/dock-url-selection';
+import { FlowRecord } from './flows/flow-record';
 
 /** The random source the board's loading skeletons draw their counts from — `Math.random`, unless
  * a spec pins it. */
@@ -45,13 +48,14 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
  * queue and backlog reads feed each lane's order, and lane-tagged reposition events
  * route to the matching list's mutation (`bzh:ranking-is-per-list`).
  *
- * Which card is open is the URL's `?chunk=…`, read and written through
- * {@link injectChunkUrlSelection}.
+ * Above the board, the {@link DeliveryBand} shows each active flow's line. What the dock shows is the URL's
+ * `?chunk=…` or `?flow=…` — a chunk or a flow's record, never both — read and written through
+ * {@link injectDockUrlSelection}.
  */
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner],
+  imports: [BoardShell, ChunkDetail, DeliveryBand, FlowRecord, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -76,7 +80,7 @@ export class BoardPage {
   private readonly repositionBacklog = injectRepositionBacklogMutation((error) =>
     this.actionError.set(errorMessage(error, 'Reorder failed.')),
   );
-  private readonly selection = injectChunkUrlSelection();
+  private readonly selection = injectDockUrlSelection();
   private readonly meQuery = injectMeQuery();
 
   /** Whether the current identity may promote a backlog chunk (`chunk:control`).
@@ -232,8 +236,16 @@ export class BoardPage {
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
-  /** Select a chunk — or clear the selection — by writing the URL. */
+  /** The flow whose record the dock shows, or `null` — never set while a chunk is open. */
+  protected readonly selectedFlow = computed(() => this.selection.flowId());
+
+  /** Select a chunk — or clear the selection — by writing the URL, closing any flow record. */
   protected select(chunkId: string | null): void {
-    this.selection.select(chunkId);
+    this.selection.selectChunk(chunkId);
+  }
+
+  /** Open a flow's record in the dock — or close it — by writing the URL, closing any chunk. */
+  protected selectFlow(flowId: string | null): void {
+    this.selection.selectFlow(flowId);
   }
 }

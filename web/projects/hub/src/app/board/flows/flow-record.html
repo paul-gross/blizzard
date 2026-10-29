@@ -1,0 +1,10 @@
+<app-flow-record-view
+  [title]="title()"
+  [rows]="rows()"
+  [state]="state()"
+  [hasOlder]="hasOlder()"
+  [olderPending]="olderPending()"
+  (older)="onOlder()"
+  (dismiss)="dismiss.emit()"
+  (selectChunk)="selectChunk.emit($event)"
+/>

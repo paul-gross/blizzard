@@ -24,6 +24,7 @@ export class BoardListRow {
   protected readonly hasCostFigure = hasCostFigure;
   protected readonly finishedWord = finishedWord;
   protected readonly shortCommitHash = shortCommitHash;
+  protected readonly toneColor = toneColor;
 
   readonly card = input.required<BoardCard>();
   /** The board lane the chunk sits in, drawn as the row's leading icon. */

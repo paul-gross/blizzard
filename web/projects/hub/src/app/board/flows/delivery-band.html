@@ -1,0 +1,3 @@
+@if (lanes().length) {
+  <app-delivery-band-view [lanes]="lanes()" (selectChunk)="selectChunk.emit($event)" (selectFlow)="selectFlow.emit($event)" />
+}
