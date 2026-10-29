@@ -58,33 +58,6 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         when set, closes a gate decision no transition or migration will."""
         ...
 
-    def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
-        """Record one delivery kick-back (#64), idempotent by ``(chunk_id, epoch)``.
-
-        Append-only, and the sole input :meth:`ChunkFacts.bounce_count` derives from; the natural key
-        makes a redelivery replay after a ``kill -9`` re-enter harmlessly rather than
-        double-count. Returns True iff it wrote."""
-        ...
-
-    def record_bounce_escalation(
-        self,
-        chunk_id: str,
-        *,
-        epoch: int,
-        admission: EpochAdmission,
-        runner_id: str,
-        takeover_command: str,
-        at: datetime,
-        cause: str,
-        detail: str,
-    ) -> BounceEscalationOutcome:
-        """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically and
-        idempotently. The hub lease and the escalation fact land in one transaction, guarded
-        by the escalation's existence at this epoch. No transition is recorded: the chunk's
-        held route and stuck node are untouched. Behind the write fence (``bzh:epoch-fencing``):
-        a terminal chunk or a stale ``epoch`` writes nothing and is ``REFUSED``."""
-        ...
-
     def record_bounce_locked(
         self,
         handle: ILockedChunkRead,
@@ -96,9 +69,10 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         envelope: str,
         at: datetime,
     ) -> bool:
-        """:meth:`record_bounce` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``), and behind
-        the write fence (``bzh:epoch-fencing``): a terminal chunk or a stale ``epoch`` writes nothing. Returns True iff
-        it wrote."""
+        """Record one delivery kick-back on ``handle``'s already-locked connection (``bzh:store-exclusive-write``),
+        idempotent by ``(chunk_id, epoch)`` and behind the write fence (``bzh:epoch-fencing``): a replay, a terminal
+        chunk, or a stale ``epoch`` writes nothing. Append-only, and the sole input :meth:`ChunkFacts.bounce_count`
+        derives from. Returns True iff it wrote."""
         ...
 
     def record_bounce_escalation_locked(
@@ -114,7 +88,9 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         cause: str,
         detail: str,
     ) -> BounceEscalationOutcome:
-        """:meth:`record_bounce_escalation` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``) — a hub-node escalation, committed with the turn's end. Handed the visit's epoch
-        plus one with :attr:`EpochAdmission.ABOVE`, so the escalation opens the next visit."""
+        """Escalate a chunk at a hub node on ``handle``'s already-locked connection (``bzh:store-exclusive-write``) —
+        committed with the turn's end — idempotent by the escalation's existence at ``epoch``. The hub lease and the
+        escalation fact land together; no transition is recorded. Handed the visit's epoch plus one with
+        :attr:`EpochAdmission.ABOVE`, so the escalation opens the next visit; behind the write fence
+        (``bzh:epoch-fencing``), a terminal chunk or a stale ``epoch`` writes nothing and is ``REFUSED``."""
         ...

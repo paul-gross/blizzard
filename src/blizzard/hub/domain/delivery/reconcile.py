@@ -20,11 +20,13 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.flows import (
+    TURN_INTERRUPTED,
     TURN_SUPERSEDED,
     AdmittedTurn,
     FlowLine,
@@ -32,6 +34,7 @@ from blizzard.hub.domain.delivery.flows import (
     Submission,
     Turn,
     TurnEvent,
+    Withdrawal,
     held_resources,
     withdrawal_for,
 )
@@ -89,9 +92,11 @@ class FlowLineReconciler:
         links: IReadProjectLinks,
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
         self._flows = flows
+        self._exclusive = exclusive
         self._refusals = refusals
         self._facts = facts
         self._record = record
@@ -138,7 +143,7 @@ class FlowLineReconciler:
     def end_unanswered(self, *, started_before: datetime | None, running: frozenset[str]) -> int:
         """End ``interrupted`` every open turn not in ``running`` that started before ``started_before`` (every one,
         with ``None``) — each in one transaction with its ``turn-ended`` facts, its ``turn-interrupted`` event, and
-        the closure ``withdrawal_for`` answers. Answers how many it ended."""
+        the closure ``withdrawal_for`` answers under its chunk's lock. Answers how many it ended."""
         turns = [
             turn
             for turn in self._flows.open_turns()
@@ -147,29 +152,41 @@ class FlowLineReconciler:
         if not turns:
             return 0
         subs = {sub.submission_id: sub for sub in self._flows.open_submissions_from(0)}
-        chunk_ids = sorted({subs[turn.submission_id].chunk_id for turn in turns if turn.submission_id in subs})
-        facts_by_id = self._facts.load_facts_for(chunk_ids)
-        node_names = self._node_names(chunk_ids)
+        node_names = self._node_names(sorted({sub.chunk_id for sub in subs.values()}))
         now = self._clock.now()
         ended = 0
         for turn in turns:
             sub = subs.get(turn.submission_id)
-            withdrawal = withdrawal_for(ChunkFacts.or_default(facts_by_id.get(sub.chunk_id)), sub) if sub else None
-            event = TurnEvent(
-                kind=_EVENT_TURN_INTERRUPTED,
-                chunk_id=sub.chunk_id if sub else None,
-                node_name=node_names.get((sub.chunk_id, sub.node_id)) if sub else None,
-                message=f"turn {turn.turn_id} ended interrupted: no running task answers for it",
-                detail={
-                    "turn_id": turn.turn_id,
-                    "submission_id": turn.submission_id,
-                    "started_at": iso_utc(turn.started_at),
-                    "withdrawal": withdrawal,
-                },
-            )
-            if self._flows.end_turn_interrupted(turn.turn_id, withdrawal=withdrawal, event=event, at=now):
-                ended += 1
+            if sub is None:
+                event = self._interrupted(turn, None, node_name=None, withdrawal=None)
+                ended += self._flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=event, at=now)
+                continue
+            with self._exclusive.locked([sub.chunk_id]) as handle:
+                withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
+                event = self._interrupted(
+                    turn, sub, node_name=node_names.get((sub.chunk_id, sub.node_id)), withdrawal=withdrawal
+                )
+                ended += self._flows.end_turn_locked(
+                    handle, turn.turn_id, outcome=TURN_INTERRUPTED, closure=withdrawal, event=event, at=now
+                )
         return ended
+
+    @staticmethod
+    def _interrupted(
+        turn: Turn, sub: Submission | None, *, node_name: str | None, withdrawal: Withdrawal | None
+    ) -> TurnEvent:
+        return TurnEvent(
+            kind=_EVENT_TURN_INTERRUPTED,
+            chunk_id=sub.chunk_id if sub else None,
+            node_name=node_name,
+            message=f"turn {turn.turn_id} ended interrupted: no running task answers for it",
+            detail={
+                "turn_id": turn.turn_id,
+                "submission_id": turn.submission_id,
+                "started_at": iso_utc(turn.started_at),
+                "withdrawal": withdrawal,
+            },
+        )
 
     def admit(self, floor: int, now: datetime) -> list[AdmittedTurn]:
         """Take a turn, oldest arrival first, for every open submission at or above ``floor`` that is next on every
@@ -198,7 +215,7 @@ class FlowLineReconciler:
         for sub in subs:
             if not line.is_next(sub, now=now):
                 continue
-            turn: Turn | None = self._flows.take_turn(sub.submission_id, passed_over=passed_over, at=now)
+            turn: Turn | None = self._flows.take_turn(sub.submission_id, passed_over=passed_over, at=self._clock.now())
             if turn is not None:
                 admitted.append(AdmittedTurn(turn, sub))
         return admitted
@@ -259,24 +276,18 @@ class FlowLineReconciler:
         """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
         moved — or refuse it, routing its failure choice, when it cannot name them."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
-        action = node.action
-        assert action is not None
         generation = self._generation(chunk.chunk_id, node.node_id, epoch)
         if generation is None:
-            return None
-        spec = self._catalogue.get(action)
-        if spec is None:
-            detail = f"no hub action `{action}`"
-            self._refusals.refuse(chunk, graph, node, epoch=epoch, step="action-unavailable", detail=detail)
             return None
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         resolved = resolve_visit(
             artifacts,
+            action=node.action,
+            spec=self._catalogue.get(node.action) if node.action is not None else None,
             project=LandingProject.read(chunk.project_id, projects=self._projects, links=self._links),
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),
-            lands=spec.lands,
         )
         if isinstance(resolved, VisitRefusal):
             self._refusals.refuse(
@@ -294,7 +305,7 @@ class FlowLineReconciler:
             node_id=node.node_id,
             epoch=epoch,
             generation=generation,
-            resources=held_resources(resolved.resolution, LandedRepos.of(artifacts).names, spec),
+            resources=held_resources(resolved.resolution, LandedRepos.of(artifacts).names, resolved.spec),
             at=self._clock.now(),
         )
 

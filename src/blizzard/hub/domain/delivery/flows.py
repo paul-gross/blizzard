@@ -7,7 +7,7 @@ once it leaves the node. Whether a submission is open, or a flow busy, is derive
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
@@ -15,6 +15,7 @@ from typing import Literal
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.graph.actions import ActionSpec
@@ -244,6 +245,41 @@ class PollPolicy:
         return max(due, row.next_poll_at) if row.next_poll_at is not None else due
 
 
+def describe_standing(
+    facts: ChunkFacts,
+    node: Node,
+    standing: VisitStanding | None,
+    *,
+    epoch: int,
+    now: datetime,
+    flow_name: Callable[[Flow], str],
+) -> str:
+    """Where a chunk's visit to ``node`` at ``epoch`` stands, as an operator reads it: held by a person, waiting to be
+    submitted, taking its turn, waiting on its next poll, or its place on each flow it holds, each named by
+    ``flow_name``."""
+    if facts.open_escalation() is not None:
+        return "escalated — awaiting a person"
+    if facts.status() is not ChunkStatus.DELIVERING:
+        return f"{facts.status().value} — takes no turn until it is delivering"
+    if standing is None:
+        return "waiting to be submitted to its flows"
+    names = [flow_name(flow) for flow in standing.submission.flows]
+    if standing.turning:
+        return f"landing on {', '.join(names)}" if names else "taking its turn"
+    polls = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch)
+    due = PollPolicy.of(node).due_at(polls[-1]) if polls else None
+    if due is not None and due > now:
+        return f"pending — next poll at {iso_utc(due)}"
+    if not names:
+        return "next to take its turn"
+    return ", ".join(f"{_ordinal(ahead + 1)} on {name}" for name, ahead in zip(names, standing.ahead, strict=True))
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 def held_resources(
     resolution: RepositoryResolution, landed: frozenset[str], spec: ActionSpec
 ) -> tuple[FlowResource, ...]:
@@ -268,6 +304,11 @@ def _stands_at(facts: ChunkFacts, submission: Submission) -> bool:
 def is_current(facts: ChunkFacts, submission: Submission) -> bool:
     """The submission's visit is the chunk's current one: it stands at the node, at the submission's epoch."""
     return _stands_at(facts, submission) and (facts.latest_epoch() or 0) == submission.epoch
+
+
+def may_pass(facts: ChunkFacts, submission: Submission) -> bool:
+    """The submission's visit may take a pass: its chunk is ``delivering`` and the visit is its current one."""
+    return facts.status() is ChunkStatus.DELIVERING and is_current(facts, submission)
 
 
 def held_by_a_person(facts: ChunkFacts, submission: Submission) -> bool:
@@ -327,7 +368,7 @@ class FlowLine:
         """Its chunk is ``delivering``, its visit is current and has no open turn, and its next poll is due: no
         poll row for the visit, or ``PollPolicy.due_at`` of the newest one has passed."""
         facts = self.facts[submission.chunk_id]
-        if facts.status() is not ChunkStatus.DELIVERING or not is_current(facts, submission):
+        if not may_pass(facts, submission):
             return False
         if submission.submission_id in self.turning:
             return False

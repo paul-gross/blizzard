@@ -13,7 +13,6 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import Movement, MovementKind
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.runner.hub.internal.http_hub import _chunk_state
@@ -546,19 +545,22 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
     assert _restart(hub, chunk_id, node="build").status_code == 202
     build_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
-        chunk_id,
-        from_node_id=plan_node,
-        to_node_id=build_node,
-        choice_name="success",
-        epoch=2,  # the run's own hub epoch, minted from the epoch it read before the move
-        runner_id="hub",
-        transition_id="tr_fenced",
-        at=hub.clock.now(),
-        artifacts=[],
-        release_route=False,
-        admission=EpochAdmission.ABOVE,
-    )
+    stores = chunk_stores(hub.engine, hub.clock)
+    with stores.exclusive.locked([chunk_id]) as handle:
+        wrote = stores.hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk_id,
+            from_node_id=plan_node,
+            to_node_id=build_node,
+            choice_name="success",
+            epoch=2,  # the run's own hub epoch, minted from the epoch it read before the move
+            runner_id="hub",
+            transition_id="tr_fenced",
+            at=hub.clock.now(),
+            artifacts=[],
+            release_route=False,
+            admission=EpochAdmission.ABOVE,
+        )
 
     assert wrote is False
     detail = _detail(hub, chunk_id)
@@ -571,19 +573,22 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: 
     chunk_id = _mint(hub)
     plan_node = _detail(hub, chunk_id)["current_node_id"]
 
-    wrote = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
-        chunk_id,
-        from_node_id=plan_node,
-        to_node_id="done",
-        choice_name="success",
-        epoch=2,
-        runner_id="hub",
-        transition_id="tr_landed",
-        at=hub.clock.now(),
-        artifacts=[],
-        release_route=True,
-        admission=EpochAdmission.ABOVE,
-    )
+    stores = chunk_stores(hub.engine, hub.clock)
+    with stores.exclusive.locked([chunk_id]) as handle:
+        wrote = stores.hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk_id,
+            from_node_id=plan_node,
+            to_node_id="done",
+            choice_name="success",
+            epoch=2,
+            runner_id="hub",
+            transition_id="tr_landed",
+            at=hub.clock.now(),
+            artifacts=[],
+            release_route=True,
+            admission=EpochAdmission.ABOVE,
+        )
 
     assert wrote is True
     assert _detail(hub, chunk_id)["status"] == "done"

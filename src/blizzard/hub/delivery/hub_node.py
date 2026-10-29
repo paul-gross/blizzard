@@ -19,13 +19,12 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
-from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, HubNodePollFact, LandedRepos, is_landed_revision
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, is_landed_revision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
@@ -41,7 +40,7 @@ from blizzard.hub.domain.config.repositories import (
     ResolvedRepository,
     resolve_chunk_repositories,
 )
-from blizzard.hub.domain.delivery.flows import TURN_ESCALATED, PollPolicy
+from blizzard.hub.domain.delivery.flows import TURN_ESCALATED
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS
 from blizzard.hub.domain.graph.model import (
@@ -149,17 +148,6 @@ class BounceEnvelope:
         )
 
 
-def _escalation_detail(crossed: str, outcome: BounceEscalationOutcome) -> str:
-    """A bounce-cap crossing's run detail: an escalation already recorded at this epoch reads as escalated."""
-    match outcome:
-        case BounceEscalationOutcome.RECORDED:
-            return f"{crossed}, escalated"
-        case BounceEscalationOutcome.ALREADY_RECORDED:
-            return f"{crossed}, already escalated"
-        case BounceEscalationOutcome.REFUSED:
-            return f"{crossed}, escalation not recorded (chunk moved on)"
-
-
 class ITurnEnd(Protocol):
     """The end of the turn a routing belongs to, written on the routing's own locked transaction."""
 
@@ -179,15 +167,6 @@ class _NoTurn:
 
 #: The end of no turn.
 NO_TURN: ITurnEnd = _NoTurn()
-
-
-@domain_model
-@dataclass(frozen=True)
-class Routed:
-    """Where a routing left its turn: the turn's outcome, and what it reports."""
-
-    outcome: str
-    detail: str = ""
 
 
 class HubNodeRouter:
@@ -229,16 +208,17 @@ class HubNodeRouter:
         ending: ITurnEnd = NO_TURN,
         commits: list[dict[str, str]] | None = None,
         action: BouncedAction | None = None,
-    ) -> Routed:
+    ) -> None:
         """Route ``choice`` along its authored edge at ``epoch + 1``; a choice no edge routes, or one routed to a node
         the graph lacks, escalates. A delivery the markers say is incomplete bounces first, escalating past the
         node's bounce cap."""
         edge = graph.edge_for_choice(node.node_id, choice)
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
         if edge is None or to_node_id is None:
-            return self._unroutable(
+            self._unroutable(
                 chunk, node, epoch=epoch, choice=choice, to_node=edge.to_node_name if edge else None, ending=ending
             )
+            return
         envelope: str | None = None
         # A delivery kick-back, detected from the landed-marker fact and never from the choice name.
         if commits and to_node_id != RESERVED_TERMINAL:
@@ -251,7 +231,7 @@ class HubNodeRouter:
                     sources=self._delivery_sources(chunk),
                     action=action,
                 ).serialize()
-        return self._commit(
+        self._commit(
             chunk, node, epoch=epoch, choice=choice, to_node_id=to_node_id, bounce=(choice, envelope), ending=ending
         )
 
@@ -265,7 +245,7 @@ class HubNodeRouter:
         to_node_id: str,
         bounce: tuple[str, str | None],
         ending: ITurnEnd,
-    ) -> Routed:
+    ) -> None:
         """One transaction: the bounce ``(cause, envelope)`` when there is an envelope — escalating past the cap —
         else beside the transition its envelope rides on, and the turn's end."""
         hub_epoch = epoch + 1
@@ -273,10 +253,9 @@ class HubNodeRouter:
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             artifacts: list[StoredArtifact] = []
             if envelope is not None:
-                crossed = self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope)
-                if crossed is not None:
+                if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
                     ending.end(handle, outcome=TURN_ESCALATED, closure=None)
-                    return Routed(TURN_ESCALATED, crossed)
+                    return
                 artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
             wrote = self._hub_exec.record_hub_step_transition_locked(
                 handle,
@@ -293,7 +272,6 @@ class HubNodeRouter:
                 release_route=to_node_id == RESERVED_TERMINAL,
             )
             ending.end(handle, outcome=choice, closure=choice if wrote else None)
-        return Routed(choice, "" if wrote else "not recorded: the chunk is terminal or has moved past this visit")
 
     def refuse(
         self,
@@ -306,7 +284,7 @@ class HubNodeRouter:
         detail: str,
         resolution: RepositoryResolution | None = None,
         ending: ITurnEnd = NO_TURN,
-    ) -> Routed:
+    ) -> None:
         """Record why the visit cannot run — its ``hub-log.<step>`` artifact, and the refusal's event the first time
         — and route its failure choice, before any pass is taken."""
         announced = self._artifacts.record_hub_artifact(
@@ -321,7 +299,7 @@ class HubNodeRouter:
         )
         if announced and resolution is not None:
             self._record_refusal_event(chunk, node, resolution, epoch=epoch)
-        return self.route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[], ending=ending)
+        self.route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[], ending=ending)
 
     def record_wait(
         self,
@@ -332,7 +310,7 @@ class HubNodeRouter:
         next_poll_at: datetime | None = None,
         ending: ITurnEnd = NO_TURN,
         reached: Callable[[], None] | None = None,
-    ) -> Routed:
+    ) -> None:
         """Record one reserved-wait poll row for the visit — no transition, no retry or bounce spent. A pass's
         ``next_poll_at`` rides on the row and only ever postpones the next poll. ``reached`` marks the window
         between the row and the turn's end."""
@@ -344,21 +322,20 @@ class HubNodeRouter:
             if reached is not None:
                 reached()
             ending.end(handle, outcome=_PENDING, closure=None)
-        due = self._next_poll(node, epoch=epoch, polled_at=now, next_poll_at=next_poll_at)
-        return Routed(_PENDING, f"pending — next poll at {iso_utc(due)}")
 
     def route_pending_timeout(
         self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, ending: ITurnEnd = NO_TURN
-    ) -> Routed:
+    ) -> None:
         """A pending node past its ``poll_timeout`` is a kick-back, not a plain failure: a bounce, an escalation past
         the node's ``bounce_cap``, else the ``failure`` edge with the kick-back envelope riding along."""
         choice = HUB_DEFAULT_FAILURE_CHOICE
         edge = graph.edge_for_choice(node.node_id, choice)
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
         if edge is None or to_node_id is None:
-            return self._unroutable(
+            self._unroutable(
                 chunk, node, epoch=epoch, choice=choice, to_node=edge.to_node_name if edge else None, ending=ending
             )
+            return
         rows = GitCommits.of(self._artifacts.load_artifacts(chunk.chunk_id))
         project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
         resolution = resolve_chunk_repositories(
@@ -376,7 +353,7 @@ class HubNodeRouter:
             sources=self._delivery_sources(chunk),
             action=None,
         ).serialize()
-        return self._commit(
+        self._commit(
             chunk,
             node,
             epoch=epoch,
@@ -386,17 +363,17 @@ class HubNodeRouter:
             ending=ending,
         )
 
-    def escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd = NO_TURN) -> Routed:
+    def escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd = NO_TURN) -> None:
         """An escalation the hub authors at the visit's epoch plus one, routing nothing."""
-        return Routed(TURN_ESCALATED, self._escalated(chunk, escalation, epoch=epoch, ending=ending)[1])
+        self._escalated(chunk, escalation, epoch=epoch, ending=ending)
 
-    def escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int, ending: ITurnEnd = NO_TURN) -> bool:
+    def escalate_action_missing(self, chunk: Chunk, node: Node, *, epoch: int) -> bool:
         """A hub node naming no action — one the carry-over could not translate — escalates its chunk, its stored
         command named, recording ``hub-action-missing`` once the escalation takes."""
         stored = f"its stored run: {node.legacy_run}" if node.legacy_run else "no `run:`"
         detail = f"hub node `{node.name}` names no action ({stored})"
-        outcome, _ = self._escalated(
-            chunk, ActionEscalation(EscalationCause.HUB_ACTION_MISSING, detail), epoch=epoch, ending=ending
+        outcome = self._escalated(
+            chunk, ActionEscalation(EscalationCause.HUB_ACTION_MISSING, detail), epoch=epoch, ending=NO_TURN
         )
         if outcome is not BounceEscalationOutcome.RECORDED:
             return False
@@ -424,7 +401,7 @@ class HubNodeRouter:
         forge: ConfiguredForge,
         epoch: int,
         ending: ITurnEnd = NO_TURN,
-    ) -> Routed:
+    ) -> None:
         """Refuse the visit before its pass: only an operator can change what a forge offers or what an action asks
         of it. Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
         detail = (
@@ -442,7 +419,7 @@ class HubNodeRouter:
             at=self._clock.now(),
         )
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
-        outcome, reported = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
+        outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
         if outcome is BounceEscalationOutcome.RECORDED:
             self._events.record(
                 kind=_EVENT_CAPABILITY_MISSING,
@@ -460,15 +437,14 @@ class HubNodeRouter:
                 },
                 at=self._clock.now(),
             )
-        return Routed(TURN_ESCALATED, reported)
 
     def _escalated(
         self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd
-    ) -> tuple[BounceEscalationOutcome, str]:
+    ) -> BounceEscalationOutcome:
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             outcome = self._escalate_locked(handle, chunk, escalation.cause, escalation.detail, epoch=epoch + 1)
             ending.end(handle, outcome=TURN_ESCALATED, closure=None)
-        return outcome, _escalation_detail(escalation.detail, outcome)
+        return outcome
 
     def _escalate_locked(
         self, handle: ILockedChunkRead, chunk: Chunk, cause: EscalationCause, detail: str, *, epoch: int
@@ -488,8 +464,8 @@ class HubNodeRouter:
 
     def _bounce(
         self, handle: ILockedChunkRead, chunk: Chunk, node: Node, *, hub_epoch: int, cause: str, envelope: str
-    ) -> str | None:
-        """Record a bounce, and escalate once it crosses the node's cap — the crossing's detail, or ``None``."""
+    ) -> bool:
+        """Record a bounce, and escalate once it crosses the node's cap — whether it crossed."""
         self._escalations.record_bounce_locked(
             handle,
             chunk.chunk_id,
@@ -502,10 +478,10 @@ class HubNodeRouter:
         facts = handle.facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
         if facts is None or not facts.bounces_over_cap(cap):
-            return None
+            return False
         crossed = f"bounce cap ({cap}) crossed after {facts.bounce_count()} bounces"
-        outcome = self._escalate_locked(handle, chunk, EscalationCause.BOUNCE_CAP, crossed, epoch=hub_epoch)
-        return _escalation_detail(crossed, outcome)
+        self._escalate_locked(handle, chunk, EscalationCause.BOUNCE_CAP, crossed, epoch=hub_epoch)
+        return True
 
     def _envelope_artifact(self, chunk: Chunk, node: Node, *, hub_epoch: int, envelope: str) -> StoredArtifact:
         return StoredArtifact(
@@ -523,7 +499,7 @@ class HubNodeRouter:
 
     def _unroutable(
         self, chunk: Chunk, node: Node, *, epoch: int, choice: str, to_node: str | None, ending: ITurnEnd
-    ) -> Routed:
+    ) -> None:
         """An answer no edge routes is a fault in the graph: announce it once per visit, and escalate the chunk."""
         now = self._clock.now()
         if to_node is None:
@@ -559,7 +535,7 @@ class HubNodeRouter:
             )
         named = f"`{choice}`, which no edge routes" if to_node is None else f"`{choice}`, routed to unknown `{to_node}`"
         unroutable = ActionEscalation(EscalationCause.UNROUTABLE_OUTCOME, f"hub node `{node.name}` answered {named}")
-        return self.escalate(chunk, unroutable, epoch=epoch, ending=ending)
+        self.escalate(chunk, unroutable, epoch=epoch, ending=ending)
 
     def _delivery_sources(self, chunk: Chunk) -> DeliverySources:
         """The chunk's delivery markers, the PR references already parsed by the store. The historical landing
@@ -581,12 +557,6 @@ class HubNodeRouter:
             message=resolution.detail,
             detail={"epoch": epoch},
             at=self._clock.now(),
-        )
-
-    @staticmethod
-    def _next_poll(node: Node, *, epoch: int, polled_at: datetime, next_poll_at: datetime | None) -> datetime:
-        return PollPolicy.of(node).due_at(
-            HubNodePollFact(node_id=node.node_id, epoch=epoch, polled_at=polled_at, next_poll_at=next_poll_at)
         )
 
 

@@ -92,12 +92,6 @@ class ChunkEscalationsStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
-        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
-        ``IWriteChunkEscalationsRepository.record_bounce``."""
-        with self._store.write("record_bounce") as conn:
-            return self._bounce_conn(conn, chunk_id, epoch=epoch, admission=None, cause=cause, envelope=envelope, at=at)
-
     def record_bounce_locked(
         self,
         handle: ILockedChunkRead,
@@ -119,12 +113,12 @@ class ChunkEscalationsStore:
         chunk_id: str,
         *,
         epoch: int,
-        admission: EpochAdmission | None,
+        admission: EpochAdmission,
         cause: str,
         envelope: str,
         at: datetime,
     ) -> bool:
-        """The bounce's replay guard and insert; behind the fence only when ``admission`` is given."""
+        """The bounce's replay guard and insert, behind the fence."""
         already = conn.execute(
             self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
                 (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
@@ -132,7 +126,7 @@ class ChunkEscalationsStore:
         ).first()
         if already is not None:
             return False
-        if admission is not None and fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
             return False
         conn.execute(
             self._store.insert(s.chunk_bounces).values(
@@ -140,33 +134,6 @@ class ChunkEscalationsStore:
             )
         )
         return True
-
-    def record_bounce_escalation(
-        self,
-        chunk_id: str,
-        *,
-        epoch: int,
-        admission: EpochAdmission,
-        runner_id: str,
-        takeover_command: str,
-        at: datetime,
-        cause: str,
-        detail: str,
-    ) -> BounceEscalationOutcome:
-        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
-        ``IWriteChunkEscalationsRepository.record_bounce_escalation``."""
-        with self._store.write("record_bounce_escalation") as conn:
-            return self._bounce_escalation_conn(
-                conn,
-                chunk_id,
-                epoch=epoch,
-                admission=admission,
-                runner_id=runner_id,
-                takeover_command=takeover_command,
-                at=at,
-                cause=cause,
-                detail=detail,
-            )
 
     def record_bounce_escalation_locked(
         self,

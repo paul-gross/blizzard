@@ -7,6 +7,7 @@ to the caller through :meth:`FleetRequest.assert_owns`."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
@@ -14,12 +15,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.foundation.roles import dto
-from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
@@ -53,7 +53,7 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
 )
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.domain.delivery.flows import Flow, PollPolicy
+from blizzard.hub.domain.delivery.flows import Flow, describe_standing
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -72,7 +72,7 @@ from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRef
 from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
-from blizzard.hub.domain.graph.model import FollowLatest, Graph, Node
+from blizzard.hub.domain.graph.model import FollowLatest, Graph
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.observability.transcripts import LeaseSegmentsNotOwned, refuse_foreign_lease_read
 from blizzard.hub.domain.projects.model import ProjectId
@@ -638,41 +638,25 @@ def hub_advance(
         chunk_id=chunk_id,
         status=facts.status(),
         ran=False,
-        detail=_standing(services, chunk_id, facts, node, epoch=epoch),
+        detail=describe_standing(
+            facts,
+            node,
+            services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch),
+            epoch=epoch,
+            now=services.clock.now(),
+            flow_name=_flow_namer(services),
+        ),
     )
 
 
-def _standing(services: TenantServices, chunk_id: str, facts: ChunkFacts, node: Node, *, epoch: int) -> str:
-    """Where the chunk's visit to ``node`` stands: held by a person, waiting to be submitted, taking its turn,
-    waiting on its next poll, or its place on each flow it holds."""
-    if facts.open_escalation() is not None:
-        return "escalated — awaiting a person"
-    if facts.status() is not ChunkStatus.DELIVERING:
-        return f"{facts.status().value} — takes no turn until it is delivering"
-    standing = services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch)
-    if standing is None:
-        return "waiting to be submitted to its flows"
-    names = [_flow_name(services, flow) for flow in standing.submission.flows]
-    if standing.turning:
-        return f"landing on {', '.join(names)}" if names else "taking its turn"
-    polls = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch)
-    due = PollPolicy.of(node).due_at(polls[-1]) if polls else None
-    if due is not None and due > services.clock.now():
-        return f"pending — next poll at {iso_utc(due)}"
-    if not names:
-        return "next to take its turn"
-    return ", ".join(f"{_ordinal(ahead + 1)} on {name}" for name, ahead in zip(names, standing.ahead, strict=True))
-
-
-def _flow_name(services: TenantServices, flow: Flow) -> str:
+def _flow_namer(services: TenantServices) -> Callable[[Flow], str]:
     """A flow as an operator names it: its repository and branch."""
-    record = services.repository_records.get(RepositoryId(flow.repository_id))
-    return f"{record.fields.repo if record is not None else flow.repository_id}/{flow.branch}"
 
+    def name(flow: Flow) -> str:
+        record = services.repository_records.get(RepositoryId(flow.repository_id))
+        return f"{record.fields.repo if record is not None else flow.repository_id}/{flow.branch}"
 
-def _ordinal(n: int) -> str:
-    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
+    return name
 
 
 def _incompatible_denial(

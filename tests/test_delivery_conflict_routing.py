@@ -19,7 +19,6 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
@@ -31,6 +30,7 @@ from tests.support import (
     HubHarness,
     build_hub,
     chunk_facts_of,
+    chunk_stores,
     make_ready,
     pointer_token,
     report_lease,
@@ -47,10 +47,6 @@ def _forge(*repos: str, **state: object) -> GitHubDouble:
 
 def _writable_movement(hub: HubHarness) -> IWriteChunkMovementRepository:
     return cast(IWriteChunkMovementRepository, hub.services.chunks.movement)
-
-
-def _writable_escalations(hub: HubHarness) -> IWriteChunkEscalationsRepository:
-    return cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations)
 
 
 def _mint_and_claim(hub: HubHarness) -> tuple[str, dict[str, str]]:
@@ -151,10 +147,18 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
 
     # `deliver` falls back to `DEFAULT_BOUNCE_CAP` (5) — pre-seed that many prior bounces
     # (idempotent per `(chunk_id, epoch)`) so this run's kick-back crosses it.
+    stores = chunk_stores(hub.engine, hub.clock)
     for epoch in range(1, DEFAULT_BOUNCE_CAP + 1):
-        _writable_escalations(hub).record_bounce(
-            chunk_id, epoch=epoch, cause="conflict", envelope="{}", at=hub.clock.now()
-        )
+        with stores.exclusive.locked([chunk_id]) as handle:
+            stores.escalations.record_bounce_locked(
+                handle,
+                chunk_id,
+                epoch=epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                cause="conflict",
+                envelope="{}",
+                at=hub.clock.now(),
+            )
     report_lease(hub, chunk_id, epoch=DEFAULT_BOUNCE_CAP + 1, seq=1)
 
     assert hub.turn_outcome(chunk_id) == "escalated"

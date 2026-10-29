@@ -90,9 +90,10 @@ class TickResult:
 
 
 class FlowDriver:
-    """Holds, in memory only, each tenant's arrival floor and the probe and instant of its last full reconcile, the
-    instant its last tick began, and the turns a task is running — touched only on the hub's loop, and handed to a
-    tick as a snapshot. Boot starts every floor at zero."""
+    """Holds, in memory only, each tenant's arrival floor and the probe and instant of its last full reconcile, and
+    the instant its last tick began — written only by the one tick running at a time — and the wake mark and the turns
+    a task is running, touched only on the hub's loop and handed to a tick as a snapshot. Boot starts every floor at
+    zero."""
 
     def __init__(self, stores: FlowLineStores, clock: IClock, *, timer: Callable[[], float] = time.monotonic) -> None:
         self._stores = stores
@@ -132,12 +133,19 @@ class FlowDriver:
         self._floors[tenant] = lines.reconcile(0).floor
         return ended
 
-    def tick(self, store: FlowLineStores, clock: IClock, *, running: frozenset[str] | None = None) -> TickResult:
-        """For every open tenant: reconcile its lines when due, end every open turn that started before the previous
-        tick began with no task in ``running``, and take the turns its visits may. A tenant that closes mid-tick is
-        skipped for the rest of it; one that raises is logged and left due, and the others still run."""
+    def tick(
+        self,
+        store: FlowLineStores,
+        clock: IClock,
+        *,
+        running: frozenset[str] | None = None,
+        forced: bool = False,
+    ) -> TickResult:
+        """For every open tenant: reconcile its lines when due — every one, ``forced`` — end every open turn that
+        started before the previous tick began with no task in ``running``, and take the turns its visits may. A
+        tenant that closes mid-tick is skipped for the rest of it; one that raises is logged and left due, and the
+        others still run."""
         running = frozenset(self._running) if running is None else running
-        forced, self._woken = self._woken, False
         tenants = sorted(store.tenants())
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in tenants}
         signatures = store.corpus.flow_lines_signature()
@@ -183,7 +191,9 @@ class FlowDriver:
 
     async def step(self) -> TickResult:
         """One tick, then every turn it started run to its end — how a test drives the driver."""
-        result = await asyncio.to_thread(self.tick, self._stores, self._clock, running=frozenset(self._running))
+        result = await asyncio.to_thread(
+            self.tick, self._stores, self._clock, running=frozenset(self._running), forced=self._take_wake()
+        )
         tasks = self._spawn(result.started)
         if tasks:
             await asyncio.wait(tasks)
@@ -199,7 +209,11 @@ class FlowDriver:
                 started = self._timer()
                 try:
                     result = await asyncio.to_thread(
-                        self.tick, self._stores, self._clock, running=frozenset(self._running)
+                        self.tick,
+                        self._stores,
+                        self._clock,
+                        running=frozenset(self._running),
+                        forced=self._take_wake(),
                     )
                     self._spawn(result.started)
                 except Exception:
@@ -212,6 +226,11 @@ class FlowDriver:
                 task.cancel()
             if tasks:
                 await asyncio.wait(tasks)
+
+    def _take_wake(self) -> bool:
+        """Whether the driver was woken since the last tick, clearing the mark — on the loop, so no wake is lost."""
+        woken, self._woken = self._woken, False
+        return woken
 
     def _spawn(self, started: Iterable[StartedTurn]) -> list[asyncio.Task[None]]:
         tasks = [asyncio.create_task(self._turn(turn)) for turn in started]

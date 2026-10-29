@@ -7,14 +7,11 @@ escalation lets through only a submission that would re-escalate, answered with 
 
 from __future__ import annotations
 
-from datetime import timedelta
 from pathlib import Path
-from typing import cast
 
 import pytest
 from sqlalchemy import Table
 
-from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.store import schema as s
 from tests.support import (
     HubHarness,
@@ -121,13 +118,8 @@ class _Chunk:
         assert report_question(self.hub, self.chunk_id, epoch=1, seq=self.seq)["applied"] == [self.seq]
 
     def stand_at_deliver(self) -> None:
-        """Move onto the hub-executed ``deliver`` node with its run deferred — a live fleet-wide
-        hub-exec slot holds it — so the chunk stands there."""
-        hub_exec = cast(IWriteChunkHubExecRepository, self.hub.services.chunks.hub_exec)
-        slot = hub_exec.acquire_hub_exec_slot(
-            self.chunk_id, node_id="nd_elsewhere", at=self.hub.clock.now(), stale_after=timedelta(hours=1)
-        )
-        assert slot is not None
+        """Move onto the hub-executed ``deliver`` node, where the chunk stands until the flow driver takes its
+        turn — which no test here ticks."""
         assert self.complete("build", choice="ship")["outcome"] != "failure"
         assert self.detail()["current_node_id"] == self.nodes["deliver"]
 

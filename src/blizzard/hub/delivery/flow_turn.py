@@ -69,6 +69,7 @@ from blizzard.hub.domain.delivery.flows import (
     TurnEvent,
     held_resources,
     is_stuck,
+    may_pass,
     resources_moved,
     withdrawal_for,
 )
@@ -99,17 +100,16 @@ _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN = crashpoint(
 )
 _CP_FLOW_AFTER_POLL_BEFORE_TURN_END = crashpoint(
     "flow.after-poll.before-turn-end",
-    "a pending pass's poll row is written; the turn's end, in the same transaction, is not",
+    "a pending pass's poll row is written but uncommitted; the turn's end shares its transaction, so both roll back",
 )
 _EVENT_ACTION_OVERRAN: EventLogKind = "hub-action-overran"
 _EVENT_TURN_INTERRUPTED: EventLogKind = "turn-interrupted"
 _FLOW_LANDED: EventLogKind = "flow-landed"
 # The one reserved wait a pass answers.
 (_PENDING,) = RESERVED_WAITS
-# What a delivery the chunk has moved past answers its action with.
-_FENCED_DETAIL = "not recorded: the chunk is terminal or has moved past this visit"
-# A landing record is written however the fence answers; this names why it answers `fenced` anyway.
-_LANDED_PAST_FENCE_DETAIL = "the chunk is terminal or has moved past this visit"
+# Why a fenced write answers `fenced`; a landing record, written regardless, answers the reason alone.
+_PAST_FENCE = "the chunk is terminal or has moved past this visit"
+_FENCED_DETAIL = f"not recorded: {_PAST_FENCE}"
 
 _log = get_logger("blizzard.hub.flow_turn")
 
@@ -276,17 +276,15 @@ class TurnRunner:
             return None
 
     def _build(self, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff) -> _Ready | None:
-        """The visit, or ``None`` once the turn has ended without a pass: the visit already left, three cut-offs in
-        a row, a poll timed out, a refusal, resources moved under the submission, or a capability missing."""
+        """The visit, or ``None`` once the turn has ended without a pass: the visit no longer takes one, three
+        cut-offs in a row, a poll timed out, a refusal, resources moved under the submission, or a capability
+        missing."""
         at = self._visit_of(submission)
         facts = self._facts.load_facts(submission.chunk_id)
-        if at is None or facts is None or withdrawal_for(facts, submission) is not None:
+        if at is None or facts is None or not may_pass(facts, submission):
             self._end(submission, ending, outcome=TURN_SUPERSEDED)
             return None
         chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
-        if node.action is None:
-            self._router.escalate_action_missing(chunk, node, epoch=epoch, ending=ending)
-            return None
         outcomes = self._flows.turn_outcomes(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         if is_stuck(outcomes):
             self._router.escalate(chunk, self._stuck(node), epoch=epoch, ending=ending)
@@ -295,29 +293,23 @@ class TurnRunner:
         if polls and self._clock.now() - polls[0].polled_at >= PollPolicy.of(node).timeout:
             self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
             return None
-        action = self._actions.action(node.action)
-        if action is None:
-            detail = f"no hub action `{node.action}`"
-            self._router.refuse(
-                chunk, graph, node, epoch=epoch, step="action-unavailable", detail=detail, ending=ending
-            )
-            return None
+        action = self._actions.action(node.action) if node.action is not None else None
         return self._resolve(at, action, submission, ending, cut_off)
 
     def _resolve(
-        self, at: _Visit, action: IHubAction, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff
+        self, at: _Visit, action: IHubAction | None, submission: Submission, ending: _TurnEnding, cut_off: TurnCutOff
     ) -> _Ready | None:
         chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
-        spec = action.spec
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
         resolved = resolve_visit(
             artifacts,
+            action=node.action,
+            spec=action.spec if action is not None else None,
             project=project,
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),
-            lands=spec.lands,
         )
         if isinstance(resolved, VisitRefusal):
             self._router.refuse(
@@ -331,7 +323,8 @@ class TurnRunner:
                 ending=ending,
             )
             return None
-        git_commits, resolution = resolved.git_commits, resolved.resolution
+        assert action is not None  # resolved, so its spec was found
+        spec, git_commits, resolution = resolved.spec, resolved.git_commits, resolved.resolution
         held = held_resources(resolution, LandedRepos.of(artifacts).names, spec)
         if resources_moved(held, held_resources(resolution, frozenset(), spec), [f.resource for f in submission.flows]):
             self._end(submission, ending, outcome=TURN_SUPERSEDED, closure=TURN_SUPERSEDED)
@@ -414,8 +407,8 @@ class TurnRunner:
         bound = self._passes.bound.deadline_seconds()
         return ActionEscalation(
             EscalationCause.HUB_ACTION_STUCK,
-            f"hub action `{node.action}` at node `{node.name}` was cut off at its {bound:g}s deadline "
-            f"on each of its last {STUCK_AFTER} turns",
+            f"hub action `{node.action}` at node `{node.name}` was cut off on each of its last {STUCK_AFTER} turns, "
+            f"at its {bound:g}s pass deadline or its {self._build_bound:g}s build bound",
         )
 
     def _fail_build(self, submission: Submission, ending: _TurnEnding, log: str) -> None:
@@ -474,7 +467,7 @@ class TurnRunner:
                 refused = self._record_landing(chunk, node, epoch, submission, repository, repo, revision)
                 _CP_CLOSE_AFTER_ENQUEUE_BEFORE_DRAIN.reached()
                 if refused:
-                    return EffectResult(EffectStatus.FENCED, _LANDED_PAST_FENCE_DETAIL)
+                    return EffectResult(EffectStatus.FENCED, _PAST_FENCE)
                 return EffectResult(EffectStatus.RECORDED)
             case RecordReviewFindings():
                 try:

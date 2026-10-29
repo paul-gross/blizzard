@@ -30,6 +30,7 @@ from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import (
     TEST_HUB_ACTIONS,
     build_hub,
+    chunk_stores,
     default_tenant,
     hub_scoped,
     hub_store_connections,
@@ -540,6 +541,31 @@ def test_a_turn_a_tick_started_but_no_task_ran_is_ended_by_the_sweep_within_two_
         assert conn.execute(hub_scoped(select(s.event_log).where(s.event_log.c.kind == "turn-interrupted"))).first()
     world.tick()
     assert world.action.passes == [chunk_id]  # eligible again at once, and taken by a fresh turn
+
+
+def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: _World) -> None:
+    chunk_id = world.at_merge()
+    (started,) = world.driver.tick(world.stores, world.hub.clock).started
+    stores = chunk_stores(world.hub.engine, world.hub.clock)
+    with stores.exclusive.locked([chunk_id]) as handle:
+        stores.escalations.record_bounce_escalation_locked(
+            handle,
+            chunk_id,
+            epoch=2,
+            admission=EpochAdmission.ABOVE,
+            runner_id="hub",
+            takeover_command="",
+            at=world.hub.clock.now(),
+            cause=EscalationCause.FORGE_AUTH,
+            detail="held by a person",
+        )
+    assert world.detail(chunk_id)["status"] == "needs_human"
+
+    asyncio.run(world.stores.turns(world.tenant).take(started.turn, started.submission))
+
+    assert world.action.passes == []
+    assert world.turn_outcomes(chunk_id) == ["superseded"]
+    assert world.submissions(chunk_id)[0].closed is None  # a person holds it at a later epoch
 
 
 def test_a_running_turn_is_never_swept(world: _World) -> None:

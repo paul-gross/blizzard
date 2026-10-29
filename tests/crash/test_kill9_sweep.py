@@ -214,7 +214,7 @@ _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 # issue's central bug.
 _PAUSE_CI_SUBSET = ("pause.after-interrupt.before-park",)
 
-# The flow CI subset: a pending poll killed before its turn ends, the window boot recovery most often meets.
+# The flow CI subset: a pending poll killed before its transaction commits, the window boot recovery most often meets.
 _FLOW_CI_SUBSET = ("flow.after-poll.before-turn-end",)
 _ACTION_CI_SUBSET = ("action.after-effect.before-write",)
 

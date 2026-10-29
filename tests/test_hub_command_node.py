@@ -45,6 +45,7 @@ from tests.support import (
     FakeWorkSource,
     HubHarness,
     build_hub,
+    chunk_stores,
     default_project,
     hub_store_connections,
     link_project,
@@ -597,19 +598,22 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
-    recorded = cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec).record_hub_step_transition(
-        chunk_id,
-        from_node_id=merge_node.node_id,
-        to_node_id="done",
-        choice_name="success",
-        epoch=1,  # the run's own epoch — a stop mints no fresher one to fence it out
-        runner_id="r1",
-        transition_id="tr_stale",
-        at=hub.clock.now(),
-        artifacts=[],
-        release_route=True,
-        admission=EpochAdmission.ABOVE,
-    )
+    stores = chunk_stores(hub.engine, hub.clock)
+    with stores.exclusive.locked([chunk_id]) as handle:
+        recorded = stores.hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk_id,
+            from_node_id=merge_node.node_id,
+            to_node_id="done",
+            choice_name="success",
+            epoch=1,  # the run's own epoch — a stop mints no fresher one to fence it out
+            runner_id="r1",
+            transition_id="tr_stale",
+            at=hub.clock.now(),
+            artifacts=[],
+            release_route=True,
+            admission=EpochAdmission.ABOVE,
+        )
 
     assert recorded is False
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()

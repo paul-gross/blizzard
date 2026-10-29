@@ -5,9 +5,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 claim; nothing here derives status. Timestamps arrive already stamped
 (``bzh:injected-clock``).
 
-``record_hub_step_transition`` is one transaction on one connection — the shared row
-helpers below are plain function calls inside that same ``with self._store.write(...)``
-block, never a second connection."""
+``record_hub_step_transition_locked`` writes on its caller's one locked connection — the
+shared row helpers below are plain function calls on that same connection, never a
+second one."""
 
 from __future__ import annotations
 
@@ -98,39 +98,6 @@ class ChunkHubExecStore:
                 .values(released_at=at)
             ).rowcount
 
-    def record_hub_step_transition(
-        self,
-        chunk_id: str,
-        *,
-        from_node_id: str,
-        to_node_id: str,
-        choice_name: str,
-        epoch: int,
-        admission: EpochAdmission,
-        runner_id: str,
-        transition_id: str,
-        at: datetime,
-        artifacts: list[StoredArtifact],
-        release_route: bool,
-    ) -> bool:
-        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
-        ``IWriteChunkHubExecRepository.record_hub_step_transition``."""
-        with self._store.write("record_hub_step_transition") as conn:
-            return self._transition_conn(
-                conn,
-                chunk_id,
-                from_node_id=from_node_id,
-                to_node_id=to_node_id,
-                choice_name=choice_name,
-                epoch=epoch,
-                admission=admission,
-                runner_id=runner_id,
-                transition_id=transition_id,
-                at=at,
-                artifacts=artifacts,
-                release_route=release_route,
-            )
-
     def record_hub_step_transition_locked(
         self,
         handle: ILockedChunkRead,
@@ -147,8 +114,6 @@ class ChunkHubExecStore:
         artifacts: list[StoredArtifact],
         release_route: bool,
     ) -> bool:
-        """:meth:`record_hub_step_transition` on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), so a turn's end commits with it."""
         return self._transition_conn(
             conn_of(handle),
             chunk_id,
@@ -234,14 +199,6 @@ class ChunkHubExecStore:
             enqueue_close_intents(conn, chunk_id, at=at)
         return True
 
-    def record_hub_node_poll(
-        self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
-    ) -> None:
-        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
-        ``IWriteChunkHubExecRepository.record_hub_node_poll``."""
-        with self._store.write("record_hub_node_poll") as conn:
-            self._poll_conn(conn, chunk_id, node_id=node_id, epoch=epoch, at=at, next_poll_at=next_poll_at)
-
     def record_hub_node_poll_locked(
         self,
         handle: ILockedChunkRead,
@@ -252,7 +209,9 @@ class ChunkHubExecStore:
         at: datetime,
         next_poll_at: datetime | None = None,
     ) -> None:
-        """:meth:`record_hub_node_poll` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``)."""
+        """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — never a transition, no idempotency guard (an at-least-once poll attempt is
+        harmless recorded twice)."""
         self._poll_conn(conn_of(handle), chunk_id, node_id=node_id, epoch=epoch, at=at, next_poll_at=next_poll_at)
 
     def _poll_conn(
