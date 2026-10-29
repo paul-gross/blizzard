@@ -22,9 +22,8 @@ class GardenSweepsStore:
 
     def last_swept_by_scope(self, project_id: str, routine_name: str) -> list[SweepFact]:
         """Per scope, the set no newer set of the same routine beats in ``(produced_at, finding_set_id)``
-        order — ``finding_sets`` carries no timestamp of its own, so each side joins its own artifact.
-        Deliberately not :meth:`FindingStore.newest_by_scope_for_routine`, which orders by
-        ``finding_set_id`` alone."""
+        order — ``finding_sets`` carries no timestamp of its own, so each side joins its own artifact
+        (``tests/test_garden_sweeps_component.py::test_the_newest_set_by_produced_at_is_reported``)."""
         rival_sets = finding_sets.alias("rival_sets")
         rival_artifacts = artifacts.alias("rival_artifacts")
         beaten = newer_row_exists(

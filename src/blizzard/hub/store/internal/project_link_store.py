@@ -57,8 +57,7 @@ LINK_KINDS: Mapping[RecordKind, LinkKind] = {
 }
 
 #: The ``keyed_locks`` namespace of one project's source links, keyed by the project's id. Every source link or
-#: unlink takes its project's key, and an ingest takes the key of the project it mints into before its pointers'
-#: keys, so the links an ingest read stand until it commits.
+#: unlink takes its project's key.
 PROJECT_SOURCE_LINKS_LOCK_NAMESPACE = "project-source-links"
 
 
@@ -207,8 +206,7 @@ def _revisions(
 
 def projects_linking_sources_conn(conn: Connection, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
     """Each of ``work_source_ids`` mapped to the projects whose standing link draws from it, ordered by id — a source
-    no project links dropped — read on the caller's ``conn``: the locked ingest's read, and
-    :meth:`ProjectLinkStore.projects_linking_sources`' body."""
+    no project links dropped — read on the caller's connection, inside the caller's transaction."""
     stmts = statements_of(conn)
     links = _SOURCES.links
     found: dict[str, list[ProjectId]] = {}

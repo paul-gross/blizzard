@@ -3,8 +3,7 @@
 All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). The window
 itself is bound in SQL and the list is ordered by an explicit ``ORDER BY`` on
 ``chunks.minted_at`` (never incidental row order, ``bzh:sql-portable``); outcome
-derivation is left entirely to `src/blizzard/hub/domain/garden/runs/history.py`, which reads the
-chunk's own facts through its own seams."""
+derivation is `src/blizzard/hub/domain/garden/runs/history.py`'s."""
 
 from __future__ import annotations
 
@@ -64,8 +63,7 @@ _IDENTITY_COLUMNS = (
 )
 
 # The three fact kinds `DeliveredSet.added_count`/`observed_count`/`gone_count` fold
-# over — `finding_facts.finding_set_id` (src/blizzard/hub/store/schema.py) is written only for these on the
-# delivery path; a person's own exit verb or `reopened` carries no `finding_set_id`.
+# over (which kinds carry a `finding_set_id`: src/blizzard/hub/store/schema.py's `finding_facts`).
 _SET_COUNT_KINDS = ("add", "observed", "gone")
 
 
@@ -185,11 +183,8 @@ class GardenRunStore:
     def _fact_counts_by_set(conn: Connection, finding_set_ids: list[str]) -> dict[str, dict[str, int]]:
         """How many `add`/`observed`/`gone` facts each delivered set's own delivery
         recorded — one `GROUP BY` query for every id in `finding_set_ids`
-        (index-backed on `ix_finding_facts_tenant_finding_set_id`), the `fact_summaries`
-        shape, so the list read never issues one count query per row. `add`/`observed`/`gone`
-        are named explicitly rather than left to whatever `finding_set_id` happens to
-        carry, so an exit or `reopened` fact — which src/blizzard/hub/store/schema.py records with no
-        `finding_set_id` at all — could never be miscounted here even if that changed."""
+        (index-backed on `ix_finding_facts_tenant_finding_set_id`), so the list read never
+        issues one count query per row."""
         counts: dict[str, dict[str, int]] = {
             finding_set_id: dict.fromkeys(_SET_COUNT_KINDS, 0) for finding_set_id in finding_set_ids
         }

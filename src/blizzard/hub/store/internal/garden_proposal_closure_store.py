@@ -1,8 +1,5 @@
 """SQLAlchemy adapter for the garden-proposal closure repository seam.
-All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``). The
-accept-with-mint write lives in ``WorkItemStore.accept_create`` instead, reaching
-:func:`insert_garden_proposal_closure_row` from outside its own adapter — a deliberate
-two-adapter split."""
+All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
@@ -32,13 +29,11 @@ def insert_garden_proposal_closure_row(
     item_outcome: GardenProposalItemOutcome | None,
     pointer: WorkRef | None,
 ) -> bool:
-    """Insert one ``garden_proposal_closures`` row on a caller-supplied ``conn`` —
-    mirrors ``chunk_rows.insert_chunk_rows``'s shared-connection shape, so a
-    composite write can fold this into its own transaction. Idempotent per
-    ``proposal_id``: returns ``False`` and writes nothing when a closure already exists.
-    Locks the proposal's own row first with the same no-op ``UPDATE``
-    ``GardenProposalStore._is_closed`` uses, so this closing write and a concurrent
-    edit/attach/detach contend on the same row instead of racing across two tables."""
+    """Writes one ``garden_proposal_closures`` row, on the caller's connection, inside
+    the caller's transaction. Idempotent per ``proposal_id``: returns ``False`` and
+    writes nothing when a closure already exists. Locks the proposal's own row before
+    reading closures (``tests/test_garden_proposal_closure_race.py::
+    test_insert_closure_row_locks_the_proposal_row_before_reading_closures``)."""
     stmts = statements_of(conn)
     conn.execute(
         stmts.update(garden_proposals)

@@ -16,8 +16,8 @@ from blizzard.hub.auth.invitations import TenantInvitation
 from blizzard.hub.store.schema import invitations
 from blizzard.hub.tenancy import TenantId
 
-#: Opens a read, named by its operation, whose every statement is marked hub-scoped — the aggregate's
-#: ``hub_scoped_read`` bound to the hub-level connections, so this group never holds an unmarked one.
+#: Opens a read, named by its operation, whose every statement is marked hub-scoped
+#: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
 

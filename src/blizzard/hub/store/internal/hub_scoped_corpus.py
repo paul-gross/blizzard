@@ -1,6 +1,5 @@
-"""The sweep corpus member group of :class:`HubScopedReads` — the reads a hub sweep's one pass
-takes its corpus from, across every tenant: forge-status annotation, the close drain, event
-derivation, and the trace and egress exports — and the flow driver's change probe.
+"""The sweep corpus member group of :class:`HubScopedReads` — corpus reads and change probes
+across every tenant.
 
 Each corpus read answers, beside every row, the tenant the row belongs to, and leaves out every
 closed tenant — one with a ``tenant_deletions`` row, whether its drain is still running or done —
@@ -10,7 +9,7 @@ returns rows of; the same predicate leaves out a row naming no tenant. A probe t
 (``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. Chunk ids are
 hub-minted, so a filter on a chunk id needs no tenant beside it; a segment id is runner-minted, so a
 read that matches one segment row against another matches the tenant too. The group reads and never
-writes: whatever a pass then does with a row, it does in that row's tenant. The trace and egress
+writes. The trace and egress
 reads' statements live in ``corpus_rows`` and run on the marked connection this group opens."""
 
 from __future__ import annotations
@@ -53,8 +52,8 @@ from blizzard.hub.store.internal.corpus_rows import open_tenant
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
 from blizzard.hub.tenancy import TenantId
 
-#: Opens a read, named by its operation, whose every statement is marked hub-scoped — the aggregate's
-#: ``hub_scoped_read`` bound to the hub-level connections, so this group never holds an unmarked one.
+#: Opens a read, named by its operation, whose every statement is marked hub-scoped
+#: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
 _EPHEMERAL_TABLES = (s.chunk_grouped, s.chunk_deleted)
@@ -89,8 +88,7 @@ def _visible_segments() -> Select[Any]:
 
 
 class SweepCorpusReads:
-    """The forge-status, close-drain, event-derivation, trace and egress sweeps' corpus reads and probes, and the flow
-    driver's probe."""
+    """Cross-tenant corpus reads, each row answered with its tenant, and per-tenant change probes."""
 
     def __init__(self, read: MarkedRead) -> None:
         self._read = read

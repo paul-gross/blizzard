@@ -72,8 +72,6 @@ class GardenDeliveryStore:
             # first, then findings sorted: no path locks a finding and then a chunk.
             for batch in id_batches(sorted(plan.expect)):
                 lock_findings(conn, batch)
-            # Not `ChunkArtifactsStore.record_hub_artifact`: that opens its own transaction, which
-            # cannot fold into this one alongside every insert below.
             already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
             if already is not None:
                 return DeliveryOutcome.ALREADY_RECORDED

@@ -1,8 +1,7 @@
 """SQLAlchemy adapter for the run-context repository seam (package-private).
 All ``sqlalchemy`` usage is confined here
-(``bzh:dependency-inversion``). Resolves a chunk's first work ref straight against
-``work_items`` rather than composing another store instance (``bzh:repository-split``)
-— this store depends only on :class:`ScopedConnections`. A run names its scope by
+(``bzh:dependency-inversion``). Resolves a chunk's first work ref against
+``work_items`` (``bzh:repository-split``). A run names its scope by
 ``scope_id``, written from and read back as the slug within the run's project."""
 
 from __future__ import annotations
@@ -17,9 +16,7 @@ from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 
 def insert_run_context_row(conn: Connection, work_item_id: str, context: RunContext) -> None:
-    """Insert one ``work_item_runs`` row on a caller-supplied ``conn`` — mirrors
-    :func:`~blizzard.hub.store.internal.chunk_rows.insert_chunk_rows`'s shared-connection
-    shape, so a routine run's own composite write folds this into its own transaction."""
+    """Writes one ``work_item_runs`` row, on the caller's connection, inside the caller's transaction."""
     stmts = statements_of(conn)
     conn.execute(
         stmts.insert(s.work_item_runs).values(

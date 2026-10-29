@@ -1,9 +1,6 @@
 """SQLAlchemy adapter for the analytics event query seam (package-private).
 
-Reads ``transcript_events`` directly — the same table :mod:`transcript_event_store`
-writes — rather than depending on that adapter: two ``internal/`` adapters sharing one
-engine and schema module is established, not a coupling between them (see that module's
-own docstring). All ``sqlalchemy`` usage stays confined here (``bzh:dependency-inversion``)."""
+Reads ``transcript_events`` directly. All ``sqlalchemy`` usage stays confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
