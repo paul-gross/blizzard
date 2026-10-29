@@ -11,7 +11,7 @@ pytestmark = pytest.mark.unit
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "upper-tiers.yml").read_text())
 _JOBS = _WORKFLOW["jobs"]
-_SUITE_JOBS = ("e2e", "journey", "image-smoke", "compose-smoke")
+_SUITE_JOBS = ("e2e", "ui", "journey", "image-smoke", "compose-smoke")
 
 
 def test_the_full_suite_input_defaults_off_and_the_crash_sweep_defaults_bounded() -> None:
@@ -37,6 +37,7 @@ def test_the_check_names_the_branch_protection_requires_are_the_ones_the_jobs_em
         "service tier (blizzard:service-test)",
         "kill-9 crash sweep (blizzard:crash-sweep)",
         "e2e acceptance loop (blizzard:e2e)",
+        "ui (blizzard:ui)",
         "acceptance journey (blizzard:journey)",
         "hub image smoke (blizzard:image-smoke)",
         "reference compose smoke (blizzard:compose-smoke)",

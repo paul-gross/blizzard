@@ -1,4 +1,4 @@
-# The upper tiers — service, kill-9 crash sweep, and (behind `full_suite`) e2e, journey and the two
+# The upper tiers — service, kill-9 crash sweep, and (behind `full_suite`) e2e, ui, journey and the two
 # container smokes — as a reusable check suite.
 #
 # `pr.yml`, `push.yml` and `release.yml` all call this exactly as they call `gate.yml`, so each tier
@@ -41,7 +41,7 @@ on:
         default: "1"
       full_suite:
         description: >-
-          Run the e2e, journey, image-smoke and compose-smoke jobs as well as the
+          Run the e2e, ui, journey, image-smoke and compose-smoke jobs as well as the
           service tier and the crash sweep.
         type: boolean
         default: false
@@ -318,6 +318,81 @@ jobs:
         env:
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
         run: cd blizzard && mise run e2e
+
+  ui:
+    needs: [mock-ref]
+    if: ${{ inputs.full_suite }}
+    name: ui (blizzard:ui)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+          persist-credentials: false
+      - name: resolve and checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: ./blizzard/.github/actions/resolve-mock-ref
+        with:
+          sha: ${{ needs.mock-ref.outputs.sha }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+          working-directory: blizzard
+          cache-dependency-glob: |
+            uv.lock
+            ../blizzard-mock/uv.lock
+      - name: Node from mise.toml
+        uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: true
+          working_directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+      - name: git identity for fixture/forge git operations
+        run: |
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: Node version (the cache key's)
+        id: node
+        run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
+      - name: cache the Playwright package's dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: blizzard/tests/node_modules
+          key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
+      - name: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: cd blizzard/tests && npm ci
+      - name: install the frontend's dependencies (the ui task builds it into the wheel-embed dir)
+        # The ui projects drive the *served* board: `mise run ui` depends on `web-build`, which fills
+        # src/blizzard/static/{hub,runner} and needs `npm ci` first.
+        run: cd blizzard/web && npm ci
+      - name: install Chromium for the ui projects (Playwright)
+        run: cd blizzard/tests && npx playwright install --with-deps chromium
+      - name: ui tier — a Chromium page against the board each test's hub serves, `mise run ui`
+        timeout-minutes: 30
+        env:
+          CI: "1"
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+        run: cd blizzard && mise run ui
+      - name: keep the failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui
+          path: |
+            blizzard/tests/playwright-report/
+            blizzard/tests/test-results/
+            blizzard/tests/.run/
+          retention-days: 14
+          if-no-files-found: ignore
 
   journey:
     needs: [mock-ref]
