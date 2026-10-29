@@ -20,7 +20,6 @@ def _claim_body(chunk_id: str, runner: str) -> dict:
 def test_a_claim_blocks_while_a_detach_holds_the_row_lock_mid_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A claim blocks while a detach sits between its route check and its release write."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}])
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1"))
