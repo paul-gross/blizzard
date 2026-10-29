@@ -197,7 +197,7 @@ from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
 from blizzard.runner.leases.overload import IReadOverloadRepository
-from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository, IReadLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
@@ -777,7 +777,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
     (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
-    (IReadLeaseRecordRepository, "chunk_leases"): lambda w: w.read.lease_record.chunk_leases(w.chunk_1),
+    (IReadChunkLeaseRepository, "chunk_leases"): lambda w: w.read.lease_record.chunk_leases(w.chunk_1),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
