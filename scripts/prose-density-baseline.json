@@ -11274,12 +11274,6 @@
    "over_cap": 0,
    "total": 182
   },
-  "service/test_dashboard_route_service.py": {
-   "comments": 7,
-   "docstrings": 10,
-   "over_cap": 0,
-   "total": 157
-  },
   "service/test_forge_old_fields_service.py": {
    "comments": 1,
    "docstrings": 4,
