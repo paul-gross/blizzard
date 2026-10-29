@@ -148,6 +148,7 @@ DERIVATION_TRANSITIONS: Mapping[MarkerState, Mapping[DerivationVerb, DerivationA
 
 
 def marker_state(marker_fingerprint: str | None, current_fingerprint: str | None) -> MarkerState:
+    """No current content (``None``) is gone; no marker is none; else current or stale by fingerprint."""
     if current_fingerprint is None:
         return MarkerState.GONE
     if marker_fingerprint is None:

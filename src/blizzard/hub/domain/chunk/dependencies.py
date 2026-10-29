@@ -138,7 +138,7 @@ class DependencyService:
         self._clock = clock
         # The residual per-tenant lock: row locks alone cannot
         # close a race between two declares closing a cycle through chunks neither one
-        # names, so the cycle check itself still needs one lock over the whole graph.
+        # names, so the cycle check itself still needs one lock over the tenant's whole dependency graph.
         self._cycle_lock = cycle_lock
 
     def declare(self, dependent: Chunk, prerequisite: PrerequisiteScope, *, by: str) -> DependencyEdge:
