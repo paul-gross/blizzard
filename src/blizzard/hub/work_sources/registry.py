@@ -2,7 +2,7 @@
 
 The store is the only answer to what is configured (``bzh:config-read-on-use``): each
 lookup reads the record's revisions and hands out the adapter built under them from the
-process's :class:`~blizzard.hub.live_config.ConfigObjectCache`, so an edit, a retirement or
+process's ``ConfigObjectCache`` (``src/blizzard/hub/live_config/__init__.py``), so an edit, a retirement or
 a secret replace reaches the next call with no restart. The built-in ``hub`` source is
 seated in-process, outside the cache — never configured, never retired.
 
@@ -154,10 +154,6 @@ class StoreWorkSourceRegistry:
         return self._built_in if source == RESERVED_HUB_SOURCE_NAME else None
 
     def resolve(self, token: str) -> WorkRef | None:
-        """The pointer ``token`` names, or ``None``. A ``{x}:{n}`` or ``{x}#{n}`` token whose ``x`` is ``hub`` goes to
-        the built-in source; one whose ``x`` names a configured source — by id, current slug or a slug it left — goes
-        to that source alone, rewritten to name its id, and is claimed by none when the source is retired. Any other
-        token is offered to every active source, the built-in last."""
         for sep in (":", "#"):
             prefix, found, ref = token.partition(sep)
             if not found:

@@ -76,8 +76,8 @@ class GitHubWorkSource:
     def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token forms into a pointer, or ``None`` when ``token``
         isn't shaped for it: ``{id}:{number}``, ``{id}#{number}``, or an issue URL
-        (full or schemeless) naming *this binding's own configured* ``repo``. A slug is never matched here: the
-        registry resolves a slug prefix to the id before it hands the token over."""
+        (full or schemeless) naming *this binding's own configured* ``repo``. A slug prefix is not
+        matched."""
         for sep_char in (":", "#"):
             prefix, sep, ref = token.partition(sep_char)
             if sep and prefix == self._id and ref.isdigit():
@@ -136,8 +136,7 @@ class GitHubWorkSource:
         self._labels_bootstrapped = True
 
     def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
-        """Add ``marker``'s label and remove the other one if present — exclusive
-        and idempotent, mirroring GitHub's own idempotent label add/remove."""
+        """Add ``marker``'s label and delete the other one's, a 404 on the delete tolerated."""
         self._ensure_labels_bootstrapped()
         try:
             added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[Label(marker).name])

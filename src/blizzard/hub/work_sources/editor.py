@@ -1,9 +1,4 @@
-"""The write-half work-source seam's editor capability — full item CRUD.
-
-A sibling Protocol to ``IWorkAnnotator``/``IWorkCloser``: "this source serves browsable
-items" is a *presence* question the registry answers. Only the built-in ``hub`` source
-seats one; a configured forge source's registry entry has none, so a write against one
-is a structural refusal, not a permission check."""
+"""The write-half work-source seam's editor capability — full item CRUD."""
 
 from __future__ import annotations
 
@@ -57,14 +52,13 @@ class IWorkEditor(Protocol):
         """Resolve ``edit``'s sentinel-tagged fields against the record ``pointer`` names
         and replace them in place, stamping ``edited_at``.
 
-        Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``, and the
-        service's closure-guard error for an item that already carries a closure."""
+        Raises :class:`WorkItemRefUnknownError` for an unallocated ``ref``; refused for an item that already
+        carries a closure."""
         ...
 
     def withdraw(self, pointer: WorkRef, *, by: str) -> WithdrawnWorkItem:
         """Close ``pointer`` as withdrawn, attributed to ``by``. Raises
-        :class:`WorkItemRefUnknownError` for an unallocated ``ref``, the service's
-        closure-guard error for an already-closed item, and its live-holder refusal while
-        a live chunk still holds the pointer — else names the unacquired holder chunk
-        deleted along the way, if any."""
+        :class:`WorkItemRefUnknownError` for an unallocated ``ref``; refused for an
+        already-closed item and while a live chunk still holds the pointer — else names the
+        unacquired holder chunk deleted along the way, if any."""
         ...
