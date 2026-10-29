@@ -180,6 +180,8 @@ def _visit(
         feature_title=feature_title,
         public_url=public_url,
         project=LandingProject(),
+        first_turn_at=datetime(2026, 10, 24, tzinfo=UTC),
+        now=datetime(2026, 10, 24, tzinfo=UTC),
     )
 
 

@@ -202,7 +202,7 @@ def test_complete_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_it
         turning_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[FlowResource("re_b", "main")], at=now
     )
     assert waiting is not None and turning is not None
-    assert flows.take_turn(turning.submission_id, passed_over=frozenset(), at=now) is not None
+    assert flows.take_turn(turning.submission_id, passed_over=frozenset(), terms=(), at=now) is not None
 
     for chunk_id in (waiting_chunk, turning_chunk):
         resp = hub.client.post(f"/api/chunks/{chunk_id}/complete", json={"by": "operator"})

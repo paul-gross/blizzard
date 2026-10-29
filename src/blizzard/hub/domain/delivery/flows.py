@@ -8,7 +8,7 @@ once it leaves the node. Whether a submission is open, or a flow busy, is derive
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Literal, get_args
 
@@ -19,7 +19,8 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
-from blizzard.hub.domain.config.repositories import RepositoryResolution
+from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, LandingPolicy
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryResolution
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
 from blizzard.hub.domain.graph.model import Node
 
@@ -230,6 +231,30 @@ class LandingWrite:
 
 @domain_model
 @dataclass(frozen=True)
+class LandingTerms:
+    """What one repository a visit holds lands by, taken at the visit's first turn and kept for the visit: its policy,
+    its park timeout, and its position in the project's landing order — ``None`` when unranked. ``landing_policy`` is
+    the stored name, read open."""
+
+    repository_id: str
+    landing_policy: str
+    park_timeout_hours: int | None = None
+    landing_position: float | None = None
+
+    @classmethod
+    def candidate(
+        cls, repository_id: str, record: ConfiguredRepository | None, *, position: float | None
+    ) -> LandingTerms:
+        """The terms ``repository_id`` would take now: its record's policy and timeout, the default policy for a
+        repository with no record, and ``position`` in its project's order."""
+        if record is None:
+            return cls(repository_id, str(DEFAULT_LANDING_POLICY), None, position)
+        fields = record.fields
+        return cls(repository_id, str(fields.landing_policy), fields.park_timeout_hours, position)
+
+
+@domain_model
+@dataclass(frozen=True)
 class AdmittedTurn:
     """A turn the tick started, and the submission it is a turn of."""
 
@@ -265,6 +290,20 @@ NOT_VERDICTS = frozenset(
         *get_args(Withdrawal.__value__),
     }
 )
+
+
+def stamp_terms(resolution: RepositoryResolution, terms: Mapping[str, LandingTerms]) -> RepositoryResolution:
+    """``resolution`` with each target's policy the one the visit's terms hold for its record; a target with no terms
+    keeps its record's policy."""
+    return replace(
+        resolution,
+        targets=tuple(
+            replace(target, landing_policy=LandingPolicy(taken.landing_policy))
+            if (taken := terms.get(target.record)) is not None
+            else target
+            for target in resolution.targets
+        ),
+    )
 
 
 def is_stuck(outcomes: Sequence[str]) -> bool:

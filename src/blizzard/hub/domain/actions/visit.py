@@ -7,8 +7,9 @@ or ``Node``, whose lists would make it mutable through them (``bzh:hub-action-pu
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.repo_ref import pointer_key, repo_identity
@@ -32,12 +33,14 @@ from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 @domain_model
 @dataclass(frozen=True)
 class LandingProject:
-    """The project a chunk lands for, read as a hub node visit starts: its id, its slug, and the
-    ids of the repository records it links. A chunk record carrying no project links nothing."""
+    """The project a chunk lands for, read as a hub node visit starts: its id, its slug, the
+    ids of the repository records it links, and each linked record's current position in its landing
+    order — ``None`` when unranked. A chunk record carrying no project links nothing."""
 
     project_id: str = ""
     slug: str = ""
     linked: frozenset[str] = frozenset()
+    positions: Mapping[str, float | None] = field(default_factory=lambda: MappingProxyType({}))
 
     @classmethod
     def read(
@@ -47,10 +50,14 @@ class LandingProject:
         if project_id is None:
             return cls()
         project = projects.get(project_id)
+        positions: dict[str, float | None] = {
+            link.repository_id: link.position for link in links.repositories_of(project_id)
+        }
         return cls(
             project_id=project_id,
             slug=project.slug if project is not None else project_id,
-            linked=frozenset(link.repository_id for link in links.repositories_of(project_id)),
+            linked=frozenset(positions),
+            positions=MappingProxyType(positions),
         )
 
 
@@ -237,7 +244,8 @@ class VisitNode:
 class Visit:
     """Everything a pass reads, fixed as the visit starts. ``markers`` are the artifacts recorded at this
     node across every epoch, so a re-visit sees what earlier visits wrote; ``work_items`` are one
-    ``{label, reference}`` mapping per work ref."""
+    ``{label, reference}`` mapping per work ref. ``first_turn_at`` is when the visit's first turn started, across
+    every generation of its submissions; ``now`` is the driver's clock as it built the visit."""
 
     chunk: VisitChunk
     node: VisitNode
@@ -250,6 +258,8 @@ class Visit:
     feature_title: str | None
     public_url: str | None
     project: LandingProject
+    first_turn_at: datetime
+    now: datetime
 
     def marker_names(self) -> frozenset[str]:
         """The names of the markers recorded at this node, in any epoch."""

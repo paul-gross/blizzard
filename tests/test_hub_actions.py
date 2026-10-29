@@ -155,6 +155,8 @@ def _visit(**overrides: object) -> Visit:
         "feature_title": "A feature",
         "public_url": "https://board.example",
         "project": LandingProject(project_id="pr_1", slug="blizzard", linked=frozenset({"re_1"})),
+        "first_turn_at": datetime(2026, 10, 24, tzinfo=UTC),
+        "now": datetime(2026, 10, 24, tzinfo=UTC),
     }
     return Visit(**{**fields, **overrides})  # type: ignore[arg-type]
 

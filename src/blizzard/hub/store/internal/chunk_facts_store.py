@@ -526,7 +526,12 @@ class ChunkFactsStore:
             for p in _rows(stmts, conn, s.hub_node_poll, batch):
                 hub_node_polls[p.chunk_id].append(
                     HubNodePollFact(
-                        node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at, next_poll_at=p.next_poll_at
+                        node_id=p.node_id,
+                        epoch=p.epoch,
+                        polled_at=p.polled_at,
+                        next_poll_at=p.next_poll_at,
+                        kind=p.kind,
+                        last_polled_at=p.last_polled_at,
                     )
                 )
 

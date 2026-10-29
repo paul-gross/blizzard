@@ -16,6 +16,7 @@ from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import WaitKind
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
@@ -149,20 +150,16 @@ class ChunkHubExecStore:
         *,
         node_id: str,
         epoch: int,
+        kind: WaitKind,
         at: datetime,
         next_poll_at: datetime | None = None,
     ) -> None:
         """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — never a transition, no idempotency guard (an at-least-once poll attempt is
         harmless recorded twice)."""
-        self._poll_conn(conn_of(handle), chunk_id, node_id=node_id, epoch=epoch, at=at, next_poll_at=next_poll_at)
-
-    def _poll_conn(
-        self, conn: Connection, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None
-    ) -> None:
-        conn.execute(
+        conn_of(handle).execute(
             self._store.insert(s.hub_node_poll).values(
-                chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at, next_poll_at=next_poll_at
+                chunk_id=chunk_id, node_id=node_id, epoch=epoch, kind=kind, polled_at=at, next_poll_at=next_poll_at
             )
         )
 

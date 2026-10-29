@@ -1,5 +1,6 @@
 """The line's rules (unit tier): who is eligible and who is next on a flow, what a visit holds, the one judge of a
-closure's outcome, and ``hub:flow-line-standing`` over planted flows and facts."""
+closure's outcome, the terms a visit's repositories would take, and ``hub:flow-line-standing`` over planted flows
+and facts."""
 
 from __future__ import annotations
 
@@ -21,17 +22,27 @@ from blizzard.hub.domain.chunk.model import (
     TransitionFact,
 )
 from blizzard.hub.domain.config.forges import ForgeId
-from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
+from blizzard.hub.domain.config.landing_policies import LandingPolicy
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    RepositoryFields,
+    RepositoryId,
+    RepositoryOutcome,
+    RepositoryResolution,
+    ResolvedRepository,
+)
 from blizzard.hub.domain.delivery.flows import (
     RECONCILE_FLOOR,
     Flow,
     FlowFact,
     FlowLine,
     FlowResource,
+    LandingTerms,
     PollPolicy,
     Submission,
     Turn,
     held_resources,
+    stamp_terms,
     withdrawal_for,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
@@ -273,6 +284,41 @@ def test_a_chunk_with_nothing_to_resolve_holds_nothing() -> None:
     nothing = RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
 
     assert held_resources(nothing, frozenset(), _spec(lands=True)) == ()
+
+
+# --- The terms a visit's repositories would take ---------------------------------------------------------------------
+
+
+def test_a_candidate_takes_its_records_policy_and_timeout_and_its_projects_position() -> None:
+    record = ConfiguredRepository(
+        repository_id=RepositoryId("repo_a"),
+        slug="app",
+        name="app",
+        fields=RepositoryFields(ForgeId("frg_1"), "acme", "app", "main", "s", LandingPolicy.MERGE_ON_CHECKS, None),
+        revision=1,
+        created_at=_AT,
+        created_by="op",
+    )
+
+    assert LandingTerms.candidate("repo_a", record, position=2.0) == LandingTerms(
+        "repo_a", "merge-on-checks", None, 2.0
+    )
+
+
+def test_a_candidate_with_no_record_takes_the_default_policy_unranked() -> None:
+    assert LandingTerms.candidate("repo_x", None, position=None) == LandingTerms(
+        "repo_x", "merge-on-checks", None, None
+    )
+
+
+def test_only_a_target_with_terms_is_stamped_from_them() -> None:
+    resolution = _resolution()
+
+    stamped = stamp_terms(resolution, {"repo_a": LandingTerms("repo_a", "merge-on-checks", None, 1.0)})
+
+    assert [t.landing_policy for t in stamped.targets] == [LandingPolicy.MERGE_ON_CHECKS] * 2
+    assert stamped.targets[1] is resolution.targets[1]
+    assert (stamped.qualified, stamped.records) == (resolution.qualified, resolution.records)
 
 
 # --- withdrawal_for --------------------------------------------------------------------------------------------------

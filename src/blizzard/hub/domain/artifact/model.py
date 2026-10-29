@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TypedDict
 
 from blizzard.foundation.artifacts import ArtifactKind
@@ -108,6 +109,8 @@ class StoredArtifact:
     node_id: str
     node_name: str
     epoch: int
+    # When the store recorded the row; ``None`` on a row not yet stored.
+    produced_at: datetime | None = None
 
     @classmethod
     def of(cls, artifact: Artifact, *, node_name: str) -> StoredArtifact:

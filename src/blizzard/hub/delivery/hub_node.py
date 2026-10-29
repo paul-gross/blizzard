@@ -24,7 +24,7 @@ from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, is_landed_revision
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, WaitKind, is_landed_revision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
@@ -307,17 +307,18 @@ class HubNodeRouter:
         node: Node,
         *,
         epoch: int,
+        kind: WaitKind,
         next_poll_at: datetime | None = None,
         ending: ITurnEnd = NO_TURN,
         reached: Callable[[], None] | None = None,
     ) -> None:
-        """Record one reserved-wait poll row for the visit — no transition, no retry or bounce spent. A pass's
-        ``next_poll_at`` rides on the row and only ever postpones the next poll. ``reached`` marks the window
+        """Record one reserved-wait poll row of ``kind`` for the visit — no transition, no retry or bounce spent. A
+        pass's ``next_poll_at`` rides on the row and only ever postpones the next poll. ``reached`` marks the window
         between the row and the turn's end."""
         now = self._clock.now()
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             self._hub_exec.record_hub_node_poll_locked(
-                handle, chunk.chunk_id, node_id=node.node_id, epoch=epoch, at=now, next_poll_at=next_poll_at
+                handle, chunk.chunk_id, node_id=node.node_id, epoch=epoch, kind=kind, at=now, next_poll_at=next_poll_at
             )
             if reached is not None:
                 reached()

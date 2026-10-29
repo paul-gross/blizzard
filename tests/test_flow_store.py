@@ -1,7 +1,9 @@
 """``FlowStore`` (component tier). A submission takes the tenant's newest arrival plus one and is written once per
 generation of a visit; a closure is written once, with its ``withdrawn`` facts, and never while a turn is open; the
 open walk from a floor returns only open submissions at or above it; and ending a turn ``interrupted`` writes its
-``turn-ended`` facts and, when asked, the closure, once."""
+``turn-ended`` facts and, when asked, the closure, once. A turn gives its submission landing terms for each repository
+it holds and has none for — an earlier generation's, else the candidate — so a retried turn and a resubmission keep
+what the visit's first turn took."""
 
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import pytest
 from sqlalchemy import Engine, Table, func, select
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.delivery.flows import FlowResource, TurnEvent
+from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import build_hub, hub_scoped, hub_store_connections, stamp
@@ -171,3 +173,67 @@ def test_ending_a_turn_without_a_withdrawal_leaves_the_submission_open(world: _W
     assert flows.end_turn_interrupted("htn_1", withdrawal=None, event=_INTERRUPTED, at=_AT) is not None
 
     assert [sub.submission_id for sub in flows.open_submissions_from(0)] == [submission.submission_id]
+
+
+_TERMS_A = LandingTerms("repo_a", "merge-on-checks", None, 1.0)
+_TERMS_B = LandingTerms("repo_b", "merge-on-checks", None, 2.0)
+_THIRD = FlowResource("repo_c", "main")
+
+
+def _turn(flows: FlowStore, submission_id: str, terms: tuple[LandingTerms, ...], *, at: datetime = _AT) -> str:
+    turn = flows.take_turn(submission_id, passed_over=frozenset(), terms=terms, at=at)
+    assert turn is not None
+    return turn.turn_id
+
+
+def test_a_first_turn_takes_terms_for_every_repository_it_holds(flows: FlowStore) -> None:
+    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
+    assert submission is not None
+    assert flows.terms_of(submission.submission_id) == {}
+
+    _turn(flows, submission.submission_id, (_TERMS_A, _TERMS_B))
+
+    assert flows.terms_of(submission.submission_id) == {"repo_a": _TERMS_A, "repo_b": _TERMS_B}
+
+
+def test_a_retried_turn_keeps_the_terms_its_first_attempt_took(world: _World, flows: FlowStore) -> None:
+    submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    assert submission is not None
+    first = _turn(flows, submission.submission_id, (_TERMS_A,))
+    flows.end_turn_interrupted(first, withdrawal=None, event=_INTERRUPTED, at=_AT)
+
+    _turn(flows, submission.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 9.0),))
+
+    assert flows.terms_of(submission.submission_id) == {"repo_a": _TERMS_A}
+    assert _count(world.engine, s.flow_submission_terms) == 1
+
+
+def test_a_resubmission_copies_the_visits_terms_and_takes_fresh_ones_only_for_a_new_repository(
+    flows: FlowStore,
+) -> None:
+    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
+    assert first is not None
+    turn = _turn(flows, first.submission_id, (_TERMS_A, _TERMS_B))
+    flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
+    second = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN, _THIRD], at=_AT)
+    assert second is not None
+    fresh_c = LandingTerms("repo_c", "merge-on-checks", None, None)
+
+    _turn(flows, second.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 5.0), fresh_c))
+
+    assert flows.terms_of(second.submission_id) == {"repo_a": _TERMS_A, "repo_c": fresh_c}
+
+
+def test_the_first_turn_of_a_visit_is_kept_across_its_resubmissions(flows: FlowStore) -> None:
+    assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) is None
+    first = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN], at=_AT)
+    assert first is not None
+    turn = _turn(flows, first.submission_id, (_TERMS_A,))
+    flows.end_turn_interrupted(turn, withdrawal="superseded", event=_INTERRUPTED, at=_AT)
+    second = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=1, resources=[_MAIN], at=_AT)
+    assert second is not None
+
+    _turn(flows, second.submission_id, (_TERMS_A,), at=_AT + timedelta(hours=1))
+
+    assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) == _AT
+    assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=2) is None

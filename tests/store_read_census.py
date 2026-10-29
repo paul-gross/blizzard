@@ -1885,7 +1885,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64)
+            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(64)
         )
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_step_transition_locked(
@@ -1904,7 +1904,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, at=_ht(68)
+            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(68)
         )
 
     # --- delivery + close intents -----------------------------------------------------------------
@@ -2450,6 +2450,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
     (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
     (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
+    (IReadFlows, "terms_of"): lambda w: w.hub.services.flows.terms_of(w.flow_submission_id),
+    (IReadFlows, "first_turn_at"): lambda w: w.hub.services.flows.first_turn_at(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2

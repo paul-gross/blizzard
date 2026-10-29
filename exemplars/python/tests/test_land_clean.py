@@ -112,6 +112,8 @@ def _visit(*repos: str, landed: tuple[str, ...] = ()) -> Visit:
         feature_title=None,
         public_url=None,
         project=LandingProject(),
+        first_turn_at=datetime(2026, 10, 24, tzinfo=UTC),
+        now=datetime(2026, 10, 24, tzinfo=UTC),
     )
 
 
