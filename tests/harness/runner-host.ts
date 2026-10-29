@@ -35,6 +35,8 @@ export interface RunnerHostOptions {
   runnerStarted: boolean;
   /** Points the `anthropic` subscription at a minted credential and the counterpart, sampling on every host pass. */
   runnerSampling: boolean;
+  /** `false` declares no subscription at all, so the host's runner names none and its panel lists none. */
+  runnerSubscribed: boolean;
   /**
    * Starts a sink the host exports its traces to: the host's `OTEL_EXPORTER_OTLP_ENDPOINT` names it, and it is the
    * handle's `otlp`. Whether the host traces at all stays a `runner.toml` or `runnerConfig` setting. `'hung'` starts a
@@ -59,6 +61,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerLoop: 'stepped',
   runnerStarted: true,
   runnerSampling: false,
+  runnerSubscribed: true,
   runnerOtlp: false,
   runnerBundle: {},
   runnerModelPrices: {},
@@ -387,6 +390,11 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       // The overlay: the fixture's baseline first, then the profile, over the file the CLI wrote.
       let port = await freePort();
       const written = readHostFile(dir);
+      // `init` scaffolds the `anthropic` subscription and has each runner name it; a host declaring none starts without both.
+      if (!options.runnerSubscribed) {
+        delete written.subscription;
+        for (const entry of (written.runner ?? []) as TomlTable[]) delete entry.subscription;
+      }
       const baseline: TomlTable = {
         host: '127.0.0.1',
         port,
@@ -403,11 +411,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
               .map((name) => ({ name: name.slice(0, -'.git'.length), url: `file://${path.join(origins, name)}` })),
           },
         ],
-        subscription: [
-          options.runnerSampling
-            ? { slug: 'anthropic', usage_api_base: ctx.vendor.url, credentials_path: ctx.vendor.mintAnthropic(path.join(root, 'vendor')).path, sample_interval_seconds: 0 }
-            : { slug: 'anthropic', usage_api_base: ctx.vendor.url, credentials_path: path.join(root, 'vendor', 'absent.json') },
-        ],
+        subscription: options.runnerSubscribed
+          ? [
+              options.runnerSampling
+                ? { slug: 'anthropic', usage_api_base: ctx.vendor.url, credentials_path: ctx.vendor.mintAnthropic(path.join(root, 'vendor')).path, sample_interval_seconds: 0 }
+                : { slug: 'anthropic', usage_api_base: ctx.vendor.url, credentials_path: path.join(root, 'vendor', 'absent.json') },
+            ]
+          : [],
         runner: runnerEntries(written).map((entry) => ({
           name: entry.name,
           transcripts_root: transcripts,

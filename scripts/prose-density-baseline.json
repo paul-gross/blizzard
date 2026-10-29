@@ -11316,12 +11316,6 @@
    "over_cap": 1,
    "total": 221
   },
-  "service/test_host_registration_service.py": {
-   "comments": 2,
-   "docstrings": 8,
-   "over_cap": 0,
-   "total": 138
-  },
   "service/test_host_token_service.py": {
    "comments": 0,
    "docstrings": 3,
