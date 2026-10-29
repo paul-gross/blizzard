@@ -190,7 +190,7 @@ class ChunkDecisionsStore:
                 self._store.select(s.decisions)
                 .where(
                     not_resolved,
-                    self._not_closed_clause(self._store, s.decisions.c.decision_id),
+                    not_closed_clause(self._store, s.decisions.c.decision_id),
                     ~chunk_is_terminal(self._store, s.decisions.c.chunk_id),
                 )
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
