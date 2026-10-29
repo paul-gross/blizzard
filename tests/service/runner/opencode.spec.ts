@@ -7,7 +7,7 @@ import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures'
 const REPO = 'toy-api';
 const BUILD_BRANCH = 'feature/scripted-build';
 const WORK_REFS = [{ source: 'mock', ref: 'blizzard/toy-api/issues/1' }];
-const MAX_STEPS = 60;
+const MAX_STEPS = 600;
 
 test.use({
   runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] },
@@ -133,6 +133,8 @@ const transcriptChunk = buildThenDeliver('gr_opencode_transcript', TRANSCRIPT_BU
 
 const CRASH_MARKER = 'crash-recovered-once.marker';
 const DONE_MARKER = 'build-done.marker';
+// The judgement resume overlaps the build still running, so it waits a bounded while for the build's own completion marker.
+const JUDGE_WAIT_SECONDS = 10;
 
 /** The build program crashes the first lease hard after `beforeCrash`; the retry finds the marker and does the real work. */
 function crashBuild(beforeCrash: string[]): string {
@@ -150,8 +152,12 @@ function crashBuild(beforeCrash: string[]): string {
 }
 
 const CRASH_JUDGEMENT = [
-  'import pathlib',
-  `if pathlib.Path('${DONE_MARKER}').exists():`,
+  'import pathlib, time',
+  `done = pathlib.Path('${DONE_MARKER}')`,
+  `deadline = time.monotonic() + ${JUDGE_WAIT_SECONDS}`,
+  'while not done.exists() and time.monotonic() < deadline:',
+  '    time.sleep(0.1)',
+  'if done.exists():',
   "    verdict('pass', 'the mock harness committed the change; checks are green')",
   '',
 ].join('\n');
