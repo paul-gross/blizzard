@@ -181,7 +181,7 @@ jobs:
       - name: install the Playwright task's collector
         env:
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
-        run: cd blizzard && mise run playwright -- --version
+        run: cd blizzard && mise run collector-config-check && mise run playwright -- --version
       - name: service tier — the Playwright half, `mise run playwright`
         timeout-minutes: 30
         env:
