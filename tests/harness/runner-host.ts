@@ -92,6 +92,8 @@ export interface RunnerHost {
    * it, as the mock harness recorded at spawn. Throws when no spawned session recorded that lease.
    */
   workerHeaders(leaseId: string): Record<string, string>;
+  /** The installed `blizzard` CLI, by absolute path: a worker's own `PATH` need not hold it, as under `npx playwright test`. */
+  readonly cliBinary: string;
   /**
    * Merges `overlay` over the stopped host's file, checked as a profile is; the next boot reads it. Throws naming every
    * problem, writing nothing, when the overlay is unsound or the host is running.
@@ -466,6 +468,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before clearHubTokens()');
           fs.writeFileSync(path.join(dir, hostEnvContract().file), '');
         },
+        cliBinary: requireBinary(binDir(), 'blizzard'),
         workerHeaders: (leaseId) => ({ Authorization: `Bearer ${recordedLeaseToken(sessionsDir, leaseId)}` }),
         reconfigure(overlay) {
           const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];
