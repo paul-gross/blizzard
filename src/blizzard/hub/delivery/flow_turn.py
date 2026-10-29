@@ -341,7 +341,7 @@ class TurnRunner:
             return None
         assert action is not None  # resolved, so its spec was found
         spec, git_commits = resolved.spec, resolved.git_commits
-        resolution = stamp_terms(resolved.resolution, self._flows.terms_of(submission.submission_id))
+        resolution = stamp_terms(resolved.resolution, self._flows.terms_of(submission.submission_id), project.positions)
         held = held_resources(resolution, LandedRepos.of(artifacts).names, spec)
         if resources_moved(held, held_resources(resolution, frozenset(), spec), [f.resource for f in submission.flows]):
             self._end(submission, ending, outcome=TURN_SUPERSEDED, closure=TURN_SUPERSEDED)

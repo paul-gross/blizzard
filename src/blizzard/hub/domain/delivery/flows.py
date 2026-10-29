@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Literal, get_args
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -292,15 +293,24 @@ NOT_VERDICTS = frozenset(
 )
 
 
-def stamp_terms(resolution: RepositoryResolution, terms: Mapping[str, LandingTerms]) -> RepositoryResolution:
-    """``resolution`` with each target's policy the one the visit's terms hold for its record; a target with no terms
-    keeps its record's policy."""
+def stamp_terms(
+    resolution: RepositoryResolution,
+    terms: Mapping[str, LandingTerms],
+    positions: Mapping[str, float | None] = MappingProxyType({}),
+) -> RepositoryResolution:
+    """``resolution`` with each target's policy and landing position the ones the visit's terms hold for its record; a
+    target with no terms keeps its record's policy and takes its position from ``positions``, the project's order
+    as read now."""
     return replace(
         resolution,
         targets=tuple(
-            replace(target, landing_policy=LandingPolicy(taken.landing_policy))
+            replace(
+                target,
+                landing_policy=LandingPolicy(taken.landing_policy),
+                landing_position=taken.landing_position,
+            )
             if (taken := terms.get(target.record)) is not None
-            else target
+            else replace(target, landing_position=positions.get(target.record))
             for target in resolution.targets
         ),
     )

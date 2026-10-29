@@ -550,6 +550,7 @@ def test_a_visit_built_after_an_edit_lands_by_the_terms_its_first_turn_took(worl
     assert (taken.landing_policy, taken.landing_position) == ("merge-on-checks", None)
     assert visits[-1].project.positions[record.repository_id] == 1.0
     assert [target.landing_policy for target in visits[-1].resolution.targets] == [taken.landing_policy]
+    assert [target.landing_position for target in visits[-1].resolution.targets] == [None]
     assert visits[-1].now == world.hub.clock.now() - timedelta(seconds=1)  # the tick steps the clock after its pass
     assert all(row.produced_at is not None for row in visits[-1].artifacts)
     standing = [v for v in HubInvariants(world.hub.engine).run() if v.invariant == "hub:submission-terms-standing"]

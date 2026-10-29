@@ -277,7 +277,9 @@ class RepositoryEdit:
 @dataclass(frozen=True)
 class ResolvedRepository:
     """The repository record one commit pointer resolved to — its forge's id, owner, base branch and
-    secret, the record's own id and current slug, and the policy work lands into it by."""
+    secret, the record's own id and current slug, the policy work lands into it by, and its position in its
+    project's landing order — ``None`` when unranked. A visit's driver stamps both from the terms its first turn
+    took."""
 
     forge_id: ForgeId
     owner: str
@@ -286,6 +288,7 @@ class ResolvedRepository:
     record: str = ""
     slug: str = ""
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
+    landing_position: float | None = None
 
 
 @domain_model
