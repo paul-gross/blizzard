@@ -1,4 +1,4 @@
-"""Whether a merge commit adds exactly the base branch's change — the proof behind ``land``'s head gate,
+"""Whether a merge commit adds exactly the base branch's change — the proof behind the head gate,
 worked from the forge's comparisons alone. A file both sides changed
 is admitted only when the merge's change blocks equal the base's blocks translated into the
 feature side's line coordinates; unprovable is refused

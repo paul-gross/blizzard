@@ -1,6 +1,5 @@
-"""What ``land`` decides from what the forge said, with no forge call of its own: where one repository's
-change routes, how its checks classify, whether its head is still the submitted work, and the
-``delivery-findings`` a resolve worker reads."""
+"""How every landing policy reads checks: where one repository's change routes, how its checks classify, the
+inherited-failure rule and its one-time re-run, and the ``delivery-findings`` a resolve worker reads."""
 
 from __future__ import annotations
 
@@ -9,7 +8,15 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.forge.landing import Check, CheckOutcome, CommitSummary, Mergeability
+from blizzard.hub.delivery.actions.landing.repo import NotRecorded, RepoLanding
+from blizzard.hub.forge.landing import (
+    Check,
+    CheckOutcome,
+    ForgeNotFound,
+    ForgeRejected,
+    ForgeUnavailable,
+    Mergeability,
+)
 
 # Pure routing decisions (what to do with one repo after reading its live change).
 PUSH = "push"  # mergeable (or already merged) — eligible for the merge stage
@@ -110,33 +117,44 @@ def inherited(base_red: bool | None) -> bool:
     return base_red is True
 
 
-@domain_model
-@dataclass(frozen=True)
-class HeadGate:
-    """Whether a live change head is still the submitted work; ``offenders`` names what broke it."""
-
-    offenders: tuple[str, ...]
-
-    def admitted(self) -> bool:
-        return not self.offenders
+_RERUN_MARKER_PREFIX = "ci-rerun/"
 
 
-def first_parent_chain(
-    commits: tuple[CommitSummary, ...], head: str, submitted: str
-) -> tuple[list[CommitSummary], str | None]:
-    """``head``'s first-parent commits back to ``submitted``, and why the walk failed, if it did."""
-    by_revision = {c.revision: c for c in commits}
-    chain: list[CommitSummary] = []
-    current = head
-    while current != submitted:
-        commit = by_revision.get(current)
-        if commit is None or not commit.parents:
-            return chain, f"{current} is not reachable from {submitted} within the listed commits"
-        chain.append(commit)
-        if len(chain) > len(by_revision):
-            return chain, f"{current} has no readable first parent"
-        current = commit.parents[0]
-    return chain, None
+def rerun_marker(repo: str, name: str, head_sha: str) -> str:
+    """The marker one inherited failure was re-run under — one per (repo, check name, head sha) — read back on a
+    re-visit."""
+    return f"{_RERUN_MARKER_PREFIX}{repo}/{name}/{head_sha}"
+
+
+async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
+    """``ref``'s checks, degrading to ``None`` on any read the forge refused or did not answer."""
+    try:
+        return Verdict(await repo.ask(repo.forge.checks.checks(ref)))
+    except (ForgeRejected, ForgeNotFound):
+        return Verdict(None)
+    except ForgeUnavailable as exc:
+        repo.run.hold(exc)
+        return Verdict(None)
+
+
+async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> bool | None:
+    """Ask the forge once to re-run ``check``, then record its signature marker. Whether the forge accepted;
+    ``None`` when it did not answer (pinned by
+    ``tests/test_land_action.py::test_a_refused_re_run_writes_no_rerun_marker_and_routes_failure``)."""
+    try:
+        accepted = await repo.ask(repo.forge.checks.rerun_check(check.id))
+    except (ForgeRejected, ForgeNotFound):
+        return False
+    except ForgeUnavailable as exc:
+        repo.run.hold(exc)
+        return None
+    if not accepted:
+        return False
+    try:
+        await repo.run.post(rerun_marker(repo.repo, check.name, head_sha), head_sha)
+    except NotRecorded as exc:
+        repo.run.say(f"re-run signature marker write failed (non-fatal): {exc}")
+    return True
 
 
 @domain_model
