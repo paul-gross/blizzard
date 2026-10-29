@@ -25,6 +25,8 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingWrite,
     Submission,
+    SubmissionClosure,
+    SubmissionRecord,
     Turn,
     TurnEvent,
     VisitStanding,
@@ -102,6 +104,34 @@ class FlowStore:
                 self._store.select(_closures, _closures.c.outcome).where(_closures.c.submission_id == row.submission_id)
             ).scalar()
             return self._submissions(conn, [row], closed={row.submission_id: outcome})[0]
+
+    def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
+        with self._store.read("submissions_of") as conn:
+            joined = self._store.scope_join(
+                _sub, _closures, _closures.c.submission_id == _sub.c.submission_id, isouter=True
+            )
+            rows = conn.execute(
+                self._store.select(joined, *_sub.c, _closures.c.outcome, _closures.c.closed_at).where(
+                    _sub.c.chunk_id == chunk_id
+                )
+            ).all()
+            # Sorted here, not in SQL: an ORDER BY arrival steers the planner onto the tenant-wide arrival index,
+            # where the chunk's own visit index bounds the read to this chunk's rows.
+            rows = sorted(rows, key=lambda r: r.arrival)
+            return [
+                SubmissionRecord(
+                    submission_id=r.submission_id,
+                    node_id=r.node_id,
+                    epoch=r.epoch,
+                    generation=r.generation,
+                    arrival=r.arrival,
+                    submitted_at=r.submitted_at,
+                    closure=None
+                    if r.closed_at is None
+                    else SubmissionClosure(outcome=r.outcome, closed_at=r.closed_at),
+                )
+                for r in rows
+            ]
 
     def facts_of(self, submission_id: str) -> list[FlowFact]:
         with self._store.read("facts_of") as conn:

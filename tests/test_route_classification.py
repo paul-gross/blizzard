@@ -217,6 +217,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/invitations/{invitation_id}/revocations"): Permission.USER_MANAGE,
     # Key rotation — the key signs runner sign-ins in every tenant, so it takes a hub permission.
     ("POST", "/api/auth/rotate-signing-key"): Permission.HUB_ADMIN_GRANT,
+    ("GET", "/api/chunks/{chunk_id}/flow-submissions"): Permission.FLEET_VIEW,
     # Transcript-segment discovery/content reads — above
     # Permission.FLEET_VIEW, since a transcript carries everything a worker saw.
     ("GET", "/api/chunks/{chunk_id}/transcripts"): Permission.TRANSCRIPT_READ,

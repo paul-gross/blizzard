@@ -2423,6 +2423,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlows, "submission_for_visit"): lambda w: w.hub.services.flows.submission_for_visit(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
+    (IReadFlows, "submissions_of"): lambda w: w.hub.services.flows.submissions_of(w.flow_chunk),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
     (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1

@@ -18,6 +18,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowResource,
     LandingWrite,
     Submission,
+    SubmissionRecord,
     Turn,
     TurnEvent,
     VisitStanding,
@@ -41,6 +42,11 @@ class IReadFlows(Protocol):
 
     def submission_for_visit(self, chunk_id: str, *, node_id: str, epoch: int) -> Submission | None:
         """The visit's newest-generation submission, open or closed, or ``None`` when it was never submitted."""
+        ...
+
+    def submissions_of(self, chunk_id: str) -> list[SubmissionRecord]:
+        """Every submission of the chunk's visits, open or closed, in arrival order, each with its closure — bounded
+        by the chunk's visits."""
         ...
 
     def facts_of(self, submission_id: str) -> list[FlowFact]:

@@ -92,6 +92,30 @@ class Submission:
 
 @domain_model
 @dataclass(frozen=True)
+class SubmissionClosure:
+    """How a submission left its flows: a verdict's choice or a :data:`Withdrawal`, and when."""
+
+    outcome: str
+    closed_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
+class SubmissionRecord:
+    """One submission of a chunk's visit as a reader sees it, without the flows it holds. ``closure`` is ``None``
+    while the submission is open."""
+
+    submission_id: str
+    node_id: str
+    epoch: int
+    generation: int
+    arrival: int
+    submitted_at: datetime
+    closure: SubmissionClosure | None
+
+
+@domain_model
+@dataclass(frozen=True)
 class Turn:
     """One turn a submission takes; open while ``ended_at`` is ``None``."""
 
