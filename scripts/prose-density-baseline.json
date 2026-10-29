@@ -11424,12 +11424,6 @@
    "over_cap": 0,
    "total": 53
   },
-  "service/test_utilization_lever_service.py": {
-   "comments": 2,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 80
-  },
   "service/test_wire_parity_service.py": {
    "comments": 12,
    "docstrings": 15,

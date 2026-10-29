@@ -302,6 +302,7 @@ export type { RunnerHost, RunnerHostOptions } from './runner-host';
 export { HOLD_OPEN, holdingChunk, runningLeaseWithWorker, seededLeaseWithWorker, stepUntil } from './runner-steps';
 export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-worker';
 export type { VendorUsage } from './vendor-usage';
+export type { WorkerCheckpoint } from './worker-checkpoint';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';
 export { chunkTraceId } from './trace-ids';
