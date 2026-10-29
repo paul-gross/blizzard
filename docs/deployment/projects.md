@@ -195,6 +195,7 @@ rewritten to the current slug. One naming no project of the tenant opens the sam
 | View                                     | On one project                                                               | On All                     |
 | ---------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
 | Board, and the header's counts           | The project's chunks, in the tenant's order                                  | Every chunk                |
+| The board's Delivery band                | Unchanged: every chunk on each branch, since a branch's line is shared       | Every active flow          |
 | Events                                   | Events of the project's chunks, and of runners that serve it                 | Every event                |
 | Gardening                                | The project's scopes, routines, runs, findings and proposals                 | One card per project       |
 | Admin → Projects                         | That project                                                                 | Every project              |

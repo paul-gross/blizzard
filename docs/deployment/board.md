@@ -42,3 +42,26 @@ through its work source as the chunk page reads them ([work-sources.md](./work-s
 it read for five minutes, across live updates and reconnects alike. For a GitHub source a read costs two API requests
 per item, so loading the board spends the source's rate limit in proportion to the items on it not read in the last five
 minutes.
+
+## The Delivery band
+
+Above the lanes, the **Delivery** band shows one lane per active flow — a branch with a chunk in its line or a change in
+the last 48 hours ([flows.md](./flows.md)). A lane is titled by its repository's name and branch, `blizzard · master`.
+It shows the chunk landing now, then the chunks in line in arrival order, each by its id, its title once read, and its
+state, with the time a polling chunk next polls. Last comes the flow's last verdict and how long ago it came. With
+nothing landing and no one in line, the lane folds to that verdict alone, and once the flow has been still for 48 hours
+it leaves the band. With no active flow the band is hidden. The band is the tenant's, not the lens's: under a project's
+lens it still shows every chunk on the branch, so you can see whom a lensed chunk waits behind. It moves live, with no
+reload, as each turn starts and ends. The glance board at phone width has no band.
+
+Clicking a chunk in the band opens it in the dock, as a card does. Clicking a lane's title opens the flow's record in
+the dock instead, newest first, with `OLDER` for the page before. The record lives in the URL as `?flow=`, in place of
+`?chunk=`; one dock shows one or the other.
+
+## Place lines
+
+A delivering card, and its row in the list, says where the chunk stands on each flow it is submitted to:
+`landing on blizzard/master` while its turn is open, `2nd on blizzard/master` while it waits, and
+`passed over on blizzard/master` while it is paused or needs a person. A chunk that has landed, or holds no flow, shows
+no place line. The chunk's timeline shows its submission, turns, and landing among its other steps, each linked to the
+flow's record.
