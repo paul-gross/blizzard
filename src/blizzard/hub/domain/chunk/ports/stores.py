@@ -1,9 +1,7 @@
 """The chunk-store bundles — composition-and-test handles for a
-collaborator spanning several chunk seams. Unlike :class:`~blizzard.runner.stores.RunnerStores`
-and its read-only twin :class:`~blizzard.runner.stores.RunnerReadStores`, no ``src/`` domain
-collaborator takes either bundle here: every service names its seams explicitly, so no chunk
-service can hold write access to a concept it never calls. Declares no umbrella Protocol
-either — unlike the runner's, nothing would hold one."""
+collaborator spanning several chunk seams. No ``src/`` domain collaborator takes either
+bundle: every service names its seams explicitly, so no chunk service can hold write access
+to a concept it never calls."""
 
 from __future__ import annotations
 
@@ -65,9 +63,7 @@ class ChunkStores:
 class ChunkReadStores:
     """The controller-facing chunk-seam bundle — every field typed to its
     concept's read Protocol only, so ``bzh:controller-read-only`` is enforced at type-check
-    time for the one collaborator every route handler reaches through. Built by
-    :func:`~blizzard.hub.composition.build_hub_services` from the same per-seam adapter
-    instances as :class:`ChunkStores`."""
+    time."""
 
     facts: IReadChunkFactsRepository
     record: IReadChunkRecordRepository

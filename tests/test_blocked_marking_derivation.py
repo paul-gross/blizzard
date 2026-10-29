@@ -217,6 +217,14 @@ class TestDeriveChunkNeighborhood:
             dependents=[ChunkNeighbor(chunk_id="chk_dependent", status=ChunkStatus.READY, satisfied=True)],
         )
 
+    def test_an_unresolved_dependent_of_a_done_subject_is_still_drawn_and_satisfied(self) -> None:
+        edges = [_edge("dep_1", "chk_dependent", "chk_a")]
+        statuses = {"chk_a": ChunkStatus.DONE}
+
+        neighborhood = derive_chunk_neighborhood("chk_a", edges, statuses)
+
+        assert neighborhood.dependents == [ChunkNeighbor(chunk_id="chk_dependent", status=None, satisfied=True)]
+
     def test_a_neighbor_absent_from_statuses_is_drawn_unsatisfied_with_a_null_status(self) -> None:
         """A neighbor whose facts do not resolve — the residual race deletion's 409 refusal
         leaves — is still drawn, never a silently dropped edge."""

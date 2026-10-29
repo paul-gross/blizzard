@@ -17,8 +17,7 @@ class IReadChunkLifecycleRepository(Protocol):
         """Whether ``chunk_id`` names a grouped-away or deleted chunk — the
         read that tells an ephemeral prerequisite apart from one never minted at all,
         since :meth:`~blizzard.hub.domain.chunk.ports.record.IReadChunkRecordRepository.get`
-        answers ``None`` for both. The record seam's exclusion of ephemeral ids from
-        every other read is not widened by this."""
+        answers ``None`` for both."""
         ...
 
 

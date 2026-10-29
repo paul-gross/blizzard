@@ -27,7 +27,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 
 
 class IWorkRefLabels(Protocol):
-    """How a source and a pointer display — the work-source registry is one."""
+    """How a source and a pointer display."""
 
     def source_label(self, source: str) -> str:
         """The handle the source keyed ``source`` displays under."""

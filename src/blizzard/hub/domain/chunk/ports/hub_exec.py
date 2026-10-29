@@ -14,8 +14,8 @@ class IReadChunkHubExecRepository(Protocol):
     """Read-only chunk-hub-exec access."""
 
     def count_live_hub_exec_slots(self) -> int:
-        """The number of this tenant's currently-live hub-execution slots — the invariant
-        checker's ``hub:one-live-exec-slot`` probe (should never exceed 1)."""
+        """The number of this tenant's currently-live hub-execution slots — never more than 1
+        (``hub:one-live-exec-slot``)."""
         ...
 
 

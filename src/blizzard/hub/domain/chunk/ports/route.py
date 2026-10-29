@@ -66,8 +66,7 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
     ) -> int:
         """Append the ``route.released`` fact, on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), recording which write gave tenure back and, on a
-        release, the caller's reason. Returns the freshly-written ``route_released.id`` (the
-        activity-feed's key)."""
+        release, the caller's reason. Returns the freshly-written ``route_released.id``."""
         ...
 
     def record_route_token_locked(

@@ -158,5 +158,5 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``), atomically
         with the route release it always accompanies.
 
-        Returns the freshly-written ``requeues.id`` (the activity-feed's key)."""
+        Returns the freshly-written ``requeues.id``."""
         ...

@@ -20,7 +20,7 @@ class IReadChunkUsageRepository(Protocol):
         project's chunks.
         ``since`` is inclusive and ``until`` exclusive, so adjacent windows
         sharing a boundary instant neither double-count nor drop a fact at it. Omitting
-        ``until`` is the original open-ended tail. Follows the lower-bound + PARTIAL cost
+        ``until`` leaves the window open-ended. Follows the lower-bound + PARTIAL cost
         contract in ``UsageTotal.of_grouped_sums``."""
         ...
 
