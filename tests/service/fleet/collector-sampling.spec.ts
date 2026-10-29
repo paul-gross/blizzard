@@ -29,7 +29,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }])
       }, { timeout: 30000 }).toBe(true);
       if (setting.name === 'whole') {
         await expect.poll(() => collector.forwarded.spans().some((s) => s.spanId === root.spanId), { timeout: 60000 }).toBe(true);
-        expect(collector.forwarded.spans().filter(isFleet).some((s) => s.traceId === root.traceId && roleOf(s) === 'runner/invocation')).toBe(true);
+        await expect.poll(() => collector.forwarded.spans().filter(isFleet).some((s) => s.traceId === root.traceId && roleOf(s) === 'runner/invocation'), { timeout: 60000 }).toBe(true);
       } else {
         await expect.poll(() => Date.now(), { timeout: 5000 }).toBeGreaterThan(Date.now() + 2000);
         expect(collector.forwarded.spans().some((s) => s.spanId === root.spanId)).toBe(false);

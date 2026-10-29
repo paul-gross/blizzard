@@ -303,6 +303,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
 
 /** A traced companion owns its hub and sink; both daemons export to that same sink. */
 const traceTest = test.extend<{ traceSink: OtlpSink }>({
+  isolation: 'fresh-hub',
   traceSink: async ({ otlpSink }, use) => { await use(await otlpSink()); },
   hubEnv: async ({ hubEnv, traceSink }, use) => { await use({ ...hubEnv, OTEL_EXPORTER_OTLP_ENDPOINT: traceSink.endpoint }); },
   hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n }, sweeps: { trace_export: { mode: 'timed' } } })); },
@@ -312,10 +313,7 @@ const traceTest = test.extend<{ traceSink: OtlpSink }>({
 
 /** Register one execution of a scenario as the fresh-hub trace-only companion to its ordinary test. */
 export function traced(title: string, body: Parameters<typeof traceTest>[2]): void {
-  traceTest.describe(`${title} trace companion`, () => {
-    traceTest.use({ isolation: 'fresh-hub' });
-    traceTest(`${title}_traced`, body);
-  });
+  traceTest(`${title}_traced`, body);
 }
 
 export const collectorTest = test.extend<{ collector: Collector; collectorWait: number }>({
