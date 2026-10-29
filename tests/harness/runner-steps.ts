@@ -11,11 +11,11 @@ const RUNNER = 'runner-local';
 /** Holds the worker's judgement turn, and so its lease, open: the spawn turn has ended and recorded its session. */
 export const HOLD_OPEN = 'import time\ntime.sleep(120)\n';
 
-/** Steps the host's sole runner until `reached` holds, failing after `MAX_STEPS` passes with the last state it saw. */
-export async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean): Promise<T> {
+/** Steps the host's sole runner until `reached` holds, failing after `maxSteps` passes (default `MAX_STEPS`) with the last state it saw. */
+export async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean, maxSteps = MAX_STEPS): Promise<T> {
   let state = await read();
   for (let pass = 0; !reached(state); pass++) {
-    if (pass === MAX_STEPS) throw new Error(`not reached within ${MAX_STEPS} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
+    if (pass === maxSteps) throw new Error(`not reached within ${maxSteps} passes; last state ${JSON.stringify(state)}\n${host.logTail()}`);
     expect((await host.step()).outcome).toBe('completed');
     state = await read();
   }

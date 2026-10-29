@@ -11298,12 +11298,6 @@
    "over_cap": 2,
    "total": 698
   },
-  "service/test_budget_lever_service.py": {
-   "comments": 6,
-   "docstrings": 8,
-   "over_cap": 1,
-   "total": 157
-  },
   "service/test_check_forges_service.py": {
    "comments": 1,
    "docstrings": 5,
