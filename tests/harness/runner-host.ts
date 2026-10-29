@@ -129,7 +129,7 @@ export interface MockSessionRecord {
 /** One `mock-opencode` session export: the session's info and its messages' parts. */
 export interface OpencodeExport {
   info: { id: string; parentID?: string | null; [key: string]: unknown };
-  messages: { parts: { type: string; tool?: string; cost?: number; tokens?: { input: number }; [key: string]: unknown }[] }[];
+  messages: { info: { role: string; [key: string]: unknown }; parts: { type: string; tool?: string; cost?: number; tokens?: { input: number }; [key: string]: unknown }[] }[];
 }
 
 /** Where a host enrolls: the hub, a tenant on it, and an operator session when the hub offers an IdP. */

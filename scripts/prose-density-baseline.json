@@ -11364,12 +11364,6 @@
    "over_cap": 0,
    "total": 993
   },
-  "service/test_opencode_service.py": {
-   "comments": 19,
-   "docstrings": 27,
-   "over_cap": 0,
-   "total": 613
-  },
   "service/test_parity_guard.py": {
    "comments": 10,
    "docstrings": 26,

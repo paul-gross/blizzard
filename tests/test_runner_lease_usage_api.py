@@ -1,17 +1,13 @@
-"""The lease usage route — ``GET /api/leases/{lease_id}/usage``.
-
-Exercised over a real store via ``TestClient``: one fact per ``(generation, kind)`` as the store
-recorded it, a closed lease still readable, and an unknown lease a 404."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
@@ -23,14 +19,14 @@ pytestmark = pytest.mark.component
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _app(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _app(tmp_path: Path) -> tuple[Any, Any]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     app = create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store))
     return app, store
 
 
-def _seed_lease(store, lease_id: str, epoch: int) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: Any, lease_id: str, epoch: int) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -45,7 +41,7 @@ def _seed_lease(store, lease_id: str, epoch: int) -> None:  # type: ignore[no-un
     )
 
 
-def _record(store, lease_id: str, *, generation: int, kind: str, input_tokens: int, minutes: int) -> None:  # type: ignore[no-untyped-def]
+def _record(store: Any, lease_id: str, *, generation: int, kind: UsageKind, input_tokens: int, minutes: int) -> None:
     record_usage(
         store,
         lease_id=lease_id,
@@ -54,7 +50,7 @@ def _record(store, lease_id: str, *, generation: int, kind: str, input_tokens: i
         epoch=1,
         generation=generation,
         sample=UsageSample(
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             model="mock-model",
             input_tokens=input_tokens,
             output_tokens=3,
