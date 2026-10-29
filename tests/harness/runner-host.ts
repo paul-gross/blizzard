@@ -85,6 +85,8 @@ export interface RunnerHost {
   log(): string;
   /** The hub tokens enrollment issued, read now from the host's `.env` by the names the host contract declares. */
   hubTokens(): HostHubTokens;
+  /** Empties the stopped host's `.env`, as a host no hub added holds no token; the next boot reads none. Throws when the host is running. */
+  clearHubTokens(): void;
   /**
    * The headers a worker of lease `leaseId` calls the runner with: a bearer of the lease token the runner exported to
    * it, as the mock harness recorded at spawn. Throws when no spawned session recorded that lease.
@@ -460,6 +462,10 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         logTail: () => logTail(logPath),
         log: () => (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''),
         hubTokens: () => readHubTokens(dir, entries.map((entry) => entry.name)),
+        clearHubTokens() {
+          if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('the host is running; stop() it before clearHubTokens()');
+          fs.writeFileSync(path.join(dir, hostEnvContract().file), '');
+        },
         workerHeaders: (leaseId) => ({ Authorization: `Bearer ${recordedLeaseToken(sessionsDir, leaseId)}` }),
         reconfigure(overlay) {
           const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];

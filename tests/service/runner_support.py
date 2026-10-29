@@ -68,12 +68,6 @@ def fleet_chunk_status(hub: httpx2.Client, chunk_id: str) -> str:
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
 
 
-def seed_chunk(hub: httpx2.Client) -> str:
-    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(WORK_REF_URL))
-    assert resp.status_code == 201, resp.text
-    return resp.json()["chunk_id"]
-
-
 def worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
     """The lease-token header a worker presents, minted here rather than intercepted: the
     plaintext handed to the spawn lives only in that process's environment, and
