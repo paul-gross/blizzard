@@ -115,7 +115,7 @@ class IReadEgress(Protocol):
 
 
 class IReadUsageCorpus(Protocol):
-    """The egress sweep's usage pages, read across every open tenant."""
+    """Usage pages across every open tenant, each fact tagged with its tenant."""
 
     def usage_after(self, position: UsagePosition, until: datetime, limit: int) -> Sequence[AttributedUsage]:
         """As :meth:`IReadEgress.usage_after`, over every open tenant's usage facts, each tagged with its tenant."""

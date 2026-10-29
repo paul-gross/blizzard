@@ -1,9 +1,6 @@
 """The analytics event query seam — filterable events plus canned
-counts, over the projection :mod:`extraction` and :mod:`derivation` populate.
-
-New, not an extension of :mod:`events` (``bzh:controller-read-only``): that module's
-``IReadTranscriptEvents`` carries derivation bookkeeping alone, never an event query.
-Read-only; no write variant exists."""
+counts, over the projection :mod:`extraction` and :mod:`derivation` populate
+(``bzh:controller-read-only``). Read-only; no write variant exists."""
 
 from __future__ import annotations
 
@@ -18,8 +15,7 @@ from blizzard.foundation.roles import domain_model
 @dataclass(frozen=True)
 class EventQueryCriteria:
     """Every filter this API owes, all optional and freely combinable.
-    ``source`` is a ``chunk_work_refs`` existence test, never a join — a chunk
-    carrying several refs would multiply event rows. ``extractor_version`` has no
+    ``source`` matches an event once, however many refs its chunk carries. ``extractor_version`` has no
     default: mixing versions double-counts an occurrence, so a caller names one."""
 
     extractor_version: str
@@ -45,8 +41,7 @@ class EventQueryCriteria:
 @domain_model
 @dataclass(frozen=True)
 class QueriedEvent:
-    """One event row as the query layer renders it — the wire layer shapes
-    this further for the two encodings. ``payload`` stays raw JSON object text
+    """One event row matching a query. ``payload`` stays raw JSON object text
     (``bzh:sql-portable``: never parsed or filtered on here)."""
 
     id: int
@@ -105,7 +100,7 @@ def fold_counts_by_name(rows: list[KeyedCount]) -> list[KeyedCount]:
 
 
 class IReadAnalyticsEventQueries(Protocol):
-    """Read-only event query Protocol — the routes' own seam
+    """Read-only event query Protocol
     (``bzh:controller-read-only``, ``bzh:repository-split``). Every ``counts_by_*``
     orders its rows most-frequent first, key ascending as the tiebreak — the order a
     top-N reader takes a prefix of, and one two identical calls agree on."""

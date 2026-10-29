@@ -71,8 +71,7 @@ class TranscriptCaps:
         return None
 
     def chunk_breach(self, byte_count: int, *, chunk_stored: int) -> CapBreach | None:
-        """Only already-*stored* bytes count toward the chunk budget — a rejection counts toward
-        the runner's rate only, never the chunk budget."""
+        """``chunk_stored`` is the chunk's already-*stored* bytes, the only bytes counted toward its budget."""
         if chunk_stored + byte_count > self.chunk_budget_max_bytes:
             return CapBreach(REJECTED_CHUNK_BUDGET_EXCEEDED, chunk_stored + byte_count, self.chunk_budget_max_bytes)
         return None
@@ -150,7 +149,7 @@ class SegmentSummary:
 @domain_model
 @dataclass(frozen=True)
 class SegmentRecordContent:
-    """One record's decompressed turns, in the order the content route concatenates them.
+    """One record's decompressed turns, in record order.
     ``rejected`` records carry ``turns_json="[]"``. ``record_truncated`` is the runner's
     own declaration that THIS record lost content — ``turns_json`` is often non-empty
     content the runner shrunk, not always ``"[]"``."""
@@ -307,8 +306,7 @@ def stored_turns(records: Iterable[SegmentRecordContent]) -> list[str]:
 @domain_model
 @dataclass(frozen=True)
 class TranscriptIngestResult:
-    """:meth:`TranscriptIngestService.ingest`'s own return — the per-seq outcome
-    partition an API layer renders into :class:`~blizzard.wire.transcript_segment.TranscriptSegmentAck`."""
+    """:meth:`TranscriptIngestService.ingest`'s own return — the per-seq outcome partition."""
 
     high_water: int
     applied: list[int]
@@ -373,8 +371,7 @@ class TranscriptIngestService:
                 else:
                     capped.append(seq)
                 continue
-            # Every reachable outcome advances the mark — no contract-mismatch
-            # rejection exists here, unlike the fact lane; every field is wire-validated.
+            # Every reachable outcome advances the mark; every field is wire-validated.
             mark = seq
             if self._apply(record, at=now):
                 applied.append(seq)
@@ -426,8 +423,8 @@ class TranscriptIngestService:
     @staticmethod
     def _rejected(record: TranscriptSlice, breach: CapBreach) -> str:
         """Log the CONFIGURED limit alongside the reason: a rejection reads as a bug when the
-        operator cannot tell which ceiling bound it, and the ceilings are no longer constants
-        an operator could look up. Returns ``reason`` so the caller stays a single expression."""
+        operator cannot tell which ceiling bound it, and the ceilings are configured, not
+        constants. Returns ``reason`` so the caller stays a single expression."""
         _log.warning(
             "transcript record rejected",
             segment_id=record.segment_id,

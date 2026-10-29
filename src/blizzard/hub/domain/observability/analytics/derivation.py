@@ -1,7 +1,4 @@
-"""The per-segment replacement unit and the standing convergence sweep.
-
-There is no finalize hook to derive from: the sweep is the only first-derivation
-path, and re-running it is the re-derive path — one engine, one convergence property
+"""The per-segment replacement unit and the standing convergence sweep
 (``bzh:domain-core``, ``bzh:steppable-loop``)."""
 
 from __future__ import annotations
@@ -152,7 +149,7 @@ def derivation_due(
 
 
 class IReadDerivationCorpus(Protocol):
-    """The event-derivation sweep's corpus, read across every open tenant, and its probe."""
+    """Every open tenant's derivation corpus and change probe, each read keyed by tenant."""
 
     def derivation_signature(self) -> Mapping[TenantId, DerivationSignature]:
         """The hub-wide change probe, one statement, its value per tenant over that tenant's segments
@@ -172,8 +169,7 @@ class IReadDerivationCorpus(Protocol):
 class EventDerivationService:
     """The per-segment replacement unit and the candidate-set predicate.
 
-    ``facts``/``record`` resolve a node-step's ``graph_id``: the latest matching
-    ``transitions`` row where one exists, else the chunk's own mint pin."""
+    ``facts``/``record`` resolve a node-step's ``graph_id`` per :meth:`GraphPins.graph_id_for`."""
 
     def __init__(
         self,
@@ -204,16 +200,12 @@ class EventDerivationService:
         return self._events.candidacy(self._extractor_version, chunk_id=chunk_id)
 
     def candidate_segment_ids(self, *, chunk_id: str | None = None) -> list[str]:
-        """Every visible segment lacking a current-version marker, or whose marker
-        disagrees with the segment's stored content today, read via
-        :meth:`candidacy`."""
+        """:meth:`candidacy`'s candidate ids."""
         return self.candidacy(chunk_id=chunk_id).candidate_segment_ids
 
     def graph_pins_for(self, segment_ids: Sequence[str]) -> GraphPins:
-        """Every one of ``segment_ids``' resolved chunks' graph pins, in two bulk reads
-        for the whole batch: one ``segment_contexts`` call resolves the chunk ids,
-        then one ``movement_facts_for`` (only the transitions are consumed) plus one ``graph_id_of_many``
-        call resolves the distinct chunk set's transitions and mint pins. Empty input issues neither read."""
+        """The graph pins of ``segment_ids``' resolved chunks, in a bounded number of bulk reads
+        for the whole batch — none for empty input."""
         if not segment_ids:
             return GraphPins()
         chunk_ids = sorted({context.chunk_id for context in self._events.segment_contexts(segment_ids).values()})

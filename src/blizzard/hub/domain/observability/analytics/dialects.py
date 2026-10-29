@@ -1,9 +1,8 @@
 """Analytics dialect registry — the recognition registry keyed
 by a segment's own exact ``normalizer_version``. A kind absent from a dialect
 derives zero events of that kind; a version absent from :data:`DIALECTS`
-derives zero events at all (``bzh:domain-core``). Version keys stay
-string literals, never imported from ``blizzard.runner``: a normalizer's own
-version constant is that module's business, not this registry's dependency."""
+derives zero events at all (``bzh:domain-core``). Version keys stay string
+literals (``tests/test_layering.py::test_hub_does_not_import_runner``)."""
 
 from __future__ import annotations
 
@@ -31,7 +30,8 @@ _CLAUDE_CODE_JSONL_2: dict[str, DialectEntry] = {
 }
 
 #: OpenCode's recognition parameters — each proven against the live captures under
-#: ``src/blizzard/runner/harness/contracts/opencode/`` by the corpus guard, never authored.
+#: ``src/blizzard/runner/harness/contracts/opencode/``, never authored
+#: (``tests/test_analytics_dialect_corpus_guard.py``).
 _OPENCODE_EXPORT_1: dict[str, DialectEntry] = {
     KIND_FILE_READ: DialectEntry(tool_name="read", argument_key="filePath"),
     KIND_SKILL_INVOCATION: DialectEntry(tool_name="skill", argument_key="name"),
