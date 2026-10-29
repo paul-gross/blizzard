@@ -18,6 +18,7 @@ from blizzard.foundation.flags import FlagRegistry, FlagResolution, HeldKey
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.auth.roles import RolePolicy
 from blizzard.runner.auth.session import CALLBACK_PATH
 from blizzard.runner.config_table import ConfigError, Table
@@ -164,16 +165,13 @@ def _parse_harness_config_dir(value: object, root: Path, path: Path) -> Path | N
 
 
 def _workspace_repos(workspace: ConfigView) -> tuple[WorkspaceRepo, ...]:
-    raw = workspace.get("repo", [])
-    if not isinstance(raw, list):
+    raw = as_list(workspace.get("repo", []))
+    if raw is None:
         raise ConfigError("[[workspace_repo]] must be an array of tables")
     repos: list[WorkspaceRepo] = []
     for entry in raw:
-        if (
-            not isinstance(entry, dict)
-            or not isinstance(entry.get("name"), str)
-            or not isinstance(entry.get("url"), str)
-        ):
+        table = as_table(entry)
+        if table is None or not isinstance(table.get("name"), str) or not isinstance(table.get("url"), str):
             raise ConfigError("[[workspace_repo]] requires name and url strings")
         view = workspace.element("repo", entry)
         name, url = view.get("name"), view.get("url")
@@ -255,9 +253,15 @@ def _labels(view: ConfigView, key: str, *, path: str) -> tuple[str, ...] | None:
     if key not in view:
         return None
     value = view.get(key)
-    if not isinstance(value, list) or not value or not all(isinstance(item, str) and item.strip() for item in value):
+    items = as_list(value)
+    if items is None or not items:
         raise ConfigError(f"{path} must be a non-empty list of strings, got {value!r}")
-    return tuple(item.strip() for item in value)
+    labels: list[str] = []
+    for item in items:
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(f"{path} must be a non-empty list of strings, got {value!r}")
+        labels.append(item.strip())
+    return tuple(labels)
 
 
 def _minute_of_day(hours: str, minutes: str, *, path: str, span: str) -> int:
@@ -327,9 +331,10 @@ class Throttle:
             window = window.strip()
         lead = _percent(table, "lead_pct", path="throttle.pace.lead_pct")
         steps: list[TaperStep] = []
-        raw = table.get("taper", [])
-        if not isinstance(raw, list):
-            raise ConfigError(f"throttle.pace.taper must be an array of tables, got {raw!r}")
+        declared_taper = table.get("taper", [])
+        raw = as_list(declared_taper)
+        if raw is None:
+            raise ConfigError(f"throttle.pace.taper must be an array of tables, got {declared_taper!r}")
         for position, step in enumerate(table.entries("taper"), start=1):
             where = f"throttle.pace.taper[{position}]"
             from_pct = _percent(step, "from_pct", path=f"{where}.from_pct")
@@ -466,16 +471,16 @@ class SubscriptionDeclaration:
         """Validate and project the ``[[subscription]]`` entries of ``document``; each rejection names the
         offending entry. An empty list (none authored) is zero declarations; anything else
         non-list (e.g. a singular ``[subscription]`` table) is rejected rather than silently read as zero."""
-        raw_declarations = document.get("subscription", [])
-        if not isinstance(raw_declarations, list):
+        declared = document.get("subscription", [])
+        raw_declarations = as_list(declared)
+        if raw_declarations is None:
             raise ConfigError(
-                f"[[subscription]] must be an array of tables, got {type(raw_declarations).__name__}: "
-                f"{raw_declarations!r}"
+                f"[[subscription]] must be an array of tables, got {type(declared).__name__}: {declared!r}"
             )
         declarations: list[SubscriptionDeclaration] = []
         seen_slugs: set[str] = set()
         for raw_entry in raw_declarations:
-            if not isinstance(raw_entry, dict):
+            if as_table(raw_entry) is None:
                 raise ConfigError(f"[[subscription]] entry must be a table, got {raw_entry!r}")
             entry = document.element("subscription", raw_entry)
             missing = [key for key in _REQUIRED_SUBSCRIPTION_KEYS if key not in entry]
@@ -810,7 +815,7 @@ class RunnerConfig:
     #: Lease-trace sweep knobs; every field at its default when ``[tracing]`` is absent.
     tracing: RunnerTracingConfig = field(default_factory=RunnerTracingConfig)
     #: The host's ``[flags]`` overrides — flag name to on or off; matched to the registry at composition.
-    flags: Mapping[str, bool] = field(default_factory=dict)
+    flags: Mapping[str, bool] = field(default_factory=dict[str, bool])
     #: The ``[flags]`` as the host's load resolved them, applied by composition.
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the host's file carried while their flag was off.

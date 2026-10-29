@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Context, Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
 from blizzard.foundation.roles import domain_model
 
@@ -230,9 +230,11 @@ def _value_problem(column: ColumnSpec, value: object) -> str | None:
         case ColumnType.STRING_LIST:
             if isinstance(value, str) or not isinstance(value, list | tuple):
                 return "not a sequence of str"
-            if not all(isinstance(item, str) for item in value):
+            items = cast("Sequence[object]", value)
+            texts = [item for item in items if isinstance(item, str)]
+            if len(texts) != len(items):
                 return "an element is not a str"
-            return next((problem for item in value if (problem := _encoding_problem(item))), None)
+            return next((problem for item in texts if (problem := _encoding_problem(item))), None)
 
 
 def _encoding_problem(value: str) -> str | None:

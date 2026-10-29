@@ -32,7 +32,7 @@ class SpanStatus(StrEnum):
 class SpanEvent:
     name: str
     time: datetime
-    attributes: Attributes = field(default_factory=dict)
+    attributes: Attributes = field(default_factory=lambda: dict[str, AttributeValue]())
 
 
 @domain_model
@@ -41,7 +41,7 @@ class SpanLink:
     """A link to another span's root; ``context`` is derived, never looked up."""
 
     context: DerivedContext
-    attributes: Attributes = field(default_factory=dict)
+    attributes: Attributes = field(default_factory=lambda: dict[str, AttributeValue]())
 
 
 @domain_model

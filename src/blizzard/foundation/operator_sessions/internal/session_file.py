@@ -10,6 +10,7 @@ import platformdirs
 
 from blizzard.foundation.operator_sessions import IReadSessionStore, IWriteSessionStore
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.untyped import as_table
 
 _APP_NAME = "blizzard"
 
@@ -51,7 +52,8 @@ class SessionFile:
             data = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return {}
-        return {_key(url): token for url, token in data.items()} if isinstance(data, dict) else {}
+        table = as_table(data)
+        return {_key(url): token for url, token in table.items() if isinstance(token, str)} if table is not None else {}
 
     def _write(self, sessions: dict[str, str]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

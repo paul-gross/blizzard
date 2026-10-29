@@ -103,7 +103,7 @@ def _fact_view(fact: FindingFact) -> FindingFactView:
 def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Finding]:
     """`finding_ids`, in order — one batched read (`get_many`), not one query per id."""
     by_id = services.findings.get_many(finding_ids)
-    findings = []
+    findings: list[Finding] = []
     for finding_id in finding_ids:
         finding = by_id.get(finding_id)
         if finding is None:
@@ -118,7 +118,7 @@ def _reread(findings: list[Finding], services: TenantServices) -> list[FindingVi
     batched read (`get_many`), not one query per finding."""
     by_id = services.findings.get_many([f.finding_id for f in findings])
     labels = ProjectLabels.read(services, (f.project_id for f in findings))
-    views = []
+    views: list[FindingView] = []
     for f in findings:
         fresh = by_id.get(f.finding_id)
         assert fresh is not None  # just written a fact against it; cannot have vanished

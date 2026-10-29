@@ -29,7 +29,7 @@ class OtlpDestination:
     """The full URL to post to and the headers to send with it."""
 
     url: str
-    headers: Mapping[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=lambda: dict[str, str]())
 
     @classmethod
     def of(cls, environ: Mapping[str, str]) -> OtlpDestination | None:

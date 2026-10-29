@@ -60,7 +60,7 @@ class PackagedSystemArtifacts:
 
     @property
     def files(self) -> list[SystemArtifactFile]:  # ast-grep-ignore: bzh:property-delegates
-        files = []
+        files: list[SystemArtifactFile] = []
         for path in self.paths:
             name = path.relative_to(self.root).with_suffix("").as_posix()
             if not is_valid_system_artifact_name(name):

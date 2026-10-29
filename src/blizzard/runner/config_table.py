@@ -5,8 +5,9 @@ table without importing the config module that holds the parsed sections."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
@@ -76,7 +77,7 @@ class Table:
         value = self.view.get(key)
         if not isinstance(value, (list, tuple)):
             return default
-        return tuple(str(entry) for entry in value)
+        return tuple(str(entry) for entry in cast(Sequence[object], value))
 
     def pairs(self, key: str) -> tuple[tuple[str, str], ...]:
         """The open table at ``key`` as key/value pairs — a frozen dataclass field must

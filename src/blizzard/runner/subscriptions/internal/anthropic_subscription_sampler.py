@@ -16,6 +16,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.untyped import as_table
 from blizzard.runner.subscriptions.subscription_sampler import (
     ANTHROPIC_DEFAULT_CREDENTIALS_PATH,
     ExternalSubscriptionUsageSnapshot,
@@ -87,14 +88,15 @@ class AnthropicSubscriptionSampler:
                 return SampleMiss(SampleMissReason.CREDENTIAL_LAPSED)
             return SampleMiss(SampleMissReason.ENDPOINT_UNREACHABLE)
         try:
-            body = resp.json()
+            payload = resp.json()
         except ValueError as exc:
             _log.warning("external subscription usage sample failed: unparseable response body", detail=str(exc))
             return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
-        if not isinstance(body, dict):
+        body = as_table(payload)
+        if body is None:
             _log.warning(
                 "external subscription usage sample failed: unexpected response shape",
-                body_type=type(body).__name__,
+                body_type=type(payload).__name__,
             )
             return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
         windows = self._parse_usage_windows(body)
@@ -119,7 +121,7 @@ class AnthropicSubscriptionSampler:
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
         try:
-            data = json.loads(raw)
+            data = as_table(json.loads(raw))
         except json.JSONDecodeError as exc:
             _log.warning(
                 "external subscription usage sample failed: malformed credentials JSON",
@@ -127,8 +129,8 @@ class AnthropicSubscriptionSampler:
                 detail=str(exc),
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
-        oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
-        if not isinstance(oauth, dict):
+        oauth = as_table(data.get("claudeAiOauth")) if data is not None else None
+        if oauth is None:
             _log.warning(
                 "external subscription usage sample failed: no claudeAiOauth block in credentials",
                 path=self._credentials_path,
@@ -163,8 +165,8 @@ class AnthropicSubscriptionSampler:
         fabricated as a zero entry."""
         windows: list[ExternalSubscriptionUsageWindow] = []
         for key, label, seconds in _USAGE_WINDOW_SPECS:
-            entry = body.get(key)
-            if not isinstance(entry, dict):
+            entry = as_table(body.get(key))
+            if entry is None:
                 continue
             utilization = entry.get("utilization")
             resets_at_raw = entry.get("resets_at")

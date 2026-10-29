@@ -86,7 +86,7 @@ class TracingConfig:
     def knob_lines(self, keys: tuple[str, ...]) -> list[str]:
         """``keys`` rendered one line each: commented out at the default, live once overridden."""
         defaults = type(self)()
-        lines = []
+        lines: list[str] = []
         for key in keys:
             value = getattr(self, key)
             literal = toml_literal(value)

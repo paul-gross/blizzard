@@ -172,7 +172,7 @@ class OpenCodeTakeoverProbe:
                 try:
 
                     def process_alive() -> bool:
-                        return attached is not None and attached.poll() is None
+                        return attached.poll() is None
 
                     def send_continuation() -> None:
                         nonlocal continuation_sent, continuation_send_error

@@ -76,7 +76,7 @@ class ChunkState:
     route_runner_id: str | None = None
     pause: ChunkPause | None = None
     latest_epoch: int | None = None
-    restart_epochs: list[int] = field(default_factory=list)
+    restart_epochs: list[int] = field(default_factory=list[int])
     cost: ChunkSpend = field(default_factory=ChunkSpend.zero)
     decision: ChunkGate | None = None
     #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.

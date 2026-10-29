@@ -243,7 +243,7 @@ def _key_of(kind: RecordKind | None, key: str | None, services: TenantServices) 
 def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
     """The domain's entries from a validated document: each entry's create fields, a sparse edit of only the
     fields the entry states (``model_fields_set``), and what it says of its forge — the old address fields it states."""
-    sources = []
+    sources: list[DeclaredWorkSource] = []
     for entry in document.work_sources:
         stated = {name: getattr(entry, name) for name in entry.model_fields_set if name != "slug"}
         addresses = {name: stated.pop(name) for name in _WORK_SOURCE_ADDRESSES if name in stated}
@@ -259,7 +259,7 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
                 forge=ForgeChoice(forge=reference, **addresses),
             )
         )
-    repositories = []
+    repositories: list[DeclaredRepository] = []
     for repo in document.repositories:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
         address = stated.pop(_REPOSITORY_ADDRESS, UNSET)
@@ -286,7 +286,7 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
         )
         for scope in document.scopes
     ]
-    routines = []
+    routines: list[DeclaredRoutine] = []
     for routine in document.routines:
         stated = {
             name: getattr(routine, name) for name in routine.model_fields_set if name not in ("scopes", "project")
@@ -398,7 +398,7 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocument | ConfigD
             ],
         ) from exc
     try:
-        version = mapping.get("version") if isinstance(mapping, dict) else None
+        version = mapping.get("version")
         model = ConfigDocumentV2 if version == 2 else ConfigDocument
         return model.model_validate(mapping)
     except ValidationError as exc:

@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.hub.client import HubClientError, ITranscriptPusher, TranscriptPush
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.transcripts.ledger import (
@@ -210,14 +211,16 @@ class TranscriptDrain:
         return _final_record(delta.seq, segment)
 
 
-def _scrub_surrogates(value: Any) -> Any:
+def _scrub_surrogates(value: object) -> Any:
     """U+FFFD for each lone surrogate a mid-pair preview cut leaves, which no UTF-8 body can carry."""
     if isinstance(value, str):
         return value.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
-    if isinstance(value, list):
-        return [_scrub_surrogates(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _scrub_surrogates(item) for key, item in value.items()}
+    items = as_list(value)
+    if items is not None:
+        return [_scrub_surrogates(item) for item in items]
+    table = as_table(value)
+    if table is not None:
+        return {key: _scrub_surrogates(item) for key, item in table.items()}
     return value
 
 

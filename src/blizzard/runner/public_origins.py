@@ -7,7 +7,9 @@ carried verbatim; `blizzard/docs/deployment/human-auth.md` §Runner-side federat
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urlsplit
 
 from blizzard.foundation.roles import domain_model
@@ -52,8 +54,11 @@ class PublicOrigins:
         rather than malformed — an empty ``public_url`` declares no federation identity."""
         if raw is None:
             return ()
-        declared = (raw,) if isinstance(raw, str) else raw
-        if not isinstance(declared, (list, tuple)):
+        if isinstance(raw, str):
+            declared: Sequence[object] = (raw,)
+        elif isinstance(raw, (list, tuple)):
+            declared = cast(Sequence[object], raw)
+        else:
             raise invalid(f"public_url must be a URL or a list of URLs, got {type(raw).__name__}")
         entries = tuple(stripped.rstrip("/") for entry in declared if (stripped := str(entry).strip()))
         seen: dict[str, str] = {}

@@ -155,7 +155,7 @@ class OpenCodeCompatibilityProbe:
     ) -> None:
         if allow_live_provider is not True:
             raise LiveProviderOptInRequired("pass the explicit live-provider opt-in before running OpenCode")
-        if not isinstance(binary, str) or not binary.strip():
+        if not binary.strip():
             raise OpenCodeProbeError("the OpenCode binary is empty")
         binary_path = Path(binary)
         if not binary_path.is_file() or not os.access(binary_path, os.X_OK):
@@ -164,18 +164,11 @@ class OpenCodeCompatibilityProbe:
             model_reference = parse_model_reference(model)
         except ValueError as exc:
             raise OpenCodeProbeError("the OpenCode model must use the exact non-empty provider/model form") from exc
-        if (
-            not isinstance(variant, str)
-            or not variant.strip()
-            or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in variant)
+        if not variant.strip() or any(
+            character.isspace() or ord(character) < 32 or ord(character) == 127 for character in variant
         ):
             raise OpenCodeProbeError("the OpenCode variant must be a non-empty single argument")
-        if (
-            isinstance(timeout_seconds, bool)
-            or not isinstance(timeout_seconds, int | float)
-            or not math.isfinite(timeout_seconds)
-            or timeout_seconds <= 0
-        ):
+        if isinstance(timeout_seconds, bool) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise OpenCodeProbeError("the OpenCode command timeout must be positive")
         self.binary = str(binary_path.resolve())
         self.model = model
@@ -411,20 +404,18 @@ class OpenCodeCompatibilityProbe:
         except OpenCodeProcessError:
             return _TurnResult(None, None, "OpenCode process could not be started for the live transcript proof")
 
-        outcome: _TurnResult | None = None
         try:
             outcome = self._collect_fresh_turn(started, cwd, env)
         finally:
             reaped = stop_started_process(started)
         if not reaped:
             return _TurnResult(
-                outcome.events if outcome is not None else None,
-                outcome.export if outcome is not None else None,
+                outcome.events,
+                outcome.export,
                 "OpenCode fresh-turn process group could not be reaped",
-                outcome.transcript if outcome is not None else None,
-                outcome.provider_refusal if outcome is not None else None,
+                outcome.transcript,
+                outcome.provider_refusal,
             )
-        assert outcome is not None
         return outcome
 
     def _collect_fresh_turn(

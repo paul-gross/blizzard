@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from google.protobuf.json_format import MessageToJson, ParseDict, ParseError
-from google.protobuf.message import DecodeError
+from google.protobuf.message import DecodeError, Message
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest, ExportLogsServiceResponse
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
     ExportMetricsServiceRequest,
@@ -36,6 +36,7 @@ from blizzard.foundation.platform_tracing.received import (
     ReceivedSpan,
     Scalar,
 )
+from blizzard.foundation.untyped import as_list, as_table
 
 _ID_FIELDS = ("traceId", "spanId", "parentSpanId")
 _TRACE_ID_BYTES = 16
@@ -101,7 +102,7 @@ def _encoded(response: Any, content_type: str) -> bytes:
     return MessageToJson(response, indent=None).encode()
 
 
-def _parse(body: bytes, content_type: str, message: Any, normalize: Callable[[Any], None]) -> None:
+def _parse(body: bytes, content_type: str, message: Message, normalize: Callable[[object], None]) -> None:
     if content_type == PROTOBUF_CONTENT_TYPE:
         try:
             message.ParseFromString(body)
@@ -113,7 +114,7 @@ def _parse(body: bytes, content_type: str, message: Any, normalize: Callable[[An
         raise OtlpDecodeError(f"unsupported content type {content_type!r}")
 
 
-def _parse_json(body: bytes, message: Any, normalize: Callable[[Any], None]) -> None:
+def _parse_json(body: bytes, message: Message, normalize: Callable[[object], None]) -> None:
     try:
         document = json.loads(body)
         normalize(document)
@@ -122,45 +123,69 @@ def _parse_json(body: bytes, message: Any, normalize: Callable[[Any], None]) -> 
         raise OtlpDecodeError("malformed JSON body") from exc
 
 
-def _normalize_ids(document: Any) -> None:
+def _object(document: object) -> dict[str, object]:
+    table = as_table(document)
+    if table is None:
+        raise ValueError("the body is not an object")
+    return table
+
+
+def _tables(value: object) -> list[dict[str, object]]:
+    """The tables of the array ``value``; empty when it is absent."""
+    if not value:
+        return []
+    items = as_list(value)
+    if items is None:
+        raise AttributeError("expected an array")
+    return [_element(entry) for entry in items]
+
+
+def _element(entry: object) -> dict[str, object]:
+    table = as_table(entry)
+    if table is None:
+        raise AttributeError("an array element is not an object")
+    return table
+
+
+def _hex_to_base64(table: dict[str, object], name: str) -> None:
+    value = table.get(name)
+    if value:
+        if not isinstance(value, str):
+            raise TypeError("an id is not hex")
+        table[name] = base64.b64encode(bytes.fromhex(value)).decode("ascii")
+    elif name in table:
+        del table[name]
+
+
+def _normalize_ids(document: object) -> None:
     """OTLP/JSON carries ids as hex; the protobuf JSON mapping reads bytes as base64."""
-    if not isinstance(document, dict):
-        raise ValueError("the body is not an object")
-    for resource in document.get("resourceSpans") or []:
-        for scope in resource.get("scopeSpans") or []:
-            for span in scope.get("spans") or []:
+    for resource in _tables(_object(document).get("resourceSpans")):
+        for scope in _tables(resource.get("scopeSpans")):
+            for span in _tables(scope.get("spans")):
                 for name in _ID_FIELDS:
-                    value = span.get(name)
-                    if value:
-                        span[name] = base64.b64encode(bytes.fromhex(value)).decode("ascii")
-                    elif name in span:
-                        del span[name]
+                    _hex_to_base64(span, name)
 
 
-def _normalize_log_ids(document: Any) -> None:
-    if not isinstance(document, dict):
-        raise ValueError("the body is not an object")
-    for resource in document.get("resourceLogs") or []:
-        for scope in resource.get("scopeLogs") or []:
-            for record in scope.get("logRecords") or []:
+def _normalize_log_ids(document: object) -> None:
+    for resource in _tables(_object(document).get("resourceLogs")):
+        for scope in _tables(resource.get("scopeLogs")):
+            for record in _tables(scope.get("logRecords")):
                 for name in ("traceId", "spanId"):
-                    value = record.get(name)
-                    if value:
-                        record[name] = base64.b64encode(bytes.fromhex(value)).decode("ascii")
-                    elif name in record:
-                        del record[name]
+                    _hex_to_base64(record, name)
 
 
-def _normalize_metrics(document: Any) -> None:
+def _normalize_metrics(document: object) -> None:
     """Exemplars are never read, and their hex ids would not parse as the protobuf JSON mapping's base64."""
-    if not isinstance(document, dict):
-        raise ValueError("the body is not an object")
-    for resource in document.get("resourceMetrics") or []:
-        for scope in resource.get("scopeMetrics") or []:
-            for metric in scope.get("metrics") or []:
+    for resource in _tables(_object(document).get("resourceMetrics")):
+        for scope in _tables(resource.get("scopeMetrics")):
+            for metric in _tables(scope.get("metrics")):
                 for kind in ("sum", "gauge", "histogram", "exponentialHistogram"):
-                    for point in (metric.get(kind) or {}).get("dataPoints") or []:
+                    for point in _tables(_element_or_empty(metric.get(kind)).get("dataPoints")):
                         point.pop("exemplars", None)
+
+
+def _element_or_empty(value: object) -> dict[str, object]:
+    return _element(value) if value else {}
 
 
 def _spans(message: ExportTraceServiceRequest) -> list[ReceivedSpan]:
@@ -238,7 +263,7 @@ def _points(metric: Metric, scope_name: str, scope_version: str) -> list[Receive
         elif kind == "histogram":
             points.append(
                 ReceivedDataPoint(
-                    **shared,  # pyright: ignore[reportArgumentType]
+                    **shared,  # pyright: ignore[reportArgumentType]  # one dict feeds several constructors; the splat types every field as the value union
                     count=int(point.count),
                     total=float(point.sum) if point.HasField("sum") else 0.0,
                     bucket_counts=tuple(point.bucket_counts),
@@ -248,7 +273,7 @@ def _points(metric: Metric, scope_name: str, scope_version: str) -> list[Receive
                 )
             )
         else:
-            points.append(ReceivedDataPoint(**shared, value=_number(point)))  # pyright: ignore[reportArgumentType]
+            points.append(ReceivedDataPoint(**shared, value=_number(point)))  # pyright: ignore[reportArgumentType]  # one dict feeds several constructors; the splat types every field as the value union
     return points
 
 

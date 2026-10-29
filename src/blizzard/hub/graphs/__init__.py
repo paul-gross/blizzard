@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.documents import accepted_extensions, codec_for_path
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.graph.model import GraphDoc
@@ -47,10 +48,11 @@ class ArtifactInliner:
         """Resolve every entry's file reference to its text; a shape that is not a mapping
         is left untouched — that malformation is ``GraphDoc.of``'s to report, not the
         loader's (``bzh:domain-core``)."""
-        if not isinstance(raw, dict):
+        table = as_table(raw)
+        if table is None:
             return raw
         inlined: dict[str, object] = {}
-        for name, value in raw.items():
+        for name, value in table.items():
             if not isinstance(value, str):
                 inlined[name] = value
                 continue
@@ -70,14 +72,14 @@ class Inliner:
     base: Path
 
     def inline(self, node: object) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
+        if (table := as_table(node)) is not None:
+            for key, value in table.items():
                 if key in _PROMPT_KEYS and isinstance(value, str) and self.is_ref(value):
-                    node[key] = (self.base / value).read_text()
+                    table[key] = (self.base / value).read_text()
                 else:
                     self.inline(value)
-        elif isinstance(node, list):
-            for item in node:
+        elif (items := as_list(node)) is not None:
+            for item in items:
                 self.inline(item)
 
     @staticmethod

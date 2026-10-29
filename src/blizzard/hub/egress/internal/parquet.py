@@ -2,6 +2,9 @@
 
 The one module that imports ``pyarrow``."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false
+# pyarrow ships no type information, so every use of it is unknown to the checker; this module is its only importer.
+
 from __future__ import annotations
 
 from collections.abc import Sequence

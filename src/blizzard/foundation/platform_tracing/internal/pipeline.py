@@ -259,7 +259,7 @@ class EnabledPlatformTracing:
         self._engine_tracers.append(EngineTracer(tracer, engine, usage, enable_commenter=False))
 
     def instrument_client(self, client: httpx2.Client | httpx2.AsyncClient) -> None:
-        HTTPX2ClientInstrumentor.instrument_client(client, tracer_provider=self._provider)
+        HTTPX2ClientInstrumentor.instrument_client(client, tracer_provider=self._provider)  # pyright: ignore[reportUnknownMemberType]  # the instrumentor's client parameter is unannotated
 
     def suppressed(self) -> AbstractContextManager[object]:
         return suppress_instrumentation()

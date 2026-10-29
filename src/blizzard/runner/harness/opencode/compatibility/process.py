@@ -225,7 +225,7 @@ class _SubprocessStartedProcess:
 
         if self.interactive_fd is None:
             raise OpenCodeProcessError("the OpenCode process has no controlling terminal")
-        if not isinstance(value, str) or not value:
+        if not value:
             raise OpenCodeProcessError("interactive input must be a non-empty string")
 
         pending = value.encode()
@@ -310,8 +310,6 @@ class _SubprocessStartedProcess:
 
         self._drain_pipes(_DRAIN_AFTER_STOP_SECONDS)
         self._close_pipe_streams()
-        if returncode is None:
-            returncode = -1
         if self._output_truncated and returncode == 0:
             returncode = -1
         result = OpenCodeProcessResult(

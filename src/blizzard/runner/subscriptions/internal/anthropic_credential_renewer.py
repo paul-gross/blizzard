@@ -14,6 +14,7 @@ from pathlib import Path
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.untyped import as_table
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.credential_renewer import (
     ICredentialRenewer,
@@ -108,11 +109,12 @@ class AnthropicCredentialRenewer:
 
     def _read_expiry(self) -> datetime | None:
         try:
-            data = json.loads(Path(self._credentials_path).read_text())
+            data = as_table(json.loads(Path(self._credentials_path).read_text()))
         except (OSError, ValueError):
             return None
-        oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
-        expires_at = oauth.get("expiresAt") if isinstance(oauth, dict) else None
+        oauth = data.get("claudeAiOauth") if data is not None else None
+        oauth_block = as_table(oauth)
+        expires_at = oauth_block.get("expiresAt") if oauth_block is not None else None
         if isinstance(expires_at, bool) or not isinstance(expires_at, int | float):
             return None
         try:

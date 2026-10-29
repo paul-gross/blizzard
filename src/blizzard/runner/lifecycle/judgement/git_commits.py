@@ -141,9 +141,9 @@ class DeclaredCommits:
     ctx: GitCommitsContext
     lease: Lease
     bindings: list[EnvBinding]
-    _resolved: dict[Key, GitCommitDeclaration] = field(default_factory=dict)
-    _confirmed: dict[Key, CompletionArtifact] = field(default_factory=dict)
-    _submitted: dict[str, list[CompletionArtifact]] = field(default_factory=dict)
+    _resolved: dict[Key, GitCommitDeclaration] = field(default_factory=dict[Key, GitCommitDeclaration])
+    _confirmed: dict[Key, CompletionArtifact] = field(default_factory=dict[Key, CompletionArtifact])
+    _submitted: dict[str, list[CompletionArtifact]] = field(default_factory=dict[str, list[CompletionArtifact]])
 
     def verify(self) -> list[CompletionArtifact]:
         """Confirm every declaration this instance has not already resolved, in declaration

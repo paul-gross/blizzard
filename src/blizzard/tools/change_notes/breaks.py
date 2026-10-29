@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,7 +52,8 @@ def declared_pairs(note: Note) -> set[tuple[str, str]]:
     """The ``(surface, where)`` a breaking note declares: each of its surfaces against each name in ``breaks``."""
     if note.fields.get("breaking") is not True:
         return set()
-    surfaces, names = note.fields.get("surfaces") or [], note.fields.get("breaks") or []
+    surfaces: Iterable[object] = note.fields.get("surfaces") or []
+    names: Iterable[object] = note.fields.get("breaks") or []
     return {(str(surface), str(name).strip()) for surface in surfaces for name in names}
 
 

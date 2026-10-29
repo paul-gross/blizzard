@@ -12,11 +12,11 @@ import os
 import re
 import stat
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue
 from blizzard.foundation.flags import (
@@ -30,6 +30,7 @@ from blizzard.foundation.flags import (
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_token_variable
+from blizzard.foundation.untyped import as_list, as_table
 from blizzard.runner.config import (
     DEFAULT_AUTH_HUB_ROLE,
     DEFAULT_BASE_BRANCH,
@@ -306,7 +307,7 @@ class HostConfig:
     auth: Auth = field(default_factory=lambda: Auth.of(None))
     tracing: RunnerTracingConfig = field(default_factory=RunnerTracingConfig)
     #: The ``[flags]`` overrides, laid onto every runner's config.
-    flags: Mapping[str, bool] = field(default_factory=dict)
+    flags: Mapping[str, bool] = field(default_factory=dict[str, bool])
     #: The ``[flags]`` as the load resolved them, applied by composition; ``None`` for a config built in code.
     flag_resolution: FlagResolution | None = None
     #: The guarded keys the file carried while their flag was off.
@@ -781,7 +782,7 @@ def _dotenv_text(root: Path) -> str:
 class _Errors:
     """The errors a read has found so far; :meth:`attempt` runs one step and records its failure."""
 
-    found: list[str] = field(default_factory=list)
+    found: list[str] = field(default_factory=list[str])
 
     def add(self, message: str) -> None:
         self.found.append(message)
@@ -950,12 +951,16 @@ def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[s
         }
         raw["subscription"] = [synthesized]
         runner["subscription"] = SCAFFOLD_SUBSCRIPTION.slug
-    elif isinstance(declared, list) and len(declared) == 1 and isinstance(declared[0], dict):
-        runner["subscription"] = declared[0].get("slug")
-    elif isinstance(declared, list) and declared:
+    elif (
+        (declared_list := as_list(declared)) is not None
+        and len(declared_list) == 1
+        and (sole := as_table(declared_list[0])) is not None
+    ):
+        runner["subscription"] = sole.get("slug")
+    elif declared_list:
         # Which plan the runner spends is the one its enabled harness spends — a choice no key records.
         raise ConfigError(
-            f"the runner file declares {len(declared)} [[subscription]]s, and which one the runner spends is not "
+            f"the runner file declares {len(declared_list)} [[subscription]]s, and which one the runner spends is not "
             f"recorded: graduate it by hand ({GRADUATION_PROCEDURE})"
         )
     raw["workspace"] = [workspace]
@@ -978,13 +983,13 @@ def _refuse_misplaced_keys(raw: ConfigView, errors: _Errors) -> None:
 
 
 def _entries(document: ConfigView, table: str, errors: _Errors) -> list[ConfigView]:
-    raw = document.get(table, [])
-    if not isinstance(raw, list):
+    raw = as_list(document.get(table, []))
+    if raw is None:
         errors.add(f"[[{table}]] must be an array of tables")
         return []
     entries: list[ConfigView] = []
     for position, entry in enumerate(raw, start=1):
-        if isinstance(entry, dict):
+        if as_table(entry) is not None:
             entries.append(document.element(table, entry))
         else:
             errors.add(f"[[{table}]] #{position} must be a table")
@@ -1038,7 +1043,7 @@ def _workspace(entry: ConfigView) -> HostWorkspace:
         id=identity.strip(),
         root=str(entry.get("root", "")),
         provider=provider,
-        envs=tuple(str(env) for env in envs),
+        envs=tuple(str(env) for env in cast(Sequence[object], envs)),
         max_environments=cap,
         repos=_workspace_repos(entry),
         base_branch=str(entry.get("base_branch", DEFAULT_BASE_BRANCH)),
@@ -1117,9 +1122,10 @@ def _bindings(raw: ConfigView, errors: _Errors) -> tuple[ProjectBinding, ...]:
     if "projects" not in raw:
         errors.add("has no projects: list the projects it serves, or `projects = []` to serve none")
         return ()
-    listed = raw.get("projects")
-    if not isinstance(listed, list):
-        errors.add(f"projects must be a list of {{ project, workspace }} bindings, got {listed!r}")
+    listed_value = raw.get("projects")
+    listed = as_list(listed_value)
+    if listed is None:
+        errors.add(f"projects must be a list of {{ project, workspace }} bindings, got {listed_value!r}")
         return ()
     bindings: list[ProjectBinding] = []
     for binding in listed:
@@ -1150,9 +1156,10 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
     """The tables only a runner owns, parsed onto a :class:`RunnerConfig` the host's keys are projected over."""
     sections = HarnessSections.parse(raw, root=root, path=path)
     harness = Table.of(raw.table("harness"))
-    gates = raw.get("gates", [])
-    if not isinstance(gates, list):
-        raise ConfigError(f"gates must be a list of node names, got {gates!r}")
+    declared_gates = raw.get("gates", [])
+    gates = as_list(declared_gates)
+    if gates is None:
+        raise ConfigError(f"gates must be a list of node names, got {declared_gates!r}")
     spend = Spend.of(raw.table("cost"))
     throttle = Throttle.of(raw.table("throttle"))
     context = Context.of(raw.table("context"))

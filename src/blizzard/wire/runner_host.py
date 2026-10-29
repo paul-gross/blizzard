@@ -44,7 +44,7 @@ class HostRunnerView(HostRunnerStateView):
     #: ``None`` for a halted runner, which holds no brake.
     pause: PauseStateView | None = None
     throttle: ThrottleStatusView | None = None
-    bindings: list[HostRunnerBindingView] = Field(default_factory=list)
+    bindings: list[HostRunnerBindingView] = Field(default_factory=lambda: list[HostRunnerBindingView]())
     agents_in_use: int = 0
     #: The sum of its bindings' ``agents``.
     max_agents: int = 0
@@ -105,7 +105,9 @@ class HostSubscriptionView(SubscriptionView):
     them: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample."""
 
     spenders: list[str] = Field(default_factory=list)
-    windows: list[ExternalSubscriptionUsageWindowView] = Field(default_factory=list)
+    windows: list[ExternalSubscriptionUsageWindowView] = Field(
+        default_factory=lambda: list[ExternalSubscriptionUsageWindowView]()
+    )
     windows_sampled_at: str | None = None
 
 

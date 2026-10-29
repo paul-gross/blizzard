@@ -211,9 +211,9 @@ class CompatibilityReport:
         version_admitted: bool,
         observations: Iterable[ProbeObservation],
     ) -> CompatibilityReport:
-        if not isinstance(observed_version, str) or not observed_version.strip():
+        if not observed_version.strip():
             raise CompatibilityContractError("the observed harness version is empty")
-        if not isinstance(admitted_range, str) or not admitted_range.strip():
+        if not admitted_range.strip():
             raise CompatibilityContractError("the admitted harness version range is empty")
         collected: dict[CompatibilityProbe, ProbeResult] = {}
         for observation in observations:

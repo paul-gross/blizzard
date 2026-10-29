@@ -6,8 +6,11 @@ read-only over its wiring (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from fastapi import APIRouter, Request
 
+from blizzard.foundation.leases import LeaseDisplayStatus
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, ClosedLeaseActivity, LeaseActivity
@@ -16,9 +19,27 @@ from blizzard.wire.lease import LeaseListResponse, LeaseView
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
+class _CommonFields(TypedDict):
+    """The `LeaseView` fields both the active and the closed branch fill identically."""
+
+    lease_id: str
+    chunk_id: str
+    graph_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+    session_id: str | None
+    harness_id: str | None
+    pid: int | None
+    created_at: str
+    display_status: LeaseDisplayStatus
+    project_id: str | None
+    stale_after_seconds: int
+
+
 def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
     lease = activity.lease
-    common = {
+    common: _CommonFields = {
         "lease_id": lease.lease_id,
         "chunk_id": lease.chunk_id,
         "graph_id": lease.graph_id,

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import Connection, CursorResult, Engine, Select, Table, and_, func, or_, select
+from sqlalchemy import Connection, CursorResult, Engine, Row, Select, Table, and_, func, or_, select
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
@@ -252,7 +252,7 @@ class UniqueEnvBinding(QueryCheck):
                             f"env {env_id} of workspace {workspace_id} held by chunks {sorted(chunks)}",
                         )
                     )
-            every = set().union(*by_workspace.values())
+            every = set[str]().union(*by_workspace.values())
             if unknown and len(every) > 1:
                 violations.append(
                     Violation(
@@ -1087,10 +1087,10 @@ class MigrationsAtomic(HubQueryCheck):
                     )
                 )
 
-        newest: dict[str, object] = {}
+        newest: dict[str, Row[Any]] = {}
         for m in self.rows(select(hub.chunk_migrations)):
             cur = newest.get(m.chunk_id)
-            if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
+            if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):
                 newest[m.chunk_id] = m
         chunks = {c.chunk_id: c for c in self.rows(select(hub.chunks))}
         # A migration's landed node executor. Node ids are globally-unique, so
@@ -1110,35 +1110,34 @@ class MigrationsAtomic(HubQueryCheck):
             chunk = chunks.get(chunk_id)
             if chunk is None:
                 continue
-            if chunk.graph_id != m.to_graph_id:  # type: ignore[attr-defined]
+            if chunk.graph_id != m.to_graph_id:
                 violations.append(
                     Violation(
                         "hub:migration-pin-consistent",
-                        f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
+                        f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",
                     )
                 )
             # **Membership**, not equality against `[model_after]` — the list may
             # legitimately grow afterwards (pinned by tests/test_invariant_checker.py).
-            elif m.model_after is not None and m.model_after not in DEFAULT_MODEL.decode(chunk.default_model):  # type: ignore[attr-defined]
+            elif m.model_after is not None and m.model_after not in DEFAULT_MODEL.decode(chunk.default_model):
                 violations.append(
                     Violation(
                         "hub:migration-pin-consistent",
-                        f"chunk {chunk_id} default_model {chunk.default_model!r} does not carry "  # type: ignore[attr-defined]
-                        f"{m.model_after}, which its newest migration re-pinned",  # type: ignore[attr-defined]
+                        f"chunk {chunk_id} default_model {chunk.default_model!r} does not carry "
+                        f"{m.model_after}, which its newest migration re-pinned",
                     )
                 )
             # A hub landing and an operator restart's own re-pin (#371) both retain the
             # route by design — neither is a torn write, so neither owes a release.
             keeps_route = (
-                landed_executor.get(m.landed_node_id) == Executor.HUB  # type: ignore[attr-defined]
-                or m.source == MigrationSource.RESTART.value  # type: ignore[attr-defined]
+                landed_executor.get(m.landed_node_id) == Executor.HUB or m.source == MigrationSource.RESTART.value
             )
             released = latest_release.get(chunk_id)
-            if not keeps_route and (released is None or released < m.recorded_at):  # type: ignore[attr-defined]
+            if not keeps_route and (released is None or released < m.recorded_at):
                 violations.append(
                     Violation(
                         "hub:migration-route-released",
-                        f"chunk {chunk_id} migrated at {m.recorded_at} but no route release landed "  # type: ignore[attr-defined]
+                        f"chunk {chunk_id} migrated at {m.recorded_at} but no route release landed "
                         "with it — a torn migrate. write kept the stale claim",
                     )
                 )

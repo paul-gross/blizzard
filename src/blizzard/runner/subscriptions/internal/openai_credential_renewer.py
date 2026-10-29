@@ -13,6 +13,7 @@ from pathlib import Path
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.untyped import as_table
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.credential_renewer import (
     ICredentialRenewer,
@@ -70,11 +71,12 @@ class OpenAICredentialRenewer:
     def _read_access_token_expiry(self) -> datetime | None:
         try:
             raw = Path(self._credentials_path).read_text()
-            data = json.loads(raw)
+            data = as_table(json.loads(raw))
         except (OSError, ValueError):
             return None
-        tokens = data.get("tokens") if isinstance(data, dict) else None
-        access_token = tokens.get("access_token") if isinstance(tokens, dict) else None
+        tokens = data.get("tokens") if data is not None else None
+        tokens_block = as_table(tokens)
+        access_token = tokens_block.get("access_token") if tokens_block is not None else None
         if not isinstance(access_token, str) or not access_token:
             return None
         return parse_jwt_expiry(access_token)
@@ -110,7 +112,8 @@ class OpenAICredentialRenewer:
             _log.warning("credential renewal vendor CLI reported an error", detail=response.get("error"))
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         payload = response.get("result")
-        account = payload.get("account") if isinstance(payload, dict) else None
+        payload_table = as_table(payload)
+        account = payload_table.get("account") if payload_table is not None else None
         if not isinstance(account, dict):
             _log.warning("credential renewal vendor CLI reports no login to refresh", codex_home=codex_home)
             return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
@@ -134,10 +137,10 @@ def _find_response(stdout: str, request_id: int) -> dict[str, object] | None:
         if not line:
             continue
         try:
-            message = json.loads(line)
+            message = as_table(json.loads(line))
         except ValueError:
             continue
-        if isinstance(message, dict) and message.get("id") == request_id:
+        if message is not None and message.get("id") == request_id:
             return message
     return None
 

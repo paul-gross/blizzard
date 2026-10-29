@@ -265,7 +265,7 @@ def peek_matched_queue(
     host = None
     if registration is not None and registration.host_id is not None:
         host = services.hosts.get_host(registration.host_id)
-    served = (
+    served: frozenset[str] = (
         frozenset()
         if registration is None
         else offered_projects(registration, host, project=request.project, projects=request.projects)

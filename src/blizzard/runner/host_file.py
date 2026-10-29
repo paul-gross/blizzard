@@ -18,6 +18,7 @@ from typing import Any
 
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.untyped import as_list
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_config import decode_host_text
@@ -78,8 +79,8 @@ def _append_table(layout: HostLayout, name: str, table: str, *, strict: bool) ->
     text = layout.config_path.read_text()
     before = _parsed(layout, text)
     parsed = decode_host_text(table, what=f"the [[{name}]] to append")
-    added = ConfigView.root(HOST_REGISTRY, parsed, strict=strict).get(name)
-    if set(parsed) != {name} or not isinstance(added, list) or len(added) != 1:
+    added = as_list(ConfigView.root(HOST_REGISTRY, parsed, strict=strict).get(name))
+    if set(parsed) != {name} or added is None or len(added) != 1:
         raise ConfigError(f"the [[{name}]] to append is not one TOML [[{name}]]")
     expected = copy.deepcopy(before)
     expected.setdefault(name, []).extend(added)

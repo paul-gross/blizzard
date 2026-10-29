@@ -229,7 +229,7 @@ def _day_words(days: Sequence[int]) -> str:
             runs[-1].append(day)
         else:
             runs.append([day])
-    words = []
+    words: list[str] = []
     for run in runs:
         if len(run) >= 3:
             words.append(f"{DAY_NAMES[run[0]]}{_DASH}{DAY_NAMES[run[-1]]}")

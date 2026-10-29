@@ -60,19 +60,19 @@ class EnvelopeNode:
     session_name: str | None = None
     # The prioritized model preferences and the effort — opaque strings an adapter resolves
     # (`bzh:pluggable-seams`); empty or ``None`` expresses no preference.
-    session_model: list[str] = field(default_factory=list)
+    session_model: list[str] = field(default_factory=list[str])
     session_effort: str | None = None
     # The acceptable harness set, `session_model`'s shape.
-    session_harnesses: list[str] = field(default_factory=list)
+    session_harnesses: list[str] = field(default_factory=list[str])
     session_rotate: RotateBounds | None = None
     session_compaction_window: str | None = None
-    checks: list[str] = field(default_factory=list)
+    checks: list[str] = field(default_factory=list[str])
     # Where the checks run, relative to the leased env's workdir, and the per-check timeout.
     checks_cwd: str | None = None
     checks_timeout: int | None = None
-    produces: list[ProducesSpec] = field(default_factory=list)
+    produces: list[ProducesSpec] = field(default_factory=list[ProducesSpec])
     retries_max: int | None = None
-    choices: list[Choice] = field(default_factory=list)
+    choices: list[Choice] = field(default_factory=list[Choice])
 
 
 @domain_model
@@ -116,6 +116,6 @@ class Envelope:
     judgement_prompt: str | None
     # ``None`` from a hub that predates the field.
     graph_name: str | None = None
-    work_refs: list[dict[str, str]] = field(default_factory=list)
-    artifacts: list[CarriedArtifact] = field(default_factory=list)
-    graph_artifacts: list[GraphArtifact] = field(default_factory=list)
+    work_refs: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
+    artifacts: list[CarriedArtifact] = field(default_factory=list[CarriedArtifact])
+    graph_artifacts: list[GraphArtifact] = field(default_factory=list[GraphArtifact])

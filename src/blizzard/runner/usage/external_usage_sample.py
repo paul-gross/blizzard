@@ -250,7 +250,7 @@ def _sampled_payload(
     persisted attempt and the outbound report carry the same complete windows."""
     windows: list[dict[str, object]] = []
     for window in snapshot.windows:
-        payload = {
+        payload: dict[str, object] = {
             "window": window.window,
             "utilization_pct": window.utilization_pct,
             "resets_at": iso_utc(window.resets_at),

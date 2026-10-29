@@ -406,7 +406,7 @@ def build_workspaces(
     prompt resolved now — a missing prompt file or an unknown packaged sample is a start-up error. Each provider
     launches its ``git`` and ``winter`` children through ``launch``. With ``audit``, each provider reads its own
     pool's held set host-wide."""
-    entries = []
+    entries: list[WorkspaceEntry] = []
     for workspace in declared:
         held_ids = _pool_held_ids(audit, workspace.id) if audit is not None else None
         provider = build_workspace_provider(workspace.settings(host_root), launch=launch, held_ids=held_ids)
@@ -805,7 +805,7 @@ def host_report(
 ) -> HostReport:
     """What the host reports about itself: its first public URL, the panel's sign-in callback URIs, each workspace
     with the environments it holds, and the subscriptions it declares."""
-    reported = []
+    reported: list[HostReportedWorkspace] = []
     for workspace in config.workspaces:
         provider = workspaces.provider(workspace.id)
         reported.append(

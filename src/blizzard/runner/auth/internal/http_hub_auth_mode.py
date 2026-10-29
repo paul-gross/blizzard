@@ -4,6 +4,8 @@ All ``httpx2`` usage is confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
+from http import HTTPStatus
+
 import httpx2
 
 from blizzard.foundation.logging import get_logger
@@ -24,7 +26,7 @@ class HttpHubAuthMode:
         if self._enabled is None:
             try:
                 resp = self._http.get("/api/auth/jwks.json")
-                self._enabled = resp.status_code == httpx2.codes.OK
+                self._enabled = resp.status_code == HTTPStatus.OK
             except httpx2.HTTPError as exc:
                 _log.warning("hub auth-mode probe failed", detail=str(exc))
                 self._enabled = False

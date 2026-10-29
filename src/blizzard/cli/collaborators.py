@@ -45,12 +45,10 @@ def _short_lived_client(
     headers: Mapping[str, str] | None = None,
     uds: str | None = None,
 ) -> Client:
-    kwargs: dict[str, object] = {"base_url": base_url, "headers": headers}
-    if timeout is not None:
-        kwargs["timeout"] = timeout
-    if uds is not None:
-        kwargs["transport"] = HTTPTransport(uds=uds)
-    return Client(**kwargs)  # type: ignore[arg-type]
+    transport = HTTPTransport(uds=uds) if uds is not None else None
+    if timeout is None:
+        return Client(base_url=base_url, headers=headers, transport=transport)
+    return Client(base_url=base_url, headers=headers, transport=transport, timeout=timeout)
 
 
 _PIN = "blizzard.cli.collaborators"

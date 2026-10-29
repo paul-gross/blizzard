@@ -11,6 +11,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from opentelemetry._logs import LogRecord, SeverityNumber
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -37,6 +38,7 @@ from opentelemetry.sdk.metrics.export import (
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import TraceFlags
+from opentelemetry.util.types import Attributes
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
@@ -56,6 +58,11 @@ def _temporality(value: int) -> AggregationTemporality:
     return AggregationTemporality.DELTA if value == _DELTA else AggregationTemporality.CUMULATIVE
 
 
+def _attributes(raw: Attributes) -> Attributes:
+    """``raw`` with the URL redaction applied, typed as the SDK's attribute mapping."""
+    return cast(Attributes, redacted(raw))
+
+
 def _metric(key: _MetricKey, points: Sequence[ReceivedDataPoint]) -> Metric:
     name, description, unit, kind, temporality, monotonic = key
     if kind == "exponential_histogram":
@@ -67,15 +74,15 @@ def _metric(key: _MetricKey, points: Sequence[ReceivedDataPoint]) -> Metric:
         data = Histogram(
             data_points=[
                 HistogramDataPoint(
-                    attributes=redacted(point.attributes),  # pyright: ignore[reportArgumentType]
+                    attributes=_attributes(point.attributes),
                     start_time_unix_nano=point.start_time_ns,
                     time_unix_nano=point.time_ns,
                     count=point.count,
                     sum=point.total,
                     bucket_counts=point.bucket_counts,
                     explicit_bounds=point.bounds,
-                    min=point.minimum,  # pyright: ignore[reportArgumentType]
-                    max=point.maximum,  # pyright: ignore[reportArgumentType]
+                    min=point.minimum,  # pyright: ignore[reportArgumentType]  # the SDK annotates float; its encoder skips None
+                    max=point.maximum,  # pyright: ignore[reportArgumentType]  # the SDK annotates float; its encoder skips None
                 )
                 for point in points
             ],
@@ -84,7 +91,7 @@ def _metric(key: _MetricKey, points: Sequence[ReceivedDataPoint]) -> Metric:
     else:
         numbers = [
             NumberDataPoint(
-                attributes=redacted(point.attributes),  # pyright: ignore[reportArgumentType]
+                attributes=_attributes(point.attributes),
                 start_time_unix_nano=point.start_time_ns,
                 time_unix_nano=point.time_ns,
                 value=point.value,
@@ -103,7 +110,7 @@ def _exponential_point(point: ReceivedDataPoint) -> ExponentialHistogramDataPoin
     buckets = point.exponential
     assert buckets is not None, "an exponential histogram point carries its buckets"
     return ExponentialHistogramDataPoint(
-        attributes=redacted(point.attributes),  # pyright: ignore[reportArgumentType]
+        attributes=_attributes(point.attributes),
         start_time_unix_nano=point.start_time_ns,
         time_unix_nano=point.time_ns,
         count=point.count,
@@ -113,8 +120,8 @@ def _exponential_point(point: ReceivedDataPoint) -> ExponentialHistogramDataPoin
         positive=Buckets(buckets.positive_offset, buckets.positive_counts),
         negative=Buckets(buckets.negative_offset, buckets.negative_counts),
         flags=0,
-        min=point.minimum,  # pyright: ignore[reportArgumentType]
-        max=point.maximum,  # pyright: ignore[reportArgumentType]
+        min=point.minimum,  # pyright: ignore[reportArgumentType]  # the SDK annotates float; its encoder skips None
+        max=point.maximum,  # pyright: ignore[reportArgumentType]  # the SDK annotates float; its encoder skips None
     )
 
 
@@ -138,7 +145,7 @@ def _metrics_data(points: Sequence[ReceivedDataPoint], resource: Resource) -> Me
 
 
 def _emitted(record: ReceivedLogRecord, resource: Resource) -> ReadWriteLogRecord:
-    sdk_record = LogRecord(
+    sdk_record = LogRecord(  # pyright: ignore[reportDeprecated]  # explicit ids and flags pass through verbatim, zero included; `context` would derive them
         timestamp=record.time_ns,
         observed_timestamp=record.observed_time_ns or record.time_ns,
         trace_id=record.trace_id or 0,
@@ -147,7 +154,7 @@ def _emitted(record: ReceivedLogRecord, resource: Resource) -> ReadWriteLogRecor
         severity_text=record.severity_text or None,
         severity_number=SeverityNumber(record.severity_number) if 0 < record.severity_number <= 24 else None,
         body=record.body,
-        attributes=redacted(record.attributes),  # pyright: ignore[reportArgumentType]
+        attributes=_attributes(record.attributes),
     )
     return ReadWriteLogRecord(
         sdk_record, resource, InstrumentationScope(record.scope_name, record.scope_version or None)
@@ -192,7 +199,7 @@ class _MetricQueue:
                 self._queued -= points
                 self._exporting = True
             try:
-                result = self._exporter.export(data)
+                result = self._exporter.export(data)  # pyright: ignore[reportUnknownMemberType]  # the SDK leaves **kwargs untyped
                 if result is not MetricExportResult.SUCCESS:
                     _log.warning("received metrics were not exported", count=points)
             except Exception:
@@ -218,7 +225,7 @@ class _MetricQueue:
         if self._thread.is_alive():
             _log.warning("received metrics export still in flight at shutdown, exporter left open")
             return
-        self._exporter.shutdown()
+        self._exporter.shutdown()  # pyright: ignore[reportUnknownMemberType]  # the SDK leaves **kwargs untyped
 
 
 class EnabledReceivedTelemetryExport:

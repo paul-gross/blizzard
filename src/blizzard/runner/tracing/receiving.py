@@ -70,7 +70,7 @@ class TelemetryReceiver:
     clock: IClock
     worker_programs: bool = False
     harness_telemetry: bool = False
-    mapped_services: Mapping[str, str] = field(default_factory=dict)
+    mapped_services: Mapping[str, str] = field(default_factory=dict[str, str])
 
     def require_traces(self, sender: ICurrentRunnerIdentity) -> None:
         """Refuse while platform tracing is off, or before ``sender``'s first registration."""

@@ -49,8 +49,8 @@ class Completion:
     choice: str
     epoch: int
     from_node_id: str
-    check_results: list[CheckVerdict] = field(default_factory=list)
-    artifacts: list[CompletionArtifact] = field(default_factory=list)
+    check_results: list[CheckVerdict] = field(default_factory=list[CheckVerdict])
+    artifacts: list[CompletionArtifact] = field(default_factory=list[CompletionArtifact])
     decision_id: str | None = None
     route_token: str | None = None
     lease_id: str | None = None
@@ -64,8 +64,8 @@ class GateSubmission:
 
     from_node_id: str
     epoch: int
-    check_results: list[CheckVerdict] = field(default_factory=list)
-    artifacts: list[CompletionArtifact] = field(default_factory=list)
+    check_results: list[CheckVerdict] = field(default_factory=list[CheckVerdict])
+    artifacts: list[CompletionArtifact] = field(default_factory=list[CompletionArtifact])
     route_token: str | None = None
     lease_id: str | None = None
 

@@ -44,7 +44,7 @@ def snapshots_at(repo: Repository) -> tuple[list[Snapshot], FlagRegistry]:
     if head_text is None:
         raise FlagRegistryError(f"HEAD:{_REGISTRY}: missing flag registry")
     head = FlagRegistry.parse(head_text, f"HEAD:{_REGISTRY}")
-    releases = []
+    releases: list[Snapshot] = []
     for release in parse_releases(repo.tags()):
         text = repo.show(release.tag, _REGISTRY)
         if text is not None:
@@ -62,7 +62,7 @@ def main(mode: Mode, base: str | None) -> None:
     repo = Repository(Path.cwd())
     try:
         snapshots, head = snapshots_at(repo)
-        supported = supported_tags() if snapshots else frozenset()
+        supported: frozenset[str] = supported_tags() if snapshots else frozenset()
         rows, findings = derive(
             snapshots, head, mode, supported=supported, base=base_registry(repo, base), noted=noted_flags(repo)
         )

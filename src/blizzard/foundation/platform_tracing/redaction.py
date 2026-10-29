@@ -47,7 +47,7 @@ class RedactingExporter(SpanExporter):
             context=span.context,
             parent=span.parent,
             resource=span.resource,
-            attributes=redacted(span.attributes),  # pyright: ignore[reportArgumentType]
+            attributes=redacted(span.attributes),  # pyright: ignore[reportArgumentType]  # redacted passes through the SDK attribute values as dict[str, object]; the SDK annotates its narrower Attributes alias
             events=span.events,
             links=span.links,
             kind=span.kind,

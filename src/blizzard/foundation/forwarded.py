@@ -7,13 +7,22 @@ to their direct-connection values. Cross-cutting infrastructure with no domain r
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
+from typing import cast
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.untyped import as_list
 
 _XFF_HEADER = "x-forwarded-for"
 _XFP_HEADER = "x-forwarded-proto"
+
+
+def _listed(value: object) -> Sequence[object] | None:
+    if isinstance(value, tuple):
+        return list(cast("tuple[object, ...]", value))
+    return as_list(value)
 
 
 @domain_model
@@ -30,9 +39,10 @@ class TrustedProxies:
         parsed networks. A single host (``"10.0.0.4"``) becomes a ``/32`` (or ``/128``)
         network; a malformed entry raises :class:`ValueError`, so a bad config fails at
         load rather than silently trusting nothing."""
-        if not isinstance(entries, (list, tuple)):
+        listed = _listed(entries)
+        if listed is None:
             return cls()
-        return cls(tuple(ip_network(str(entry).strip(), strict=False) for entry in entries))
+        return cls(tuple(ip_network(str(entry).strip(), strict=False) for entry in listed))
 
     @classmethod
     def entries(cls, raw: object, invalid: type[Exception]) -> tuple[str, ...]:
@@ -40,9 +50,10 @@ class TrustedProxies:
         one fails at config load and then carried verbatim — they round-trip to toml, and
         building the networks is the composition root's job. ``invalid`` is the caller's
         config-error type."""
-        if not isinstance(raw, (list, tuple)):
+        listed = _listed(raw)
+        if listed is None:
             return ()
-        entries = tuple(str(entry).strip() for entry in raw)
+        entries = tuple(str(entry).strip() for entry in listed)
         try:
             cls.parse(entries)
         except ValueError as exc:

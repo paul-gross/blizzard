@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 from blizzard.hub.egress.internal.files import DirectoryEgressWriter
 from blizzard.hub.egress.writer import (
@@ -29,7 +29,7 @@ def _encode_value(value: object) -> object:
     if isinstance(value, Decimal):
         return format(abs(value) if value == 0 else value, f".{MONEY_SCALE}f")
     if isinstance(value, tuple):
-        return list(value)
+        return list(cast("tuple[object, ...]", value))
     return value
 
 

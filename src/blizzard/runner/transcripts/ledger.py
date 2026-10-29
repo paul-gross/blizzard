@@ -121,7 +121,7 @@ class TranscriptSegmentState:
     spawn_cwd: str | None
     #: agent_id -> spawning `tool_use_id`, accumulated across every window
     #: this segment has read; empty until one names a pair.
-    agent_tool_use_ids: dict[str, str] = field(default_factory=dict)
+    agent_tool_use_ids: dict[str, str] = field(default_factory=dict[str, str])
 
     @property
     def session(self) -> SessionReference:

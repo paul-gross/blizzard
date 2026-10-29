@@ -445,7 +445,7 @@ class OpenedTakeover:
     harness_id: str | None = None
     # The bounded takeover env, layered over the operator's terminal on exec.
     # Carries the re-minted lease token — env only, never the printable ``command``.
-    env: dict[str, str] = field(default_factory=dict)
+    env: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True)

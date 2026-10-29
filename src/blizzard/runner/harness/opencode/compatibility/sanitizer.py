@@ -203,11 +203,7 @@ def sanitize_value(
     if isinstance(value, Mapping):
         sanitized: dict[str, SanitizableValue] = {}
         for key, nested in value.items():
-            sanitized_key = (
-                sanitize_text(key, secrets=secrets, path_replacements=path_replacements)
-                if isinstance(key, str)
-                else key
-            )
+            sanitized_key = sanitize_text(key, secrets=secrets, path_replacements=path_replacements)
             if _key_is_sensitive(key):
                 sanitized[sanitized_key] = REDACTED
             elif key == "http" and isinstance(nested, Mapping):
@@ -236,9 +232,7 @@ def _sanitize_http_mapping(
 ) -> dict[str, SanitizableValue]:
     sanitized: dict[str, SanitizableValue] = {}
     for key, nested in value.items():
-        sanitized_key = (
-            sanitize_text(key, secrets=secrets, path_replacements=path_replacements) if isinstance(key, str) else key
-        )
+        sanitized_key = sanitize_text(key, secrets=secrets, path_replacements=path_replacements)
         if key == "path" and isinstance(nested, str):
             sanitized[sanitized_key] = _sanitize_text(
                 nested,

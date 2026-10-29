@@ -187,7 +187,7 @@ class MigrationRunner:
     def knows_revision(self, revision: str) -> bool:
         """Whether the code's tree holds ``revision`` — ``False`` for a store a newer build migrated."""
         try:
-            return ScriptDirectory.from_config(self._config()).get_revision(revision) is not None
+            return ScriptDirectory.from_config(self._config()).get_revision(revision) is not None  # pyright: ignore[reportUnnecessaryComparison]  # alembic returns None for the "base" pseudo-revision; its stub omits it
         except (CommandError, ResolutionError):
             return False
 
