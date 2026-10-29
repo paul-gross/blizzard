@@ -58,9 +58,11 @@ test('a recorded worker credential authorizes a lease call, and none is refused'
   // to be called as; the host's teardown ends it sooner.
   const chunkId = (await mockHub.seed.chunk({ ...workerChunk("print('worked')\n", 'import time\ntime.sleep(120)\n'), graph_artifacts: [{ name: 'brief', content: 'hello' }] } as never)).body.chunk_id;
   const lease = await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'));
+  // The runner re-mints a lease's token for each resume, so the record is read until the credential it holds answers.
   const headers = await stepUntil(runnerHost, async () => {
     try {
-      return runnerHost.workerHeaders(lease.lease_id);
+      const candidate = runnerHost.workerHeaders(lease.lease_id);
+      return (await runner.leaseArtifacts(lease.lease_id, { scope: 'graph', headers: candidate })).status === 200 ? candidate : undefined;
     } catch {
       return undefined;
     }

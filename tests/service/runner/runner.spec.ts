@@ -369,7 +369,7 @@ function judgementReleasedBy(mockHub: MockHub): string {
   ].join('\n');
 }
 
-/** Steps until the chunk's sole lease is running and the mock harness has recorded its spawn credential. */
+/** Steps until the chunk's sole lease is running and the mock harness has recorded its spawn credential, current as the runner last issued it. */
 async function runningLeaseWithWorker(host: RunnerHost, chunkId: string) {
   const runner = host.runners[RUNNER]!;
   const lease = await stepUntil(
@@ -381,7 +381,9 @@ async function runningLeaseWithWorker(host: RunnerHost, chunkId: string) {
     host,
     async () => {
       try {
-        return host.workerHeaders(lease!.lease_id);
+        // The runner re-mints a lease's token for each resume, so the record is read until the credential it holds answers.
+        const candidate = host.workerHeaders(lease!.lease_id);
+        return (await runner.leaseArtifacts(lease!.lease_id, { scope: 'graph', headers: candidate })).status === 200 ? candidate : undefined;
       } catch {
         return undefined;
       }
