@@ -33,6 +33,7 @@ describe('forge admin models', () => {
   it('links both kinds of referring records by id and shows the effective web origin', () => {
     const detail: ForgeDetail = {
       ...GITHUB,
+      budgets: [],
       repositories: [{ kind: 'repository', key: 'repo_1', label: 'blizzard' }],
       work_sources: [{ kind: 'work_source', key: 'wsrc_1', label: 'issues' }],
     };

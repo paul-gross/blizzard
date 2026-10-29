@@ -197,6 +197,8 @@ from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.forge.budget import ForgeBudgets
+from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
@@ -321,6 +323,8 @@ class TenantServices:
     work_sources: IWorkSourceRegistry
     #: Each repository's forge roles, built from its records.
     forges: ForgeRegistry
+    #: Each forge key's rate budget, shared by every caller of that forge and credential.
+    forge_budgets: ForgeBudgets
     #: Renders a work ref's source-native token.
     work_ref_label: WorkRefLabel
     #: The user read repository — every write still goes through ``auth``.
@@ -903,13 +907,13 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
 
 
 #: Builds a tenant's work-source registry over its stores and its live configuration.
-type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig], IWorkSourceRegistry]
+type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], IWorkSourceRegistry]
 
-#: Builds a tenant's forge registry over its stores and its live configuration.
-type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig], ForgeRegistry]
+#: Builds a tenant's forge registry over its stores, its live configuration, and its rate budgets.
+type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], ForgeRegistry]
 
 
-def default_forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+def default_forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
     """A tenant's forge registry with every forge kind's adapter, uninstrumented."""
     return build_forge_registry(
         records=stores.repository_records,
@@ -917,6 +921,7 @@ def default_forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegis
         objects=live.objects,
         secrets=live.secrets,
         clock=stores.clock,
+        budgets=budgets,
     )
 
 
@@ -973,8 +978,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     chunk_dependencies = chunk_stores.dependencies
     chunk_exclusive = chunk_stores.exclusive
     live = build_live_config(stores, cipher=parts.secret_cipher)
-    work_sources = parts.work_sources(stores, live)
-    forges = parts.forges(stores, live)
+    # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
+    forge_budgets = ForgeBudgets(clock=clock)
+    work_sources = parts.work_sources(stores, live, forge_budgets)
+    forges = parts.forges(stores, live, forge_budgets)
     transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)
     transcript_store = TranscriptSegmentStore(tenant_connections)
@@ -1086,6 +1093,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     work_ref_label = _work_ref_label(work_sources)
     services = TenantServices(
         forges=forges,
+        forge_budgets=forge_budgets,
         work_ref_label=work_ref_label,
         chunks=ChunkReadStores(
             facts=chunk_facts,
@@ -1689,11 +1697,16 @@ def build_flow_driver(
             tenants=lambda: services.tenants.open_tenants.every().keys(),
             lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
             turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
+            notices=lambda tenant: _notices(services.tenants.open_services(StoreScope(tenant))),
         ),
         services.clock,
     )
     services.step_wake.bind(driver)
     return driver
+
+
+def _notices(tenant: TenantServices) -> BudgetNoticeDrain:
+    return BudgetNoticeDrain(tenant.forge_budgets, tenant.event_log)
 
 
 def _announced(tenant: TenantServices, announce: Callable[[TenantServices, ITurnRunner], ITurnRunner]) -> ITurnRunner:

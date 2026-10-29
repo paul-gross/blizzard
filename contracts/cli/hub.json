@@ -3838,7 +3838,7 @@
           "short_help": "Retire FORGE, refusing while an enabled record names it."
         },
         "show": {
-          "help": "Show FORGE by id, current slug or former slug, with its linked records.",
+          "help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading.",
           "params": [
             {
               "hidden": false,
@@ -3889,7 +3889,7 @@
             }
           ],
           "path": "hub forge show",
-          "short_help": "Show FORGE by id, current slug or former slug, with its linked records."
+          "short_help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."
         }
       },
       "help": "Create, list, show, edit, retire and enable forges.",

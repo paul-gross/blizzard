@@ -153,7 +153,9 @@ reads when nothing has, running a full pass anyway once five intervals (ten minu
 on the hub side shows on the forge within one interval; a hand-removed label, an edit by another actor, or a source's
 binding edit self-heals within that five-interval floor. Mid-sweep crashes, forge outages, and failed writes or clears
 are retried on the very next pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a logged
-skip; it never blocks a chunk transition, an ingest, or any other hub request.
+skip; it never blocks a chunk transition, an ingest, or any other hub request. The sweep is among the first callers the
+forge's [rate budget](./forges.md#the-rate-budget) turns away: below two fifths of the limit its source is skipped
+without a request, and the pass after the reset runs it again.
 
 Each tenant is judged on its own. The change check and the five-interval floor are kept per tenant, so a tenant whose
 source's forge cannot be read retries on every pass by itself while every other tenant keeps skipping unchanged passes,
@@ -190,7 +192,9 @@ completes it by hand) enqueues one durable close intent per still-open work ref,
 a fixed drain sweep (the hub's `close_drain` sweep, [The hub's sweeps](./observability.md#the-hubs-sweeps)), on its own
 short interval and independent of `annotation_interval_seconds`, then attempts up to a fixed number of due intents per
 pass through that source's binding, shared fairly among the tenants with due intents (one tenant's backlog never takes
-another's turn) and leaving the rest to the next pass, and a failed attempt stays pending under backoff — the guarantee
+another's turn) and leaving the rest to the next pass, and a failed attempt stays pending under backoff. A close the
+forge's [rate budget](./forges.md#the-rate-budget) turns away, or the forge refuses for its rate, is not a failure: the
+intent waits for the reset without spending its backoff, and is attempted on the first pass after it — the guarantee
 half of closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the
 drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so
 more than one hub pointed at the same repo closing the same item is not a race to coordinate around.

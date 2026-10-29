@@ -14,6 +14,7 @@ from blizzard.hub.composition import ForgeRegistryFactory, LiveConfig, TenantSto
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
@@ -145,14 +146,14 @@ class GitHubDouble:
         self.tokens[repo] = binding.token
         return _Adapter(self, repo)
 
-    def forges(self, stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+    def forges(self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
         """The :data:`ForgeRegistryFactory` a hub under test builds each tenant's registry with."""
-        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live)
+        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live, budgets)
 
     def forges_offering(self, capabilities: Mapping[str, frozenset[Capability]]) -> ForgeRegistryFactory:
         """A registry factory whose forges offer only ``capabilities``, by kind."""
 
-        def build(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+        def build(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
             return ForgeRegistry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
@@ -160,6 +161,7 @@ class GitHubDouble:
                 secrets=live.secrets,
                 build=self.adapter,
                 capabilities=capabilities,
+                budgets=budgets,
             )
 
         return build

@@ -6,23 +6,27 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import func, insert, select, update
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -149,6 +153,9 @@ class _World:
             tenants=lambda: self.hub.hub_services.tenants.open_tenants.every().keys(),
             lines=self.lines,
             turns=lambda tenant: self.hub.open_services(tenant).turns,
+            notices=lambda tenant: BudgetNoticeDrain(
+                self.hub.open_services(tenant).forge_budgets, self.hub.open_services(tenant).event_log
+            ),
         )
 
     def lines(self, tenant: TenantId) -> FlowLineReconciler:
@@ -624,6 +631,106 @@ def test_the_first_boot_submits_chunks_mid_delivery_in_the_order_they_entered_th
     assert first.arrival < second.arrival
 
 
+# --- forge budget notices -----------------------------------------------------------------------------------------
+
+
+def _budget_events(world: _World) -> list[tuple[str, str, dict]]:
+    with world.hub.engine.connect() as conn:
+        rows = conn.execute(
+            hub_scoped(
+                select(s.event_log.c.kind, s.event_log.c.severity, s.event_log.c.detail)
+                .where(s.event_log.c.kind.in_(("forge-budget-low", "forge-rate-limited")))
+                .order_by(s.event_log.c.id)
+            )
+        ).all()
+    return [(r.kind, r.severity, r.detail if isinstance(r.detail, dict) else json.loads(r.detail)) for r in rows]
+
+
+def test_the_tick_drains_each_budget_notice_once_per_window_into_the_tenants_log(world: _World) -> None:
+    budgets = world.hub.open_services(world.tenant).forge_budgets
+    key = BudgetKey("github", "token")
+    reset = world.hub.clock.now() + timedelta(minutes=2)
+    headers = {
+        "X-RateLimit-Limit": "100",
+        "X-RateLimit-Remaining": "30",
+        "X-RateLimit-Reset": str(int(reset.timestamp())),
+    }
+    budgets.learn(key, headers)
+
+    for _ in range(2):
+        with pytest.raises(ForgeBudgetLow):
+            budgets.admit(key, ForgePriority.SWEEPING)
+    budgets.spent(key, reset)
+    budgets.spent(key, reset)
+    first = world.tick()
+    with pytest.raises(ForgeBudgetLow):
+        budgets.admit(key, ForgePriority.SWEEPING)
+    second = world.tick()
+
+    assert (first.noticed, second.noticed) == (2, 0)
+    events = _budget_events(world)
+    assert [(kind, severity) for kind, severity, _ in events] == [
+        ("forge-budget-low", "warning"),
+        ("forge-rate-limited", "warning"),
+    ]
+    assert events[0][2] == {
+        "forge": "github",
+        "secret": "token",
+        "bucket": "core",
+        "remaining": 30,
+        "limit": 100,
+        "reset": reset.replace(microsecond=0).isoformat(),
+    }
+
+
+def test_a_new_window_drains_its_notice_again(world: _World) -> None:
+    budgets = world.hub.open_services(world.tenant).forge_budgets
+    key = BudgetKey("github", None)
+    for _ in range(2):
+        reset = world.hub.clock.now() + timedelta(minutes=1)
+        budgets.spent(key, reset)
+        world.tick()
+        world.hub.clock.advance(timedelta(minutes=2))
+
+    assert [kind for kind, _, _ in _budget_events(world)] == ["forge-rate-limited", "forge-rate-limited"]
+
+
+def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain() -> None:
+    clock = FixedClock(datetime(2026, 10, 29, 12, 0, tzinfo=UTC))
+    budgets = ForgeBudgets(clock=clock)
+    key = BudgetKey("github", None)
+    budgets.spent(key, clock.now() + timedelta(minutes=1))
+    budgets.learn(
+        key,
+        {
+            "X-RateLimit-Limit": "100",
+            "X-RateLimit-Remaining": "10",
+            "X-RateLimit-Reset": str(int((clock.now() + timedelta(minutes=1)).timestamp())),
+        },
+    )
+    with pytest.raises(ForgeBudgetLow):
+        budgets.admit(key, ForgePriority.SWEEPING)
+
+    class _Log:
+        def __init__(self) -> None:
+            self.kinds: list[str] = []
+            self.fail = True
+
+        def record(self, **kwargs: Any) -> None:
+            if self.fail:
+                self.fail = False
+                raise RuntimeError("store unavailable")
+            self.kinds.append(kwargs["kind"])
+
+    log = _Log()
+    drain = BudgetNoticeDrain(budgets, cast(EventLogService, log))
+    with pytest.raises(RuntimeError):
+        drain.drain(clock.now())
+    recorded = drain.drain(clock.now())
+
+    assert (recorded, log.kinds) == (2, ["forge-rate-limited", "forge-budget-low"])
+
+
 # --- isolation ------------------------------------------------------------------------------------------------------
 
 
@@ -636,7 +743,11 @@ def test_a_raising_tenant_does_not_stop_the_others(world: _World) -> None:
         return world.lines(tenant)
 
     stores = FlowLineStores(
-        corpus=world.stores.corpus, tenants=world.stores.tenants, lines=lines, turns=world.stores.turns
+        corpus=world.stores.corpus,
+        tenants=world.stores.tenants,
+        lines=lines,
+        turns=world.stores.turns,
+        notices=world.stores.notices,
     )
     result = FlowDriver(stores, world.hub.clock).tick(stores, world.hub.clock)
 
@@ -651,7 +762,13 @@ def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: _World) -> Non
         ticks.append(1)
         raise RuntimeError("probe unavailable")
 
-    stores = FlowLineStores(corpus=world.stores.corpus, tenants=tenants, lines=world.lines, turns=world.stores.turns)
+    stores = FlowLineStores(
+        corpus=world.stores.corpus,
+        tenants=tenants,
+        lines=world.lines,
+        turns=world.stores.turns,
+        notices=world.stores.notices,
+    )
     driver = FlowDriver(stores, world.hub.clock)
 
     async def drive() -> None:

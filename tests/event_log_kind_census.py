@@ -61,6 +61,8 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "forge-capability-missing": Recorded(
         "hub/delivery/hub_node.py:HubNodeRouter.escalate_capability_missing", "warning"
     ),
+    "forge-budget-low": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
+    "forge-rate-limited": Recorded("hub/forge/budget_notices.py:BudgetNoticeDrain.drain", "warning"),
     "config-old-field-used": Recorded("hub/domain/config/forge_resolution.py:record_old_fields", "warning"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),
     "command-failed": Recorded("runner/hub/outbound.py:OutboundFacts.command_failed", "warning"),

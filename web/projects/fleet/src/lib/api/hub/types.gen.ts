@@ -3676,6 +3676,35 @@ export type FleetSummaryView = {
 };
 
 /**
+ * ForgeBudgetView
+ *
+ * One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous
+ * budget), and the limit, remaining and reset the forge last answered with.
+ */
+export type ForgeBudgetView = {
+    /**
+     * Bucket
+     */
+    bucket: string;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Remaining
+     */
+    remaining: number;
+    /**
+     * Reset
+     */
+    reset: string;
+    /**
+     * Secret Name
+     */
+    secret_name: string | null;
+};
+
+/**
  * ForgeCreateRequest
  */
 export type ForgeCreateRequest = {
@@ -3709,6 +3738,10 @@ export type ForgeDetail = {
      * Api Base
      */
     api_base: string;
+    /**
+     * Budgets
+     */
+    budgets: Array<ForgeBudgetView>;
     /**
      * Created At
      */

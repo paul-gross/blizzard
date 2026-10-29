@@ -1387,7 +1387,9 @@ close_intent_attempts = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("intent_id", Integer, ForeignKey("close_intents.id"), nullable=False),
     Column("attempted_at", UtcDateTime, nullable=False),
-    Column("outcome", String, nullable=False),  # skipped | failed
+    Column("outcome", String, nullable=False),  # skipped | failed | deferred
+    # Set only on a `deferred` row: when the forge's rate budget lets the close be tried again.
+    Column("resume_at", UtcDateTime, nullable=True),
     Column(
         "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_close_intent_attempts_tenant_id"), nullable=False
     ),

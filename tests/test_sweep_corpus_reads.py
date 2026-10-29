@@ -207,6 +207,27 @@ def test_pending_close_intents_are_the_open_tenants_rows_each_with_its_tenant(wo
     assert rows == {(world.carried, _live(world.carried)), (_OPEN, _live(_OPEN))}
 
 
+def test_pending_close_intents_count_no_deferred_attempt_and_carry_its_resume_at(world: _World) -> None:
+    [intent] = [row.intent for row in world.corpus.pending_close_intents() if row.tenant == _OPEN]
+    resume_at = _AT + timedelta(minutes=5)
+    for outcome, at, resume in (
+        ("failed", _AT, None),
+        ("deferred", _AT + timedelta(seconds=1), _AT + timedelta(hours=1)),
+        ("deferred", _AT + timedelta(seconds=2), resume_at),
+    ):
+        world.insert(
+            s.close_intent_attempts,
+            tenant_id=_OPEN,
+            intent_id=intent.intent_id,
+            attempted_at=at,
+            outcome=outcome,
+            resume_at=resume,
+        )
+
+    [read] = [row.intent for row in world.corpus.pending_close_intents() if row.tenant == _OPEN]
+    assert (read.attempt_count, read.last_attempt_at, read.resume_at) == (1, _AT, resume_at)
+
+
 def test_candidacy_is_keyed_by_open_tenant(world: _World) -> None:
     read = world.corpus.candidacy(_EXTRACTOR)
     assert set(read) == {world.carried, _OPEN}

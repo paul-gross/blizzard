@@ -27,6 +27,7 @@ from blizzard.hub.domain.config.forges import (
     ForgeSlugTaken,
 )
 from blizzard.wire.forge import (
+    ForgeBudgetView,
     ForgeCreateRequest,
     ForgeDetail,
     ForgePatchRequest,
@@ -71,6 +72,16 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
             ForgeReferenceView(kind="work_source", key=s.work_source_id, label=s.slug)
             for s in sources
             if s.fields.forge_id == record.forge_id
+        ],
+        budgets=[
+            ForgeBudgetView(
+                secret_name=key.secret_name,
+                bucket=reading.bucket,
+                limit=reading.limit,
+                remaining=reading.remaining,
+                reset=iso_utc(reading.reset),
+            )
+            for key, reading in services.forge_budgets.forge_readings(record.forge_id)
         ],
     )
 

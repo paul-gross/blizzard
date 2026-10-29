@@ -3,6 +3,8 @@ an intent in, the terminal outcomes that derives, and the event a recorded outco
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome, WorkRef
@@ -11,6 +13,7 @@ from blizzard.hub.domain.work_items.closure import (
     CloseEvent,
     CloseIntentState,
     close_event,
+    close_intent_is_due,
 )
 
 pytestmark = pytest.mark.unit
@@ -50,4 +53,33 @@ def test_a_gone_or_failed_ref_announces_close_failed_with_its_outcome_and_reason
         kind="work-item-close-failed",
         message="failed to close forge#12: boom",
         detail={"outcome": outcome.value, "reason": "boom"},
+    )
+
+
+_NOW = datetime(2026, 10, 29, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("attempt_count", "last_attempt_at"), [(0, None), (3, _NOW - timedelta(days=1))], ids=["fresh", "long-backed-off"]
+)
+def test_an_intent_is_held_until_its_newest_deferrals_resume_at(
+    attempt_count: int, last_attempt_at: datetime | None
+) -> None:
+    resume_at = _NOW + timedelta(minutes=5)
+
+    def due(now: datetime) -> bool:
+        return close_intent_is_due(
+            now, attempt_count=attempt_count, last_attempt_at=last_attempt_at, resume_at=resume_at
+        )
+
+    assert not due(resume_at - timedelta(microseconds=1))
+    assert due(resume_at)
+
+
+def test_a_passed_resume_at_leaves_the_backoff_to_decide() -> None:
+    last = _NOW - timedelta(seconds=30)
+
+    assert not close_intent_is_due(_NOW, attempt_count=1, last_attempt_at=last, resume_at=_NOW - timedelta(hours=1))
+    assert close_intent_is_due(
+        _NOW + timedelta(seconds=30), attempt_count=1, last_attempt_at=last, resume_at=_NOW - timedelta(hours=1)
     )

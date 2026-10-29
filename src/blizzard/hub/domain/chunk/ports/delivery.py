@@ -23,7 +23,8 @@ class IReadChunkDeliveryRepository(Protocol):
 
     def pending_close_intents(self) -> list[PendingCloseIntent]:
         """Every ``(chunk_id, ref)`` pair carrying a pending ``close_intents`` row,
-        due or not, with its own ``close_intent_attempts`` history; a chunk in the ephemeral
+        due or not, with its own ``close_intent_attempts`` history — a ``deferred`` attempt counted
+        only as its ``resume_at``, never as a backoff tick; a chunk in the ephemeral
         set is excluded even if its intent enqueued before it was grouped or deleted."""
         ...
 
@@ -75,4 +76,10 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         the backoff clock's own tick for an intent no bound closer answered this pass.
         A single insert, its own transaction: unlike a failed close, there is no outcome
         fact or retirement to fold it alongside."""
+        ...
+
+    def record_close_attempt_deferred(self, intent_id: int, *, at: datetime, resume_at: datetime) -> None:
+        """Append one ``deferred`` ``close_intent_attempts`` row for ``intent_id`` — the forge's rate
+        budget turned the close away until ``resume_at``. A single insert, its own transaction; it
+        writes no outcome fact and spends no backoff."""
         ...

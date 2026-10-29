@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
@@ -66,6 +67,11 @@ class WorkItem:
 
 class WorkSourceError(Exception):
     """The forge read failed — an unreachable forge or an unresolvable pointer."""
+
+    def __init__(self, message: str = "", *, retry_after: datetime | None = None) -> None:
+        super().__init__(message)
+        #: Set only when the forge's rate budget turned the call away or the forge refused it for rate: when to retry.
+        self.retry_after = retry_after
 
 
 class IWorkSource(Protocol):

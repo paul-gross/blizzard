@@ -61,9 +61,22 @@ class ForgeSummary(WireModel):
     retired: bool
 
 
+class ForgeBudgetView(WireModel):
+    """One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous
+    budget), and the limit, remaining and reset the forge last answered with."""
+
+    secret_name: str | None
+    bucket: str
+    limit: int
+    remaining: int
+    reset: str
+
+
 class ForgeDetail(ForgeSummary):
     repositories: list[ForgeReferenceView]
     work_sources: list[ForgeReferenceView]
+    #: Each budget's last reading, held in memory since the hub started; empty until the forge has been heard from.
+    budgets: list[ForgeBudgetView]
 
 
 class ForgesListView(WireModel):

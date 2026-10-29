@@ -133,6 +133,7 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.layout import SIGNING_KEYS_PARTS
@@ -578,7 +579,7 @@ def build_hosted_app(
     # Minted here on first start when no key source exists yet.
     secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
 
-    def work_source_registry(stores: TenantStores, live: LiveConfig) -> IWorkSourceRegistry:
+    def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
         return WorkSourceEntry.registry(
             records=stores.work_source_records,
             forges=stores.forge_records,
@@ -588,17 +589,19 @@ def build_hosted_app(
             work_item_store=stores.work_item_store,
             edits=stores.work_item_edits,
             resolution=stores.garden_proposal_resolution,
+            budgets=budgets,
             close_forge_writes_enabled=config.close_forge_writes_enabled,
             instrument_client=platform_tracing.instrument_client,
         )
 
-    def forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+    def forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
         return build_forge_registry(
             records=stores.repository_records,
             forges=stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             clock=stores.clock,
+            budgets=budgets,
             instrument=platform_tracing.instrument_client,
         )
 

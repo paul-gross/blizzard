@@ -58,6 +58,12 @@ action requires. The hub refuses the visit before the action runs, writes a `hub
 and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the forge.
 The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
 
+`forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
+before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of
+that forge and secret waits until the refusal lifts. Each is recorded at most once per budget per reset window, naming
+the forge, the secret, the bucket, the last remaining and limit, and the reset; it names no chunk. Nothing needs doing
+unless it recurs: the callers wait and resume on their own. A notice lost to a restart is not recorded.
+
 `config-old-field-used` (warning): a write named its forge by a deprecated address field (`forge_api_url`, `api_base`,
 or `web_base`) instead of `forge`. The hub records one event per field, naming the record, the field, and the forge it
 resolved to, and the write answers with a `Deprecation` header and a warning. No event appears once nothing still sends

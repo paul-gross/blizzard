@@ -141,7 +141,8 @@ class PendingCloseIntent:
     ``intent_id`` is the backing ``close_intents.id`` — the key a
     skipped attempt's own ``close_intent_attempts`` row is recorded against.
     ``attempt_count`` and ``last_attempt_at`` are that intent's backoff history (``0`` and
-    ``None`` with no attempt). All three are excluded
+    ``None`` with no attempt), counting no ``deferred`` attempt. ``resume_at`` is the newest
+    deferred attempt's resume time, ``None`` with none. All four are excluded
     from equality, so two instances compare equal by ``(chunk_id, ref)`` alone; each
     defaults to its unset value."""
 
@@ -150,6 +151,7 @@ class PendingCloseIntent:
     intent_id: int = field(default=0, compare=False)
     attempt_count: int = field(default=0, compare=False)
     last_attempt_at: datetime | None = field(default=None, compare=False)
+    resume_at: datetime | None = field(default=None, compare=False)
 
 
 @domain_model

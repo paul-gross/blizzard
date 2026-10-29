@@ -118,6 +118,7 @@ from blizzard.hub.egress.writer import (
     validate_batch,
 )
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
@@ -699,11 +700,19 @@ def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
 class FakeCloser:
     """An in-process :class:`IWorkCloser` — an in-memory ``{ref: outcome}`` map plus
     a call log a test asserts against. ``gone_refs`` raises
-    :class:`WorkItemGoneError`; ``fail_refs`` raises a bare :class:`WorkCloseError`."""
+    :class:`WorkItemGoneError`; ``fail_refs`` raises a bare :class:`WorkCloseError`; ``rate_refs``
+    raises a :class:`WorkCloseError` carrying its ref's ``retry_after``."""
 
-    def __init__(self, *, gone_refs: set[str] | None = None, fail_refs: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        gone_refs: set[str] | None = None,
+        fail_refs: set[str] | None = None,
+        rate_refs: dict[str, datetime] | None = None,
+    ) -> None:
         self.gone_refs = gone_refs or set()
         self.fail_refs = fail_refs or set()
+        self.rate_refs = rate_refs or {}
         self.closed: list[WorkRef] = []
         self.traces: list[DeliveryTrace | None] = []
 
@@ -712,6 +721,8 @@ class FakeCloser:
             raise WorkItemGoneError(f"{pointer.ref} no longer exists")
         if pointer.ref in self.fail_refs:
             raise WorkCloseError(f"boom closing {pointer.ref}")
+        if pointer.ref in self.rate_refs:
+            raise WorkCloseError(f"budget low closing {pointer.ref}", retry_after=self.rate_refs[pointer.ref])
         self.closed.append(pointer)
         self.traces.append(trace)
 
@@ -1440,7 +1451,7 @@ def build_hub(
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
-    def tenant_work_sources(stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
+    def tenant_work_sources(stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
         # The default tenant reads the fakes; any other tenant holds only its own built-in source.
         if stores.scope == default:
             return work_source_registry
