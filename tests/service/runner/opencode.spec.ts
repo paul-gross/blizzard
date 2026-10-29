@@ -1,5 +1,5 @@
 import { expect, runnerTest as test } from '../../harness/fixtures';
-import type { RunnerHost } from '../../harness/fixtures';
+import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // The OpenCode binding on a stepped runner host: worker turns run under `mock-opencode`, every wait is a step of the host,
 // and each case reads the lease, usage, transcript and segment routes of the runner and the mock's own world records.
@@ -51,7 +51,7 @@ const DELIVER = {
 };
 
 /** A build then review chunk entirely under OpenCode, the two nodes sharing one session pool. */
-const buildAndReview = {
+const buildAndReview: MockChunkSpec = {
   graph_id: 'gr_service_opencode',
   entry: 'build',
   nodes: {
@@ -82,7 +82,7 @@ const buildAndReview = {
 };
 
 /** A build then deliver chunk around one build program and its judgement script. */
-function buildThenDeliver(graphId: string, prompt: string, judgement: string) {
+function buildThenDeliver(graphId: string, prompt: string, judgement: string): MockChunkSpec {
   return {
     graph_id: graphId,
     entry: 'build',
@@ -190,9 +190,9 @@ function stepCost(messages: { parts: { type: string; cost?: number }[] }[]): num
 }
 
 /** Seeds `spec`, and returns what a case reads its chunk through. */
-async function seeded(mockHub: Parameters<Parameters<typeof test>[2]>[0]['mockHub'], runnerHost: RunnerHost, spec: unknown) {
+async function seeded(mockHub: MockHub, runnerHost: RunnerHost, spec: MockChunkSpec) {
   const reader = (await mockHub.enroll.runner({ name: 'reader' })).body.token;
-  const chunkId = (await mockHub.seed.chunk(spec as never)).body.chunk_id;
+  const chunkId = (await mockHub.seed.chunk(spec)).body.chunk_id;
   const runner = runnerHost.runners['runner-local']!;
   const status = async (): Promise<string> => (await mockHub.fleet(reader).get(`/api/fleet/chunks/${chunkId}`)).body.status as string;
   const leases = async () => (await runner.leases()).body.items.filter((lease) => lease.chunk_id === chunkId).sort((a, b) => a.epoch - b.epoch);
