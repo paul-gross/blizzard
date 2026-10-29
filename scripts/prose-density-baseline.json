@@ -11352,12 +11352,6 @@
    "over_cap": 0,
    "total": 57
   },
-  "service/test_idp_federation_service.py": {
-   "comments": 19,
-   "docstrings": 22,
-   "over_cap": 0,
-   "total": 330
-  },
   "service/test_mock_chunk_findings_service.py": {
    "comments": 1,
    "docstrings": 6,
