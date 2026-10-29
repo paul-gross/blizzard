@@ -65,6 +65,10 @@ export class ChunkDetailPanel {
    * {@link ChunkTimeline}; `null` withholds the Graph fact's and every timeline row's link. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
+  /** The board's path segments a timeline flow row links its flow's record through (`?flow=`), forwarded to
+   * {@link ChunkTimeline}; `null` withholds the link. */
+  readonly flowLinkBase = input<readonly string[] | null>(null);
+
   /** Whether the current identity may answer an open question (`question:answer`),
    * forwarded to {@link ChunkAwaitingHuman}. */
   readonly canAnswer = input(false);

@@ -1,4 +1,5 @@
-import { type ChunkDetail, type ChunkStatus, MigrationSource } from '../../api/hub';
+import { type ChunkDetail, type ChunkStatus, type FlowFactKind, MigrationSource } from '../../api/hub';
+import { openLookup } from '../../core/open-lookup';
 import { nodeStepKey } from '../../core/node-step';
 import { formatAbsolute, formatWhen } from '../../core/when';
 import { bounceReason } from './parse-bounce-envelope';
@@ -21,9 +22,10 @@ import { bounceReason } from './parse-bounce-envelope';
  * `restart` row is an operator's move of the chunk: `nodeName → toName`, by
  * {@link actor}, its graph crossing (when it left another graph) read off `toName`'s
  * `graph/node` form the way a migration's is. Neither is a node-step, so both are
- * keyless. */
+ * keyless. A `flow` row is one fact of the chunk's delivery on a flow — a submission, a turn and how it ended, a
+ * landing, or a withdrawal — named by {@link flowId}, which a consumer links to that flow's record. */
 export interface HistoryRow {
-  readonly kind: 'transition' | 'migration' | 'bounce' | 'restart';
+  readonly kind: 'transition' | 'migration' | 'bounce' | 'restart' | 'flow';
   readonly key: string | null;
   /** The row's epoch — `null` for a bounce, which records none. */
   readonly epoch: number | null;
@@ -45,6 +47,8 @@ export interface HistoryRow {
   /** Whether the row hops graphs — a migration always, a restart when it left another
    * graph. */
   readonly crossesGraph: boolean;
+  /** The flow a `flow` row's fact was recorded on — `null` on every other kind. */
+  readonly flowId: string | null;
   readonly when: string;
   readonly whenTitle: string;
   readonly sortKey: string;
@@ -92,8 +96,8 @@ export interface StepUsageTotal {
 
 /**
  * The chunk's node-history rows, oldest-first: every judged transition, every
- * cross-graph migration, every bounce, and every restart, woven into one
- * chronological list by `recorded_at`. A cross-graph restart also records a
+ * cross-graph migration, every bounce, every restart, and every fact of the chunk's
+ * delivery on a flow, woven into one chronological list by when each was recorded. A cross-graph restart also records a
  * migration (`source: 'restart'`); that migration is folded into the restart's own
  * row rather than rendered as a second step for the one operator move. The single
  * owner of this derivation (`canon:one-owner`, the same precedent
@@ -119,6 +123,7 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
       actor: null,
       title: null,
       crossesGraph: false,
+      flowId: null,
       when: formatWhen(t.recorded_at, now),
       whenTitle: formatAbsolute(t.recorded_at),
       sortKey: t.recorded_at,
@@ -139,6 +144,7 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
     actor: null,
     title: null,
     crossesGraph: true,
+    flowId: null,
     when: formatWhen(m.recorded_at, now),
     whenTitle: formatAbsolute(m.recorded_at),
     sortKey: m.recorded_at,
@@ -157,6 +163,7 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
     actor: null,
     title: bounceReason(b.envelope),
     crossesGraph: false,
+    flowId: null,
     when: formatWhen(b.recorded_at, now),
     whenTitle: formatAbsolute(b.recorded_at),
     sortKey: b.recorded_at,
@@ -178,12 +185,49 @@ export function deriveHistoryRows(detail: ChunkDetail, now: Date): readonly Hist
       actor: r.restarted_by,
       title: null,
       crossesGraph,
+      flowId: null,
       when: formatWhen(r.recorded_at, now),
       whenTitle: formatAbsolute(r.recorded_at),
       sortKey: r.recorded_at,
     };
   });
-  return [...transitions, ...migrations, ...bounces, ...restarts].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  // `flow_record` is absent from a runner's detail, which carries no flows.
+  const flowFacts: HistoryRow[] = (detail.flow_record ?? []).map((f) => ({
+    kind: 'flow' as const,
+    key: null,
+    epoch: null,
+    nodeId: null,
+    nodeName: flowFactKindLabel(f.kind),
+    graphName: null,
+    graphId: null,
+    verdict: f.outcome,
+    toId: null,
+    toName: null,
+    actor: null,
+    title: f.flow_id,
+    crossesGraph: false,
+    flowId: f.flow_id,
+    when: formatWhen(f.at, now),
+    whenTitle: formatAbsolute(f.at),
+    sortKey: f.at,
+  }));
+  return [...transitions, ...migrations, ...bounces, ...restarts, ...flowFacts].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+}
+
+const FLOW_FACT_KIND_LABELS = openLookup<FlowFactKind, string>(
+  {
+    submitted: 'submitted',
+    'turn-started': 'turn started',
+    'turn-ended': 'turn ended',
+    landed: 'landed',
+    withdrawn: 'withdrawn',
+  },
+  (raw) => raw,
+);
+
+/** A flow fact kind's label — the kind raw when this build does not know it. */
+export function flowFactKindLabel(kind: string): string {
+  return FLOW_FACT_KIND_LABELS(kind);
 }
 
 // U+FE0E pins the arrows to text presentation: bare, Chromium paints them as colour emoji
@@ -193,6 +237,7 @@ const KIND_MARKS: Record<Exclude<HistoryRow['kind'], 'transition'>, { mark: stri
   migration: { mark: '⤳', choice: 'migrated' },
   bounce: { mark: '', choice: 'bounced' },
   restart: { mark: '\u21BB\uFE0E', choice: 'restarted' },
+  flow: { mark: '\u21A6\uFE0E', choice: 'flow' },
 };
 
 /** The row's attempt-column text — a transition's own epoch, or its kind's glyph. */

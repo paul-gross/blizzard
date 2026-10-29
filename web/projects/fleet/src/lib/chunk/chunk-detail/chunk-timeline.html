@@ -58,7 +58,14 @@
               } @else {
                 <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
               }
-            }{{ row.nodeName }}</span
+            }@if (row.flowId !== null && flowLinkBase(); as flowBase) {<a
+                class="fl"
+                data-testid="history-flow-link"
+                [routerLink]="flowBase | lensLink"
+                [queryParams]="{ flow: row.flowId }"
+                (click)="$event.stopPropagation()"
+                >{{ row.nodeName }}</a
+              >} @else {{{ row.nodeName }}}</span
           >
           <!-- The judgement that closed the node, in a column of its own so the
                verdicts read down the timeline aligned, then where it routed the

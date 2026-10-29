@@ -52,6 +52,9 @@ export class ChunkDetail {
    * `null` withholds the graph links. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
+  /** The board's path segments, forwarded to {@link ChunkDetailPanel.flowLinkBase}; `null` withholds the flow links. */
+  readonly flowLinkBase = input<readonly string[] | null>(null);
+
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
