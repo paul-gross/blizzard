@@ -1,8 +1,8 @@
 """Chunk completion — the operator's manual closure of a chunk, reachable from any non-``done``
 status including ``stopped``. Appends the ``chunk.completed`` fact (its precedence over a stop is
 ``ChunkFacts.status``'s, ``bzh:facts-not-status``) and releases any live route and closes ``completed``
-each flow submission waiting its turn in the same store transaction. Idempotent by no-op: an already-``done`` chunk writes
-no second fact and is never refused."""
+each flow submission waiting its turn in the same store transaction. Idempotent by no-op: an already-``done``
+chunk writes no second fact and is never refused."""
 
 from __future__ import annotations
 
