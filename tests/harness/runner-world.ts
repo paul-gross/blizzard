@@ -21,6 +21,7 @@ export interface RunnerHostFixtureOptions {
   runnerBundle: RunnerHostOptions['runnerBundle'];
   runnerStubs: RunnerHostOptions['runnerStubs'];
   runnerWinterTrap: RunnerHostOptions['runnerWinterTrap'];
+  runnerDir: RunnerHostOptions['runnerDir'];
   runnerRepositories: RunnerHostOptions['runnerRepositories'];
 }
 
@@ -100,6 +101,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   runnerBundle: [DEFAULT_RUNNER_OPTIONS.runnerBundle, { option: true }],
   runnerStubs: [DEFAULT_RUNNER_OPTIONS.runnerStubs, { option: true }],
   runnerWinterTrap: [DEFAULT_RUNNER_OPTIONS.runnerWinterTrap, { option: true }],
+  runnerDir: [DEFAULT_RUNNER_OPTIONS.runnerDir, { option: true }],
   runnerRepositories: [DEFAULT_RUNNER_OPTIONS.runnerRepositories, { option: true }],
 
   vendorUsage: async ({}, use) => {
@@ -121,10 +123,10 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHosts: async (
-    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerRepositories },
+    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories },
     use,
   ) => {
-    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerRepositories };
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir, runnerRepositories };
     await use({
       create: async (options = {}) => {
         runnerBinding.admit?.();
@@ -135,7 +137,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHost: async (
-    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap },
+    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir },
     use,
     testInfo,
   ) => {
@@ -144,7 +146,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
       return;
     }
     // A held block's host is the worker's: built by the first test, with a context, usage stand-in and ledger that outlive it.
-    const options = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap };
+    const options = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap, runnerDir };
     await use(
       await heldStacks.acquire(`host:${held}`, async () => {
         runnerBinding.admit?.();

@@ -30,6 +30,23 @@ test('a default host boots stepped, and a step completes', async ({ runnerHost }
   expect((await runnerHost.stepHost()).outcome).toBe('completed');
 });
 
+test('a host over a test-initialized directory serves that directory’s runner, which survives dispose', async ({ runnerHosts, scratchDirs, mockHub }) => {
+  const dir = scratchDirs.make('adopted');
+  const init = await scratchDirs.cli(['init', dir, '--hub', mockHub.url]);
+  expect(init.code, init.stdout + init.stderr).toBe(0);
+
+  const host = await runnerHosts.create({ runnerDir: dir });
+  expect(host.dir).toBe(dir);
+  expect(Object.keys(host.runners)).toEqual(['runner-local']);
+  const runner = host.runners['runner-local']!;
+  expect((await mockHub.fleetOf(host, 'runner-local').get('/api/fleet/identity')).body.runner_id).toBe(runner.id);
+  expect((await host.step()).outcome).toBe('completed');
+  expect((await runner.status()).body.runner_id).toBe(runner.id);
+
+  await host.stop();
+  expect(fs.existsSync(path.join(dir, 'blizzard-host.toml'))).toBe(true);
+});
+
 test('init host file is captured before the fixture overlay', async ({ runnerHost }) => {
   const current = fs.readFileSync(path.join(runnerHost.dir, 'blizzard-host.toml'), 'utf8');
   expect(runnerHost.hostFile()).toBe(current);

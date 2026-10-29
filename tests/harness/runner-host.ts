@@ -74,6 +74,12 @@ export interface RunnerHostOptions {
    * the runner's own registration.
    */
   runnerAdopted: { name: string; runnerId: string; token: string } | undefined;
+  /**
+   * A directory the test already initialized, which the host boots over instead of one the fixture scaffolds: `init` and
+   * `add` are skipped, the runners and tokens are read from its host file and `.env`, and the directory is left to its
+   * owner when the host is disposed.
+   */
+  runnerDir: string | undefined;
   /** Forge-backed bare origins supplied by repositories the test owns, replacing the fixture's same-named origins. */
   runnerRepositories: Record<string, string>;
 }
@@ -92,6 +98,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerModelPrices: {},
   runnerWinterTrap: false,
   runnerAdopted: undefined,
+  runnerDir: undefined,
   runnerRepositories: {},
 };
 
@@ -362,9 +369,11 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     if (adopted !== undefined && options.runnerStarted) throw new Error('runnerAdopted needs runnerStarted: false; the first boot is the adopted runner registering');
     const index = count++;
     // A hub holds one live host per name and a host is named for its first runner, so a test's later hosts each name theirs.
-    const defaultRunner = adopted?.name ?? (index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`);
+    const ownDir = options.runnerDir;
+    if (ownDir !== undefined && adopted !== undefined) throw new Error('runnerDir and runnerAdopted cannot both be set');
+    let defaultRunner = adopted?.name ?? (index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`);
     const root = path.join(ctx.scratchRoot ?? os.tmpdir(), `bzh-${crypto.randomBytes(4).toString('hex')}`);
-    const dir = path.join(root, 'h');
+    const dir = ownDir ?? path.join(root, 'h');
     const socket = path.join(dir, 'host.sock');
     const tooLong = socketPathProblem(socket);
     if (tooLong !== undefined) throw new Error(tooLong);
@@ -449,43 +458,50 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
       const runner = requireBinary(binDir(), RUNNER_BINARY);
       const operatorHome = ctx.hub.operatorHome === undefined ? path.join(home, '.config') : await ctx.hub.operatorHome();
-      started = Date.now();
-      if (index > 0 || adopted !== undefined) {
-        // `init` scaffolds the file before it reaches the hub, so a first pass against nothing leaves the scaffold to
-        // rename; the second pass registers the host under that name.
-        await runCommand(runner, ['init', dir, '--hub', 'http://127.0.0.1:9'], { env: cliEnv(operatorHome), cwd: root });
-        if (!fs.existsSync(path.join(dir, 'blizzard-host.toml'))) {
-          throw new Error('`blizzard-runner init` left no host file when the hub was unreachable, so the second host cannot name its runner; the scaffold-then-rename step needs revisiting');
-        }
-        const scaffold = readHostFile(dir);
-        scaffold.hub_url = ctx.hub.url;
-        (scaffold.runner as TomlTable[])[0]!.name = defaultRunner;
-        fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(scaffold));
-      }
-      // An adopted runner's host is never registered: the scaffold above is the whole of `init`.
       let initHostFile: string;
-      if (adopted === undefined) {
-        const init = await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
-        initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
-        const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
-        if (hostId !== undefined) ctx.ledger.add('host', hostId);
-      } else {
-        initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
-      }
-      timings.initMs = Date.now() - started;
+      if (ownDir === undefined) {
+        started = Date.now();
+        if (index > 0 || adopted !== undefined) {
+          // `init` scaffolds the file before it reaches the hub, so a first pass against nothing leaves the scaffold to
+          // rename; the second pass registers the host under that name.
+          await runCommand(runner, ['init', dir, '--hub', 'http://127.0.0.1:9'], { env: cliEnv(operatorHome), cwd: root });
+          if (!fs.existsSync(path.join(dir, 'blizzard-host.toml'))) {
+            throw new Error('`blizzard-runner init` left no host file when the hub was unreachable, so the second host cannot name its runner; the scaffold-then-rename step needs revisiting');
+          }
+          const scaffold = readHostFile(dir);
+          scaffold.hub_url = ctx.hub.url;
+          (scaffold.runner as TomlTable[])[0]!.name = defaultRunner;
+          fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(scaffold));
+        }
+        // An adopted runner's host is never registered: the scaffold above is the whole of `init`.
+        if (adopted === undefined) {
+          const init = await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
+          const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
+          initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
+          if (hostId !== undefined) ctx.ledger.add('host', hostId);
+        } else {
+          initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
+        }
+        timings.initMs = Date.now() - started;
 
-      started = Date.now();
-      for (const entry of (profile.runner ?? []) as TomlTable[]) {
-        const name = entry.name as string;
-        if (name === defaultRunner) continue;
-        const projects = ((entry.projects ?? []) as TomlTable[]).flatMap((item) => [
-          '--project', item.project as string,
-          ...(item.workspace === undefined ? [] : ['--workspace', item.workspace as string]),
-        ]);
-        const agents = entry.agents === undefined ? [] : ['--agents', String(entry.agents)];
-        await run(runner, ['add', name, '--dir', dir, ...(projects.length > 0 ? projects : ['--project', 'default']), ...agents], home);
+        started = Date.now();
+        for (const entry of (profile.runner ?? []) as TomlTable[]) {
+          const name = entry.name as string;
+          if (name === defaultRunner) continue;
+          const projects = ((entry.projects ?? []) as TomlTable[]).flatMap((item) => [
+            '--project', item.project as string,
+            ...(item.workspace === undefined ? [] : ['--workspace', item.workspace as string]),
+          ]);
+          const agents = entry.agents === undefined ? [] : ['--agents', String(entry.agents)];
+          await run(runner, ['add', name, '--dir', dir, ...(projects.length > 0 ? projects : ['--project', 'default']), ...agents], home);
+        }
+        timings.addMs = Date.now() - started;
+      } else {
+        const first = runnerEntries(readHostFile(dir))[0];
+        if (first === undefined) throw new Error(`runnerDir ${ownDir} holds no runner in its host file; initialize it before booting a host over it`);
+        defaultRunner = first.name;
+        initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
       }
-      timings.addMs = Date.now() - started;
 
       // The overlay: the fixture's baseline first, then the profile, over the file the CLI wrote.
       let port = await freePort();
