@@ -114,6 +114,8 @@ export interface MockChunkSpec {
     locus: string;
     summary: string;
   }[];
+  /** The findings in the run's bucket; `live: false` rows are excluded from the worker's read. */
+  garden_findings?: { finding_id: string; class: string; locus: string; summary: string; live?: boolean; state?: string }[];
 }
 
 export interface MockChunkSeeded {
