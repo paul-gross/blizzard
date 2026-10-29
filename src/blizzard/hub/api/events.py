@@ -2,8 +2,8 @@
 
 A subscriber registers with its tenant's :class:`~blizzard.hub.events.broker.EventBroker`, replays
 the buffered tail newer than its ``Last-Event-ID``, then streams live until it disconnects, its
-tenant's broker is dropped, or its viewer's membership in the tenant ends — ids are monotonic, so an
-event caught in both is emitted once.
+tenant's broker is dropped, its viewer's membership in the tenant ends, or its session logs out — ids
+are monotonic, so an event caught in both is emitted once.
 :class:`Cursor`/:class:`Stream` are the runner-shared machinery; only the reserved open-of-stream
 comment names this daemon."""
 
@@ -25,7 +25,7 @@ from blizzard.foundation.events.stream import Cursor, CursorRefused, Stream
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
-from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.auth_session import PresentedSession, require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -53,15 +53,19 @@ async def events_stream(
     viewer: Annotated[ResolvedIdentity | None, Depends(require(Permission.FLEET_VIEW))] = None,
 ) -> StreamingResponse:
     """Subscribe to the live event stream of the request's tenant, resuming from ``Last-Event-ID`` if
-    present. The stream ends when the tenant's broker is dropped, or when the viewer's membership in the
-    tenant ends. ``?project=`` sends only the frames :class:`ProjectLens` selects for that project, the
-    replay tail's included. ``?from=latest`` skips the replay ring and sends only events published after the
-    subscription registered; an unknown ``from`` value, or ``from=latest`` with ``?last_event_id=``, is a ``422``."""
+    present. The stream ends when the tenant's broker is dropped, when the viewer's membership in the
+    tenant ends, or when the session it was opened under logs out. ``?project=`` sends only the frames
+    :class:`ProjectLens` selects for that project, the replay tail's included. ``?from=latest`` skips the
+    replay ring and sends only events published after the subscription registered; an unknown ``from`` value,
+    or ``from=latest`` with ``?last_event_id=``, is a ``422``."""
     cursor = _cursor(request)
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     admits = None if project is None else (await _stream_lens(services, project)).admits
     owner = viewer.user_id if viewer is not None else None
-    stream = Stream(services.events, request, cursor, _RESERVED_COMMENT, shutdown, admits=admits, owner=owner)
+    session = PresentedSession(request).id_hash if viewer is not None else None
+    stream = Stream(
+        services.events, request, cursor, _RESERVED_COMMENT, shutdown, admits=admits, owner=owner, session=session
+    )
     return StreamingResponse(stream.frames(), media_type="text/event-stream")
 
 

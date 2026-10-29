@@ -12,6 +12,7 @@ import contextlib
 import json
 import threading
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
@@ -33,11 +34,12 @@ class Event:
 
 class Subscriber:
     """One live SSE connection: its event queue, the loop that drains it, the principal it was opened
-    for (``None`` when its daemon names none), and the signal that it has ended — its broker closed, or
+    for (``None`` when its daemon names none), the session key it was opened under (``None`` when it names
+    none), and the signal that it has ended — its broker closed, or
     its owner was ended — set after every event published before the end is queued. ``joined_at`` is the
     broker's latest event id when it registered: an event above it reaches the queue, one at or below never does."""
 
-    __slots__ = ("ended", "joined_at", "loop", "owner", "queue")
+    __slots__ = ("ended", "joined_at", "loop", "owner", "queue", "session")
 
     def __init__(
         self,
@@ -45,10 +47,12 @@ class Subscriber:
         loop: asyncio.AbstractEventLoop,
         owner: str | None = None,
         joined_at: int = 0,
+        session: str | None = None,
     ) -> None:
         self.queue = queue
         self.loop = loop
         self.owner = owner
+        self.session = session
         self.joined_at = joined_at
         self.ended = asyncio.Event()
 
@@ -85,15 +89,15 @@ class EventBroker:
 
     # --- subscription --------------------------------------------------------
 
-    def subscribe(self, owner: str | None = None) -> Subscriber:
-        """Register a live connection opened for ``owner``, capturing the running loop for the handoff. A
-        connection to a closed broker is ended from the start. The latest event id is recorded in the same
-        lock acquisition that registers the connection, so it splits events exactly into those the
+    def subscribe(self, owner: str | None = None, session: str | None = None) -> Subscriber:
+        """Register a live connection opened for ``owner`` under ``session``, capturing the running loop for
+        the handoff. A connection to a closed broker is ended from the start. The latest event id is recorded in
+        the same lock acquisition that registers the connection, so it splits events exactly into those the
         connection was queued and those it was not."""
         queue: asyncio.Queue[Event] = asyncio.Queue()
         loop = asyncio.get_running_loop()
         with self._lock:
-            sub = Subscriber(queue, loop, owner, self._next_id)
+            sub = Subscriber(queue, loop, owner, self._next_id, session)
             if self._closed:
                 sub.ended.set()
             else:
@@ -115,8 +119,16 @@ class EventBroker:
     def end_subscriber(self, owner: str) -> None:
         """End every open connection of ``owner`` as :meth:`close` ends them all — each sends what it already
         holds, then returns — leaving every other connection and the broker open."""
+        self._end(lambda sub: sub.owner == owner)
+
+    def end_session(self, session: str) -> None:
+        """End every open connection opened under ``session`` as :meth:`end_subscriber` ends an owner's, leaving
+        every connection of another session — the same owner's included — and the broker open."""
+        self._end(lambda sub: sub.session == session)
+
+    def _end(self, selects: Callable[[Subscriber], bool]) -> None:
         with self._lock:
-            ended = [sub for sub in self._subscribers if sub.owner == owner]
+            ended = [sub for sub in self._subscribers if selects(sub)]
             self._subscribers.difference_update(ended)
         for sub in ended:
             with contextlib.suppress(RuntimeError):

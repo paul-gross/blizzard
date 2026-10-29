@@ -64,7 +64,9 @@ same check, with the same codes.
 `blizzard hub login` opens a browser to the hub's own authorize endpoint (PKCE, an ephemeral 127.0.0.1 loopback
 redirect) so login completes at the hub, storing the session token locally; `--paste` swaps in a paste-code fallback for
 a headless or remote shell with no reachable loopback listener. `blizzard hub logout` deletes the local session and
-revokes it at the hub, so a leaked token stops resolving.
+revokes it at the hub, so a leaked token stops resolving. The revocation also ends every event stream
+(`GET /api/events/stream`) opened under that session, in every tenant; the same person's other sessions keep
+streaming, and a reconnect with the revoked session is refused with `401`.
 
 ## Roles
 

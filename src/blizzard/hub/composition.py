@@ -456,6 +456,8 @@ class HubServices:
     close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
+    #: Every tenant's live event broker — what ends a logged-out session's streams in every tenant.
+    event_brokers: TenantBrokers
     #: The hub's own event log, read newest-first — by hub administrators alone.
     hub_events: IReadHubEventLog
     #: Creates, renames and lists the hub's tenants.
@@ -1637,6 +1639,7 @@ def build_services(
         action_loop=action_loop,
         close_tenant_objects=core.tenants.close_served,
         hub_event_log=hub_event_log,
+        event_brokers=brokers,
         hub_events=hub_events,
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,
