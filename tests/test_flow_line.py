@@ -35,7 +35,7 @@ from blizzard.hub.domain.delivery.flows import (
     withdrawal_for,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
-from blizzard.tools.invariants import FlowLineStanding
+from blizzard.hub.store.internal.invariants import FlowLineStanding
 
 pytestmark = pytest.mark.unit
 

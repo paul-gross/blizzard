@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store import schema as s
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.support import TEST_CATALOGUE, HubHarness, build_hub, hub_scoped, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -210,11 +210,11 @@ def test_the_boot_pass_leaves_a_chunk_pinned_to_the_graph_but_standing_elsewhere
 def test_the_invariant_names_a_hub_node_with_no_action_pinning_a_live_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _chunk_id, _build_node_id, graph_id = _claimed(hub)
-    assert [v for v in HubInvariants(hub.engine).run() if v.invariant == "hub:hub-node-has-action"] == []
+    assert [v for v in hub_invariants(hub.engine).run() if v.invariant == "hub:hub-node-has-action"] == []
 
     _strip_action(hub, graph_id, _LEGACY_RUN)
 
-    (violation,) = [v for v in HubInvariants(hub.engine).run() if v.invariant == "hub:hub-node-has-action"]
+    (violation,) = [v for v in hub_invariants(hub.engine).run() if v.invariant == "hub:hub-node-has-action"]
     assert graph_id in violation.detail
     assert "'merge'" in violation.detail
 

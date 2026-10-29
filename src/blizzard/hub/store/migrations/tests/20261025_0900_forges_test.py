@@ -40,7 +40,7 @@ from blizzard.hub.store.forge_check_reads import read_forge_addresses
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import TenantId
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_project_columns_migration import _NOW, _insert, _query, _run_step
 from tests.migration_support_store_migrations import _schema_snapshot
 from tests.repo_files import repo_root
@@ -314,7 +314,7 @@ def test_a_carried_over_store_holds_every_forge_invariant(tmp_path: Path) -> Non
         # The invariants read every table the live schema declares, so the store walks on to head.
         runner.upgrade("head")
 
-        assert [v for v in HubInvariants(engine).run() if v.invariant in _FORGE_INVARIANTS] == []
+        assert [v for v in hub_invariants(engine).run() if v.invariant in _FORGE_INVARIANTS] == []
 
 
 def test_a_chunks_commits_resolve_to_the_same_repositories_after_carry_over(tmp_path: Path) -> None:

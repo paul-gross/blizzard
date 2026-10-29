@@ -553,11 +553,11 @@ def _tenant_seam_breaches(src_root: Path) -> list[str]:
 def _holds_hub_scoped_exemption(path: Path, src_root: Path) -> bool:
     """Whether ``path`` is one of the few modules that may name the hub-scoped exemption: the tenant primitives that
     declare it, the statement guard that honours it, the ``HubScopedReads`` modules (``hub/store/internal/
-    hub_scoped_*.py``), the invariant checker's cross-tenant audits, and the hub's migrations."""
+    hub_scoped_*.py``), the invariant checker's hub half (its cross-tenant audit), and the hub's migrations."""
     internal = src_root / "hub" / "store" / "internal"
     holders = (src_root / "hub" / "tenancy.py", src_root / "hub" / "store" / "tenant_guard.py")
     return (
-        path in (*holders, src_root / "tools" / "invariants.py")
+        path in (*holders, internal / "invariants.py")
         or (path.parent == internal and path.name.startswith("hub_scoped_"))
         or path.is_relative_to(src_root / "hub" / "store" / "migrations")
     )
@@ -628,7 +628,7 @@ def test_tenant_seam_check_catches_every_breach(tmp_path: Path, rel: str, text: 
         ("hub/store/tenant_guard.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
         ("hub/store/migrations/versions/x.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
         ("hub/tenancy.py", 'HUB_SCOPED_OPTION = "blizzard_hub_scoped"\n'),
-        ("tools/invariants.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
+        ("hub/store/internal/invariants.py", "from blizzard.hub.tenancy import HUB_SCOPED_OPTION\n"),
         ("hub/domain/x.py", "connections = core.connections.scoped(scope)\n"),
     ],
 )

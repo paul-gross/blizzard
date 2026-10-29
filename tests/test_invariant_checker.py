@@ -22,7 +22,7 @@ from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStor
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.store import schema as runner
-from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from blizzard.tools.invariants import hub_invariants, runner_invariants
 from tests.config_inputs import init_host, init_hub
 from tests.migration_support_invariant_checker import _NOW, _PROJECT_INVARIANTS, insert
 from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
@@ -80,7 +80,7 @@ def _bind_held(engine, *rows: tuple[str, str, str | None]) -> None:
 
 
 def _unique_env_violations(engine) -> list[str]:
-    return [v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:unique-env-binding"]
+    return [v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:unique-env-binding"]
 
 
 _OTHER_RUNNER = "rn_other"
@@ -329,7 +329,7 @@ def _drained_tables(engine: sa.Engine, tenant: TenantId) -> set[str]:
 
 
 def _project_breaches(engine: sa.Engine, invariant: str) -> list[str]:
-    return [v.detail for v in HubInvariants(engine).run() if v.invariant == invariant]
+    return [v.detail for v in hub_invariants(engine).run() if v.invariant == invariant]
 
 
 def _add_project(conn: sa.Connection, project_id: str, *, slug: str) -> None:
@@ -451,8 +451,8 @@ def _mint(
 
 
 def test_clean_stores_have_no_violations(tmp_path: Path) -> None:
-    assert RunnerInvariants(_runner_engine(tmp_path)).run() == []
-    assert HubInvariants(_hub_engine(tmp_path)).run() == []
+    assert runner_invariants(_runner_engine(tmp_path)).run() == []
+    assert hub_invariants(_hub_engine(tmp_path)).run() == []
 
 
 def test_a_runner_scoped_row_naming_an_unregistered_runner_is_a_violation(tmp_path: Path) -> None:
@@ -463,7 +463,7 @@ def test_a_runner_scoped_row_naming_an_unregistered_runner_is_a_violation(tmp_pa
                 runner_id="rn_other", lease_id="lease_b", chunk_id="ch_2", epoch=1, created_at=_NOW
             )
         )
-    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:rows-name-registered-runner"}
+    details = {v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:rows-name-registered-runner"}
     assert details == {"1 leases row(s) name unregistered runner rn_other"}
 
 
@@ -473,14 +473,14 @@ def test_outbox_counters_left_by_a_reset_runner_are_not_a_violation(tmp_path: Pa
         conn.execute(
             sa.insert(runner.outbox_counters).values(runner_id="rn_reset", lane=runner.OUTBOX_LANE_OUTBOUND, last_seq=7)
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_runner_scoped_rows_naming_the_registered_runner_are_not_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(runner.leases).values(lease_id="lease_a", chunk_id="ch_1", epoch=1, created_at=_NOW))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
@@ -488,7 +488,7 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
     with engine.begin() as conn:
         for lease_id in ("lease_a", "lease_b"):
             conn.execute(insert(runner.leases).values(lease_id=lease_id, chunk_id="ch_1", epoch=1, created_at=_NOW))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-live-lease-per-chunk" in slugs
     # Closing one lease clears the violation (facts-not-status: a closure is the fact).
     with engine.begin() as conn:
@@ -497,7 +497,7 @@ def test_two_live_leases_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                 lease_id="lease_b", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_closed_lease_with_an_ambiguous_generation_is_a_violation(tmp_path: Path) -> None:
@@ -517,7 +517,7 @@ def test_a_closed_lease_with_an_ambiguous_generation_is_a_violation(tmp_path: Pa
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:no-unowned-live-lease-process" in slugs
 
 
@@ -542,7 +542,7 @@ def test_a_closed_lease_whose_generation_was_marked_identity_failed_is_not_a_vio
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation(tmp_path: Path) -> None:
@@ -563,11 +563,11 @@ def test_an_active_lease_with_no_live_process_at_its_recorded_pid_is_a_violation
         )
     # The default probe is the real `/proc` one — pid 99999 is not this test process, so it
     # reads dead without needing to fake anything.
-    slugs = {v.invariant for v in RunnerInvariants(engine).run(after_recovery=True)}
+    slugs = {v.invariant for v in runner_invariants(engine).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" in slugs
     # Not asserted at all before a recovery pass has had its chance to run (the same crash
     # window that leaves it provisional in the first place is not itself a violation).
-    assert RunnerInvariants(engine).run(after_recovery=False) == []
+    assert runner_invariants(engine).run(after_recovery=False) == []
 
 
 def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_path: Path) -> None:
@@ -584,7 +584,7 @@ def test_an_active_lease_with_a_genuinely_live_process_is_not_a_violation(tmp_pa
             )
         )
     probe = FakeProbe(alive={(4242, "start-4242")})
-    slugs = {v.invariant for v in RunnerInvariants(engine, process=probe).run(after_recovery=True)}
+    slugs = {v.invariant for v in runner_invariants(engine, process=probe).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" not in slugs
 
 
@@ -616,7 +616,7 @@ def test_an_active_lease_whose_generation_already_failed_identity_is_not_a_viola
         )
     # The default probe is the real `/proc` one — pid 99999 reads dead, which would otherwise
     # trip the check; the recorded identity failure must suppress it regardless.
-    slugs = {v.invariant for v in RunnerInvariants(engine).run(after_recovery=True)}
+    slugs = {v.invariant for v in runner_invariants(engine).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" not in slugs
 
 
@@ -641,7 +641,7 @@ def test_an_active_lease_with_a_genuinely_leaked_provisional_generation_is_still
                 lease_id="lease_a", spawned_at=_NOW, pid=99999, process_start_time="start-99999", pgid=99999
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run(after_recovery=True)}
+    slugs = {v.invariant for v in runner_invariants(engine).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" in slugs
 
 
@@ -669,7 +669,7 @@ def test_an_active_lease_with_two_unidentified_generations_reports_exactly_once(
             )
     violations = [
         v
-        for v in RunnerInvariants(engine).run(after_recovery=True)
+        for v in runner_invariants(engine).run(after_recovery=True)
         if v.invariant == "runner:active-lease-process-is-live"
     ]
     assert len(violations) == 1
@@ -693,7 +693,7 @@ def test_two_active_leases_claiming_the_same_live_process_is_a_violation(tmp_pat
                 )
             )
     probe = FakeProbe(alive={(555, "start-555")})
-    slugs = {v.invariant for v in RunnerInvariants(engine, process=probe).run(after_recovery=True)}
+    slugs = {v.invariant for v in runner_invariants(engine, process=probe).run(after_recovery=True)}
     assert "runner:active-lease-process-is-live" in slugs
 
 
@@ -706,7 +706,7 @@ def test_env_bound_to_two_chunks_is_a_violation(tmp_path: Path) -> None:
                     chunk_id=chunk_id, environment_id="env_shared", workdir="/w", bound_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:unique-env-binding" in slugs
 
 
@@ -804,7 +804,7 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
                 )
             )
     _set_counters(engine, outbound=4)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
 
@@ -825,7 +825,7 @@ def test_a_pruned_acked_outbound_seq_below_the_pending_floor_is_not_a_violation(
             )
         )
     _set_counters(engine, outbound=3)
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violation(tmp_path: Path) -> None:
@@ -846,7 +846,7 @@ def test_a_hole_at_or_above_the_pending_floor_in_outbound_seq_is_still_a_violati
                 )
             )
     _set_counters(engine, outbound=4)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
 
@@ -861,7 +861,7 @@ def test_gapped_transcript_outbound_seq_is_a_violation(tmp_path: Path) -> None:
                 )
             )
     _set_counters(engine, transcript=4)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-transcript-outbound-seq" in slugs
     # A fact-lane gap does not trip the transcript lane's own check, and vice versa.
     assert "runner:gapless-outbound-seq" not in slugs
@@ -891,7 +891,7 @@ def test_an_acked_and_pruned_transcript_seq_between_two_retained_rows_is_not_a_v
             )
         )
     _set_counters(engine, transcript=3)
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(tmp_path: Path) -> None:
@@ -918,7 +918,7 @@ def test_a_pending_gap_among_only_unacked_transcript_rows_is_still_a_violation(t
                 )
             )
     _set_counters(engine, transcript=4)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-transcript-outbound-seq" in slugs
 
 
@@ -939,7 +939,7 @@ def test_a_hole_among_acked_outbound_rows_with_none_pending_is_a_violation(tmp_p
                 )
             )
     _set_counters(engine, outbound=3)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-outbound-seq" in slugs
 
 
@@ -960,12 +960,12 @@ def test_a_hole_among_acked_transcript_rows_is_not_a_violation(tmp_path: Path) -
                 )
             )
     _set_counters(engine, transcript=5)
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:gapless-transcript-outbound-seq" not in slugs
 
 
 def test_two_runners_each_count_their_own_gapless_seq_and_hold_every_invariant(tmp_path: Path) -> None:
-    assert RunnerInvariants(_two_runner_engine(tmp_path)).run() == []
+    assert runner_invariants(_two_runner_engine(tmp_path)).run() == []
 
 
 def test_a_hole_in_one_runners_outbox_names_that_runner_alone(tmp_path: Path) -> None:
@@ -974,7 +974,7 @@ def test_a_hole_in_one_runners_outbox_names_that_runner_alone(tmp_path: Path) ->
         for table in (runner.outbound_buffer, runner.transcript_outbound_buffer):
             conn.execute(sa.delete(table).where(table.c.runner_id == _OTHER_RUNNER, table.c.seq == 2))
     violations = {
-        v.invariant: v.detail for v in RunnerInvariants(engine).run() if v.invariant.startswith("runner:gapless-")
+        v.invariant: v.detail for v in runner_invariants(engine).run() if v.invariant.startswith("runner:gapless-")
     }
     assert violations == {
         "runner:gapless-outbound-seq": f"runner {_OTHER_RUNNER}: retained outbound seqs not gapless; missing [2]",
@@ -999,7 +999,7 @@ def test_a_counter_below_a_retained_seq_is_a_violation(tmp_path: Path, lane: str
             .where(runner.outbox_counters.c.runner_id == _OTHER_RUNNER, runner.outbox_counters.c.lane == lane)
             .values(last_seq=2)
         )
-    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
+    details = {v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
     assert details == {f"runner {_OTHER_RUNNER}: {lane} lane retains seq 3 but has counter 2"}
 
 
@@ -1007,7 +1007,7 @@ def test_a_lane_with_rows_and_no_counter_is_a_violation(tmp_path: Path) -> None:
     engine = _two_runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(sa.delete(runner.outbox_counters).where(runner.outbox_counters.c.runner_id == _OTHER_RUNNER))
-    details = {v.detail for v in RunnerInvariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
+    details = {v.detail for v in runner_invariants(engine).run() if v.invariant == "runner:outbox-counter-above-seq"}
     assert details == {
         f"runner {_OTHER_RUNNER}: outbound lane retains seq 3 but has no counter",
         f"runner {_OTHER_RUNNER}: transcript lane retains seq 3 but has no counter",
@@ -1023,14 +1023,14 @@ def test_a_counter_above_every_retained_seq_is_not_a_violation(tmp_path: Path) -
                 runner.outbound_buffer.c.runner_id == FIXTURE_RUNNER_ID, runner.outbound_buffer.c.seq == 3
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_finalized_segment_with_no_final_marker_is_a_violation(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=_NOW)))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" in slugs
 
 
@@ -1049,7 +1049,7 @@ def test_finalized_segment_with_a_duplicated_final_marker_is_a_violation(tmp_pat
                     created_at=_NOW,
                 )
             )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" in slugs
 
 
@@ -1062,7 +1062,7 @@ def test_finalized_segment_with_exactly_one_final_marker_is_not_a_violation(tmp_
                 seq=1, final=True, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" not in slugs
 
 
@@ -1079,7 +1079,7 @@ def test_pending_non_final_records_do_not_count_as_final_markers(tmp_path: Path)
                     seq=seq, final=final, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
                 )
             )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" not in slugs
 
 
@@ -1093,7 +1093,7 @@ def test_a_finalized_segment_with_only_non_final_records_is_a_violation(tmp_path
                 seq=1, final=False, segment_id="seg_1", chunk_id="ch_1", payload="{}", created_at=_NOW
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:transcript-segment-finalized-exactly-once" in slugs
 
 
@@ -1103,7 +1103,7 @@ def test_an_open_segment_needs_no_final_marker(tmp_path: Path) -> None:
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(insert(runner.transcript_segments).values(**_segment_row(finalized_at=None)))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_duplicate_usage_attribution_for_one_lease_generation_kind_is_a_violation(tmp_path: Path) -> None:
@@ -1114,7 +1114,7 @@ def test_duplicate_usage_attribution_for_one_lease_generation_kind_is_a_violatio
     with engine.begin() as conn:
         for _ in range(2):  # two facts for the same (lease_1, generation 1, spawn)
             conn.execute(insert(runner.usage_facts).values(**_usage_row()))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:usage-attributed-once" in slugs
 
 
@@ -1126,7 +1126,7 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="spawn")))
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=2, kind="resume")))
         conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="judge")))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path) -> None:
@@ -1153,7 +1153,7 @@ def test_a_closed_leases_open_invocation_boundary_is_a_violation(tmp_path: Path)
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:invocation-boundary-closed-when-lease-closed" in slugs
 
 
@@ -1180,7 +1180,7 @@ def test_a_closed_leases_closed_invocation_boundary_is_not_a_violation(tmp_path:
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="transitioned", closed_at=_NOW
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Path) -> None:
@@ -1201,7 +1201,7 @@ def test_an_open_leases_open_invocation_boundary_is_not_a_violation(tmp_path: Pa
                 opened_at=_NOW,
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp_path: Path) -> None:
@@ -1224,7 +1224,7 @@ def test_a_single_worker_starting_boundary_per_generation_is_not_a_violation(tmp
                     opened_at=_NOW,
                 )
             )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_path: Path) -> None:
@@ -1247,7 +1247,7 @@ def test_two_worker_starting_boundaries_at_one_generation_is_a_violation(tmp_pat
                     opened_at=_NOW,
                 )
             )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:worker-boundary-kind-exclusive-per-generation" in slugs
 
 
@@ -1259,7 +1259,7 @@ def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path)
     with engine.begin() as conn:
         for _ in range(2):
             conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:nudge-at-most-once" in slugs
 
 
@@ -1271,7 +1271,7 @@ def test_distinct_lease_or_epoch_nudge_facts_are_not_a_violation(tmp_path: Path)
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=2, nudged_at=_NOW))
         conn.execute(insert(runner.nudge_facts).values(lease_id="lease_2", epoch=1, nudged_at=_NOW))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
@@ -1283,7 +1283,7 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
                     stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
                 )
             )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:per-repo-land-idempotent" in slugs
 
 
@@ -1308,7 +1308,7 @@ def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> Non
         conn.execute(
             insert(hub.route_released).values(stamp(hub.route_released, chunk_id="ch_1", released_at=_NOW, seq=1))
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:route-seq-unique" in slugs
 
 
@@ -1343,7 +1343,7 @@ def test_two_live_routes_for_one_chunk_is_a_violation(tmp_path: Path) -> None:
                 )
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:one-live-route-per-chunk" in slugs
 
 
@@ -1379,7 +1379,7 @@ def test_a_released_route_followed_by_a_fresh_claim_is_not_a_violation(tmp_path:
                 )
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:one-live-route-per-chunk" not in slugs
 
 
@@ -1407,7 +1407,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
                 )
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:epoch-consistent-transitions" in slugs
 
 
@@ -1455,7 +1455,7 @@ def test_owned_epochs_with_matching_leases_are_clean(tmp_path: Path) -> None:
                 stamp(hub.epoch_owners, chunk_id="ch_1", epoch=4, runner_id="r_b", recorded_at=_NOW)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:epochs-owned" not in slugs
 
 
@@ -1468,7 +1468,7 @@ def test_a_lease_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
                 stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
             )
         )
-    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+    assert [v.detail for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
         "chunk ch_1 epoch 2 has no owner"
     ]
 
@@ -1490,7 +1490,7 @@ def test_a_restart_at_an_unowned_epoch_is_a_violation(tmp_path: Path) -> None:
                 )
             )
         )
-    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+    assert [v.detail for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
         "chunk ch_1 epoch 2 has no owner"
     ]
 
@@ -1515,7 +1515,7 @@ def test_a_runner_lease_level_with_another_owners_epoch_is_a_violation(tmp_path:
                 stamp(hub.lease_facts, chunk_id="ch_1", epoch=2, runner_id="r_a", minted_at=_NOW)
             )
         )
-    assert [v.detail for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
+    assert [v.detail for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == [
         "chunk ch_1 epoch 1 taken by r_b but owned by r_a",
         "chunk ch_1 epoch 2 taken by r_a but owned by the hub",
     ]
@@ -1553,7 +1553,7 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
             )
         )
         conn.execute(insert(hub.delivery_landed).values(stamp(hub.delivery_landed, chunk_id="ch_1", landed_at=_NOW)))
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:merge-queue-single-state" in slugs
 
 
@@ -1597,7 +1597,7 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
                 stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
             )
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> None:
@@ -1607,13 +1607,13 @@ def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> Non
     with engine.begin() as conn:
         for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
             conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
     # Resuming the lease closes both parks (the resume is at/after each) — no violation.
     with engine.begin() as conn:
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=_NOW))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
@@ -1627,7 +1627,7 @@ def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
         conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_closed_leases_double_park_is_not_an_open_pause_park(tmp_path: Path) -> None:
@@ -1642,7 +1642,7 @@ def test_a_closed_leases_double_park_is_not_an_open_pause_park(tmp_path: Path) -
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="terminal", closed_at=_NOW
             )
         )
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" not in slugs
 
 
@@ -1652,7 +1652,7 @@ def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path
     with engine.begin() as conn:
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_b", chunk_id="ch_2", parked_at=_NOW))
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> None:
@@ -1668,7 +1668,7 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
         # above the resume, on a lease that *does* carry a resume fact.
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
-    slugs = {v.invariant for v in RunnerInvariants(engine).run()}
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
 
@@ -1679,7 +1679,7 @@ def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
         _seed_migration(
             conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["claude-x"]
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> None:
@@ -1688,7 +1688,7 @@ def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> N
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_migration(conn, to_graph="gr_triage", model_after=None, pin_graph="gr_src", pin_default_model=["m"])
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:migration-pin-consistent" in slugs
 
 
@@ -1699,7 +1699,7 @@ def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> N
         _seed_migration(
             conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["stale"]
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:migration-pin-consistent" in slugs
 
 
@@ -1716,7 +1716,7 @@ def test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_vi
             pin_graph="gr_triage",
             pin_default_model=["claude-x", "a-fallback-the-operator-added"],
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) -> None:
@@ -1733,7 +1733,7 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
             pin_default_model=["m"],
             release_route=False,
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:migration-route-released" in slugs
 
 
@@ -1752,7 +1752,7 @@ def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_pa
             release_route=False,
             landed_executor="hub",
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_an_operator_restarts_repin_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
@@ -1770,7 +1770,7 @@ def test_an_operator_restarts_repin_retains_its_route_and_is_not_a_violation(tmp
             release_route=False,
             source="restart",
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None:
@@ -1801,7 +1801,7 @@ def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None
                     )
                 )
             )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:one-migration-per-node-epoch" in slugs
 
 
@@ -1822,7 +1822,7 @@ def test_a_ref_closed_and_gone_both_is_a_violation(tmp_path: Path) -> None:
                     )
                 )
             )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-double-terminal-closure" in slugs
 
 
@@ -1842,7 +1842,7 @@ def test_a_ref_closed_just_once_is_not_a_violation(tmp_path: Path) -> None:
                 )
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-double-terminal-closure" not in slugs
 
 
@@ -1867,7 +1867,7 @@ def test_a_pending_intent_against_an_already_terminal_ref_is_a_violation(tmp_pat
                 stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-pending-intent-against-terminal-ref" in slugs
 
 
@@ -1892,7 +1892,7 @@ def test_a_retired_intent_against_a_terminal_ref_is_not_a_violation(tmp_path: Pa
                 stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-pending-intent-against-terminal-ref" not in slugs
 
 
@@ -1904,7 +1904,7 @@ def test_a_pending_intent_against_a_non_terminal_ref_is_not_a_violation(tmp_path
                 stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-pending-intent-against-terminal-ref" not in slugs
 
 
@@ -1931,7 +1931,7 @@ def test_a_landed_refs_pending_close_intent_is_not_a_violation(tmp_path: Path) -
                 stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=None)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
@@ -1958,7 +1958,7 @@ def test_a_landed_refs_retired_close_intent_is_not_a_violation(tmp_path: Path) -
                 stamp(hub.close_intents, chunk_id="ch_1", source="default", ref="1", enqueued_at=_NOW, retired_at=_NOW)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
@@ -1991,7 +1991,7 @@ def test_a_landed_ref_already_terminal_with_no_intent_is_not_a_violation(tmp_pat
                 )
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
@@ -2007,7 +2007,7 @@ def test_a_non_landed_refs_missing_intent_is_not_a_violation(tmp_path: Path) -> 
         conn.execute(
             insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
@@ -2030,7 +2030,7 @@ def test_a_landed_ref_with_no_close_intent_and_no_terminal_outcome_is_a_violatio
                 stamp(hub.delivery_repo_landed, chunk_id="ch_1", repo="widget", commit_hash="sha", landed_at=_NOW)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" in slugs
 
 
@@ -2051,7 +2051,7 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
                 stamp(hub.chunk_completed, chunk_id="ch_1", completed_at=_NOW, completed_by="test")
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" in slugs
 
 
@@ -2083,7 +2083,7 @@ def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> N
                 stamp(hub.chunk_grouped, chunk_id="ch_1", grouped_into="ch_2", grouped_at=_NOW)
             )
         )
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
     assert "hub:no-unenqueued-closable-ref" not in slugs
 
 
@@ -2098,7 +2098,7 @@ def test_a_segment_naming_no_chunk_is_a_violation(tmp_path: Path) -> None:
             )
         )
 
-    violations = [v for v in HubInvariants(engine).run() if v.invariant == "hub:segment-chunk-resolves"]
+    violations = [v for v in hub_invariants(engine).run() if v.invariant == "hub:segment-chunk-resolves"]
 
     assert [v.detail for v in violations] == ["segment sg_1 names unknown chunk ch_never_minted"]
 
@@ -2113,7 +2113,7 @@ def test_a_segment_naming_a_minted_chunk_is_not_a_violation(tmp_path: Path) -> N
         )
         conn.execute(insert(hub.transcript_segments).values(stamp(hub.transcript_segments, **_segment_values())))
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:segment-chunk-resolves" not in slugs
 
@@ -2144,7 +2144,7 @@ def test_a_standing_dependency_cycle_is_a_violation(tmp_path: Path) -> None:
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-cycle" in slugs
 
@@ -2173,7 +2173,7 @@ def test_an_acyclic_dependency_chain_is_not_a_violation(tmp_path: Path) -> None:
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-cycle" not in slugs
 
@@ -2208,7 +2208,7 @@ def test_a_released_edge_reopening_a_cycle_is_not_a_violation(tmp_path: Path) ->
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-cycle" not in slugs
 
@@ -2230,7 +2230,7 @@ def test_two_standing_rows_for_one_ordered_pair_is_a_violation(tmp_path: Path) -
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-duplicate-standing-dependency" in slugs
 
@@ -2254,7 +2254,7 @@ def test_a_declared_edge_after_a_release_of_the_same_pair_is_not_a_violation(tmp
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-duplicate-standing-dependency" not in slugs
 
@@ -2271,7 +2271,7 @@ def test_a_standing_edge_onto_a_grouped_away_prerequisite_is_a_violation(tmp_pat
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
 
@@ -2286,7 +2286,7 @@ def test_a_standing_edge_onto_a_deleted_prerequisite_is_a_violation(tmp_path: Pa
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
 
@@ -2303,7 +2303,7 @@ def test_a_standing_edges_dependent_gone_ephemeral_is_also_a_violation(tmp_path:
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" in slugs
 
@@ -2323,7 +2323,7 @@ def test_a_released_edge_onto_an_ephemeral_chunk_is_not_a_violation(tmp_path: Pa
             )
         )
 
-    slugs = {v.invariant for v in HubInvariants(engine).run()}
+    slugs = {v.invariant for v in hub_invariants(engine).run()}
 
     assert "hub:no-standing-dependency-onto-ephemeral-chunk" not in slugs
 
@@ -2334,7 +2334,7 @@ def test_each_tenants_chunks_are_facts_checked_in_that_tenant(tmp_path: Path) ->
     with engine.begin() as conn:
         _seed_landed_mid_flight(conn, second)
 
-    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"]
+    breaches = [v for v in hub_invariants(engine).run() if v.invariant == "hub:merge-queue-single-state"]
 
     assert [v.detail for v in breaches] == [
         f"tenant {second}: chunk ch_1 is delivery.landed but newest transition targets nd_verify"
@@ -2350,7 +2350,7 @@ def test_a_closed_tenants_chunks_are_not_facts_checked(tmp_path: Path) -> None:
         _seed_landed_mid_flight(conn, second)
     close_tenant(engine, second)
 
-    assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:merge-queue-single-state"] == []
+    assert [v for v in hub_invariants(engine).run() if v.invariant == "hub:merge-queue-single-state"] == []
 
 
 def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
@@ -2377,13 +2377,13 @@ def test_a_closed_tenant_mid_drain_breaks_no_check(tmp_path: Path) -> None:
             )
         )
         seed_drainable_history(conn, second, graph_id="gr_2", node_id="nd_2", at=_NOW, open_refs=3)
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
     close_tenant(engine, second)
     teardown = TenantTeardownStore(hub_level_connections(engine))
 
     half_drained: list[set[str]] = []
     while teardown.drain_batch(second, 1):
-        assert HubInvariants(engine).run() == [], f"after draining down to {sorted(_drained_tables(engine, second))}"
+        assert hub_invariants(engine).run() == [], f"after draining down to {sorted(_drained_tables(engine, second))}"
         left = _drained_tables(engine, second)
         if "epoch_owners" not in left and {"chunk_restarts", "chunk_migrations", "chunk_completed"} <= left:
             half_drained.append(left)
@@ -2397,11 +2397,11 @@ def test_a_membership_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_pat
     engine = _hub_engine(tmp_path)
     second = add_tenant(engine, "second")
     seed_membership(engine, second, "u_1", Role.CONTRIBUTOR)
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
     with engine.begin() as conn:
         conn.execute(hub_scoped(sa.delete(hub.tenants).where(hub.tenants.c.tenant_id == second)))
 
-    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
+    breaches = [v for v in hub_invariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
 
     assert [v.detail for v in breaches] == [
         f"membership_facts holds 1 row(s) of tenant {second}, which is not in tenants",
@@ -2429,11 +2429,11 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
                 )
             )
         )
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
     with engine.begin() as conn:
         conn.execute(hub_scoped(sa.delete(hub.tenants).where(hub.tenants.c.tenant_id == second)))
 
-    breaches = [v for v in HubInvariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
+    breaches = [v for v in hub_invariants(engine).run() if v.invariant == "hub:no-row-of-a-deleted-tenant"]
 
     assert [v.detail for v in breaches] == [
         f"graphs holds 1 row(s) of tenant {second}, which is not in tenants",
@@ -2484,7 +2484,7 @@ def test_a_chunk_of_its_tenants_project_is_not_a_violation(tmp_path: Path) -> No
             )
         )
 
-    assert {v.invariant for v in HubInvariants(engine).run()} & _PROJECT_INVARIANTS == set()
+    assert {v.invariant for v in hub_invariants(engine).run()} & _PROJECT_INVARIANTS == set()
 
 
 def test_a_closed_tenants_misfiled_chunk_is_not_judged(tmp_path: Path) -> None:
@@ -3052,7 +3052,7 @@ def test_a_forge_slug_both_current_and_former_is_a_violation(tmp_path: Path) -> 
 def _flow_line_breaches(engine: sa.Engine, *, now: datetime = _NOW + timedelta(hours=1)) -> list[str]:
     """The three flow invariants' breaches alone, judged at ``now``."""
     flow_invariants = {"hub:one-turn-per-flow", "hub:one-turn-per-visit", "hub:flow-line-standing"}
-    return [v.invariant for v in HubInvariants(engine, clock=FixedClock(now)).run() if v.invariant in flow_invariants]
+    return [v.invariant for v in hub_invariants(engine, clock=FixedClock(now)).run() if v.invariant in flow_invariants]
 
 
 def _seed_at_deliver(conn: sa.Connection, chunk_id: str = "ch_1") -> None:

@@ -1,6 +1,6 @@
 """The ``20261008_1800_projects`` revision: each tenant gains one ``default`` project every carried
 record links to, keys and uniqueness move under the project, an interrupted run finishes, and the
-downgrade refuses a second project, else restores the store exactly. ``HubInvariants`` runs once,
+downgrade refuses a second project, else restores the store exactly. ``hub_invariants`` runs once,
 over the carried-over store in ``test_a_carried_over_store_keeps_every_project_invariant``."""
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store import schema as hub
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_invariant_checker import _NOW as _INVARIANT_NOW
 from tests.migration_support_invariant_checker import _PROJECT_INVARIANTS, insert
 from tests.migration_support_store_migrations import (
@@ -320,7 +320,7 @@ def test_a_carried_over_store_keeps_every_project_invariant(tmp_path: Path) -> N
             )
     runner.upgrade("head")
     try:
-        violations = HubInvariants(engine).run()
+        violations = hub_invariants(engine).run()
         stranded = [v for v in violations if v.invariant == "hub:work-source-references-in-tenant"]
         assert {v.invariant for v in violations} & _PROJECT_INVARIANTS == {"hub:work-source-references-in-tenant"}
         # Only the ref naming a source never stored as a record is left as stored, and reported.

@@ -19,7 +19,7 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.tools.invariants import RunnerInvariants
+from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import load_host_config
 from tests.runner_init_fakes import FakeInitHub, init_runner
 from tests.runner_scope_seeding import T0, reflect, seed_tables
@@ -163,4 +163,4 @@ class NoProcess:
 
 
 def invariant_violations(engine: sa.Engine) -> list[object]:
-    return list(RunnerInvariants(engine, process=NoProcess()).run())  # type: ignore[arg-type]
+    return list(runner_invariants(engine, process=NoProcess()).run())  # type: ignore[arg-type]

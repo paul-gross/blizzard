@@ -19,7 +19,7 @@ import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as hub
 from blizzard.runner.store import schema as runner
-from blizzard.tools.invariants import HubInvariants, RunnerInvariants
+from blizzard.tools.invariants import hub_invariants, runner_invariants
 from tests.config_inputs import init_host, init_hub
 from tests.runner_fakes import FIXTURE_RUNNER_ID
 from tests.support import hub_scoped, stamp
@@ -82,7 +82,7 @@ def test_an_open_pause_park_over_a_closed_lease_is_not_a_violation(tmp_path: Pat
                 closed_at=_NOW,
             )
         )
-    assert RunnerInvariants(engine).run() == []
+    assert runner_invariants(engine).run() == []
 
 
 def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tuple[str, ...], arrival: int) -> None:  # type: ignore[no-untyped-def]
@@ -128,7 +128,7 @@ def _seed_submission(engine, chunk_id: str, submission_id: str, *, flow_ids: tup
 
 def _slugs(engine) -> list[str]:  # type: ignore[no-untyped-def]
     """The turn invariants' violations only — the seeded submissions carry no graph for the line-standing check."""
-    return [v.invariant for v in HubInvariants(engine).run() if v.invariant.startswith("hub:one-turn-")]
+    return [v.invariant for v in hub_invariants(engine).run() if v.invariant.startswith("hub:one-turn-")]
 
 
 def _open_turn(engine, turn_id: str, submission_id: str) -> None:  # type: ignore[no-untyped-def]

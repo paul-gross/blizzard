@@ -22,6 +22,7 @@ from sqlalchemy import Engine, MetaData, make_url
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
+from blizzard.foundation.invariants import Violation
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -154,7 +155,7 @@ from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.runner.usage.repository import derive_invocation_cost
-from blizzard.tools.invariants import RunnerInvariants, Violation
+from blizzard.tools.invariants import runner_invariants
 from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 
@@ -442,7 +443,7 @@ def runner_invariant_violations(store: object) -> list[Violation]:
     """The runner store's durable invariants, asserted over this store's own engine — the
     checker the crash sweep runs, reachable from a component test."""
     assert isinstance(store, SqlAlchemyRunnerStore)
-    return RunnerInvariants(store._engine).run()
+    return runner_invariants(store._engine).run()
 
 
 @dataclass(frozen=True)
