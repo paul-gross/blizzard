@@ -47,6 +47,8 @@ export interface RunnerClient {
   leaseTranscript(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<TranscriptResponse>>;
   /** `GET …/api/leases/{id}/analytics/{kind}/{dimension}`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
   leaseAnalytics(leaseId: string, kind: 'counts' | 'spend', dimension: string, options?: { since?: string; params?: Record<string, string>; headers?: Record<string, string> }): Promise<ApiResponse<Record<string, unknown>>>;
+  /** `GET …/api/leases/{id}/garden/proposals`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
+  leaseGardenProposals(leaseId: string, options?: { params?: Record<string, string>; headers?: Record<string, string> }): Promise<ApiResponse<GardenProposalRow[]>>;
   /** `PATCH …/api/runner`: the runner's local pause, or its release. */
   setPaused(paused: boolean, by?: string): Promise<ApiResponse<RunnerControlView>>;
   pauseChunk(chunkId: string): Promise<ApiResponse>;
@@ -58,6 +60,14 @@ export interface RunnerClient {
   expecting(status: number): RunnerClient;
   /** Raw verbs under the runner's prefix, for a route not yet named. */
   readonly raw: Verbs;
+}
+
+/** A garden proposal as the runner proxies it from the hub: the fields the worker's read is asserted on. */
+export interface GardenProposalRow {
+  proposal_id: string;
+  routine_name: string;
+  findings: string[];
+  closure?: { closure: string; reason: string } | null;
 }
 
 /** The calls the runner host answers for itself, and the way to one of its runners. */
@@ -141,6 +151,11 @@ export function runnerHostApi(options: {
           raw.get(`/api/leases/${encodeURIComponent(leaseId)}/analytics/${kind}/${encodeURIComponent(dimension)}`, {
             params: { since: analyticsOptions.since ?? '2020-01-01T00:00:00Z', ...analyticsOptions.params },
             headers: analyticsOptions.headers,
+          }),
+        leaseGardenProposals: (leaseId, proposalsOptions = {}) =>
+          raw.get(`/api/leases/${encodeURIComponent(leaseId)}/garden/proposals`, {
+            params: proposalsOptions.params,
+            headers: proposalsOptions.headers,
           }),
         setPaused: (paused, by) => raw.patch('/api/runner', { data: by === undefined ? { paused } : { paused, by } }),
         pauseChunk: (chunkId) => chunk(chunkId, 'pause'),
