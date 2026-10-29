@@ -26,6 +26,8 @@ export interface MockHubClient {
     pauseRunner(runnerId: string, paused: boolean): Promise<ApiResponse>;
     runnerProjects(runnerId: string, projects: string[]): Promise<ApiResponse>;
     scope(body: { slug: string; description?: string; retired?: boolean }): Promise<ApiResponse>;
+    /** Publishes (or replaces) one global system-scope document by name. */
+    systemArtifact(body: { name: string; content: string }): Promise<ApiResponse>;
     answer(body: { question_id: string; answer: string; answered_by?: string }): Promise<ApiResponse>;
     stop(chunkId: string): Promise<ApiResponse>;
     /** Clears every runner, token, chunk, and tenant: the test's own mock hub is the only one this reaches. */
@@ -89,6 +91,7 @@ export function mockHubApi(options: { context: APIRequestContext; testInfo: Test
       pauseRunner: (runnerId, paused) => call('POST', `/_seed/runners/${runnerId}/pause`, undefined, { paused }),
       runnerProjects: (runnerId, projects) => call('PUT', `/_seed/runners/${runnerId}/projects`, { projects }),
       scope: (body) => call('POST', '/_seed/scopes', body),
+      systemArtifact: (body) => call('POST', '/_seed/system-artifacts', body),
       answer: (body) => call('POST', '/_seed/answer', body),
       stop: (chunkId) => call('POST', '/_seed/stop', { chunk_id: chunkId }),
       reset: () => call('POST', '/_seed/reset'),

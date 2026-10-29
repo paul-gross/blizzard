@@ -1,8 +1,8 @@
 """``GET /api/fleet/chunks/{id}/findings`` and its ``/{finding_id}`` sibling — proven
 against a real ``blizzard-mock-hub`` subprocess, over an actual
 process boundary rather than the in-process FastAPI test client
-``tests/test_fleet_chunk_findings_api.py`` uses. Mirrors
-``tests/service/test_system_artifacts_service.py``'s bare-``mock_hub``-client shape: no
+``tests/test_fleet_chunk_findings_api.py`` uses. Uses
+the bare-``mock_hub``-client shape: no
 runner is needed to prove the mock itself serves the two routes."""
 
 from __future__ import annotations

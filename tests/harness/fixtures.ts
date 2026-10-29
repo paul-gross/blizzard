@@ -301,6 +301,7 @@ export type { RunnerHosts } from './runner-world';
 export type { RunnerHost, RunnerHostOptions } from './runner-host';
 export type { VendorUsage } from './vendor-usage';
 export { expect };
+export { packagedSystemArtifact } from './system-artifacts';
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
 export type { RunnerDeclining };
 export type { MockRunner };

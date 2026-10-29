@@ -11436,12 +11436,6 @@
    "over_cap": 0,
    "total": 181
   },
-  "service/test_system_artifacts_service.py": {
-   "comments": 5,
-   "docstrings": 16,
-   "over_cap": 0,
-   "total": 170
-  },
   "service/test_transcript_segments_service.py": {
    "comments": 0,
    "docstrings": 5,
