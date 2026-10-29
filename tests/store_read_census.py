@@ -110,7 +110,7 @@ from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, Ru
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, IReadManyGraphs
+from blizzard.hub.domain.graph.model import Graph, IReadGraphBodies, IReadGraphRepository, IReadManyGraphs
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -2578,6 +2578,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
     (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
         _HUB_GRAPH_NAME
+    ),
+    (IReadGraphBodies, "definition_yaml"): lambda w: w.hub.services.graph_bodies.definition_yaml(
+        w.retired_graph.graph_id
     ),
     (IReadGraphRepository, "is_retired"): lambda w: w.hub.services.graphs.is_retired(w.retired_graph.graph_id),
     (IReadGraphRepository, "retired_graph_ids"): lambda w: w.hub.services.graphs.retired_graph_ids(),

@@ -135,7 +135,7 @@ from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
@@ -267,6 +267,8 @@ class TenantServices:
     #: narrower, write-capable seams directly.
     chunks: ChunkReadStores
     graphs: IReadGraphRepository
+    #: Each mint's stored authoring body.
+    graph_bodies: IReadGraphBodies
     ingest: IngestService
     promote: PromoteService
     demote: DemoteService
@@ -1114,6 +1116,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             dependencies=chunk_dependencies,
         ),
         graphs=graph_store,
+        graph_bodies=graph_store,
         ingest=IngestService(
             record=chunk_record,
             exclusive=chunk_exclusive,
@@ -1221,7 +1224,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         event_log=event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
-        default_graph_yaml=PACKAGED.default.text,
+        default_graph_yaml=PACKAGED.default.inlined_yaml(parts.graph_yaml),
         system_artifacts=parts.system_artifacts,
         work_sources=work_sources,
         users=parts.users,

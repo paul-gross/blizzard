@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -403,8 +404,8 @@ nodes:
 
 
 def test_get_graph_lists_baked_artifact_names_in_authored_order_with_no_content(tmp_path: Path) -> None:
-    """``GET /api/graphs/<id>`` serves the baked names in authored order and nothing else:
-    the content is confirmable only through worker retrieval, never this surface."""
+    """``GET /api/graphs/<id>`` serves the baked names in authored order: the structured view carries no content,
+    which rides only the verbatim authoring body."""
     hub = build_hub(tmp_path)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _MULTI_ARTIFACTS_GRAPH})
     assert minted.status_code == 201, minted.text
@@ -414,9 +415,12 @@ def test_get_graph_lists_baked_artifact_names_in_authored_order_with_no_content(
     assert resp.status_code == 200
     body = resp.json()
     assert body["artifacts"] == ["zebra", "apple"]
-    # No content anywhere in the response — asserted, not merely absent from the shape.
-    assert "z content" not in resp.text
-    assert "a content" not in resp.text
+    authoring_body = body.pop("definition_yaml")
+    assert authoring_body == _MULTI_ARTIFACTS_GRAPH
+    # No content anywhere else in the response — asserted, not merely absent from the shape.
+    structured = json.dumps(body)
+    assert "z content" not in structured
+    assert "a content" not in structured
 
 
 def test_get_graph_with_no_artifacts_declared_lists_none(tmp_path: Path) -> None:

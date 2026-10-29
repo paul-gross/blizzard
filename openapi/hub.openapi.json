@@ -8072,6 +8072,10 @@
             "title": "Artifacts",
             "type": "array"
           },
+          "definition_yaml": {
+            "title": "Definition Yaml",
+            "type": "string"
+          },
           "edges": {
             "default": [],
             "items": {
@@ -8148,7 +8152,8 @@
           "artifacts",
           "nodes",
           "edges",
-          "warnings"
+          "warnings",
+          "definition_yaml"
         ],
         "title": "GraphView",
         "type": "object"

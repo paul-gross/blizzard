@@ -94,6 +94,7 @@ const GRAPH: GraphView = {
   artifacts: [],
   follow_latest: null,
   retired: false,
+  definition_yaml: '',
   sessions: [],
   warnings: [],
 };

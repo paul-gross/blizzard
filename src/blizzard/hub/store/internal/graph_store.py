@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph.model import (
     GraphArtifact,
     GraphSummary,
     ILockedGraphNameRead,
+    IReadGraphBodies,
     IWriteGraphRepository,
     Node,
     ProducesSpec,
@@ -514,6 +515,13 @@ class GraphStore:
             ).first()
         return str(row.definition_yaml) if row is not None else None
 
+    def definition_yaml(self, graph_id: str) -> str | None:
+        with self._store.read("definition_yaml") as conn:
+            body = conn.execute(
+                self._store.select(graphs, graphs.c.definition_yaml).where(graphs.c.graph_id == graph_id)
+            ).scalar_one_or_none()
+        return None if body is None else str(body)
+
     def list_summaries(self) -> list[GraphSummary]:
         """Every minted graph's listing-shape fields, newest first, with no per-graph
         fan-out into nodes/edges/sessions/artifacts."""
@@ -637,3 +645,4 @@ class GraphStore:
 
 
 _graph_store_conforms: type[IWriteGraphRepository] = GraphStore
+_graph_bodies_conforms: type[IReadGraphBodies] = GraphStore

@@ -4814,6 +4814,10 @@ export type GraphView = {
      */
     artifacts: Array<string>;
     /**
+     * Definition Yaml
+     */
+    definition_yaml: string;
+    /**
      * Edges
      */
     edges: Array<GraphEdgeView>;

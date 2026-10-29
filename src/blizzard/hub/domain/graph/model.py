@@ -949,6 +949,15 @@ class IReadManyGraphs(Protocol):
         ...
 
 
+class IReadGraphBodies(Protocol):
+    """The authoring-body read: what a mint stored, kept off :class:`Graph` so no reifying read loads it."""
+
+    def definition_yaml(self, graph_id: str) -> str | None:
+        """``graph_id``'s source YAML exactly as it was minted, ``None`` for an unknown id — the body a client can
+        resubmit."""
+        ...
+
+
 class IReadGraphRepository(IReadManyGraphs, Protocol):
     """Read-only graph access."""
 
