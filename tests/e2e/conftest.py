@@ -6,6 +6,7 @@ absent the browser scenario **skips cleanly** rather than erroring.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,9 +36,11 @@ def chromium_available() -> bool:
 
 
 # The two viewport sizes a browser e2e scenario sizes its page against
-# (web:shell-sweep — see blizzard-context:/verification/blizzard.md).
-_WIDE_VIEWPORT: ViewportSize = {"width": 1400, "height": 900}
-_NARROW_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
+# (web:shell-sweep — see blizzard-context:/verification/blizzard.md), read from the file the UI tier's
+# fixture reads too, so the sizes have one home.
+_VIEWPORTS = json.loads((Path(__file__).parent.parent / "harness" / "viewports.json").read_text())
+_WIDE_VIEWPORT: ViewportSize = {"width": _VIEWPORTS["wide"]["width"], "height": _VIEWPORTS["wide"]["height"]}
+_NARROW_VIEWPORT: ViewportSize = {"width": _VIEWPORTS["narrow"]["width"], "height": _VIEWPORTS["narrow"]["height"]}
 
 
 @pytest.fixture(scope="session")

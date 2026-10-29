@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { assertProfilesSound, discoverProfiles } from '../profiles';
-import { fleetProfileFolders, profileProject, serviceProjects, strayProfiles } from '../projects';
+import { fleetProfileFolders, profileProject, serviceProjects, strayProfiles, uiProfileFolders, uiProjects } from '../projects';
 
 /** A service tree: the hub folder with the given profile subfolders, plus whatever `extra` directories name. */
 function tree(profiles: string[], extra: string[] = []): string {
@@ -87,4 +87,46 @@ test('the fleet projects map to the hub projects, for the shared hub and the fre
   expect(profileProject('harness')).toBe('service-hub');
   expect(profileProject('harness-auth')).toBe('service-hub-auth');
   expect(profileProject('harness-actions')).toBe('service-hub-actions');
+});
+
+function uiTable(root: string) {
+  const profiles = discoverProfiles(path.join(root, 'hub'));
+  const projects = uiProjects(uiProfileFolders(profiles, path.join(root, 'ui')), path.join(root, 'ui'));
+  return (name: string) => projects.find((project) => project.name === name);
+}
+
+test('ui rides the default hub setup, ignores every profile subfolder, and alone carries a browser', () => {
+  const root = tree(['auth', 'route-token-enforce'], ['ui/auth', 'ui/route-token-enforce', 'ui/plain']);
+  const ui = uiTable(root)('ui');
+  expect(ui?.dependencies).toEqual(['setup-service-hub']);
+  expect(ui?.workers).toBeUndefined();
+  expect(ui?.testDir).toBe(path.join(root, 'ui'));
+  expect(ui?.testIgnore).toEqual([path.join(root, 'ui', 'auth', '**'), path.join(root, 'ui', 'route-token-enforce', '**')]);
+  expect(ui?.use?.browserName).toBe('chromium');
+  const projects = serviceProjects(discoverProfiles(path.join(root, 'hub')), []);
+  expect(projects.filter((project) => project.use !== undefined)).toEqual([]);
+  fs.rmSync(root, { recursive: true });
+});
+
+test('a ui subfolder named after a hub profile rides that profile’s setup with one worker; one naming none is no project', () => {
+  const root = tree(['auth'], ['ui/auth', 'ui/plain']);
+  const find = uiTable(root);
+  expect(find('ui-auth')).toMatchObject({ testDir: path.join(root, 'ui', 'auth'), dependencies: ['setup-service-hub-auth'], workers: 1 });
+  expect(find('ui-plain')).toBeUndefined();
+  fs.rmSync(root, { recursive: true });
+});
+
+test('the ui projects map to the hub projects', () => {
+  expect(profileProject('ui')).toBe('service-hub');
+  expect(profileProject('ui-auth')).toBe('service-hub-auth');
+  expect(profileProject('ui-route-token-enforce')).toBe('service-hub-route-token-enforce');
+});
+
+test('a profile.toml under the ui folder is refused', () => {
+  const root = tree([], ['ui/auth']);
+  fs.writeFileSync(path.join(root, 'ui', 'auth', 'profile.toml'), '');
+  const strays = strayProfiles([path.join(root, 'ui')]);
+  expect(strays).toHaveLength(1);
+  expect(() => assertProfilesSound([], strays)).toThrow(/ui\/auth\/profile\.toml/);
+  fs.rmSync(root, { recursive: true });
 });
