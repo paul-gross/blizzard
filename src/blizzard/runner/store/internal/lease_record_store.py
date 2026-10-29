@@ -12,6 +12,7 @@ from sqlalchemy import and_, func
 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease
 from blizzard.runner.leases.record import IWriteLeaseRecordRepository
@@ -110,6 +111,30 @@ class LeaseRecordStore:
             ClosedLease(lease=row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
             for r in self._store.all(stmt)
         ]
+
+    def chunk_leases(self, chunk_id: str) -> list[Lease | ClosedLease]:
+        open_stmt = (
+            lease_select(self._store).where(leases.c.chunk_id == chunk_id).where(_OPEN_LEASE.clause(self._store))
+        )
+        closed_stmt = (
+            lease_select(self._store)
+            .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
+            .join(lease_closures, lease_closures.c.lease_id == leases.c.lease_id)
+            .where(*self._store.key_predicates(lease_closures))
+            .where(leases.c.chunk_id == chunk_id)
+        )
+        with self._store.connect() as conn:
+            opened: list[Lease | ClosedLease] = [row_to_lease(r) for r in conn.execute(open_stmt)]
+            closed: list[Lease | ClosedLease] = [
+                ClosedLease(lease=row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
+                for r in conn.execute(closed_stmt)
+            ]
+
+        def minted(entry: Lease | ClosedLease) -> tuple[datetime, int]:
+            lease = entry.lease if isinstance(entry, ClosedLease) else entry
+            return (as_utc(lease.created_at), lease.epoch)
+
+        return sorted([*opened, *closed], key=minted)
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
         # A preempted attempt was superseded, not spent: counting it would carry

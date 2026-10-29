@@ -58,6 +58,11 @@ class IReadLeaseRecordRepository(Protocol):
         """
         ...
 
+    def chunk_leases(self, chunk_id: str) -> list[Lease | ClosedLease]:
+        """Every lease of this chunk, open (a :class:`Lease`) or closed (a :class:`ClosedLease`),
+        oldest mint first (``created_at``, then ``epoch``). Unbounded: one chunk's leases bound it."""
+        ...
+
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
         """How many leases have been minted for this chunk at this node in the current visit (retry budget).
 

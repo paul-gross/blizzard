@@ -21,6 +21,10 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     display_status: 'running',
     last_heartbeat_at: null,
     stale_after_seconds: 3600,
+    resolved_model: null,
+    resolved_effort: null,
+    harness_version: null,
+    git_commits: [],
     state: 'running',
     ...overrides,
   } as runnerApi.LeaseView;

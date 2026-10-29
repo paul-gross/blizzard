@@ -192,6 +192,7 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, S
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
@@ -202,7 +203,6 @@ from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
@@ -777,6 +777,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
     (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
+    (IReadLeaseRecordRepository, "chunk_leases"): lambda w: w.read.lease_record.chunk_leases(w.chunk_1),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
@@ -795,6 +796,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseLivenessRepository, "liveness_facts"): lambda w: w.read.liveness.liveness_facts([w.lease_2]),
     (IReadLeaseLivenessRepository, "lease_generations"): lambda w: w.read.liveness.lease_generations([w.lease_2]),
+    (IReadLeaseLivenessRepository, "latest_spawn_harness_versions"): lambda w: (
+        w.read.liveness.latest_spawn_harness_versions([w.lease_2])
+    ),
     (IReadLeaseResumeIntentRepository, "resume_intent_lease_ids"): lambda w: (
         w.read.resume_intent.resume_intent_lease_ids()
     ),
@@ -940,6 +944,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_lease"): lambda w: (
         w.read.git_commit_declarations.git_commit_declarations_for_lease(w.lease_2)
+    ),
+    (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_leases"): lambda w: (
+        w.read.git_commit_declarations.git_commit_declarations_for_leases([w.lease_2])
     ),
     (IReadCheckRepository, "nudge_fired"): lambda w: w.read.checks.nudge_fired(w.lease_2, 2),
     (IReadCheckRepository, "checks_ran"): lambda w: w.read.checks.checks_ran(w.lease_2, 2),

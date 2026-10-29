@@ -222,6 +222,25 @@ class LeaseLivenessStore:
         with self._store.connect() as conn:
             return conn.execute(stmt).scalar_one_or_none()
 
+    def latest_spawn_harness_versions(self, lease_ids: Sequence[str]) -> dict[str, str | None]:
+        if not lease_ids:
+            return {}
+        result: dict[str, str | None] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                newest = (
+                    self._store.select(lease_spawns, func.max(lease_spawns.c.id).label("id"))
+                    .where(lease_spawns.c.lease_id.in_(batch))
+                    .group_by(lease_spawns.c.lease_id)
+                    .subquery()
+                )
+                stmt = self._store.select(lease_spawns, lease_spawns.c.lease_id, lease_spawns.c.harness_version).join(
+                    newest, lease_spawns.c.id == newest.c.id
+                )
+                for row in conn.execute(stmt):
+                    result[str(row.lease_id)] = row.harness_version
+        return result
+
     # --- writes -------------------------------------------------------------
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:

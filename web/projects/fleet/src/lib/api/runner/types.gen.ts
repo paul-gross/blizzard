@@ -2675,6 +2675,34 @@ export const LeaseDisplayStatus = {
 export type LeaseDisplayStatus = typeof LeaseDisplayStatus[keyof typeof LeaseDisplayStatus];
 
 /**
+ * LeaseGitCommitView
+ *
+ * One commit a lease's worker declared: its newest declaration for this ``(environment_id, repo)``.
+ */
+export type LeaseGitCommitView = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Commit
+     */
+    commit: string;
+    /**
+     * Declared At
+     */
+    declared_at: string;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+    /**
+     * Repo
+     */
+    repo: string;
+};
+
+/**
  * LeaseListResponse
  *
  * Active leases, then recently-closed ones.
@@ -2739,6 +2767,10 @@ export type LeaseView = {
      */
     epoch: number;
     /**
+     * Git Commits
+     */
+    git_commits: Array<LeaseGitCommitView>;
+    /**
      * Graph Id
      */
     graph_id: string;
@@ -2746,6 +2778,10 @@ export type LeaseView = {
      * Harness Id
      */
     harness_id: string | null;
+    /**
+     * Harness Version
+     */
+    harness_version: string | null;
     /**
      * Last Heartbeat At
      */
@@ -2770,6 +2806,14 @@ export type LeaseView = {
      * Project Id
      */
     project_id: string | null;
+    /**
+     * Resolved Effort
+     */
+    resolved_effort: string | null;
+    /**
+     * Resolved Model
+     */
+    resolved_model: string | null;
     /**
      * Session Id
      */
@@ -5720,7 +5764,12 @@ export type ListLeasesRunnersRunnerIdApiLeasesGetData = {
          */
         runner_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Chunk Id
+         */
+        chunk_id?: string | null;
+    };
     url: '/runners/{runner_id}/api/leases';
 };
 

@@ -312,6 +312,7 @@ def _lease_service(
         environments=store,
         overload=store,
         elicitations=store,
+        git_commits=store,
         takeovers=store,
         escalations=store,
         stale_after=stale_after,

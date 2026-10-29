@@ -74,6 +74,12 @@ class IReadLeaseLivenessRepository(Protocol):
         version — never a guess at what version is running now."""
         ...
 
+    def latest_spawn_harness_versions(self, lease_ids: Sequence[str]) -> dict[str, str | None]:
+        """:meth:`latest_spawn_harness_version` for every id in ``lease_ids``, in one grouped
+        read per batch (``bzh:bulk-reconstitution``, ``bzh:newest-per-key-read``). An id that
+        never spawned is absent; one whose newest generation recorded no version maps to ``None``."""
+        ...
+
 
 class IWriteLeaseLivenessRepository(IReadLeaseLivenessRepository, Protocol):
     """Read-write liveness store — held only by the domain."""

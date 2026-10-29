@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
-    GitCommitDeclaration,
-    IWriteGitCommitDeclarationRepository,
-)
+from blizzard.foundation.store.batching import id_batches
+from blizzard.runner.leases.git_commit_declaration import DeclaredLeaseCommit, GitCommitDeclaration
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.store.schema import git_commit_declarations
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
@@ -51,6 +51,44 @@ class GitCommitDeclarationStore:
             )
             for r in self._store.all(stmt)
         }
+
+    def git_commit_declarations_for_leases(self, lease_ids: Sequence[str]) -> dict[str, list[DeclaredLeaseCommit]]:
+        if not lease_ids:
+            return {}
+        decl = git_commit_declarations
+        result: dict[str, list[DeclaredLeaseCommit]] = {}
+        with self._store.connect() as conn:
+            for batch in id_batches(lease_ids):
+                newest = (
+                    self._store.select(decl, func.max(decl.c.id).label("id"))
+                    .where(decl.c.lease_id.in_(batch))
+                    .group_by(decl.c.lease_id, decl.c.environment_id, decl.c.repo)
+                    .subquery()
+                )
+                stmt = (
+                    self._store.select(
+                        decl,
+                        decl.c.lease_id,
+                        decl.c.environment_id,
+                        decl.c.repo,
+                        decl.c.branch,
+                        decl.c.commit,
+                        decl.c.declared_at,
+                    )
+                    .join(newest, decl.c.id == newest.c.id)
+                    .order_by(decl.c.lease_id, decl.c.environment_id, decl.c.repo)
+                )
+                for r in conn.execute(stmt):
+                    result.setdefault(str(r.lease_id), []).append(
+                        DeclaredLeaseCommit(
+                            environment_id=str(r.environment_id),
+                            repo=str(r.repo),
+                            branch=str(r.branch),
+                            commit=str(r.commit),
+                            declared_at=r.declared_at,
+                        )
+                    )
+        return result
 
     def record_git_commit_declaration(
         self,

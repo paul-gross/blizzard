@@ -37,6 +37,7 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, I
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, IWriteLeaseLivenessRepository
 from blizzard.runner.leases.operator_requests import (
     IReadAttachmentRepository,
@@ -51,10 +52,7 @@ from blizzard.runner.leases.session import IReadLeaseSessionRepository, IWriteLe
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository, IWriteDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
-    IReadGitCommitDeclarationRepository,
-    IWriteGitCommitDeclarationRepository,
-)
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (

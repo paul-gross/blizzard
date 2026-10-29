@@ -17,11 +17,11 @@ from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceProviders
 from blizzard.runner.environments.worktree import IWorktreeGit, WorktreeGitError
 from blizzard.runner.hub.outbound import OutboundContext, OutboundFacts, OutboundStores
-from blizzard.runner.leases.model import Lease
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
+from blizzard.runner.leases.git_commit_declaration import (
     GitCommitDeclaration,
     IReadGitCommitDeclarationRepository,
 )
+from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 
 Key = tuple[str, str]

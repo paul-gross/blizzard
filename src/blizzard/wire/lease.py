@@ -11,6 +11,7 @@ from typing import Annotated
 from blizzard.foundation.leases import LeaseDisplayStatus, LeaseState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.git_commits import LeaseGitCommitView
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -42,6 +43,13 @@ class LeaseView(WireModel):
     project_id: str | None = None
     #: How long a running lease may go without a heartbeat before it reads ``stale``.
     stale_after_seconds: int
+    #: The model and effort the mint resolved for this lease; ``None`` when it resolved none.
+    resolved_model: str | None
+    resolved_effort: str | None
+    #: The newest spawn's recorded harness version; ``None`` before a spawn records one.
+    harness_version: str | None
+    #: The worker's declared commits, newest per ``(environment_id, repo)``.
+    git_commits: list[LeaseGitCommitView]
 
 
 class LeaseListResponse(WireModel):

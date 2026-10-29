@@ -66,6 +66,10 @@ const WORKER: runnerApi.LeaseView = {
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  resolved_model: null,
+  resolved_effort: null,
+  harness_version: null,
+  git_commits: [],
   harness_id: null,
   project_id: null,
 };
