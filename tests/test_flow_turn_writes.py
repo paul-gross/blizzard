@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Table, func, select
 
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -35,6 +36,11 @@ _MAIN = FlowResource("re_a", "main")
 _OTHER = FlowResource("re_b", "master")
 _NODE = "nd_deliver"
 _HUB_RUNNER = "hub"
+
+
+def _flow_id(submission: Submission) -> str:
+    (flow,) = submission.flows
+    return flow.flow_id
 
 
 class _Abort(Exception):
@@ -176,6 +182,11 @@ def test_a_verdict_commits_its_transition_with_the_turns_end_and_closure(world: 
         assert _transition(world, handle, submission.chunk_id)
         assert world.flows.end_turn_locked(
             handle, turn_id, outcome="landed", closure="landed", event=None, at=world.hub.clock.now()
+        ) == (
+            FlowFactWritten(
+                _flow_id(submission), "turn-ended", submission.submission_id, submission.chunk_id, "landed"
+            ),
+            FlowFactWritten(_flow_id(submission), "withdrawn", submission.submission_id, submission.chunk_id, "landed"),
         )
 
     assert world.count(s.transitions) == 1
@@ -304,7 +315,7 @@ def test_ending_a_turn_twice_writes_nothing_the_second_time(world: _World) -> No
                 )
             )
 
-    assert ends == [True, False]
+    assert [end is not None for end in ends] == [True, False]
     assert world.count(s.event_log) == 1
     assert world.kinds(submission).count(("turn-ended", "cut-off")) == 1
 
@@ -395,9 +406,14 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
 
     counts = (s.artifacts, s.delivery_repo_landed, s.close_intents, s.flow_facts, s.event_log)
     before = [world.count(t) for t in counts]
-    record()
+    first = record()
     after_once = [world.count(t) for t in counts]
-    record()
+    replay = record()
+
+    assert first.written == (FlowFactWritten(_flow_id(submission), "landed", submission.submission_id, chunk_id),), (
+        "a landing reports its one landed fact"
+    )
+    assert replay.written == ()
 
     assert [a - b for a, b in zip(after_once, before, strict=True)] == [1, 1, 1, 1, 1]
     assert [world.count(t) for t in counts] == after_once
@@ -417,9 +433,10 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
     turning = world.submit(world.chunk("13"), _OTHER)
     assert world.take(turning) is not None
 
+    reported = []
     for submission in (waiting, turning):
         with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
-            world.chunks.movement.record_restart_locked(
+            written = world.chunks.movement.record_restart_locked(
                 handle,
                 submission.chunk_id,
                 from_node_id=_NODE,
@@ -427,7 +444,12 @@ def test_a_restart_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_i
                 by="operator",
                 at=world.hub.clock.now(),
             )
+        reported.append(written.withdrawn)
 
+    assert reported == [
+        (FlowFactWritten(_flow_id(waiting), "withdrawn", waiting.submission_id, waiting.chunk_id, "restarted"),),
+        (),
+    ]
     assert world.closed(waiting) == "restarted"
     assert world.closed(turning) is None
 

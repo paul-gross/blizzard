@@ -20,8 +20,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, AdmittedTurn, Submission, Turn
-from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, LineSignature
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IReadFlowLinesCorpus, LineSignature
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
@@ -61,14 +62,16 @@ class INoticeDrain(Protocol):
 
 @dataclass(frozen=True)
 class FlowLineStores:
-    """What a tick reads: the hub-wide probe, the open tenants, each tenant's reconcile, its turns, and its forge
-    budget notices, opened through that tenant's own stores (``bzh:sweep-acts-in-row-tenant``)."""
+    """What a tick reads: the hub-wide probe, the open tenants, each tenant's reconcile, its turns, where its flow
+    facts are announced, and its forge budget notices, opened through that tenant's own stores
+    (``bzh:sweep-acts-in-row-tenant``)."""
 
     corpus: IReadFlowLinesCorpus
     tenants: Callable[[], Iterable[TenantId]]
     lines: Callable[[TenantId], FlowLineReconciler]
     turns: Callable[[TenantId], ITurnRunner]
     notices: Callable[[TenantId], INoticeDrain]
+    publishers: Callable[[TenantId], IFlowChangePublisher]
 
 
 @domain_model
@@ -135,7 +138,8 @@ class FlowDriver:
     def recover_turns(self, tenant: TenantId) -> int:
         """The boot step, run per open tenant before the hub serves: end every turn the last process left open
         ``interrupted``, then reconcile the tenant's lines in full from arrival floor zero. Both are idempotent, so a
-        boot that dies midway is finished by the next. Answers how many turns it ended."""
+        boot that dies midway is finished by the next. Answers how many turns it ended. It announces none of the facts
+        it writes: no stream is open before the hub serves."""
         lines = self._stores.lines(tenant)
         ended = lines.recover_turns()
         _CP_FLOW_BOOT_AFTER_INTERRUPT.reached()
@@ -153,7 +157,8 @@ class FlowDriver:
         """For every open tenant: reconcile its lines when due — every one, ``forced`` — end every open turn that
         started before the previous tick began with no task in ``running``, take the turns its visits may, and record
         its queued forge budget notices in its event log. A tenant that closes mid-tick is skipped for the rest of it;
-        one that raises is logged and left due, and the others still run."""
+        one that raises is logged and left due, and the others still run. Each step's flow facts are announced once its
+        writes have committed."""
         running = frozenset(self._running) if running is None else running
         tenants = sorted(store.tenants())
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in tenants}
@@ -170,8 +175,10 @@ class FlowDriver:
             with bound_contextvars(tenant_id=tenant):
                 try:
                     lines = store.lines(tenant)
+                    publisher = store.publishers(tenant)
                     if forced or self._due(tenant, signature, now):
                         result = lines.reconcile(self._floors.get(tenant, 0))
+                        publish_flow_facts(publisher, result.written)
                         self._floors[tenant] = result.floor
                         self._converged[tenant] = (signature, now)
                         reconciled.append(tenant)
@@ -182,9 +189,12 @@ class FlowDriver:
                     else:
                         skipped.append(tenant)
                     if swept_before is not None:
-                        interrupted += lines.end_unanswered(started_before=swept_before, running=running)
+                        ended = lines.end_unanswered(started_before=swept_before, running=running)
+                        publish_flow_facts(publisher, ended.written)
+                        interrupted += ended.ended
                     admitted = lines.admit(self._floors.get(tenant, 0), now)
                     noticed += store.notices(tenant).drain(now)
+                    publish_flow_facts(publisher, (fact for turn in admitted for fact in turn.written))
                 except (TenantClosed, UnknownTenant):
                     _log.info("flow driver skipped a closed tenant")
                     continue

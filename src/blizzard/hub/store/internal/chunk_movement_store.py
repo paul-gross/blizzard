@@ -20,6 +20,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -375,7 +376,7 @@ class ChunkMovementStore:
         answer: str = "",
         to_graph_id: str | None = None,
         note: str | None = None,
-    ) -> int:
+    ) -> LeverWrite:
         """Record the forced move and everything it consumes (``bzh:store-exclusive-write``) —
         the restart's own write, on ``handle``'s already-locked connection — closing ``restarted``
         each of the chunk's flow submissions waiting its turn; one mid-turn is left to the turn's end."""
@@ -407,8 +408,8 @@ class ChunkMovementStore:
         answer: str,
         to_graph_id: str | None,
         note: str | None,
-    ) -> int:
-        withdraw_waiting(conn, chunk_id, outcome="restarted", at=at)
+    ) -> LeverWrite:
+        withdrawn = withdraw_waiting(conn, chunk_id, outcome="restarted", at=at)
         epoch = latest_epoch(conn, chunk_id) + 1
         for question_id in answered_question_ids:
             already = conn.execute(
@@ -450,7 +451,7 @@ class ChunkMovementStore:
         )
         record_epoch_owner(conn, chunk_id, epoch, EpochOwner.hub(), at=at)
         key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
+        return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
     def record_requeue_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, at: datetime, by: str | None = None, note: str | None = None

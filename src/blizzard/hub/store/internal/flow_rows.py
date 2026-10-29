@@ -16,6 +16,7 @@ from sqlalchemy import Connection, Row
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowFactKind, FlowLanding, TurnEvent, Withdrawal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import statements_of
@@ -77,8 +78,8 @@ def write_facts(
     outcome: str | None,
     at: datetime,
     revision: str | None = None,
-) -> None:
-    """One fact per flow, so each flow's record stands alone."""
+) -> tuple[FlowFactWritten, ...]:
+    """One fact per flow, so each flow's record stands alone; answers the facts it wrote."""
     stmts = statements_of(conn)
     for flow in flows:
         conn.execute(
@@ -92,6 +93,9 @@ def write_facts(
                 at=at,
             )
         )
+    return FlowFactWritten.each(
+        (flow.flow_id for flow in flows), kind=kind, submission_id=submission_id, chunk_id=chunk_id, outcome=outcome
+    )
 
 
 def write_event(conn: Connection, event: TurnEvent, *, at: datetime) -> int:
@@ -116,19 +120,21 @@ def write_event(conn: Connection, event: TurnEvent, *, at: datetime) -> int:
     return int(key[0])
 
 
-def close_submission(conn: Connection, submission_id: str, *, outcome: str, at: datetime) -> bool:
-    """Insert the closure and its ``withdrawn`` facts only when no closure exists — the first writer wins. ``outcome``
-    is a verdict's choice or a :data:`Withdrawal`."""
+def close_submission(
+    conn: Connection, submission_id: str, *, outcome: str, at: datetime
+) -> tuple[FlowFactWritten, ...] | None:
+    """Insert the closure and its ``withdrawn`` facts only when no closure exists — the first writer wins — answering
+    the facts it wrote, or ``None`` when a closure already stood. ``outcome`` is a verdict's choice or a
+    :data:`Withdrawal`."""
     stmts = statements_of(conn)
     closed = conn.execute(
         stmts.select(_closures, _closures.c.submission_id).where(_closures.c.submission_id == submission_id)
     ).first()
     if closed is not None:
-        return False
+        return None
     conn.execute(stmts.insert(_closures).values(submission_id=submission_id, outcome=outcome, closed_at=at))
     chunk_id, flows = held_by(conn, submission_id)
-    write_facts(conn, flows, submission_id, chunk_id, kind="withdrawn", outcome=outcome, at=at)
-    return True
+    return write_facts(conn, flows, submission_id, chunk_id, kind="withdrawn", outcome=outcome, at=at)
 
 
 def has_open_turn(conn: Connection, submission_id: str) -> bool:
@@ -143,9 +149,11 @@ def has_open_turn(conn: Connection, submission_id: str) -> bool:
     )
 
 
-def end_turn(conn: Connection, turn_id: str, *, outcome: str, at: datetime) -> str | None:
+def end_turn(
+    conn: Connection, turn_id: str, *, outcome: str, at: datetime
+) -> tuple[str, tuple[FlowFactWritten, ...]] | None:
     """End the open turn ``outcome`` with a ``turn-ended`` fact per flow its submission holds, answering the
-    submission's id — or ``None``, writing nothing, when the turn has already ended."""
+    submission's id and the facts it wrote — or ``None``, writing nothing, when the turn has already ended."""
     stmts = statements_of(conn)
     turn = conn.execute(
         stmts.select(_turns, _turns.c.submission_id).where(_turns.c.turn_id == turn_id, _turns.c.ended_at.is_(None))
@@ -154,14 +162,16 @@ def end_turn(conn: Connection, turn_id: str, *, outcome: str, at: datetime) -> s
         return None
     conn.execute(stmts.update(_turns).where(_turns.c.turn_id == turn_id).values(ended_at=at, outcome=outcome))
     chunk_id, flows = held_by(conn, turn.submission_id)
-    write_facts(conn, flows, turn.submission_id, chunk_id, kind="turn-ended", outcome=outcome, at=at)
-    return str(turn.submission_id)
+    written = write_facts(conn, flows, turn.submission_id, chunk_id, kind="turn-ended", outcome=outcome, at=at)
+    return str(turn.submission_id), written
 
 
-def withdraw_waiting(conn: Connection, chunk_id: str, *, outcome: Withdrawal, at: datetime) -> int:
+def withdraw_waiting(
+    conn: Connection, chunk_id: str, *, outcome: Withdrawal, at: datetime
+) -> tuple[FlowFactWritten, ...]:
     """Close ``outcome`` every open submission of the chunk that has no open turn — a lever's withdrawal. One with an
-    open turn is left to that turn's end, which asks ``withdrawal_for`` and closes it the same way. Answers how many
-    it closed."""
+    open turn is left to that turn's end, which asks ``withdrawal_for`` and closes it the same way. Answers the
+    ``withdrawn`` facts it wrote."""
     stmts = statements_of(conn)
     open_ids = conn.execute(
         stmts.select(_sub, _sub.c.submission_id)
@@ -172,13 +182,19 @@ def withdraw_waiting(conn: Connection, chunk_id: str, *, outcome: Withdrawal, at
         )
         .order_by(_sub.c.arrival)
     ).scalars()
-    return sum(close_submission(conn, submission_id, outcome=outcome, at=at) for submission_id in list(open_ids))
+    return tuple(
+        fact
+        for submission_id in list(open_ids)
+        for fact in close_submission(conn, submission_id, outcome=outcome, at=at) or ()
+    )
 
 
-def write_landing(conn: Connection, landing: FlowLanding, *, revision: str, at: datetime) -> int:
-    """The ``landed`` fact on the landing's flow at ``revision``, and its ``flow-landed`` event row, whose id it
-    answers."""
-    write_facts(
+def write_landing(
+    conn: Connection, landing: FlowLanding, *, revision: str, at: datetime
+) -> tuple[int, tuple[FlowFactWritten, ...]]:
+    """The ``landed`` fact on the landing's flow at ``revision``, and its ``flow-landed`` event row; answers the row's
+    id and the fact it wrote."""
+    written = write_facts(
         conn,
         [landing.flow],
         landing.submission_id,
@@ -188,4 +204,4 @@ def write_landing(conn: Connection, landing: FlowLanding, *, revision: str, at: 
         revision=revision,
         at=at,
     )
-    return write_event(conn, landing.event, at=at)
+    return write_event(conn, landing.event, at=at), written

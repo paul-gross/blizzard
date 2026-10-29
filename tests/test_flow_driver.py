@@ -158,6 +158,7 @@ class _World:
             notices=lambda tenant: BudgetNoticeDrain(
                 self.hub.open_services(tenant).forge_budgets, self.hub.open_services(tenant).event_log
             ),
+            publishers=lambda tenant: self.hub.open_services(tenant).events,
         )
 
     def lines(self, tenant: TenantId) -> FlowLineReconciler:
@@ -789,6 +790,7 @@ def test_a_raising_tenant_does_not_stop_the_others(world: _World) -> None:
         lines=lines,
         turns=world.stores.turns,
         notices=world.stores.notices,
+        publishers=world.stores.publishers,
     )
     result = FlowDriver(stores, world.hub.clock).tick(stores, world.hub.clock)
 
@@ -809,6 +811,7 @@ def test_a_failing_tick_skips_its_cycle_and_never_ends_run(world: _World) -> Non
         lines=world.lines,
         turns=world.stores.turns,
         notices=world.stores.notices,
+        publishers=world.stores.publishers,
     )
     driver = FlowDriver(stores, world.hub.clock)
 

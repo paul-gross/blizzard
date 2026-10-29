@@ -9,6 +9,7 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
@@ -30,14 +31,14 @@ class CompleteService:
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
-    def complete(self, chunk: Chunk, *, by: str) -> int | None:
+    def complete(self, chunk: Chunk, *, by: str) -> LeverWrite | None:
         """Append ``chunk.completed``, release the chunk's live route, and close ``completed`` each of its
         flow submissions waiting its turn, atomically; a submission mid-turn closes at its turn's end. Takes the
         loaded chunk (``bzh:domain-takes-objects``); the already-``done`` guard is re-derived fresh under the row
         lock (``bzh:store-exclusive-write``), so a concurrent completion cannot land a second fact past a stale read.
-        A no-op on an already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id``. Raises
-        :class:`ChunkNotFound` for a chunk gone under the lock. ``at`` is stamped from the injected clock after the
-        row lock is taken, never before it."""
+        A no-op on an already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id`` and the
+        ``withdrawn`` flow facts, for the caller to announce once committed. Raises :class:`ChunkNotFound` for a chunk
+        gone under the lock. ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:

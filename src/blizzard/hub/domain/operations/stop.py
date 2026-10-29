@@ -10,6 +10,7 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
@@ -41,14 +42,15 @@ class StopService:
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
-    def stop(self, chunk: Chunk, *, by: str) -> int:
+    def stop(self, chunk: Chunk, *, by: str) -> LeverWrite:
         """Append ``chunk.stopped``, release the chunk's live route, and close ``stopped`` each of its flow
         submissions waiting its turn, atomically; a submission mid-turn closes at its turn's end. Takes the loaded
         chunk (``bzh:domain-takes-objects``); the terminal-status guard is re-derived fresh under the row lock
         (``bzh:store-exclusive-write``), so a concurrent stop or completion cannot race this one past a stale
-        refusal. Raises :class:`ChunkNotStoppable` for a chunk
-        already done/stopped, :class:`ChunkNotFound` for one gone under the lock. Returns
-        the id. ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
+        refusal. Raises :class:`ChunkNotStoppable` for a chunk already done/stopped, :class:`ChunkNotFound` for one
+        gone under the lock. Returns the ``chunk_stopped`` id and the ``withdrawn`` flow facts, for the caller to
+        announce once committed. ``at`` is stamped from the injected clock after the row lock is taken, never before
+        it."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:

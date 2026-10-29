@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
@@ -50,7 +51,7 @@ class ChunkLifecycleStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         """`src/blizzard/hub/domain/chunk/ports/lifecycle.py`'s `IWriteChunkLifecycleRepository.record_stop_locked`.
 
         The route check runs on the same connection (:func:`route_of_conn`), so there is no
@@ -65,11 +66,11 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        withdraw_waiting(conn, chunk_id, outcome="stopped", at=at)
+        withdrawn = withdraw_waiting(conn, chunk_id, outcome="stopped", at=at)
         key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
+        return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/lifecycle.py``'s
         ``IWriteChunkLifecycleRepository.record_completion_locked``.
 
@@ -84,10 +85,10 @@ class ChunkLifecycleStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
+        withdrawn = withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
         enqueue_close_intents(conn, chunk_id, at=at)
         key = result.inserted_primary_key
-        return int(key[0]) if key is not None else 0
+        return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
 
 _lifecycle_conforms: type[IWriteChunkLifecycleRepository] = ChunkLifecycleStore

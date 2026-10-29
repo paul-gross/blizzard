@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 
@@ -142,7 +143,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         answer: str = "",
         to_graph_id: str | None = None,
         note: str | None = None,
-    ) -> int:
+    ) -> LeverWrite:
         """Record a ``chunk.restarted`` fact — an operator forced the chunk onto ``to_node_id``,
         at a fence epoch this call derives one above the chunk's newest — on ``handle``'s
         already-locked connection (``bzh:store-exclusive-write``). One write with the
@@ -150,7 +151,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         the migration fact re-pinning the chunk there and the standing intent that clears
         with it, so no crash leaves the move half-applied. Every flow submission of the chunk
         waiting its turn closes ``restarted`` in the same write; one mid-turn is left to the
-        turn's end. Returns the ``chunk_restarts.id``."""
+        turn's end. Returns the ``chunk_restarts.id``, with the ``withdrawn`` flow facts it wrote."""
         ...
 
     def record_requeue_locked(

@@ -16,6 +16,7 @@ from sqlalchemy import ColumnElement, Connection, FromClause, Row, and_, func
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.delivery.flows import (
@@ -294,10 +295,10 @@ class FlowStore:
                 flows=flows,
             )
 
-    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> bool:
+    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("close_flow_submission") as conn:
             if has_open_turn(conn, submission_id):
-                return False
+                return None
             return close_submission(conn, submission_id, outcome=outcome, at=at)
 
     def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
@@ -336,16 +337,17 @@ class FlowStore:
         closure: str | None,
         event: TurnEvent | None,
         at: datetime,
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         conn = conn_of(handle)
-        submission_id = end_turn(conn, turn_id, outcome=outcome, at=at)
-        if submission_id is None:
-            return False
+        ended = end_turn(conn, turn_id, outcome=outcome, at=at)
+        if ended is None:
+            return None
+        submission_id, written = ended
         if event is not None:
             write_event(conn, event, at=at)
         if closure is not None:
-            close_submission(conn, submission_id, outcome=closure, at=at)
-        return True
+            written += close_submission(conn, submission_id, outcome=closure, at=at) or ()
+        return written
 
     def record_landing(
         self,
@@ -373,20 +375,23 @@ class FlowStore:
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )
-            event_id = write_landing(conn, landing, revision=revision, at=at) if wrote else None
-            return LandingWrite(refused=refused, event_id=event_id)
+            if not wrote:
+                return LandingWrite(refused=refused, event_id=None)
+            event_id, written = write_landing(conn, landing, revision=revision, at=at)
+            return LandingWrite(refused=refused, event_id=event_id, written=written)
 
     def end_turn_interrupted(
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("end_turn_interrupted") as conn:
-            submission_id = end_turn(conn, turn_id, outcome=TURN_INTERRUPTED, at=at)
-            if submission_id is None:
-                return False
+            ended = end_turn(conn, turn_id, outcome=TURN_INTERRUPTED, at=at)
+            if ended is None:
+                return None
+            submission_id, written = ended
             write_event(conn, event, at=at)
             if withdrawal is not None:
-                close_submission(conn, submission_id, outcome=withdrawal, at=at)
-            return True
+                written += close_submission(conn, submission_id, outcome=withdrawal, at=at) or ()
+            return written
 
     def _open(self) -> ColumnElement[bool]:
         """The submission row has no closure."""

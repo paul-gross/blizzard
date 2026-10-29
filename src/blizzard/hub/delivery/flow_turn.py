@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
 from types import MappingProxyType
+from typing import Protocol
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -27,6 +28,7 @@ from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
+from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.hub_node import HUB_LOG_PREFIX, BouncedAction, HubNodeRouter
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
@@ -42,6 +44,7 @@ from blizzard.hub.domain.actions.effects import (
 from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requirement
 from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
@@ -73,7 +76,7 @@ from blizzard.hub.domain.delivery.flows import (
     resources_moved,
     withdrawal_for,
 )
-from blizzard.hub.domain.delivery.ports.flows import IWriteFlows
+from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IWriteFlows
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
@@ -128,6 +131,9 @@ class _TurnEnding:
         self._submission = submission
         self._clock = clock
         self._abandoned = False
+        #: The flow facts the newest end wrote. A routing that rolled back is retried or raises, so the facts a turn
+        #: that returned normally holds here are the ones its committed end wrote.
+        self.written: tuple[FlowFactWritten, ...] = ()
 
     def abandon(self) -> None:
         """Let the turn go: whatever would still end it writes nothing."""
@@ -143,11 +149,12 @@ class _TurnEnding:
             raise TurnEndRefused(f"turn {self._turn.turn_id} was let go")
         if closure is None:
             closure = withdrawal_for(ChunkFacts.or_default(handle.facts(self._submission.chunk_id)), self._submission)
-        ended = self._flows.end_turn_locked(
+        written = self._flows.end_turn_locked(
             handle, self._turn.turn_id, outcome=outcome, closure=closure, event=event, at=self._clock.now()
         )
-        if not ended:
+        if written is None:
             raise TurnEndRefused(f"turn {self._turn.turn_id} has already ended")
+        self.written = written
 
 
 @domain_model
@@ -173,6 +180,10 @@ class _Ready:
     commits: list[dict[str, str]]
 
 
+class ITurnPublisher(IEventLogPublisher, IFlowChangePublisher, Protocol):
+    """What a turn announces once its writes commit: the event rows and the flow facts they wrote."""
+
+
 class TurnRunner:
     """One tenant's turns: each :meth:`take` answers for one turn the driver started."""
 
@@ -187,7 +198,7 @@ class TurnRunner:
         exclusive: IChunkExclusiveWrites,
         router: HubNodeRouter,
         events: EventLogService,
-        publisher: IEventLogPublisher,
+        publisher: ITurnPublisher,
         clock: IClock,
         repositories: IReadRepositoryRecordRepository,
         forge_records: IReadForgeRepository,
@@ -232,11 +243,13 @@ class TurnRunner:
         self._build_bound = build_bound_seconds
 
     async def take(self, turn: Turn, submission: Submission) -> None:
-        """Answer for ``turn`` until it ends — or, cancelled at shutdown, let it go without writing its end."""
+        """Answer for ``turn`` until it ends — or, cancelled at shutdown, let it go without writing its end. The
+        ``turn-ended`` and ``withdrawn`` facts its end wrote are announced once that end's transaction committed."""
         ending = _TurnEnding(self._flows, turn, submission, self._clock)
         cut_off = TurnCutOff()
         try:
             await self._take(turn, submission, ending, cut_off)
+            publish_flow_facts(self._publisher, ending.written)
         except asyncio.CancelledError:
             ending.abandon()
             cut_off.set()
@@ -533,6 +546,7 @@ class TurnRunner:
             revision=revision,
             at=at,
         )
+        publish_flow_facts(self._publisher, written.written)
         if written.event_id is not None:
             self._publisher.publish_event_logged(
                 severity=EVENT_LOG_SEVERITY[_FLOW_LANDED],
@@ -601,6 +615,7 @@ class TurnRunner:
                 ending.end_with(handle, outcome=TURN_CUT_OFF, closure=None, event=event)
         except TurnEndRefused:
             return
+        publish_flow_facts(self._publisher, ending.written)
 
     def _end(self, submission: Submission, ending: _TurnEnding, *, outcome: str, closure: str | None = None) -> None:
         with self._exclusive.locked([submission.chunk_id]) as handle:

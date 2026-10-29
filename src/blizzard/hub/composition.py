@@ -1730,6 +1730,7 @@ def build_flow_driver(
             lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
             turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
             notices=lambda tenant: _notices(services.tenants.open_services(StoreScope(tenant))),
+            publishers=lambda tenant: services.tenants.open_services(StoreScope(tenant)).events,
         ),
         services.clock,
     )

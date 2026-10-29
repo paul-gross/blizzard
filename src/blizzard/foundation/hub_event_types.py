@@ -17,6 +17,7 @@ class HubEventType(StrEnum):
     QUEUE_CHANGED = "queue-changed"
     RUNNER_CHANGED = "runner-changed"
     HOST_CHANGED = "host-changed"
+    FLOW_CHANGED = "flow-changed"
     EVENT_LOGGED = "event-logged"
 
 
@@ -82,3 +83,6 @@ HostChangeKind = Literal[
     "token-revoked",
     "retired",
 ]
+
+#: What a ``flow-changed`` frame reports: the kind of the flow fact written, one frame per fact.
+FlowChangeKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]

@@ -6,12 +6,19 @@ from __future__ import annotations
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.events.broker import EventBroker as _EventBroker
-from blizzard.foundation.hub_event_types import ChunkChangeCause, HostChangeKind, HubEventType, RunnerChangeKind
+from blizzard.foundation.hub_event_types import (
+    ChunkChangeCause,
+    FlowChangeKind,
+    HostChangeKind,
+    HubEventType,
+    RunnerChangeKind,
+)
 from blizzard.wire.sse import (
     ChunkChangedPayload,
     DecisionOpenedPayload,
     DecisionResolvedPayload,
     EventLoggedPayload,
+    FlowChangedPayload,
     HostChangedPayload,
     QuestionAnsweredPayload,
     QuestionAskedPayload,
@@ -147,6 +154,23 @@ class EventBroker(_EventBroker):
         tick, so ``reported`` is published only when the report changed what the hub holds."""
         payload = HostChangedPayload(host_id=host_id, host_name=host_name, kind=kind, by=by, key=key).to_payload()
         return self.publish(HubEventType.HOST_CHANGED, payload)
+
+    def publish_flow_changed(
+        self,
+        flow_id: str,
+        *,
+        kind: FlowChangeKind,
+        submission_id: str,
+        chunk_id: str,
+        outcome: str | None = None,
+    ) -> int:
+        """One fact written to a flow's record — ``kind`` names it — published once its transaction committed.
+
+        A flow is tenant-wide, so the frame names no project and reaches every lensed stream."""
+        payload = FlowChangedPayload(
+            flow_id=flow_id, kind=kind, submission_id=submission_id, chunk_id=chunk_id, outcome=outcome
+        ).to_payload()
+        return self.publish(HubEventType.FLOW_CHANGED, payload)
 
     def publish_event_logged(
         self,

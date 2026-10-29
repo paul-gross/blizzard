@@ -14,8 +14,10 @@ from typing import Literal, get_args
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
+from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
@@ -23,8 +25,8 @@ from blizzard.hub.domain.graph.model import Node
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
-#: What a flow's record says happened.
-type FlowFactKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]
+#: What a flow's record says happened — the kinds a ``flow-changed`` frame names, one frame per fact.
+type FlowFactKind = FlowChangeKind
 #: Where an open submission stands on a flow it holds: taking its turn, next to take one, eligible behind another,
 #: waiting on its next poll, or passed over while its chunk is not ``delivering`` or its visit not current.
 type FlowPlaceState = Literal["landing", "next", "waiting", "polling", "passed-over"]
@@ -217,11 +219,13 @@ class FlowLanding:
 @domain_model
 @dataclass(frozen=True)
 class LandingWrite:
-    """What recording a turn's merge did: whether the fence would have refused it, and the ``flow-landed`` event row
-    it wrote — ``None`` for a replay that found the marker written."""
+    """What recording a turn's merge did: whether the fence would have refused it, the ``flow-landed`` event row
+    it wrote — ``None`` for a replay that found the marker written — and the ``landed`` fact it wrote, none on a
+    replay."""
 
     refused: bool
     event_id: int | None
+    written: tuple[FlowFactWritten, ...] = ()
 
 
 @domain_model
@@ -231,6 +235,24 @@ class AdmittedTurn:
 
     turn: Turn
     submission: Submission
+
+    @property
+    def written(self) -> tuple[FlowFactWritten, ...]:
+        """The ``turn-started`` fact the turn's start wrote on each flow its submission holds."""
+        return written_on(self.submission, kind="turn-started")
+
+
+def written_on(
+    submission: Submission, *, kind: FlowFactKind, outcome: str | None = None
+) -> tuple[FlowFactWritten, ...]:
+    """The fact of ``kind`` a write appends on each flow ``submission`` holds."""
+    return FlowFactWritten.each(
+        (flow.flow_id for flow in submission.flows),
+        kind=kind,
+        submission_id=submission.submission_id,
+        chunk_id=submission.chunk_id,
+        outcome=outcome,
+    )
 
 
 #: The turn outcomes and withdrawals that are never a verdict on a submission.

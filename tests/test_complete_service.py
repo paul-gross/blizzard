@@ -21,6 +21,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
@@ -42,12 +43,12 @@ class _FakeChunkRepo:
     stamps: list[datetime] = field(default_factory=list)
     _next_id: int = 1
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         self.completed.append((chunk_id, by))
         self.stamps.append(at)
         fact_id = self._next_id
         self._next_id += 1
-        return fact_id
+        return LeverWrite(fact_id)
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"CompleteService should not touch {name!r}")
@@ -117,9 +118,9 @@ def _done_via_operator_completion_facts() -> ChunkFacts:
 def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
     service, repo = _service(facts_factory())  # type: ignore[operator]
 
-    fact_id = service.complete(_CHUNK, by="operator")
+    written = service.complete(_CHUNK, by="operator")
 
-    assert fact_id == 1
+    assert written == LeverWrite(1)
     assert repo.completed == [("chk_1", "operator")]
 
 
