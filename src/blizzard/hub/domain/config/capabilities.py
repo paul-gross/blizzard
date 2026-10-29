@@ -4,6 +4,11 @@ importing the seam."""
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from blizzard.hub.domain.config.forges import ConfiguredForge
+    from blizzard.hub.domain.config.repositories import RepositoryId
 
 
 class Capability(StrEnum):
@@ -24,3 +29,9 @@ class Capability(StrEnum):
     BRANCHES_MERGE = "branches.merge"
     REFS_CREATE = "refs.create"
     REFS_DELETE = "refs.delete"
+
+
+class IForgeOffers(Protocol):
+    """What a forge offers — for ``repository`` when one is named, the forge's kind for one not yet created."""
+
+    def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]: ...

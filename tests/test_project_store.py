@@ -26,6 +26,7 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.schema import config_changes, project_former_slugs, project_source_link_facts
 from blizzard.hub.store.scoped import ScopedConnections
@@ -70,8 +71,13 @@ class _World:
         return ProjectLinkStore(self.conns(tenant))
 
     def authoring(self, tenant: TenantId | None = None) -> ProjectAuthoring:
+        links = self.links(tenant)
         return ProjectAuthoring(
-            projects=self.projects(tenant), links=self.links(tenant), pick=first_color, clock=self.clock
+            projects=self.projects(tenant),
+            links=links,
+            positions=ProjectPositionStore(self.conns(tenant), links=links),
+            pick=first_color,
+            clock=self.clock,
         )
 
     def config(self) -> ConfigAuthoring:

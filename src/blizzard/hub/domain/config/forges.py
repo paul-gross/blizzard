@@ -616,3 +616,15 @@ class IWriteForgeRepository(IReadForgeRepository, Protocol):
         """Append the lifecycle fact and move the revision to ``record.revision``, as one compare-and-set on
         ``from_revision``. Retiring refuses :class:`ForgeInUse` while an enabled record names the forge."""
         ...
+
+
+class ForgeKindOffers:
+    """Answers what a forge offers from a table of what each forge kind's adapter offers — the offline legacy import's
+    answer, where no forge registry is built, and a test's own table."""
+
+    def __init__(self, table: Mapping[str, frozenset[Capability]] = FORGE_KIND_CAPABILITIES) -> None:
+        self._table = table
+
+    def offered(self, forge: ConfiguredForge, repository: str | None = None) -> frozenset[Capability]:
+        """The set ``forge``'s kind offers; nothing for a kind the table does not name."""
+        return self._table.get(forge.kind, frozenset())

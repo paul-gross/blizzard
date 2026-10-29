@@ -86,9 +86,16 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice, IEventRecorder
-from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId, canonical_origin, forge_for_origin
+from blizzard.hub.domain.config.forges import (
+    GITHUB_API_BASE,
+    ForgeId,
+    ForgeKindOffers,
+    canonical_origin,
+    forge_for_origin,
+)
 from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
@@ -130,6 +137,7 @@ from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -354,8 +362,13 @@ _SEEDER = ChangeContext(actor="test", door=Door.API)
 def _project_authoring(engine: Engine, tenant: TenantId) -> tuple[ProjectAuthoring, ProjectStore]:
     conns = scoped_connections(engine, tenant)
     projects = ProjectStore(conns)
+    links = ProjectLinkStore(conns)
     return ProjectAuthoring(
-        projects=projects, links=ProjectLinkStore(conns), pick=first_color, clock=FixedClock(_GRAPH_T0)
+        projects=projects,
+        links=links,
+        positions=ProjectPositionStore(conns, links=links),
+        pick=first_color,
+        clock=FixedClock(_GRAPH_T0),
     ), projects
 
 
@@ -461,15 +474,22 @@ class RecordedEvents:
 
 
 def config_authoring(
-    engine: Engine, *, keys: IHubKeyProvider, clock: IClock, events: IEventRecorder | None = None
+    engine: Engine,
+    *,
+    keys: IHubKeyProvider,
+    clock: IClock,
+    events: IEventRecorder | None = None,
+    offers: IForgeOffers | None = None,
 ) -> ConfigAuthoring:
-    """The one configured-record writer over ``engine``, sealing under ``keys`` and recording old-field events to
-    ``events`` — a fresh :class:`RecordedEvents` when none is given."""
+    """The one configured-record writer over ``engine``, sealing under ``keys``, recording old-field events to
+    ``events`` — a fresh :class:`RecordedEvents` when none is given — and asking ``offers`` what a forge offers — each
+    forge kind's own set when none is given."""
     store = hub_store_connections(engine)
     return ConfigAuthoring(
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
         forges=ForgeRecordStore(store),
+        offers=ForgeKindOffers() if offers is None else offers,
         secrets=SecretStore(store),
         cipher=secret_cipher(keys),
         apply_writer=ConfigApplyStore(store),

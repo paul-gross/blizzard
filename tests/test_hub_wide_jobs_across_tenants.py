@@ -25,6 +25,7 @@ from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import ForgeKindOffers
 from blizzard.hub.domain.config.secrets import (
     IResealSecretRepository,
     Reseal,
@@ -87,7 +88,9 @@ class _Hub:
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
-        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys), events=None)
+        return build_config_authoring(
+            self.stores(tenant), cipher=secret_cipher(keys), events=None, offers=ForgeKindOffers()
+        )
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""

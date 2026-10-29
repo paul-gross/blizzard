@@ -19,6 +19,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ForgeId, ForgeOriginTaken, ForgeSlugTaken, NewForge
+from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
@@ -100,6 +101,8 @@ def _columns(record: ConfiguredRepository, forge: StandingForge) -> dict[str, ob
         "repo": f.repo,
         "base_branch": f.base_branch,
         "secret_name": f.secret_name,
+        "landing_policy": f.landing_policy.value,
+        "park_timeout_hours": f.park_timeout_hours,
     }
 
 
@@ -334,6 +337,8 @@ def _of(row: Row[Any], *, retired_at: datetime | None) -> ConfiguredRepository:
             repo=row.repo,
             base_branch=row.base_branch,
             secret_name=row.secret_name,
+            landing_policy=LandingPolicy(row.landing_policy),
+            park_timeout_hours=row.park_timeout_hours,
         ),
         revision=row.revision,
         created_at=row.created_at,
