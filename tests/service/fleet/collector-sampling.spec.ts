@@ -7,7 +7,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }])
     test('tail sampling compares the collector input and output', async ({ api, issue, repository, runnerHost, collector, workerCheckpoint }) => {
       test.setTimeout(120000);
       const graph = JSON.stringify({ name: 'default-delivery', entry: 'build', nodes: {
-        build: { executor: 'runner', prompt: "import os, subprocess\nsubprocess.run(['blizzard', 'runner', 'work-items', os.environ['BLIZZARD_CHUNK_ID']], check=True)\n" + workerCheckpoint.snippet('hold'), judgement: { prompt: "verdict('pass', 'done')\n", choices: { pass: { description: 'done', to: 'done' } } }, retries: { max: 1, exhausted: 'escalate' } },
+        build: { executor: 'runner', prompt: `import os, subprocess\nsubprocess.run([${JSON.stringify(runnerHost.cliBinary)}, 'runner', 'work-items', os.environ['BLIZZARD_CHUNK_ID']], check=True)\n` + workerCheckpoint.snippet('hold'), judgement: { prompt: "verdict('pass', 'done')\n", choices: { pass: { description: 'done', to: 'done' } } }, retries: { max: 1, exhausted: 'escalate' } },
       } });
       expect((await api.post('/api/graphs', { data: { definition_yaml: graph } })).ok).toBe(true);
       const repo = await repository('toy-api');
