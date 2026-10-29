@@ -20,7 +20,7 @@ export const SOCKET_PATH_LIMIT = 107;
 /** The variable that arms the mock harness; the host's workers must carry it, and no `runnerEnv` may take it away. */
 export const FENCE_VAR = 'BLIZZARD_MOCK_HARNESS_FENCE';
 const FENCE_FILE = '.blizzard-mock-harness-fence';
-const PLACEHOLDERS = ['workspace', 'origins', 'mockBin', 'usageBase'];
+const PLACEHOLDERS = ['workspace', 'origins', 'mockBin', 'usageBase', 'bundle'];
 const RUNNER_BINARY = 'blizzard-runner';
 const FIRST_RUNNER = 'runner-local';
 
@@ -41,6 +41,11 @@ export interface RunnerHostOptions {
    * sink that accepts each connection and never answers.
    */
   runnerOtlp: boolean | 'hung';
+  /**
+   * Files of a harness bundle, by path under the bundle directory (`opencode/opencode.json`), written into a test-owned
+   * directory before the host boots. A profile names the directory as `${bundle}`, as in `harness.config_dir`.
+   */
+  runnerBundle: Record<string, string>;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -50,6 +55,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerStarted: true,
   runnerSampling: false,
   runnerOtlp: false,
+  runnerBundle: {},
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -98,6 +104,10 @@ export interface RunnerHost {
   cli(args: string[]): Promise<CliResult>;
   /** The commit a branch of the minted world's bare origin `repo` points at, or `undefined` when the branch is not there. */
   originHead(repo: string, branch: string): Promise<string | undefined>;
+  /** The session records the mock harness kept in the minted workspace, each parsed, in file-name order. */
+  mockSessions(): Promise<MockSessionRecord[]>;
+  /** The session documents `mock-opencode` exported under the host's own transcripts root, each parsed, in file-name order. */
+  opencodeExports(): Promise<OpencodeExport[]>;
   /** One pass of a runner, answered once it has completed; with no name, the sole runner's. */
   step(runner?: string): Promise<TickPass>;
   /** One pass of the host's own sweeps. */
@@ -108,6 +118,18 @@ export interface RunnerHost {
   kill(): Promise<void>;
   /** Stops a live host, then boots the same directory on the same port. On an unstarted host, the first boot. */
   restart(): Promise<void>;
+}
+
+/** One session the mock harness recorded: its invocations in order. The mock owns the rest of the shape. */
+export interface MockSessionRecord {
+  invocations: { kind: string }[];
+  [key: string]: unknown;
+}
+
+/** One `mock-opencode` session export: the session's info and its messages' parts. */
+export interface OpencodeExport {
+  info: { id: string; parentID?: string | null; [key: string]: unknown };
+  messages: { parts: { type: string; tool?: string; cost?: number; tokens?: { input: number }; [key: string]: unknown }[] }[];
 }
 
 /** Where a host enrolls: the hub, a tenant on it, and an operator session when the hub offers an IdP. */
@@ -277,6 +299,14 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
     try {
       fs.mkdirSync(home, { recursive: true });
+      const bundle = path.join(root, 'bundle');
+      for (const [file, content] of Object.entries(options.runnerBundle)) {
+        const target = path.join(bundle, file);
+        if (!path.resolve(target).startsWith(`${bundle}${path.sep}`)) throw new Error(`runnerBundle ${file}: a bundle file lies under the bundle directory`);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content);
+      }
+      const transcripts = path.join(root, 'transcripts');
       if (options.runnerOtlp !== false) otlp = await startOtlpSink({ hang: options.runnerOtlp === 'hung' });
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
       const cliEnv = (configHome: string): NodeJS.ProcessEnv => ({ ...env, XDG_CONFIG_HOME: configHome });
@@ -298,6 +328,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
       fs.writeFileSync(path.join(home, '.gitconfig'), '[user]\n\tname = harness\n\temail = harness@example.invalid\n');
       writeClaudeCredential(home);
+      writeOpencodeCredential(home);
 
       const runner = requireBinary(binDir(), RUNNER_BINARY);
       const operatorHome = ctx.hub.operatorHome === undefined ? path.join(home, '.config') : await ctx.hub.operatorHome();
@@ -358,13 +389,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         ],
         runner: runnerEntries(written).map((entry) => ({
           name: entry.name,
-          transcripts_root: path.join(root, 'transcripts'),
+          transcripts_root: transcripts,
           claude_code: { binary: path.join(mockBinDir(), 'mock-claude-code') },
           opencode: { enabled: false },
           worker: { env_passthrough: [FENCE_VAR, 'BZ_TRANSCRIPTS_ROOT'] },
         })),
       };
-      const expanded = expandProfile(profile, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url });
+      const expanded = expandProfile(profile, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
@@ -443,6 +474,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;
         },
+        mockSessions: () => readJsonDocuments(path.join(workspace, '.blizzard-mock-harness', 'sessions')),
+        opencodeExports: () => readJsonDocuments(path.join(transcripts, 'mock-opencode')),
         step(name) {
           const names = Object.keys(runners);
           const target = name ?? (names.length === 1 ? names[0] : undefined);
@@ -510,4 +543,21 @@ function writeClaudeCredential(home: string): void {
   const file = path.join(home, '.claude', '.credentials.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { accessToken: 'synthetic-claude-login', refreshToken: 'synthetic', expiresAt: Date.UTC(2099, 0, 1) } }), { mode: 0o600 });
+}
+
+/** The OpenCode credential the harness-health probe reads at the private data home's default path: synthetic, and only non-empty. */
+function writeOpencodeCredential(home: string): void {
+  const file = path.join(home, '.local', 'share', 'opencode', 'auth.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ synthetic: { type: 'api', key: 'synthetic-opencode-login' } }), { mode: 0o600 });
+}
+
+/** Every `*.json` file of `dir`, parsed, in file-name order; none when the directory is not there. */
+async function readJsonDocuments<T>(dir: string): Promise<T[]> {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as T);
 }

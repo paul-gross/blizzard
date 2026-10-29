@@ -6,15 +6,19 @@ import type {
   ArtifactScope,
   EscalationListResponse,
   FactListResponse,
+  DashboardView,
   FloorClearView,
+  HeartbeatResponse,
   HostRunnerListResponse,
   HostSubscriptionListResponse,
   LeaseListResponse,
+  LeaseUsageResponse,
   RunnerControlView,
   RunnerStatusView,
   TickPassResponse,
   TranscriptResponse,
   WorkerArtifact,
+  TranscriptSegmentIndexView,
 } from './wire/runner/types.gen';
 
 /** The calls one runner of a host answers, under `<host>/runners/<id>`. Types come from `wire/runner`. */
@@ -25,6 +29,14 @@ export interface RunnerClient {
   /** The outbound buffer's depth, read from the status's `hub.buffer_depth` and nothing else. */
   bufferDepth(): Promise<number>;
   leases(): Promise<ApiResponse<LeaseListResponse>>;
+  /** `GET …/api/leases/{id}/usage`: the usage facts the lease recorded, oldest first. */
+  leaseUsage(leaseId: string): Promise<ApiResponse<LeaseUsageResponse>>;
+  /** `GET …/api/chunks/{id}/transcripts`: the chunk's transcript segments, as the runner indexes them. */
+  transcriptSegments(chunkId: string): Promise<ApiResponse<TranscriptSegmentIndexView>>;
+  /** `GET …/api/dashboard`. */
+  dashboard(): Promise<ApiResponse<DashboardView>>;
+  /** `POST …/api/heartbeat`: a heartbeat for a lease, as its worker's hook posts it. */
+  heartbeat(leaseId: string): Promise<ApiResponse<HeartbeatResponse>>;
   /** The runner's facts as `FactView`s, unmapped: `seq`, `kind`, `chunk_id` and `acked_at` survive as the runner sent them. */
   facts(options?: { limit?: number }): Promise<ApiResponse<FactListResponse>>;
   /** `GET …/api/escalations`: the open set by default; `state: 'closed'` pages the ended ones, each with its closure. */
@@ -107,6 +119,10 @@ export function runnerHostApi(options: {
           return answer.body.hub.buffer_depth;
         },
         leases: () => raw.get('/api/leases'),
+        leaseUsage: (leaseId) => raw.get(`/api/leases/${encodeURIComponent(leaseId)}/usage`),
+        transcriptSegments: (chunkId) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/transcripts`),
+        dashboard: () => raw.get('/api/dashboard'),
+        heartbeat: (leaseId) => raw.post('/api/heartbeat', { data: { lease_id: leaseId } }),
         facts: (factOptions = {}) => raw.get('/api/facts', factOptions.limit === undefined ? {} : { params: { limit: factOptions.limit } }),
         escalations: (listOptions = {}) => {
           const params = Object.fromEntries(Object.entries(listOptions).filter(([, value]) => value !== undefined)) as Record<string, string | number>;
