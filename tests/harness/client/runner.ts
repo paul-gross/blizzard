@@ -18,6 +18,7 @@ import type {
   HeartbeatResponse,
   HostRunnerListResponse,
   HostRegistrationView,
+  HostEnvironmentListResponse,
   HostSubscriptionListResponse,
   LeaseListResponse,
   LeaseUsageResponse,
@@ -124,6 +125,8 @@ export interface RunnerHostClient extends HostRoutes {
   registration(): Promise<ApiResponse<HostRegistrationView>>;
   /** `GET /api/host/runners`. */
   runners(): Promise<ApiResponse<HostRunnerListResponse>>;
+  /** `GET /api/host/environments`: held and free environments grouped by workspace. */
+  environments(): Promise<ApiResponse<HostEnvironmentListResponse>>;
   /** `GET /api/host/subscriptions`. */
   subscriptions(): Promise<ApiResponse<HostSubscriptionListResponse>>;
   /** `POST /api/host/subscriptions/{slug}/floor/clear`. */
@@ -173,6 +176,7 @@ export function runnerHostApi(options: {
     ready: () => host.get('/api/ready'),
     registration: () => host.get('/api/host/registration'),
     runners: () => host.get('/api/host/runners'),
+    environments: () => host.get('/api/host/environments'),
     subscriptions: () => host.get('/api/host/subscriptions'),
     clearSubscriptionFloor: (slug, by) => host.post(`/api/host/subscriptions/${encodeURIComponent(slug)}/floor/clear`, { data: by === undefined ? {} : { by } }),
     runner(runnerId) {

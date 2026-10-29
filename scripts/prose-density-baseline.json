@@ -11370,12 +11370,6 @@
    "over_cap": 2,
    "total": 225
   },
-  "service/test_release_service.py": {
-   "comments": 9,
-   "docstrings": 7,
-   "over_cap": 0,
-   "total": 209
-  },
   "service/test_runner_bindings_service.py": {
    "comments": 0,
    "docstrings": 2,
@@ -14735,12 +14729,6 @@
    "docstrings": 2,
    "over_cap": 0,
    "total": 74
-  },
-  "test_release_service.py": {
-   "comments": 0,
-   "docstrings": 5,
-   "over_cap": 0,
-   "total": 171
   },
   "test_release_workflow.py": {
    "comments": 2,
