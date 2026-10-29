@@ -112,13 +112,6 @@ class ChunkDecisionsStore:
             for row in rows
         ]
 
-    @staticmethod
-    def _not_closed_clause(stmts: ScopedStatements, decision_id: ColumnElement[str]) -> ColumnElement[bool]:
-        """True when the decision whose id is ``decision_id`` (the column of ``s.decisions`` or of an alias of
-        it) is still live: no closure table holds a row for its id, ANDed across every table — each
-        ``NOT EXISTS`` built through ``stmts``, so it reads only the scope's facts."""
-        return and_(*(~stmts.exists(table, table.c.decision_id == decision_id) for table in _DECISION_CLOSURE_TABLES))
-
     def _newest_live_decisions_select(self, chunk_ids: Sequence[str]) -> Select[Any]:
         """The newest not-yet-transitioned decision of each chunk in ``chunk_ids``, one row per chunk:
         a decision no newer not-closed decision of its chunk beats, in ``(submitted_at, decision_id)``
@@ -133,11 +126,11 @@ class ChunkDecisionsStore:
                 (s.decisions.c.submitted_at, rival.c.submitted_at),
                 (s.decisions.c.decision_id, rival.c.decision_id),
             ],
-            where=self._not_closed_clause(self._store, rival.c.decision_id),
+            where=not_closed_clause(self._store, rival.c.decision_id),
         )
         return self._store.select(s.decisions).where(
             s.decisions.c.chunk_id.in_(chunk_ids),
-            self._not_closed_clause(self._store, s.decisions.c.decision_id),
+            not_closed_clause(self._store, s.decisions.c.decision_id),
             ~beaten,
         )
 
@@ -197,7 +190,7 @@ class ChunkDecisionsStore:
                 self._store.select(s.decisions)
                 .where(
                     not_resolved,
-                    self._not_closed_clause(self._store, s.decisions.c.decision_id),
+                    not_closed_clause(self._store, s.decisions.c.decision_id),
                     ~chunk_is_terminal(self._store, s.decisions.c.chunk_id),
                 )
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
@@ -454,10 +447,15 @@ class ChunkDecisionsStore:
         )
 
 
+def not_closed_clause(stmts: ScopedStatements, decision_id: ColumnElement[str]) -> ColumnElement[bool]:
+    """True when the decision is live: no scoped closure table holds its id."""
+    return and_(*(~stmts.exists(table, table.c.decision_id == decision_id) for table in _DECISION_CLOSURE_TABLES))
+
+
 def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -> set[str]:
     """The ids among ``decision_ids`` — every decision when ``None`` — closed by a fact in
     :data:`_DECISION_CLOSURE_TABLES` —
-    :meth:`ChunkDecisionsStore._not_closed_clause`'s own predicate, inverted, so every closure read (the live
+    :func:`not_closed_clause`'s own predicate, inverted, so every closure read (the live
     decision, the bulk status read, the chunk facts) shares one rule."""
     if decision_ids is not None and not decision_ids:
         return set()
@@ -465,7 +463,7 @@ def decision_closure_ids(conn: Connection, decision_ids: Sequence[str] | None) -
     closed: set[str] = set()
     for batch in id_batches(decision_ids) if decision_ids is not None else [None]:
         stmt = stmts.select(s.decisions, s.decisions.c.decision_id).where(
-            ~ChunkDecisionsStore._not_closed_clause(stmts, s.decisions.c.decision_id)
+            ~not_closed_clause(stmts, s.decisions.c.decision_id)
         )
         if batch is not None:
             stmt = stmt.where(s.decisions.c.decision_id.in_(batch))

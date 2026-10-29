@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api", tags=["runner"])
 @router.get("/fleet-summary", response_model=FleetSummaryView)
 def get_fleet_summary(request: Request) -> FleetSummaryView:
     """Forward the fleet-summary read to the hub — the layered pass-through."""
-    return _fleet_summary(HubProxy.of(request, "fleet-summary"))
+    return fleet_summary(HubProxy.of(request, "fleet-summary"))
 
 
-def _fleet_summary(proxy: HubProxy, *, timeout: float | None = None, severity: str = "error") -> FleetSummaryView:
+def fleet_summary(proxy: HubProxy, *, timeout: float | None = None, severity: str = "error") -> FleetSummaryView:
     upstream = proxy.get("/api/fleet/summary", timeout=timeout, severity=severity)
     return FleetSummaryView.model_validate(upstream.json())

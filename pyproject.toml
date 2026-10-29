@@ -257,6 +257,7 @@ also_copy = [
     "scripts/repo_pointers.py",
     "scripts/mutation.py",
     "scripts/typecheck_strict_rows.py",
+    "scripts/typecheck_private_usage.py",
     "docs/deployment/transcripts.md",
     "docs/deployment/egress.md",
     "docs/deployment/tracing.md",

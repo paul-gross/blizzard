@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import ast
 import os
+import subprocess
 import sys
 import time
 
 import pytest
 
 from blizzard.runner.process.child_env import ChildEnv
+from blizzard.runner.process.internal import subprocess_child_processes
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from tests.support_child_launch import CHILDREN
 
@@ -104,22 +106,38 @@ def test_env_fully_replaces_the_childs_environment() -> None:
     assert "HOME" not in keys
 
 
-def test_settle_seconds_delays_closing_stdin_past_the_write() -> None:
+def test_settle_seconds_delays_closing_stdin_past_the_write(monkeypatch: pytest.MonkeyPatch) -> None:
     """A child that keeps running until it reads EOF, and only then replies, gets that
     reply back — closing stdin waits ``settle_seconds`` past the write rather than
     happening immediately, so a reply still being produced is never cut off."""
-    script = (
-        "import sys, time\n"
-        "start = time.monotonic()\n"
-        "sys.stdin.read()\n"
-        "sys.stdout.write(str(time.monotonic() - start))\n"
-    )
+    written_at: list[float] = []
+    closing_at: list[float] = []
+    open_at_close: list[bool] = []
+    write = subprocess_child_processes._write_unclosed
+    communicate = subprocess.Popen.communicate
+
+    def record_write(process: subprocess.Popen[str], text: str) -> None:
+        write(process, text)
+        written_at.append(time.monotonic())
+
+    def record_close(process: subprocess.Popen[str], *args, **kwargs):
+        assert process.stdin is not None
+        open_at_close.append(not process.stdin.closed)
+        closing_at.append(time.monotonic())
+        return communicate(process, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess_child_processes, "_write_unclosed", record_write)
+    monkeypatch.setattr(subprocess.Popen, "communicate", record_close)
+    script = "import sys; sys.stdin.read(); sys.stdout.write('done')"
     result = SubprocessOneShotProcess(CHILDREN).run(
         [sys.executable, "-c", script], stdin="", timeout=5.0, env=_INHERITED_ENV, settle_seconds=0.3
     )
 
     assert result.exit_code == 0
-    assert float(result.stdout) >= 0.25  # a monotonic clock read after process start, not before
+    assert result.stdout == "done"
+    assert open_at_close == [True]
+    assert len(written_at) == len(closing_at) == 1
+    assert closing_at[0] - written_at[0] >= 0.25
 
 
 def test_settle_seconds_zero_closes_immediately() -> None:

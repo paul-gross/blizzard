@@ -144,7 +144,7 @@ def fact_summaries(conn: Connection, finding_ids: Sequence[str]) -> dict[str, Fi
             .group_by(finding_facts.c.finding_id)
         ).all()
         newest_by_finding = {
-            row.finding_id: FindingStore._fact_of(row)
+            row.finding_id: fact_of(row)
             for row in conn.execute(
                 stmts.select(finding_facts)
                 .where(finding_facts.c.finding_id.in_(batch))
@@ -485,18 +485,7 @@ class FindingStore:
             .where(finding_facts.c.finding_id == finding_id)
             .order_by(finding_facts.c.id.asc())
         ).all()
-        return [self._fact_of(r) for r in rows]
-
-    @staticmethod
-    def _fact_of(row: Row[Any]) -> FindingFact:
-        return FindingFact(
-            kind=row.kind,
-            recorded_at=row.recorded_at,
-            note=row.note,
-            actor=row.actor,
-            proposal_id=row.proposal_id,
-            superseded_by=row.superseded_by,
-        )
+        return [fact_of(r) for r in rows]
 
     @staticmethod
     def _of(row: Row[Any], summary: FindingFactSummary) -> Finding:
@@ -522,6 +511,18 @@ class FindingStore:
             actor=state.actor,
             project_id=row.project_id,
         )
+
+
+def fact_of(row: Row[Any]) -> FindingFact:
+    """Project a stored fact row into the finding domain."""
+    return FindingFact(
+        kind=row.kind,
+        recorded_at=row.recorded_at,
+        note=row.note,
+        actor=row.actor,
+        proposal_id=row.proposal_id,
+        superseded_by=row.superseded_by,
+    )
 
 
 _finding_store_conforms: type[IWriteFindingRepository] = FindingStore

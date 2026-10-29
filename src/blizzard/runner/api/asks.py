@@ -82,10 +82,10 @@ def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> 
             detail="only open asks are queryable — no closed-ask history is kept",
         )
     stores = RunnerWiring.of(request).read_stores()
-    return _ask_list(stores.asks, stores.environments)
+    return ask_list(stores.asks, stores.environments)
 
 
-def _ask_list(asks: IReadAskRepository, environments: IReadEnvironmentRepository) -> AskListResponse:
+def ask_list(asks: IReadAskRepository, environments: IReadEnvironmentRepository) -> AskListResponse:
     open_asks = asks.open_asks()
     projects = environments.chunk_project_ids(sorted({a.chunk_id for a in open_asks}))
     return AskListResponse(items=[_ask_view(a, projects.get(a.chunk_id)) for a in open_asks])

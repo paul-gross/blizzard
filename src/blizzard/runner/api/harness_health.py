@@ -23,10 +23,10 @@ router = APIRouter(prefix="/api", tags=["runner"])
 def list_harness_health(request: Request) -> HarnessHealthListResponse:
     """Every configured harness binding's own computed health."""
     wiring = RunnerWiring.of(request)
-    return _harness_health_list(wiring.harnesses(), wiring.harness_health())
+    return harness_health_list(wiring.harnesses(), wiring.harness_health())
 
 
-def _harness_health_list(harnesses: IHarnessRegistry, health: IReadHarnessHealth) -> HarnessHealthListResponse:
+def harness_health_list(harnesses: IHarnessRegistry, health: IReadHarnessHealth) -> HarnessHealthListResponse:
     items: list[HarnessHealthViewWire] = []
     for harness_id in harnesses.known_harnesses:
         result = reported_health(harness_id, health.get(harness_id))

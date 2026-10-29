@@ -285,8 +285,8 @@ def carry_outbox_rows(
     kept a larger one when the runner was removed from it. Both stores are bound to the moving runner."""
     for table in _OUTBOX_LANES:
         rows = [
-            {name: value for name, value in row._mapping.items() if name != RUNNER_COLUMN}
-            for row in source_conn.execute(source.select(table).order_by(table.c.seq))
+            {name: value for name, value in row.items() if name != RUNNER_COLUMN}
+            for row in source_conn.execute(source.select(table).order_by(table.c.seq)).mappings()
         ]
         if rows:
             destination_conn.execute(destination.insert(table), rows)
