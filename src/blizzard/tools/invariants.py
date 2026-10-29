@@ -893,29 +893,6 @@ class NoUnenqueuedClosableRef(HubQueryCheck):
         return violations
 
 
-class OneLiveExecSlot(HubQueryCheck):
-    """At most one hub_exec_slot row per tenant is live (``released_at IS NULL``) at a time
-    (pinned by tests/test_pin_foundation.py). Each tenant holds its own slot, so two
-    tenants' live slots at once are legal."""
-
-    def run(self) -> list[Violation]:
-        slot = hub.hub_exec_slot
-        live = func.count()
-        crowded = self.rows(
-            select(slot.c.tenant_id, live)
-            .where(slot.c.released_at.is_(None))
-            .group_by(slot.c.tenant_id)
-            .having(live > 1)
-            .order_by(slot.c.tenant_id)
-        ).all()
-        return [
-            Violation(
-                "hub:one-live-exec-slot", f"tenant {row.tenant_id}: {row[1]} hub-execution slots are live at once"
-            )
-            for row in crowded
-        ]
-
-
 class OneTurnPerFlow(HubQueryCheck):
     """``hub:one-turn-per-flow`` — no flow has two open turns (``ended_at IS NULL``) holding it at once."""
 
@@ -1962,7 +1939,6 @@ class HubInvariants:
                 PerRepoLandIdempotent(conn),
                 PerRepoMarkerIdempotent(conn),
                 NoDoubleDelivery(conn),
-                OneLiveExecSlot(conn),
                 OneTurnPerFlow(conn),
                 OneTurnPerVisit(conn),
                 HubNodeHasAction(conn),

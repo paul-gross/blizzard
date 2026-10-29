@@ -57,7 +57,6 @@ from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRep
 from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
-from blizzard.hub.domain.chunk.ports.hub_exec import IReadChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
 from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
 from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
@@ -1863,12 +1862,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_hub_exec_released = "ch_hub_exec_released"
     _mint(chunk_hub_exec_live, "1013", at=_ht(61))
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
-    # Released first: the slot is fleet-wide-single, so the still-held one below must be
-    # acquired last to stay the sole live holder `count_live_hub_exec_slots` counts.
-    released_slot = write.hub_exec.acquire_hub_exec_slot(
-        chunk_hub_exec_released, node_id=deliver_node.node_id, at=_ht(63), stale_after=timedelta(minutes=5)
-    )
-    assert released_slot is not None
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
             handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64)
@@ -1888,10 +1881,6 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             release_route=True,
             admission=EpochAdmission.ABOVE,
         )
-    write.hub_exec.release_hub_exec_slot(released_slot, at=_ht(66))
-    write.hub_exec.acquire_hub_exec_slot(
-        chunk_hub_exec_live, node_id=deliver_node.node_id, at=_ht(67), stale_after=timedelta(minutes=5)
-    )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
             handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, at=_ht(68)
@@ -2419,7 +2408,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
         [w.chunk_ready_1, w.chunk_ready_2]
     ),
-    (IReadChunkHubExecRepository, "count_live_hub_exec_slots"): lambda w: w.read.hub_exec.count_live_hub_exec_slots(),
     (IReadFlows, "open_submissions_from"): lambda w: w.hub.services.flows.open_submissions_from(1),
     (IReadFlows, "open_turns"): lambda w: w.hub.services.flows.open_turns(),
     (IReadFlows, "submission_for_visit"): lambda w: w.hub.services.flows.submission_for_visit(

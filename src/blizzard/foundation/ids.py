@@ -39,7 +39,6 @@ class IdPrefix(StrEnum):
     LEASE = "lease"
     TAKEOVER = "tko"
     SELFTEST = "self"
-    HUB_EXEC_SLOT = "hes"
     MIGRATION = "mg"  # a chunk_migrations fact
     USER = "usr"  # a hub-local user
     SEGMENT = "seg"  # a transcript segment, the hub's idempotence key

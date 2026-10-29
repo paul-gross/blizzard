@@ -11808,12 +11808,6 @@
    "over_cap": 1,
    "total": 223
   },
-  "test_chunk_artifact_order_and_hub_exec_slot_store.py": {
-   "comments": 0,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 146
-  },
   "test_chunk_change_description.py": {
    "comments": 2,
    "docstrings": 7,
@@ -13835,12 +13829,6 @@
    "docstrings": 2,
    "over_cap": 0,
    "total": 188
-  },
-  "test_hub_exec_slot_tenancy.py": {
-   "comments": 0,
-   "docstrings": 2,
-   "over_cap": 0,
-   "total": 111
   },
   "test_hub_item_projects.py": {
    "comments": 1,
@@ -17363,6 +17351,12 @@
    "docstrings": 11,
    "over_cap": 0,
    "total": 196
+  },
+  "test_chunk_artifact_order_store.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 146
   }
  }
 }
