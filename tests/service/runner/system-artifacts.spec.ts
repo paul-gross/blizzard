@@ -22,7 +22,7 @@ interface CliCall {
  * then lifts any `unreachable` lever (the hub the host steps against has to come back) and leaves the results in its
  * working directory. Its judgement passes with them as JSON.
  */
-function cliWorker(mockHub: MockHub, calls: string[][]): Pick<MockChunkSpec['nodes'][string], 'prompt' | 'judgement_prompt'> {
+function cliWorker(mockHub: MockHub, cli: string, calls: string[][]): Pick<MockChunkSpec['nodes'][string], 'prompt' | 'judgement_prompt'> {
   const prompt = [
     'import json, subprocess, time, urllib.error, urllib.request',
     'opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))',
@@ -30,7 +30,7 @@ function cliWorker(mockHub: MockHub, calls: string[][]): Pick<MockChunkSpec['nod
     '    time.sleep(0.1)',
     'results = []',
     `for args in ${JSON.stringify(calls)}:`,
-    "    run = subprocess.run(['blizzard', 'runner', 'artifact', *args], capture_output=True, text=True)",
+    `    run = subprocess.run([${JSON.stringify(cli)}, 'runner', 'artifact', *args], capture_output=True, text=True)`,
     "    results.append({'code': run.returncode, 'stdout': run.stdout, 'stderr': run.stderr})",
     `opener.open(urllib.request.Request('${mockHub.url}/_levers/unreachable', method='DELETE'))`,
     "with open('system-artifact-reads.json', 'w') as handle:",
@@ -60,7 +60,7 @@ function chunkRunning(worker: ReturnType<typeof cliWorker>): MockChunkSpec {
 
 /** Seeds a chunk whose worker makes `calls` and steps the host until its lease is running; returns the lease id. */
 async function spawnWorker(mockHub: MockHub, host: RunnerHost, calls: string[][]): Promise<string> {
-  const seeded = await mockHub.seed.chunk(chunkRunning(cliWorker(mockHub, calls)));
+  const seeded = await mockHub.seed.chunk(chunkRunning(cliWorker(mockHub, host.cliBinary, calls)));
   expect(seeded.status).toBe(201);
   const runner = host.runners[RUNNER]!;
   for (let pass = 0; ; pass++) {
