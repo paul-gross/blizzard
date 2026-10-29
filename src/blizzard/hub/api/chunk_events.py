@@ -3,13 +3,16 @@ so every emit site enriches the frame the same way."""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.delivery.flow_driver import ITurnRunner
 from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
+from blizzard.hub.domain.delivery.flows import Submission, Turn
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.runners.route import Route
 
@@ -202,3 +205,23 @@ class ChunkChanged:
             project_id=project_id,
         )
         return facts
+
+
+@dataclass(frozen=True)
+class AnnouncedTurns:
+    """A tenant's turns, each announcing the ``chunk-changed`` frame of the move it routed: a ``hub-advanced`` frame
+    once a turn ends with its chunk's transitions or status changed, none for a turn that only waited."""
+
+    services: TenantServices
+    turns: ITurnRunner
+
+    async def take(self, turn: Turn, submission: Submission) -> None:
+        change = await asyncio.to_thread(ChunkChanged.before, self.services, submission.chunk_id)
+        await self.turns.take(turn, submission)
+        await asyncio.to_thread(self._announce, change)
+
+    def _announce(self, change: ChunkChanged) -> None:
+        state = ChunkFrameState.load(self.services, change.chunk_id)
+        moved = change.facts is None or len(state.facts.transitions) != len(change.facts.transitions)
+        if moved or state.facts.status().value != change.prev_status:
+            change.publish_from(state, cause="hub-advanced")

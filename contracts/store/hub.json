@@ -4865,7 +4865,7 @@
           "type": "String"
         }
       },
-      "deprecated": null,
+      "deprecated": "0.3",
       "foreign_keys": [
         {
           "columns": [

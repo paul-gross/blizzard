@@ -156,6 +156,7 @@ def test_completion_on_terminal_chunk_fails(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
     hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1))
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
     # A fresh (non-replayed) completion on a done chunk is rejected as terminal. A
@@ -190,6 +191,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
     }
     resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
     assert resp.status_code == 200
+    hub.settle_turns()
 
     # Fleet truth: the empty deliver still finalizes the chunk terminal.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
@@ -295,6 +297,7 @@ def test_checks_gate_backstop_admits_a_green_gated_pass(tmp_path: Path) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["outcome"] != "failure"
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 

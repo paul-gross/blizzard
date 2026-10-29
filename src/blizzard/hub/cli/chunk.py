@@ -472,8 +472,8 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
     """Mark CHUNK done from any status, including ``stopped``.
 
-    Its runner and any hub-exec slot are released, and its work items become eligible
-    for closure. Completing a done chunk changes nothing."""
+    Its runner is released, it leaves the delivery lines it waits in, and its work items
+    become eligible for closure. Completing a done chunk changes nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/complete",
         "POST /chunks/{id}/complete",

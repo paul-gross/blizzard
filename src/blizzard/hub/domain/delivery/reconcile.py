@@ -1,9 +1,9 @@
 """The reconcile — a tenant's flow lines converged on where its chunks stand, never on an event a caller sends.
 
 Its first pass submits every chunk ``delivering`` at a hub node naming an action with no open submission for that
-visit, oldest entry first; its second closes every open submission whose chunk has left its visit, as ``withdrawal_for``
-answers. It writes nothing to a chunk: a visit the slot would refuse, or a node naming no action, is left to the slot
-and the boot pass."""
+visit, oldest entry first, refusing a visit that cannot name its resources and escalating a node naming no action; its
+second closes every open submission whose chunk has left its visit, as ``withdrawal_for`` answers. Admission then takes
+a turn for every visit next on each flow it holds."""
 
 from __future__ import annotations
 
@@ -20,12 +20,25 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.delivery.flows import Submission, TurnEvent, held_resources, withdrawal_for
-from blizzard.hub.domain.delivery.ports.flows import IWriteFlows
+from blizzard.hub.domain.delivery.flows import (
+    TURN_INTERRUPTED,
+    TURN_SUPERSEDED,
+    AdmittedTurn,
+    FlowLine,
+    PollPolicy,
+    Submission,
+    Turn,
+    TurnEvent,
+    Withdrawal,
+    held_resources,
+    withdrawal_for,
+)
+from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
 from blizzard.hub.domain.projects.links import IReadProjectLinks
@@ -55,14 +68,15 @@ class _Standing:
     """A chunk standing at a hub node that names an action, at the visit's epoch, since ``entered_at``."""
 
     chunk: Chunk
+    graph: Graph
     node: Node
     epoch: int
     entered_at: datetime
 
 
 class FlowLineReconciler:
-    """One tenant's reconcile, and the turns its last process left open. Every flow write goes through
-    :class:`IWriteFlows`; nothing here writes to a chunk."""
+    """One tenant's reconcile, admission, and the turns no task answers for. Every flow write goes through
+    :class:`IWriteFlows`, and every chunk write through :class:`IHubStepRefusals`."""
 
     def __init__(
         self,
@@ -77,9 +91,13 @@ class FlowLineReconciler:
         projects: IReadProjectRepository,
         links: IReadProjectLinks,
         catalogue: HubActionCatalogue,
+        refusals: IHubStepRefusals,
+        exclusive: IChunkExclusiveWrites,
         clock: IClock,
     ) -> None:
         self._flows = flows
+        self._exclusive = exclusive
+        self._refusals = refusals
         self._facts = facts
         self._record = record
         self._graphs = graphs
@@ -107,7 +125,7 @@ class FlowLineReconciler:
             sub
             for standing in self._standing(facts_by_id)
             if (standing.chunk.chunk_id, standing.node.node_id, standing.epoch) not in in_line
-            and (sub := self._submit_isolated(standing)) is not None
+            and (sub := self._submit_isolated(standing, facts_by_id[standing.chunk.chunk_id])) is not None
         ]
         closed, still_open = self._close_departed(open_subs, facts_by_id)
         arrivals = [sub.arrival for sub in (*still_open, *submitted)]
@@ -118,41 +136,115 @@ class FlowLineReconciler:
         )
 
     def recover_turns(self) -> int:
-        """End every open turn ``interrupted`` — it ended with the process that ran it, crashed or shut down — each
-        in one transaction with its ``turn-ended`` facts, its ``turn-interrupted`` event, and the closure
-        ``withdrawal_for`` answers for a submission whose chunk has left its visit. Answers how many it ended; a
-        turn already ended writes nothing."""
-        turns = self._flows.open_turns()
+        """End every open turn ``interrupted`` — it ended with the process that ran it, crashed or shut down. Answers
+        how many it ended; a turn already ended writes nothing."""
+        return self.end_unanswered(started_before=None, running=frozenset())
+
+    def end_unanswered(self, *, started_before: datetime | None, running: frozenset[str]) -> int:
+        """End ``interrupted`` every open turn not in ``running`` that started before ``started_before`` (every one,
+        with ``None``) — each in one transaction with its ``turn-ended`` facts, its ``turn-interrupted`` event, and
+        the closure ``withdrawal_for`` answers under its chunk's lock. Answers how many it ended."""
+        turns = [
+            turn
+            for turn in self._flows.open_turns()
+            if turn.turn_id not in running and (started_before is None or turn.started_at < started_before)
+        ]
         if not turns:
             return 0
         subs = {sub.submission_id: sub for sub in self._flows.open_submissions_from(0)}
-        chunk_ids = sorted({subs[turn.submission_id].chunk_id for turn in turns if turn.submission_id in subs})
-        facts_by_id = self._facts.load_facts_for(chunk_ids)
-        node_names = self._node_names(chunk_ids)
+        node_names = self._node_names(sorted({sub.chunk_id for sub in subs.values()}))
         now = self._clock.now()
         ended = 0
         for turn in turns:
             sub = subs.get(turn.submission_id)
-            withdrawal = withdrawal_for(ChunkFacts.or_default(facts_by_id.get(sub.chunk_id)), sub) if sub else None
-            event = TurnEvent(
-                kind=_EVENT_TURN_INTERRUPTED,
-                chunk_id=sub.chunk_id if sub else None,
-                node_name=node_names.get((sub.chunk_id, sub.node_id)) if sub else None,
-                message=f"turn {turn.turn_id} ended interrupted: the hub process running it stopped",
-                detail={
-                    "turn_id": turn.turn_id,
-                    "submission_id": turn.submission_id,
-                    "started_at": iso_utc(turn.started_at),
-                    "withdrawal": withdrawal,
-                },
-            )
-            if self._flows.end_turn_interrupted(turn.turn_id, withdrawal=withdrawal, event=event, at=now):
-                ended += 1
+            if sub is None:
+                event = self._interrupted(turn, None, node_name=None, withdrawal=None)
+                ended += self._flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=event, at=now)
+                continue
+            with self._exclusive.locked([sub.chunk_id]) as handle:
+                withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
+                event = self._interrupted(
+                    turn, sub, node_name=node_names.get((sub.chunk_id, sub.node_id)), withdrawal=withdrawal
+                )
+                ended += self._flows.end_turn_locked(
+                    handle, turn.turn_id, outcome=TURN_INTERRUPTED, closure=withdrawal, event=event, at=now
+                )
         return ended
 
+    @staticmethod
+    def _interrupted(
+        turn: Turn, sub: Submission | None, *, node_name: str | None, withdrawal: Withdrawal | None
+    ) -> TurnEvent:
+        return TurnEvent(
+            kind=_EVENT_TURN_INTERRUPTED,
+            chunk_id=sub.chunk_id if sub else None,
+            node_name=node_name,
+            message=f"turn {turn.turn_id} ended interrupted: no running task answers for it",
+            detail={
+                "turn_id": turn.turn_id,
+                "submission_id": turn.submission_id,
+                "started_at": iso_utc(turn.started_at),
+                "withdrawal": withdrawal,
+            },
+        )
+
+    def admit(self, floor: int, now: datetime) -> list[AdmittedTurn]:
+        """Take a turn, oldest arrival first, for every open submission at or above ``floor`` that is next on every
+        flow it holds, judged on one bulk read; the store re-checks each under the flows' locks, handed the
+        submissions judged ineligible."""
+        subs = self._flows.open_submissions_from(floor)
+        if not subs:
+            return []
+        turning = frozenset(turn.submission_id for turn in self._flows.open_turns())
+        chunk_ids = sorted({sub.chunk_id for sub in subs})
+        loaded = self._facts.load_facts_for(chunk_ids)
+        nodes = self._nodes(chunk_ids)
+        line = FlowLine(
+            submissions=tuple(subs),
+            facts={chunk_id: ChunkFacts.or_default(loaded.get(chunk_id)) for chunk_id in chunk_ids},
+            policies={
+                sub.submission_id: PollPolicy.of(node)
+                if (node := nodes.get((sub.chunk_id, sub.node_id)))
+                else PollPolicy()
+                for sub in subs
+            },
+            turning=turning,
+        )
+        passed_over = frozenset(sub.submission_id for sub in subs if not line.eligible(sub, now=now))
+        admitted: list[AdmittedTurn] = []
+        for sub in subs:
+            if not line.is_next(sub, now=now):
+                continue
+            turn: Turn | None = self._flows.take_turn(sub.submission_id, passed_over=passed_over, at=self._clock.now())
+            if turn is not None:
+                admitted.append(AdmittedTurn(turn, sub))
+        return admitted
+
+    def escalate_actionless(self) -> int:
+        """Escalate every chunk of this tenant standing at a hub node that names no action — the boot step run
+        before :meth:`recover_turns`, so a chunk the carry-over left stranded reaches a person without waiting for a
+        tick. Answers how many it escalated."""
+        chunks = self._record.get_many(self._record.pinned_to_actionless_hub_nodes())
+        facts_by_id = self._facts.load_facts_for(list(chunks))
+        graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
+        return sum(
+            self._escalate_actionless(chunk, facts, graphs.get(chunk.graph_id))
+            for chunk_id, chunk in chunks.items()
+            if (facts := facts_by_id.get(chunk_id)) is not None
+        )
+
+    def _escalate_actionless(self, chunk: Chunk, facts: ChunkFacts, graph: Graph | None) -> bool:
+        node = facts.hub_advance_node(graph) if graph is not None else None
+        if node is None or node.action is not None or facts.open_escalation() is not None:
+            return False
+        epoch = facts.latest_epoch() or 0
+        if not facts.awaits_exit_from(node, epoch=epoch):
+            return False
+        return self._refusals.escalate_action_missing(chunk, node, epoch=epoch)
+
     def _standing(self, facts_by_id: Mapping[str, ChunkFacts]) -> list[_Standing]:
-        """Every chunk in ``facts_by_id`` whose newest movement enters a hub node naming an action, oldest entry
-        first, the chunk id breaking a tie."""
+        """Every chunk in ``facts_by_id`` whose newest movement enters a hub node, oldest entry first, the chunk id
+        breaking a tie."""
         chunks = self._record.get_many(list(facts_by_id))
         graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
         standing: list[_Standing] = []
@@ -161,15 +253,18 @@ class FlowLineReconciler:
             graph = graphs.get(chunk.graph_id) if chunk is not None else None
             node = _hub_node_of(facts, graph)
             entered_at = _entered_at(facts)
-            if chunk is None or node is None or node.action is None or entered_at is None:
+            if chunk is None or graph is None or node is None or entered_at is None:
                 continue
-            standing.append(_Standing(chunk, node, facts.latest_epoch() or 0, entered_at))
+            standing.append(_Standing(chunk, graph, node, facts.latest_epoch() or 0, entered_at))
         return sorted(standing, key=lambda s: (s.entered_at, s.chunk.chunk_id))
 
-    def _submit_isolated(self, standing: _Standing) -> Submission | None:
+    def _submit_isolated(self, standing: _Standing, facts: ChunkFacts) -> Submission | None:
         """Submit one visit, logging and skipping it when it raises, so one chunk's failure never holds back the
         rest of the tenant's line. A closed tenant still ends the pass."""
         try:
+            if standing.node.action is None:
+                self._escalate_actionless(standing.chunk, facts, standing.graph)
+                return None
             return self._submit(standing)
         except TenantClosed:
             raise
@@ -178,31 +273,49 @@ class FlowLineReconciler:
             return None
 
     def _submit(self, standing: _Standing) -> Submission | None:
-        """Submit the visit to the flows it holds, or leave it unsubmitted when the slot's run would refuse it."""
-        assert standing.node.action is not None
-        spec = self._catalogue.get(standing.node.action)
-        if spec is None:
+        """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
+        moved — or refuse it, routing its failure choice, when it cannot name them."""
+        chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
+        generation = self._generation(chunk.chunk_id, node.node_id, epoch)
+        if generation is None:
             return None
-        chunk = standing.chunk
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         resolved = resolve_visit(
             artifacts,
+            action=node.action,
+            spec=self._catalogue.get(node.action) if node.action is not None else None,
             project=LandingProject.read(chunk.project_id, projects=self._projects, links=self._links),
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),
-            lands=spec.lands,
         )
         if isinstance(resolved, VisitRefusal):
+            self._refusals.refuse(
+                chunk,
+                graph,
+                node,
+                epoch=epoch,
+                step=resolved.step,
+                detail=resolved.detail,
+                resolution=resolved.resolution,
+            )
             return None
         return self._flows.submit(
             chunk.chunk_id,
-            node_id=standing.node.node_id,
-            epoch=standing.epoch,
-            generation=0,
-            resources=held_resources(resolved.resolution, LandedRepos.of(artifacts).names, spec),
+            node_id=node.node_id,
+            epoch=epoch,
+            generation=generation,
+            resources=held_resources(resolved.resolution, LandedRepos.of(artifacts).names, resolved.spec),
             at=self._clock.now(),
         )
+
+    def _generation(self, chunk_id: str, node_id: str, epoch: int) -> int | None:
+        """The generation the visit submits at: 0 when never submitted, the next when its own turn closed its newest
+        ``superseded`` — its resources moved — and ``None`` when that one is open or closed otherwise."""
+        latest = self._flows.submission_for_visit(chunk_id, node_id=node_id, epoch=epoch)
+        if latest is None:
+            return 0
+        return latest.generation + 1 if latest.closed == TURN_SUPERSEDED else None
 
     def _close_departed(
         self, open_subs: Sequence[Submission], facts_by_id: Mapping[str, ChunkFacts]
@@ -225,10 +338,14 @@ class FlowLineReconciler:
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:
         """Each named chunk's graph's node names, by ``(chunk_id, node_id)``."""
+        return {key: node.name for key, node in self._nodes(chunk_ids).items()}
+
+    def _nodes(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], Node]:
+        """Each named chunk's graph's nodes, by ``(chunk_id, node_id)``."""
         chunks = self._record.get_many(list(chunk_ids))
         graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
         return {
-            (chunk.chunk_id, node.node_id): node.name
+            (chunk.chunk_id, node.node_id): node
             for chunk in chunks.values()
             if (graph := graphs.get(chunk.graph_id)) is not None
             for node in graph.nodes

@@ -103,6 +103,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
     # the zombie, not the live attempt.
     winner = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=2))
     assert winner.json()["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 

@@ -1414,8 +1414,8 @@ Index(
     "ix_chunk_bounces_tenant_chunk_id_epoch", chunk_bounces.c.tenant_id, chunk_bounces.c.chunk_id, chunk_bounces.c.epoch
 )
 
-# --- The hub-execution serialization slot, one per tenant --------------------
-# A live slot has ``released_at IS NULL``; one at a time per tenant, reclaimable past its TTL.
+# --- The hub-execution slot, deprecated --------------------------------------
+# Hub steps take turns (``hub_turns``); the rows are the history of steps run before turns, read by the trace corpus.
 
 hub_exec_slot = Table(
     "hub_exec_slot",
@@ -1426,6 +1426,7 @@ hub_exec_slot = Table(
     Column("acquired_at", UtcDateTime, nullable=False),
     Column("released_at", UtcDateTime, nullable=True),  # null while live
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_exec_slot_tenant_id"), nullable=False),
+    info={"deprecated": "0.3"},
 )
 Index("ix_hub_exec_slot_tenant_id", hub_exec_slot.c.tenant_id)
 

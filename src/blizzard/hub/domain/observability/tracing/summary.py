@@ -267,13 +267,13 @@ def _intervals(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...], en
     intervals += _pause_intervals(facts.pauses, step.start, end)
     if step.kind is StepKind.HUB:
         node_id = step.position.node_id
-        for slot in facts.hub_exec_slots:
-            if slot.node_id != node_id or not step.start <= slot.acquired_at <= end:
+        held = [(turn.turn_id, turn.node_id, turn.started_at, turn.ended_at) for turn in facts.hub_turns]
+        held += [(slot.slot_id, slot.node_id, slot.acquired_at, slot.released_at) for slot in facts.hub_exec_slots]
+        for held_id, held_node_id, started_at, ended_at in held:
+            if held_node_id != node_id or not step.start <= started_at <= end:
                 continue
-            released = min(slot.released_at, end) if slot.released_at is not None else end
-            intervals.append(
-                Interval(IntervalKind.HUB_EXEC, slot.slot_id, slot.acquired_at, max(released, slot.acquired_at))
-            )
+            finished = min(ended_at, end) if ended_at is not None else end
+            intervals.append(Interval(IntervalKind.HUB_EXEC, held_id, started_at, max(finished, started_at)))
     return intervals
 
 

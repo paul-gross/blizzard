@@ -7,6 +7,7 @@ to the caller through :meth:`FleetRequest.assert_owns`."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated
@@ -18,7 +19,7 @@ from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.foundation.roles import dto
-from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api import chunk_events, node_steps
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
@@ -51,7 +52,8 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
 )
-from blizzard.hub.domain.delivery.flows import PollPolicy
+from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.delivery.flows import Flow, describe_standing
 from blizzard.hub.domain.execution.claim import (
     ClaimConflict,
     ClaimDeniedDependency,
@@ -616,10 +618,8 @@ def hub_advance(
     chunk_id: str,
     services: Services,
 ) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step, taking one pass of that
-    node's action under the tenant's hub-execution slot. The call defers when another chunk holds the
-    slot, the node is ``pending`` inside ``poll_interval``, the chunk is escalated, or it is not parked
-    at a drivable hub node — ``detail`` names which."""
+    """Wake the hub's flow driver for a chunk parked at a hub command node, and answer where its visit stands in the
+    flows it holds — ``detail`` names it. The call never takes a pass itself: ``ran`` is always false."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -632,35 +632,31 @@ def hub_advance(
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=facts.status(), ran=False, detail="not parked at a hub command node"
         )
-    change = chunk_events.ChunkChanged.of(services, chunk_id, prev_status=facts.status().value)
+    services.hub_step_wake.wake()
     epoch = facts.latest_epoch() or 0
-    result = services.hub_node.run(chunk, graph, node, epoch=epoch)
-    facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
-    derived = facts.status()
-    # `key` names the transition this call recorded — absent when the poll deferred or wrote a
-    # poll-attempt fact instead, since there is no fresh `transitions` row to key on.
-    advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
-    change.publish(cause="hub-advanced", key=advance_key)
-    if result is None:
-        pending = facts.hub_node_pending()
-        next_poll_at = PollPolicy.of(node).due_at(pending) if pending is not None else None
-        # A future `next_poll_at` distinguishes "not yet due to poll" from a genuinely busy slot;
-        # a pending node whose interval elapsed but lost the slot race falls through to the busy branch.
-        if facts.open_escalation() is not None:
-            detail = "escalated — awaiting a person"
-        elif next_poll_at is not None and next_poll_at > services.clock.now():
-            detail = f"pending — next poll at {iso_utc(next_poll_at)}"
-        else:
-            detail = "hub-execution slot busy — try again"
-        return HubAdvanceResponse(chunk_id=chunk_id, status=derived, ran=False, detail=detail)
     return HubAdvanceResponse(
         chunk_id=chunk_id,
-        status=derived,
-        ran=True,
-        outcome_choice=result.outcome_choice,
-        to_node_name=result.to_node_name or None,
-        detail=result.detail,
+        status=facts.status(),
+        ran=False,
+        detail=describe_standing(
+            facts,
+            node,
+            services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch),
+            epoch=epoch,
+            now=services.clock.now(),
+            flow_name=_flow_namer(services),
+        ),
     )
+
+
+def _flow_namer(services: TenantServices) -> Callable[[Flow], str]:
+    """A flow as an operator names it: its repository and branch."""
+
+    def name(flow: Flow) -> str:
+        record = services.repository_records.get(RepositoryId(flow.repository_id))
+        return f"{record.fields.repo if record is not None else flow.repository_id}/{flow.branch}"
+
+    return name
 
 
 def _incompatible_denial(

@@ -1,28 +1,30 @@
 """The ``/chunks/{id}/stop`` route over the HTTP surface.
 
 Proves the controller wires stop correctly end to end: 202/404/409, the fact written,
-the route + hub-exec slot released, the events published, and that a stopped chunk
+the route released, waiting flow submissions withdrawn, the events published, and that a stopped chunk
 never re-enters the ready queue."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
 
 import pytest
 
-from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
-from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, ingest, report_lease
+from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.store.internal.flow_store import FlowStore
+from tests.support import (
+    assert_all_timestamps_utc,
+    build_hub,
+    emitted_events,
+    hub_store_connections,
+    ingest,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
-
-
-def _writable(hub) -> IWriteChunkHubExecRepository:  # type: ignore[no-untyped-def]
-    """A test-only cast — see ``tests/test_hub_command_node.py``'s helper of the same name."""
-    return cast(IWriteChunkHubExecRepository, hub.services.chunks.hub_exec)
 
 
 _MERGE_YAML = """
@@ -110,6 +112,7 @@ def _ingest_and_deliver(hub) -> str:  # type: ignore[no-untyped-def]
         },
     )
     assert apply.status_code == 200, apply.text
+    hub.settle_turns()
     return chunk_id
 
 
@@ -254,20 +257,29 @@ def test_stopped_chunk_with_a_stale_live_route_is_still_excluded_from_the_queue(
     assert _peek_ids(hub) == []
 
 
-def test_stop_releases_a_held_fleet_wide_hub_exec_slot(tmp_path: Path) -> None:
-    """Consider-4 from the #118 pre-push review: a ``delivering`` chunk holding the
-    fleet-wide hub-exec slot is stoppable, and the slot release rides the same atomic
-    write as the terminal fact."""
+def test_stop_withdraws_a_waiting_submission_and_leaves_a_mid_turn_one_to_its_turn(tmp_path: Path) -> None:
+    """The withdrawal rides the same atomic write as the terminal fact; a submission whose turn is open keeps its
+    place until that turn's end, so no branch is freed while a pass may still be landing on it."""
     hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [_POINTER])
-    chunks = _writable(hub)
-    slot_id = chunks.acquire_hub_exec_slot(
-        chunk_id, node_id="nd_deliver", at=hub.clock.now(), stale_after=timedelta(minutes=5)
+    waiting_chunk = ingest(hub, [_POINTER])
+    turning_chunk = ingest(hub, [{"source": "default", "ref": "13"}])
+    flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
+    now = hub.clock.now()
+    waiting = flows.submit(
+        waiting_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[FlowResource("re_a", "main")], at=now
     )
-    assert slot_id is not None
-    assert chunks.count_live_hub_exec_slots() == 1
+    turning = flows.submit(
+        turning_chunk, node_id="nd_deliver", epoch=1, generation=0, resources=[FlowResource("re_b", "main")], at=now
+    )
+    assert waiting is not None and turning is not None
+    assert flows.take_turn(turning.submission_id, passed_over=frozenset(), at=now) is not None
 
-    resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
+    for chunk_id in (waiting_chunk, turning_chunk):
+        resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
+        assert resp.status_code == 202, resp.text
 
-    assert resp.status_code == 202, resp.text
-    assert chunks.count_live_hub_exec_slots() == 0
+    withdrawn = flows.submission_for_visit(waiting_chunk, node_id="nd_deliver", epoch=1)
+    assert withdrawn is not None and withdrawn.closed == "stopped"
+    assert [(f.kind, f.outcome) for f in flows.facts_of(waiting.submission_id)][-1] == ("withdrawn", "stopped")
+    mid_turn = flows.submission_for_visit(turning_chunk, node_id="nd_deliver", epoch=1)
+    assert mid_turn is not None and mid_turn.closed is None

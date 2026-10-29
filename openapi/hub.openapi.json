@@ -5029,6 +5029,7 @@
           "bounce-cap",
           "migration-target-unresolvable",
           "hub-action-missing",
+          "hub-action-stuck",
           "unroutable-outcome",
           "forge-auth",
           "forge-config",
@@ -22194,7 +22195,7 @@
     },
     "/api/chunks/{chunk_id}/complete": {
       "post": {
-        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route\nand held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
+        "description": "Manually complete CHUNK, from any non-``done`` status, including ``stopped``.\nRecords the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,\ncloses its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:\ncompleting an already-``done`` chunk is a harmless no-op. 404 only when the chunk is\nunknown.",
         "operationId": "complete_chunk_api_chunks__chunk_id__complete_post",
         "parameters": [
           {
@@ -25472,7 +25473,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/hub-advance": {
       "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step, taking one pass of that\nnode's action under the tenant's hub-execution slot. The call defers when another chunk holds the\nslot, the node is ``pending`` inside ``poll_interval``, the chunk is escalated, or it is not parked\nat a drivable hub node \u2014 ``detail`` names which.",
+        "description": "Wake the hub's flow driver for a chunk parked at a hub command node, and answer where its visit stands in the\nflows it holds \u2014 ``detail`` names it. The call never takes a pass itself: ``ran`` is always false.",
         "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
         "parameters": [
           {

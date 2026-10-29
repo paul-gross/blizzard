@@ -1,8 +1,8 @@
 """Chunk completion — the operator's manual closure of a chunk, reachable from any non-``done``
 status including ``stopped``. Appends the ``chunk.completed`` fact (its precedence over a stop is
-``ChunkFacts.status``'s, ``bzh:facts-not-status``) and releases any live route and held hub-exec
-slot in the same store transaction. Idempotent by no-op: an already-``done`` chunk writes
-no second fact and is never refused."""
+``ChunkFacts.status``'s, ``bzh:facts-not-status``) and releases any live route and closes ``completed``
+each flow submission waiting its turn in the same store transaction. Idempotent by no-op: an already-``done``
+chunk writes no second fact and is never refused."""
 
 from __future__ import annotations
 
@@ -31,14 +31,13 @@ class CompleteService:
         self._exclusive = exclusive
 
     def complete(self, chunk: Chunk, *, by: str) -> int | None:
-        """Append ``chunk.completed`` and release the chunk's live route (and any held
-        hub-exec slot), atomically. Takes the loaded chunk (``bzh:domain-takes-objects``);
-        the already-``done`` guard is re-derived fresh under the row lock
-        (``bzh:store-exclusive-write``), so a concurrent completion cannot land a second
-        fact past a stale read. A no-op on an already-``done`` chunk — returns ``None``;
-        otherwise the fresh ``chunk_completed.id``. Raises :class:`ChunkNotFound` for a
-        chunk gone under the lock. ``at`` is stamped from the injected clock after the row
-        lock is taken, never before it."""
+        """Append ``chunk.completed``, release the chunk's live route, and close ``completed`` each of its
+        flow submissions waiting its turn, atomically; a submission mid-turn closes at its turn's end. Takes the
+        loaded chunk (``bzh:domain-takes-objects``); the already-``done`` guard is re-derived fresh under the row
+        lock (``bzh:store-exclusive-write``), so a concurrent completion cannot land a second fact past a stale read.
+        A no-op on an already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id``. Raises
+        :class:`ChunkNotFound` for a chunk gone under the lock. ``at`` is stamped from the injected clock after the
+        row lock is taken, never before it."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:

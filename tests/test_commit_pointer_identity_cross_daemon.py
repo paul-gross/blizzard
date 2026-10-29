@@ -8,7 +8,7 @@ seams."""
 from __future__ import annotations
 
 import itertools
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,7 +16,6 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.delivery.hub_node import HubRunResult
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -79,12 +78,17 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
     return DeclaredCommits(ctx, lease, store.bindings_for_chunk("ch_1")).verify()
 
 
+@dataclass(frozen=True)
+class _Delivered:
+    outcome_choice: str | None
+
+
 def _deliver(
     tmp_path: Path,
     submitted: list[CompletionArtifact],
     *owners: str,
     forges: tuple[str, ...] = (),
-) -> tuple[HubRunResult, GitHubDouble, str]:
+) -> tuple[_Delivered, GitHubDouble, str]:
     """Record ``submitted`` as the chunk's build artifacts, push each one's branch to the double, and run
     ``deliver``: its result, the double, and the chunk."""
     double = GitHubDouble()
@@ -130,14 +134,7 @@ def _deliver(
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    node = graph.node_by_id(nodes["deliver"])
-    assert node is not None
-    result = hub.services.hub_node.run(chunk, graph, node, epoch=1)
-    assert result is not None
+    result = _Delivered(hub.turn_outcome(chunk_id))
     log = next(
         (
             a.data

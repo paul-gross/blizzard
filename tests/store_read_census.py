@@ -1869,25 +1869,33 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         chunk_hub_exec_released, node_id=deliver_node.node_id, at=_ht(63), stale_after=timedelta(minutes=5)
     )
     assert released_slot is not None
-    write.hub_exec.record_hub_node_poll(chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64))
-    write.hub_exec.record_hub_step_transition(
-        chunk_hub_exec_released,
-        from_node_id=deliver_node.node_id,
-        to_node_id="done",
-        choice_name="success",
-        epoch=1,
-        runner_id="hub",
-        transition_id="tr_hub_exec_1",
-        at=_ht(65),
-        artifacts=[],
-        release_route=True,
-        admission=EpochAdmission.ABOVE,
-    )
+    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+        write.hub_exec.record_hub_node_poll_locked(
+            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64)
+        )
+    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+        write.hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk_hub_exec_released,
+            from_node_id=deliver_node.node_id,
+            to_node_id="done",
+            choice_name="success",
+            epoch=1,
+            runner_id="hub",
+            transition_id="tr_hub_exec_1",
+            at=_ht(65),
+            artifacts=[],
+            release_route=True,
+            admission=EpochAdmission.ABOVE,
+        )
     write.hub_exec.release_hub_exec_slot(released_slot, at=_ht(66))
     write.hub_exec.acquire_hub_exec_slot(
         chunk_hub_exec_live, node_id=deliver_node.node_id, at=_ht(67), stale_after=timedelta(minutes=5)
     )
-    write.hub_exec.record_hub_node_poll(chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, at=_ht(68))
+    with write.exclusive.locked([chunk_hub_exec_live]) as handle:
+        write.hub_exec.record_hub_node_poll_locked(
+            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, at=_ht(68)
+        )
 
     # --- delivery + close intents -----------------------------------------------------------------
     chunk_delivery_a = "ch_hub_delivery_a"
@@ -2418,6 +2426,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
+    (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlows, "visit_standing"): lambda w: w.hub.services.flows.visit_standing(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2

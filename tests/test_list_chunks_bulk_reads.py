@@ -412,6 +412,7 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
     review_id = to_review["next_envelope"]["node"]["node_id"]
     assert report_lease(hub, old_holder_id, epoch=2, seq=1)["applied"] == [1]
     _pass(hub, old_holder_id, review_id, 2, artifacts=[])
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{old_holder_id}").json()["status"] == "done"
 
     hub.clock.advance(timedelta(seconds=1))

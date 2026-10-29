@@ -396,14 +396,14 @@ class HubAdvanceResponse(WireModel):
     chunk_id: str
     #: The chunk's derived status after the call.
     status: Annotated[ChunkStatus | Unrecognized, OPEN]
-    #: Whether this call took a pass of the parked node's action, even one that only recorded a pending poll or an
-    #: escalation; ``False`` means the call deferred — not a failure, and not a promise that nothing changed.
+    #: Always ``False``: the call wakes the hub, which takes the step as a turn on its flows; ``False`` is not a
+    #: failure, and not a promise that nothing changed.
     ran: bool
-    #: The choice the pass answered; ``None`` when there is none.
+    #: Always ``None``: the call takes no pass.
     outcome_choice: str | None = None
-    #: The node the pass routed to; ``None`` when there is none.
+    #: Always ``None``: the call routes nothing.
     to_node_name: str | None = None
-    #: Why the call deferred, or what the pass reported; empty when there is nothing to add.
+    #: Where the visit stands: held by a person, waiting to be submitted, taking its turn, or its place in its flows.
     detail: str = ""
 
 

@@ -104,6 +104,7 @@ def test_completed_at_is_the_terminal_transitions_instant_for_done(tmp_path: Pat
         },
     )
     assert apply.status_code == 200, apply.text
+    hub.settle_turns()
 
     summary = _summary(hub, chunk_id)
     assert summary["status"] == "done"

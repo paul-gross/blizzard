@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
 
@@ -38,8 +39,9 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         hub process serves the store."""
         ...
 
-    def record_hub_step_transition(
+    def record_hub_step_transition_locked(
         self,
+        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         from_node_id: str,
@@ -53,19 +55,25 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         artifacts: list[StoredArtifact],
         release_route: bool,
     ) -> bool:
-        """Record a generic hub command node's exit transition, atomically and idempotently
-        (#65). The hub lease and the transition land in one transaction; ``release_route``
-        is True only when ``to_node_id`` is the reserved terminal. Returns False, writing
-        nothing, on a redelivery replay — the transition's existence at ``(chunk_id,
-        from_node_id, epoch)`` — or when the write fence refuses (``bzh:epoch-fencing``)."""
+        """Record a hub command node's exit transition on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — a turn's verdict, committed with the turn's end. ``release_route`` is True
+        only when ``to_node_id`` is the reserved terminal. Returns False, writing nothing, on a replay — the
+        transition's existence at ``(chunk_id, from_node_id, epoch)`` — or when the write fence refuses
+        (``bzh:epoch-fencing``)."""
         ...
 
-    def record_hub_node_poll(
-        self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
+    def record_hub_node_poll_locked(
+        self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        at: datetime,
+        next_poll_at: datetime | None = None,
     ) -> None:
-        """Append one pending-poll-attempt fact (#66) — never a transition. ``next_poll_at`` is the
-        earliest moment the waiting pass asked to be polled again.
-
-        Append-only: an at-least-once poll attempt is harmless to record twice — it only
-        widens the interval/timeout gating's read — so this carries no idempotency guard."""
+        """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
+        (``bzh:store-exclusive-write``) — a turn's wait, committed with the turn's end, never a transition.
+        ``next_poll_at`` is the earliest moment the waiting pass asked to be polled again. Append-only, with no
+        idempotency guard: a poll attempt recorded twice only widens the gating's read."""
         ...

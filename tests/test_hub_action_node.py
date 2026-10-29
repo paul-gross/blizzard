@@ -1,4 +1,4 @@
-"""A hub node naming an action: its mint rules, its due-ness, and ``hub-advance`` re-driving it."""
+"""A hub node naming an action: its mint rules, its due-ness, and the flow driver re-driving it."""
 
 from __future__ import annotations
 
@@ -184,7 +184,7 @@ nodes:
 
 
 @pytest.mark.component
-def test_hub_advance_re_drives_a_chunk_waiting_at_an_action_node_once_its_hint_passes(tmp_path: Path) -> None:
+def test_the_flow_driver_re_drives_a_chunk_waiting_at_an_action_node_once_its_hint_passes(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     minted = hub.client.post("/api/graphs", json={"definition_yaml": _ACTION_GRAPH_YAML})
     assert minted.status_code == 201, minted.text
@@ -233,14 +233,13 @@ def test_hub_advance_re_drives_a_chunk_waiting_at_an_action_node_once_its_hint_p
             )
         )
 
+    # Short of its hint, a tick takes no turn for it: it waits at its next poll.
     hub.clock.advance(timedelta(seconds=31))
-    waiting = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()
-    assert waiting["ran"] is False
-    assert waiting["detail"] == f"pending — next poll at {iso_utc(hint)}"
+    assert hub.turn_outcome(chunk_id) is None
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["pending"]["next_poll_at"] == iso_utc(hint)
 
     hub.clock.advance(timedelta(minutes=5))
-    assert hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance").json()["ran"] is True
+    assert hub.turn_outcome(chunk_id) is not None
 
 
 _GARDEN_GRAPH_YAML = """

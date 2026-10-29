@@ -465,7 +465,7 @@ def record_hub_marker(
     node = graph.node_by_id(node_id) if graph is not None else None
     node_name = node.name if node is not None else node_id
     try:
-        recorded = services.hub_node.record_marker(
+        recorded = services.hub_markers.record_marker(
             chunk_id,
             node_id=node_id,
             node_name=node_name,
@@ -730,8 +730,8 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
 )
 def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Services) -> ChunkSummary:
     """Manually complete CHUNK, from any non-``done`` status, including ``stopped``.
-    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route
-    and held hub-exec slot, and makes the chunk's work refs eligible for closure. Idempotent:
+    Records the ``chunk_completed`` fact so the chunk derives ``done``, releases any live route,
+    closes its flow submissions waiting their turn, and makes the chunk's work refs eligible for closure. Idempotent:
     completing an already-``done`` chunk is a harmless no-op. 404 only when the chunk is
     unknown."""
     chunk = services.chunks.record.get(chunk_id)

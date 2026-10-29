@@ -993,7 +993,7 @@
           "short_help": "Forcibly release CHUNK from its runner."
         },
         "done": {
-          "help": "Mark CHUNK done from any status, including ``stopped``.\n\nIts runner and any hub-exec slot are released, and its work items become eligible\nfor closure. Completing a done chunk changes nothing.",
+          "help": "Mark CHUNK done from any status, including ``stopped``.\n\nIts runner is released, it leaves the delivery lines it waits in, and its work items\nbecome eligible for closure. Completing a done chunk changes nothing.",
           "params": [
             {
               "hidden": false,

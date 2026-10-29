@@ -62,7 +62,7 @@ with a `ConfigError` naming the variable, from `hub init` and from every later l
 `action_pass_seconds` (default 300) in `blizzard-hub.toml` bounds one pass of a hub node's action, and the environment
 does not override it. A pass that overruns it is cancelled at its next wait, answers `pending` where its action can wait
 and its failure choice where it cannot, and records `hub-action-overran` ([observability.md](./observability.md)); the
-hub lets go of a pass still stuck thirty seconds later, so it never holds the hub's slot past that.
+hub lets go of a pass still stuck thirty seconds later, ending its turn so the branch it holds moves on.
 
 ## Runtime directories
 

@@ -9,16 +9,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Row
+from sqlalchemy import Connection, Row
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import EscalationOpen
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
+    conn_of,
     ephemeral_ids_select,
     fence,
     lock_chunk_row,
@@ -90,26 +92,52 @@ class ChunkEscalationsStore:
             key = result.inserted_primary_key
             return int(key[0]) if key is not None else 0
 
-    def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
-        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
-        ``IWriteChunkEscalationsRepository.record_bounce``."""
-        with self._store.write("record_bounce") as conn:
-            already = conn.execute(
-                self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
-                    (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
-                )
-            ).first()
-            if already is not None:
-                return False
-            conn.execute(
-                self._store.insert(s.chunk_bounces).values(
-                    chunk_id=chunk_id, epoch=epoch, cause=cause, envelope=envelope, recorded_at=at
-                )
-            )
-            return True
-
-    def record_bounce_escalation(
+    def record_bounce_locked(
         self,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        cause: str,
+        envelope: str,
+        at: datetime,
+    ) -> bool:
+        return self._bounce_conn(
+            conn_of(handle), chunk_id, epoch=epoch, admission=admission, cause=cause, envelope=envelope, at=at
+        )
+
+    def _bounce_conn(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        cause: str,
+        envelope: str,
+        at: datetime,
+    ) -> bool:
+        """The bounce's replay guard and insert, behind the fence."""
+        already = conn.execute(
+            self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
+                (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
+            )
+        ).first()
+        if already is not None:
+            return False
+        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+            return False
+        conn.execute(
+            self._store.insert(s.chunk_bounces).values(
+                chunk_id=chunk_id, epoch=epoch, cause=cause, envelope=envelope, recorded_at=at
+            )
+        )
+        return True
+
+    def record_bounce_escalation_locked(
+        self,
+        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         epoch: int,
@@ -120,31 +148,53 @@ class ChunkEscalationsStore:
         cause: str,
         detail: str,
     ) -> BounceEscalationOutcome:
-        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
-        ``IWriteChunkEscalationsRepository.record_bounce_escalation``."""
-        with self._store.write("record_bounce_escalation") as conn:
-            lock_chunk_row(conn, chunk_id)
-            already = conn.execute(
-                self._store.select(s.escalations, s.escalations.c.id).where(
-                    (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
-                )
-            ).first()
-            if already is not None:
-                return BounceEscalationOutcome.ALREADY_RECORDED
-            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-                return BounceEscalationOutcome.REFUSED
-            record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
-            conn.execute(
-                self._store.insert(s.escalations).values(
-                    chunk_id=chunk_id,
-                    epoch=epoch,
-                    takeover_command=takeover_command,
-                    cause=cause,
-                    detail=detail,
-                    recorded_at=at,
-                )
+        return self._bounce_escalation_conn(
+            conn_of(handle),
+            chunk_id,
+            epoch=epoch,
+            admission=admission,
+            runner_id=runner_id,
+            takeover_command=takeover_command,
+            at=at,
+            cause=cause,
+            detail=detail,
+        )
+
+    def _bounce_escalation_conn(
+        self,
+        conn: Connection,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
+    ) -> BounceEscalationOutcome:
+        lock_chunk_row(conn, chunk_id)
+        already = conn.execute(
+            self._store.select(s.escalations, s.escalations.c.id).where(
+                (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
             )
-            return BounceEscalationOutcome.RECORDED
+        ).first()
+        if already is not None:
+            return BounceEscalationOutcome.ALREADY_RECORDED
+        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+            return BounceEscalationOutcome.REFUSED
+        record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
+        conn.execute(
+            self._store.insert(s.escalations).values(
+                chunk_id=chunk_id,
+                epoch=epoch,
+                takeover_command=takeover_command,
+                cause=cause,
+                detail=detail,
+                recorded_at=at,
+            )
+        )
+        return BounceEscalationOutcome.RECORDED
 
     def _newest_escalation_per_chunk(
         self, project: ProjectId | None = None, chunk_id: str | None = None

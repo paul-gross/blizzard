@@ -34,7 +34,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, MergeMethod
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
@@ -179,7 +179,7 @@ def test_a_forge_edit_rebuilds_the_adapter_on_its_new_address(world: _World, loo
 
 def test_an_unchanged_record_hands_out_the_same_adapter(world: _World, loop: ActionLoop) -> None:
     loop.submit(world.registry.changes(world.repository).change(7)).result(5)
-    loop.submit(world.registry.repository_forge(world.repository).changes.change(7)).result(5)
+    loop.submit(world.registry.repository_forge(world.repository, cut_off=TurnCutOff()).changes.change(7)).result(5)
 
     assert len(world.transports) == 1 and len(world.transports[0].requests) == 2
 
@@ -212,7 +212,7 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
 def test_a_role_refuses_an_operation_its_forge_does_not_offer(tmp_path: Path, loop: ActionLoop) -> None:
     offered = frozenset({Capability.CHANGES_READ})
     world = _World(tmp_path, {"github": offered})
-    forge = world.registry.repository_forge(world.repository)
+    forge = world.registry.repository_forge(world.repository, cut_off=TurnCutOff())
 
     assert loop.submit(forge.changes.change(7)).result(5).number == 7
     refusals = [
@@ -236,7 +236,7 @@ def test_a_role_refuses_an_operation_its_forge_does_not_offer(tmp_path: Path, lo
 
 def test_recently_closed_needs_the_read_capability(tmp_path: Path, loop: ActionLoop) -> None:
     world = _World(tmp_path, {"github": frozenset({Capability.REFS_READ})})
-    forge = world.registry.repository_forge(world.repository)
+    forge = world.registry.repository_forge(world.repository, cut_off=TurnCutOff())
 
     with pytest.raises(ForgeCapabilityMissing) as raised:
         loop.submit(forge.changes.recently_closed("main", 5)).result(5)

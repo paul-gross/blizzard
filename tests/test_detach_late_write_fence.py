@@ -134,4 +134,5 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
         json=_completion(build_node_id, epoch=2, runner_id="r2"),
     )
     assert winner.json()["outcome"] == "hub_node_taken", winner.text
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"

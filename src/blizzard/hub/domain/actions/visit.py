@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.repositories import (
     ResolvedRepository,
     resolve_chunk_repositories,
 )
+from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 
@@ -135,8 +136,9 @@ class GitCommits:
 @domain_model
 @dataclass(frozen=True)
 class VisitRepositories:
-    """A visit's commits and the repository records they resolved to, once nothing refused them."""
+    """A visit's action, its commits, and the repository records they resolved to, once nothing refused them."""
 
+    spec: ActionSpec
     git_commits: GitCommits
     resolution: RepositoryResolution
 
@@ -159,15 +161,19 @@ _REFUSED_OUTCOMES = frozenset({RepositoryOutcome.UNRESOLVED, RepositoryOutcome.N
 def resolve_visit(
     artifacts: Iterable[StoredArtifact],
     *,
+    action: str | None,
+    spec: ActionSpec | None,
     project: LandingProject,
     minted_at: datetime,
     repositories: list[ConfiguredRepository],
     forges: Iterable[ConfiguredForge],
-    lands: bool,
 ) -> VisitRepositories | VisitRefusal:
-    """Resolve a visit's repositories, or name why it is refused: commits that never converged, a resolution that
-    refused, or — only for an action that ``lands``, since only a landing writes ``merged/<repo>`` markers — one
-    ``owner/repo`` resolved to two records. The one home of these refusals: every reader resolving a visit asks here."""
+    """Resolve a visit's repositories, or name why it is refused: its ``action`` having no ``spec`` this hub runs,
+    commits that never converged, a resolution that refused, or — only for an action that ``lands``, since only a
+    landing writes ``merged/<repo>`` markers — one ``owner/repo`` resolved to two records. The one home of these
+    refusals: every reader resolving a visit asks here."""
+    if spec is None:
+        return VisitRefusal("action-unavailable", f"no hub action `{action}`")
     try:
         git_commits = GitCommits.of(artifacts)
     except UnconvergedDeliveryError as exc:
@@ -182,9 +188,9 @@ def resolve_visit(
     )
     if resolution.outcome in _REFUSED_OUTCOMES:
         return VisitRefusal(resolution.outcome.value, resolution.detail, resolution)
-    if lands and (ambiguity := _ambiguity(resolution)) is not None:
+    if spec.lands and (ambiguity := _ambiguity(resolution)) is not None:
         return VisitRefusal("repository-ambiguous", ambiguity, resolution)
-    return VisitRepositories(git_commits, resolution)
+    return VisitRepositories(spec, git_commits, resolution)
 
 
 def _ambiguity(resolution: RepositoryResolution) -> str | None:

@@ -819,17 +819,12 @@ def _chunk(hub: HubHarness, *repos: str, forges: tuple[str | None, ...] = ()) ->
                     )
                 )
             )
+    hub.stand_at(chunk_id, "deliver")
     return chunk_id
 
 
-def _take(hub: HubHarness, chunk_id: str):  # type: ignore[no-untyped-def]
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    node = graph.node_by_name("deliver")
-    assert node is not None
-    return hub.services.hub_node.run(chunk, graph, node, epoch=1)
+def _take(hub: HubHarness, chunk_id: str) -> str | None:
+    return hub.turn_outcome(chunk_id)
 
 
 def _landed_rows(hub: HubHarness, chunk_id: str) -> list[tuple[str, str, str | None]]:
@@ -848,7 +843,7 @@ def _artifact(hub: HubHarness, chunk_id: str, name: str) -> str | None:
 
 
 def _record_id(hub: HubHarness, repo: str) -> str:
-    rows = hub.services.hub_node._repositories.list_all(include_retired=True)
+    rows = hub.services.repository_records.list_all(include_retired=True)
     return next(str(r.repository_id) for r in rows if r.fields.repo == repo)
 
 
@@ -857,9 +852,7 @@ def test_land_lands_each_repository_through_its_own_handle_and_records_each_land
     hub = _hub(tmp_path, double)
     chunk_id = _chunk(hub, _WIDGET, _GADGET)
 
-    result = _take(hub, chunk_id)
-
-    assert result is not None and result.outcome_choice == "landed"
+    assert _take(hub, chunk_id) == "landed"
     widget, gadget = _record_id(hub, "widget"), _record_id(hub, "gadget")
     assert sorted(_landed_rows(hub, chunk_id)) == sorted(
         [(_WIDGET, f"merge-{_WIDGET}-1", widget), (_GADGET, f"merge-{_GADGET}-1", gadget)]
@@ -883,9 +876,7 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
     first = next(iter(double.repos))
     double.repos[first].on_merge = stop
 
-    result = _take(hub, chunk_id)
-
-    assert result is not None and result.outcome_choice == "failure"
+    assert _take(hub, chunk_id) == "failure"
     assert [repo for repo, _ in double.named("merge")] == [first]
     assert _artifact(hub, chunk_id, f"merged/{first}") == f"merge-{first}-1"
     assert _landed_rows(hub, chunk_id) == [(first, f"merge-{first}-1", _record_id(hub, first.partition("/")[2]))]
@@ -914,9 +905,7 @@ def test_one_owner_repo_held_for_two_records_fails_before_the_pass(tmp_path: Pat
         hub, _WIDGET, _WIDGET, forges=("https://forge.one/acme/widget.git", "https://forge.two/acme/widget.git")
     )
 
-    result = _take(hub, chunk_id)
-
-    assert result is not None and result.outcome_choice == "failure"
+    assert _take(hub, chunk_id) == "failure"  # refused at submit: it never holds a flow
     log = _artifact(hub, chunk_id, "hub-log.repository-ambiguous") or ""
     assert "resolves to two repository records" in log
     assert double.calls == [] and double.tokens == {}
@@ -933,10 +922,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     hub = build_hub(tmp_path, repositories=_REPOSITORIES, forges=double.forges_offering({"github": narrower}))
     chunk_id = _chunk(hub, _WIDGET)
 
-    result = _take(hub, chunk_id)
-
-    assert result is not None
-    assert (result.outcome_choice, result.wrote_transition) == ("forge-capability-missing", False)
+    assert _take(hub, chunk_id) == "escalated"
     assert double.calls == [] and double.tokens == {}
     with hub.engine.begin() as conn:
         rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
@@ -952,7 +938,7 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
     node = graph.node_by_name("deliver") if graph is not None else None
     assert chunk is not None and node is not None
-    target = hub.services.hub_node._repositories.list_all(include_retired=True)[0]
+    target = hub.services.repository_records.list_all(include_retired=True)[0]
     resolved = ResolvedRepository(
         forge_id=target.fields.forge_id,
         owner=target.fields.owner,
@@ -962,10 +948,9 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     )
     forge = hub.services.forge_records.get(target.fields.forge_id)
     assert forge is not None
-    raced = hub.services.hub_node._escalate_capability_missing(
+    hub.services.turns._router.escalate_capability_missing(
         chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, forge=forge, epoch=1
     )
-    assert "already escalated" in raced.detail
     assert _event_kinds(hub).count("forge-capability-missing") == 1
     names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
     assert names.count("hub-log.forge-capability-missing") == 1

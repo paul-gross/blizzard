@@ -51,14 +51,15 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-lost": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "critical"),
     "owner-unresolvable": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_owner_unresolvable", "critical"),
     "no-acceptable-harness": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
-    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._route", "critical"),
-    "hub-action-overran": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_overrun", "warning"),
-    "turn-interrupted": Recorded("hub/domain/delivery/reconcile.py:FlowLineReconciler.recover_turns", "warning"),
-    "hub-action-missing": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_action_missing", "critical"),
-    "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
-    "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeExecutor._record_refusal_event", "critical"),
+    "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeRouter._unroutable", "critical"),
+    "hub-action-overran": Recorded("hub/delivery/flow_turn.py:TurnRunner._answer", "warning"),
+    "turn-interrupted": Recorded("hub/domain/delivery/reconcile.py:FlowLineReconciler.end_unanswered", "warning"),
+    "flow-landed": Recorded("hub/store/internal/flow_rows.py:write_landing", "info"),
+    "hub-action-missing": Recorded("hub/delivery/hub_node.py:HubNodeRouter.escalate_action_missing", "critical"),
+    "repository-unresolved": Recorded("hub/delivery/hub_node.py:HubNodeRouter._record_refusal_event", "critical"),
+    "repository-not-linked": Recorded("hub/delivery/hub_node.py:HubNodeRouter._record_refusal_event", "critical"),
     "forge-capability-missing": Recorded(
-        "hub/delivery/hub_node.py:HubNodeExecutor._record_capability_missing", "warning"
+        "hub/delivery/hub_node.py:HubNodeRouter.escalate_capability_missing", "warning"
     ),
     "config-old-field-used": Recorded("hub/domain/config/forge_resolution.py:record_old_fields", "warning"),
     "attempt-failed": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "warning"),

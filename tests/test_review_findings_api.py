@@ -1,7 +1,7 @@
 """Review-findings-delivery route — the `record-findings` node's own POST
 (component tier). Seeds a chunk via ``seed_work_item`` (its own resting chunk)
 and posts a ``review-finding-delta`` artifact recorded via
-``services.hub_node.record_marker`` — the ``tests/test_garden_delivery_api.py`` shape,
+``services.hub_markers.record_marker`` — the ``tests/test_garden_delivery_api.py`` shape,
 minus the run-context seam this route does not need."""
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def _seed_chunk(hub: HubHarness) -> str:
 
 
 def _record_artifact(hub: HubHarness, chunk_id: str, *, content: str, epoch: int = _EPOCH) -> None:
-    assert hub.services.hub_node.record_marker(
+    assert hub.services.hub_markers.record_marker(
         chunk_id, node_id=_NODE_ID, node_name="record-findings", epoch=epoch, name=_ARTIFACT_NAME, content=content
     )
 

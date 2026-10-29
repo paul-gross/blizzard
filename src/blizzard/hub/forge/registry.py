@@ -115,14 +115,15 @@ class ForgeRegistry:
     def checks(self, repository: RepositoryId) -> IForgeChecks:
         return _ChecksHandle(self._adapter(repository), self._offered_for(repository))
 
-    def repository_forge(self, repository: RepositoryId) -> RepositoryForge:
-        """The three roles of ``repository``'s forge bundled, as a visit hands them to an action that lands."""
+    def repository_forge(self, repository: RepositoryId, *, cut_off: TurnCutOff) -> RepositoryForge:
+        """The three roles of ``repository``'s forge bundled, as a turn hands them to an action that lands, each
+        refusing once ``cut_off`` is set."""
         adapter, offered = self._adapter(repository), self._offered_for(repository)
         return RepositoryForge(
             repository_id=repository,
-            refs=_RefsHandle(adapter, offered),
-            changes=_ChangesHandle(adapter, offered),
-            checks=_ChecksHandle(adapter, offered),
+            refs=_RefsHandle(adapter, offered, cut_off),
+            changes=_ChangesHandle(adapter, offered, cut_off),
+            checks=_ChecksHandle(adapter, offered, cut_off),
             offered=offered,
         )
 
@@ -168,7 +169,27 @@ class ForgeRegistry:
         )
 
 
-def _require(offered: frozenset[Capability], operation: str) -> None:
+class TurnCutOff:
+    """A turn's flag its forge handles check before every call: set once the turn is cut off, it refuses each call
+    the pass makes afterwards before anything reaches the forge. One per turn, never on a cached adapter."""
+
+    def __init__(self) -> None:
+        self._set = False
+
+    def set(self) -> None:
+        self._set = True
+
+    def is_set(self) -> bool:
+        return self._set
+
+
+class ForgeCallRefused(Exception):
+    """A forge call refused before it was sent: the turn making it was cut off."""
+
+
+def _require(offered: frozenset[Capability], operation: str, cut_off: TurnCutOff | None = None) -> None:
+    if cut_off is not None and cut_off.is_set():
+        raise ForgeCallRefused(f"`{operation}` refused: the turn was cut off")
     capability = OPERATION_CAPABILITY[operation]
     if capability not in offered:
         raise ForgeCapabilityMissing(capability)
@@ -178,33 +199,34 @@ def _require(offered: frozenset[Capability], operation: str) -> None:
 class _RefsHandle:
     adapter: IForgeRefs
     offered: frozenset[Capability]
+    cut_off: TurnCutOff | None = None
 
     async def branch_tip(self, branch: str) -> str | None:
-        _require(self.offered, "branch_tip")
+        _require(self.offered, "branch_tip", self.cut_off)
         return await self.adapter.branch_tip(branch)
 
     async def compare(self, base: str, head: str) -> Comparison:
-        _require(self.offered, "compare")
+        _require(self.offered, "compare", self.cut_off)
         return await self.adapter.compare(base, head)
 
     async def commit_exists(self, revision: str) -> CommitPresence:
-        _require(self.offered, "commit_exists")
+        _require(self.offered, "commit_exists", self.cut_off)
         return await self.adapter.commit_exists(revision)
 
     async def advance_ref(self, branch: str, expected: str, revision: str) -> None:
-        _require(self.offered, "advance_ref")
+        _require(self.offered, "advance_ref", self.cut_off)
         await self.adapter.advance_ref(branch, expected, revision)
 
     async def merge_into(self, branch: str, revision: str, message: str) -> str | None:
-        _require(self.offered, "merge_into")
+        _require(self.offered, "merge_into", self.cut_off)
         return await self.adapter.merge_into(branch, revision, message)
 
     async def create_ref(self, branch: str, revision: str) -> None:
-        _require(self.offered, "create_ref")
+        _require(self.offered, "create_ref", self.cut_off)
         await self.adapter.create_ref(branch, revision)
 
     async def delete_ref(self, branch: str) -> None:
-        _require(self.offered, "delete_ref")
+        _require(self.offered, "delete_ref", self.cut_off)
         await self.adapter.delete_ref(branch)
 
 
@@ -212,29 +234,30 @@ class _RefsHandle:
 class _ChangesHandle:
     adapter: IForgeChanges
     offered: frozenset[Capability]
+    cut_off: TurnCutOff | None = None
 
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
-        _require(self.offered, "changes")
+        _require(self.offered, "changes", self.cut_off)
         return await self.adapter.changes(state, base, head)
 
     async def recently_closed(self, base: str, limit: int) -> tuple[Change, ...]:
-        _require(self.offered, "recently_closed")
+        _require(self.offered, "recently_closed", self.cut_off)
         return await self.adapter.recently_closed(base, limit)
 
     async def open_change(self, head: str, base: str, title: str, body: str) -> Change:
-        _require(self.offered, "open_change")
+        _require(self.offered, "open_change", self.cut_off)
         return await self.adapter.open_change(head, base, title, body)
 
     async def change(self, number: int) -> Change:
-        _require(self.offered, "change")
+        _require(self.offered, "change", self.cut_off)
         return await self.adapter.change(number)
 
     async def update_from_base(self, number: int, expected_head: str) -> Update:
-        _require(self.offered, "update_from_base")
+        _require(self.offered, "update_from_base", self.cut_off)
         return await self.adapter.update_from_base(number, expected_head)
 
     async def merge(self, number: int, expected_head: str, method: MergeMethod, message: str) -> str:
-        _require(self.offered, f"merge.{method}")
+        _require(self.offered, f"merge.{method}", self.cut_off)
         return await self.adapter.merge(number, expected_head, method, message)
 
 
@@ -242,17 +265,18 @@ class _ChangesHandle:
 class _ChecksHandle:
     adapter: IForgeChecks
     offered: frozenset[Capability]
+    cut_off: TurnCutOff | None = None
 
     async def checks(self, ref: str) -> tuple[Check, ...]:
-        _require(self.offered, "checks")
+        _require(self.offered, "checks", self.cut_off)
         return await self.adapter.checks(ref)
 
     async def change_checks(self, number: int) -> tuple[Check, ...]:
-        _require(self.offered, "change_checks")
+        _require(self.offered, "change_checks", self.cut_off)
         return await self.adapter.change_checks(number)
 
     async def rerun_check(self, id: str) -> bool:
-        _require(self.offered, "rerun_check")
+        _require(self.offered, "rerun_check", self.cut_off)
         return await self.adapter.rerun_check(id)
 
 

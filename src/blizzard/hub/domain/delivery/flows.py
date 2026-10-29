@@ -7,7 +7,7 @@ once it leaves the node. Whether a submission is open, or a flow busy, is derive
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
@@ -15,6 +15,7 @@ from typing import Literal
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.graph.actions import ActionSpec
@@ -26,6 +27,14 @@ type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
 type FlowFactKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
+#: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
+TURN_CUT_OFF = "cut-off"
+#: The outcome of a turn that handed its chunk to a person — never a verdict.
+TURN_ESCALATED = "escalated"
+#: The outcome of a turn that found its visit's resources moved under it, or its visit already left.
+TURN_SUPERSEDED = "superseded"
+#: How many turns in a row cut off send a visit to a person on its next.
+STUCK_AFTER = 3
 
 # Pending-poll cadence defaults, overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
@@ -121,6 +130,92 @@ class TurnEvent:
 
 @domain_model
 @dataclass(frozen=True)
+class FlowLanding:
+    """A merge a turn recorded, as its flow's record says it: the ``landed`` fact on ``flow`` for ``submission_id``
+    and ``chunk_id``, and ``event``, the ``flow-landed`` row written beside it."""
+
+    flow: Flow
+    submission_id: str
+    chunk_id: str
+    event: TurnEvent
+
+    @classmethod
+    def of(
+        cls, flow: Flow, submission: Submission, *, project_id: str | None, node_name: str, revision: str
+    ) -> FlowLanding:
+        """The landing of ``submission``'s chunk on ``flow`` at ``revision``. ``members`` lists every chunk the landing
+        carried — one, until a landing carries several."""
+        chunk_id = submission.chunk_id
+        return cls(
+            flow=flow,
+            submission_id=submission.submission_id,
+            chunk_id=chunk_id,
+            event=TurnEvent(
+                kind="flow-landed",
+                chunk_id=chunk_id,
+                node_name=node_name,
+                message=f"landed on {flow.branch} at {revision}",
+                detail={
+                    "flow_id": flow.flow_id,
+                    "resource": flow.resource,
+                    "repository_id": flow.repository_id,
+                    "branch": flow.branch,
+                    "revision": revision,
+                    "chunk_id": chunk_id,
+                    "project_id": project_id,
+                    "members": [{"chunk_id": chunk_id, "project_id": project_id}],
+                },
+            ),
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class LandingWrite:
+    """What recording a turn's merge did: whether the fence would have refused it, and the ``flow-landed`` event row
+    it wrote — ``None`` for a replay that found the marker written."""
+
+    refused: bool
+    event_id: int | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class AdmittedTurn:
+    """A turn the tick started, and the submission it is a turn of."""
+
+    turn: Turn
+    submission: Submission
+
+
+def is_stuck(outcomes: Sequence[str]) -> bool:
+    """Whether a visit whose ended turns answered ``outcomes``, newest first, is stuck: its :data:`STUCK_AFTER` newest
+    turns not ``interrupted`` all ended ``cut-off``. An interrupted turn neither counts nor resets the run."""
+    counted = [outcome for outcome in outcomes if outcome != TURN_INTERRUPTED][:STUCK_AFTER]
+    return len(counted) == STUCK_AFTER and all(outcome == TURN_CUT_OFF for outcome in counted)
+
+
+def resources_moved(held: Sequence[FlowResource], resolved: Sequence[FlowResource], submitted: Sequence[str]) -> bool:
+    """Whether a visit's resources moved under its submission: a resource still to land (``held``) it does not hold,
+    or one it holds (``submitted``) the visit no longer resolves to (``resolved``, landed or not). A repository landed
+    earlier in the visit keeps its flow until the verdict."""
+    holds = set(submitted)
+    return not {r.resource for r in held} <= holds or not holds <= {r.resource for r in resolved}
+
+
+@domain_model
+@dataclass(frozen=True)
+class VisitStanding:
+    """Where one visit's newest submission stands: ``turning`` while it has an open turn, and ``ahead`` the number of
+    open submissions that arrived before it on each flow it holds, in ``submission.flows`` order."""
+
+    submission: Submission
+    turning: bool
+    ahead: tuple[int, ...]
+
+
+@domain_model
+@dataclass(frozen=True)
 class PollPolicy:
     """A hub command node's pending-poll cadence and give-up bound."""
 
@@ -150,6 +245,41 @@ class PollPolicy:
         return max(due, row.next_poll_at) if row.next_poll_at is not None else due
 
 
+def describe_standing(
+    facts: ChunkFacts,
+    node: Node,
+    standing: VisitStanding | None,
+    *,
+    epoch: int,
+    now: datetime,
+    flow_name: Callable[[Flow], str],
+) -> str:
+    """Where a chunk's visit to ``node`` at ``epoch`` stands, as an operator reads it: held by a person, waiting to be
+    submitted, taking its turn, waiting on its next poll, or its place on each flow it holds, each named by
+    ``flow_name``."""
+    if facts.open_escalation() is not None:
+        return "escalated — awaiting a person"
+    if facts.status() is not ChunkStatus.DELIVERING:
+        return f"{facts.status().value} — takes no turn until it is delivering"
+    if standing is None:
+        return "waiting to be submitted to its flows"
+    names = [flow_name(flow) for flow in standing.submission.flows]
+    if standing.turning:
+        return f"landing on {', '.join(names)}" if names else "taking its turn"
+    polls = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch)
+    due = PollPolicy.of(node).due_at(polls[-1]) if polls else None
+    if due is not None and due > now:
+        return f"pending — next poll at {iso_utc(due)}"
+    if not names:
+        return "next to take its turn"
+    return ", ".join(f"{_ordinal(ahead + 1)} on {name}" for name, ahead in zip(names, standing.ahead, strict=True))
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 def held_resources(
     resolution: RepositoryResolution, landed: frozenset[str], spec: ActionSpec
 ) -> tuple[FlowResource, ...]:
@@ -173,7 +303,12 @@ def _stands_at(facts: ChunkFacts, submission: Submission) -> bool:
 
 def is_current(facts: ChunkFacts, submission: Submission) -> bool:
     """The submission's visit is the chunk's current one: it stands at the node, at the submission's epoch."""
-    return _stands_at(facts, submission) and facts.latest_epoch() == submission.epoch
+    return _stands_at(facts, submission) and (facts.latest_epoch() or 0) == submission.epoch
+
+
+def may_pass(facts: ChunkFacts, submission: Submission) -> bool:
+    """The submission's visit may take a pass: its chunk is ``delivering`` and the visit is its current one."""
+    return facts.status() is ChunkStatus.DELIVERING and is_current(facts, submission)
 
 
 def held_by_a_person(facts: ChunkFacts, submission: Submission) -> bool:
@@ -233,7 +368,7 @@ class FlowLine:
         """Its chunk is ``delivering``, its visit is current and has no open turn, and its next poll is due: no
         poll row for the visit, or ``PollPolicy.due_at`` of the newest one has passed."""
         facts = self.facts[submission.chunk_id]
-        if facts.status() is not ChunkStatus.DELIVERING or not is_current(facts, submission):
+        if not may_pass(facts, submission):
             return False
         if submission.submission_id in self.turning:
             return False

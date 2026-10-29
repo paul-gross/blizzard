@@ -328,12 +328,12 @@ def test_cross_graph_completion_enforces_source_outputs_before_repin(tmp_path: P
         assert completed.json()["outcome"] == "migrated", completed.text
 
 
-def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retains_the_route(
+def test_a_cross_graph_choice_migrating_onto_a_hub_node_takes_its_turn_and_retains_the_route(
     tmp_path: Path,
 ) -> None:
     """A migration whose landing node is hub-executed must not release the
     route the way a runner-landing migration does — releasing it would leave the landed
-    hub node never driven (no holding runner left to poll `hub-advance`)."""
+    hub node with no held route for its turn to run under."""
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
     triage_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "triage")
@@ -342,6 +342,7 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["outcome"] == "hub_node_taken"  # not "migrated" — the runner keeps holding
+    hub.settle_turns()
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == triage_id  # still re-pinned to the target graph

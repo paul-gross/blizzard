@@ -1,17 +1,14 @@
-"""One hub action pass, driven from the caller's thread: submitted to the :class:`ActionLoop`, its effects
-drained and written here one at a time, each released back to the action once durable.
+"""One hub action pass, driven from the caller's event loop: submitted to the :class:`ActionLoop`, its effects
+crossing back to the caller's loop and written there one at a time, each released back to the action once durable.
 
-The pass is bounded twice. Cancellation at its next ``await`` after ``bound`` is the pass's own bound;
-the caller's is a deadline ``grace`` later, so a pass stuck in synchronous work, or a loop that stops
-answering, never holds the caller past it: reaching it closes the sink and cancels the task. An effect
-already being written finishes first, so the deadline never splits a durable write."""
+The pass is bounded twice. Cancellation at its next ``await`` after ``bound`` is the pass's own bound; the caller's is
+a deadline ``grace`` later, so a pass stuck in synchronous work never holds the caller past it. An effect already being
+written finishes before the pass is let go, so the deadline never splits a durable write."""
 
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
-import queue
-import time
+import contextlib
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -58,7 +55,7 @@ class _Request:
     loop: asyncio.AbstractEventLoop
 
     def settle(self, result: EffectResult) -> None:
-        """Release the waiting action with ``result``, from the caller's thread."""
+        """Release the waiting action with ``result``, from the caller's loop."""
         self.loop.call_soon_threadsafe(_settle, self.future, result)
 
 
@@ -66,11 +63,12 @@ _FINISHED = object()
 
 
 class _QueuedEffectSink:
-    """The sink a pass records through: each effect crosses to the caller's queue, and the action waits on
-    the result the caller settles. Once closed, a record raises ``CancelledError`` and writes nothing."""
+    """The sink a pass records through: each effect crosses to the caller's loop, and the action waits on the result
+    the caller settles. Once closed, a record raises ``CancelledError`` and writes nothing."""
 
-    def __init__(self, requests: queue.SimpleQueue[object]) -> None:
+    def __init__(self, requests: asyncio.Queue[object], caller: asyncio.AbstractEventLoop) -> None:
         self._requests = requests
+        self._caller = caller
         self._closed = False
 
     async def record(self, effect: Effect) -> EffectResult:
@@ -78,8 +76,13 @@ class _QueuedEffectSink:
             raise asyncio.CancelledError
         loop = asyncio.get_running_loop()
         future: asyncio.Future[EffectResult] = loop.create_future()
-        self._requests.put(_Request(effect, future, loop))
+        self._caller.call_soon_threadsafe(self._requests.put_nowait, _Request(effect, future, loop))
         return await future
+
+    def finish(self) -> None:
+        """Tell the caller the pass has ended; a caller whose loop has already closed hears nothing."""
+        with contextlib.suppress(RuntimeError):
+            self._caller.call_soon_threadsafe(self._requests.put_nowait, _FINISHED)
 
     def close(self) -> None:
         self._closed = True
@@ -88,11 +91,13 @@ class _QueuedEffectSink:
 @domain_model
 @dataclass(frozen=True)
 class PassRun:
-    """How a pass ended: answered, overran its bound, or raised (``traceback`` set)."""
+    """How a pass ended: answered, overran its bound, raised (``traceback`` set), or was let go at the caller's
+    deadline (``cut_off``)."""
 
     answer: Pass | None = None
     overran: bool = False
     traceback: str | None = None
+    cut_off: bool = False
 
 
 def _settle(future: asyncio.Future[EffectResult], result: EffectResult) -> None:
@@ -101,60 +106,59 @@ def _settle(future: asyncio.Future[EffectResult], result: EffectResult) -> None:
 
 
 class ActionPassDriver:
-    """Takes one pass of an action at a time per caller, on the shared :class:`ActionLoop`."""
+    """Takes passes on the shared :class:`ActionLoop`, each driven by its caller's own task."""
 
     def __init__(self, loop: ActionLoop, bound: PassBound) -> None:
         self._loop = loop
         self._bound = bound
 
-    def take(
-        self, action: IHubAction, visit: Visit, forges: VisitForges, write: Callable[[Effect], EffectResult]
-    ) -> PassRun:
-        """Run ``action``'s pass over ``visit``, writing each effect it records through ``write`` on this
-        thread, and answer how it ended."""
-        requests: queue.SimpleQueue[object] = queue.SimpleQueue()
-        sink = _QueuedEffectSink(requests)
-        deadline = time.monotonic() + self._bound.deadline_seconds()
-        future = self._loop.submit(self._pass(action, visit, forges, sink, requests))
-        try:
-            while (item := self._next(requests, deadline)) is not _FINISHED:
-                if item is None:
-                    return self._let_go(sink, future)
-                assert isinstance(item, _Request)
-                _CP_ACTION_AFTER_EFFECT_BEFORE_WRITE.reached()
-                result = write(item.effect)
-                _CP_ACTION_AFTER_WRITE_BEFORE_RESUME.reached()
-                item.settle(result)
-            return future.result(timeout=max(deadline - time.monotonic(), 0))
-        except TimeoutError:
-            return self._let_go(sink, future)
-        except BaseException:
-            sink.close()
-            future.cancel()
-            raise
+    @property
+    def bound(self) -> PassBound:
+        return self._bound
 
-    @staticmethod
-    def _next(requests: queue.SimpleQueue[object], deadline: float) -> object | None:
-        """The pass's next request or its end, or ``None`` once the caller's deadline passes."""
-        try:
-            return requests.get(timeout=max(deadline - time.monotonic(), 0))
-        except queue.Empty:
-            return None
-
-    @staticmethod
-    def _let_go(sink: _QueuedEffectSink, future: concurrent.futures.Future[PassRun]) -> PassRun:
-        sink.close()
-        future.cancel()
-        return PassRun(overran=True)
-
-    async def _pass(
+    async def drive(
         self,
         action: IHubAction,
         visit: Visit,
         forges: VisitForges,
-        sink: _QueuedEffectSink,
-        requests: queue.SimpleQueue[object],
+        write: Callable[[Effect], EffectResult],
+        *,
+        cut_off: Callable[[], None],
     ) -> PassRun:
+        """Run ``action``'s pass over ``visit``, writing each effect it records through ``write`` off this loop, and
+        answer how it ended. At the deadline: ``cut_off``, close the sink, await the write in flight, cancel the pass —
+        in that order — and answer ``cut_off``."""
+        caller = asyncio.get_running_loop()
+        requests: asyncio.Queue[object] = asyncio.Queue()
+        sink = _QueuedEffectSink(requests, caller)
+        deadline = asyncio.timeout(self._bound.deadline_seconds())
+        future = self._loop.submit(self._pass(action, visit, forges, sink))
+        writing: asyncio.Future[EffectResult] | None = None
+        try:
+            async with deadline:
+                while (item := await requests.get()) is not _FINISHED:
+                    assert isinstance(item, _Request)
+                    _CP_ACTION_AFTER_EFFECT_BEFORE_WRITE.reached()
+                    writing = asyncio.ensure_future(asyncio.to_thread(write, item.effect))
+                    result = await asyncio.shield(writing)
+                    writing = None
+                    _CP_ACTION_AFTER_WRITE_BEFORE_RESUME.reached()
+                    item.settle(result)
+                return await asyncio.wrap_future(future)
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            cut_off()
+            sink.close()
+            if writing is not None:
+                await asyncio.wait([writing])
+            future.cancel()
+            return PassRun(cut_off=True)
+        finally:
+            sink.close()
+            future.cancel()
+
+    async def _pass(self, action: IHubAction, visit: Visit, forges: VisitForges, sink: _QueuedEffectSink) -> PassRun:
         """On the loop: take the pass under its bound. Each forge's client belongs to its adapter's cache entry,
         never to the pass."""
         bound = asyncio.timeout(self._bound.seconds)
@@ -168,4 +172,4 @@ class ActionPassDriver:
         except Exception:
             return PassRun(traceback=traceback.format_exc())
         finally:
-            requests.put(_FINISHED)
+            sink.finish()

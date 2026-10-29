@@ -171,6 +171,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
 
     first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert first.json()["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1
@@ -179,6 +180,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     # returns the original outcome — no second transition, no re-run.
     replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1  # still exactly one transition
@@ -259,32 +261,32 @@ def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Pat
 
 
 def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_path: Path) -> None:
-    """The first completion's answer is withheld while its hub node runs: the runner's re-submit
-    answers ``hub_node_taken`` and ``hub-advance`` answers ``ran=false`` — neither starts a pass —
-    and the node's exit lands exactly once."""
+    """While the ``deliver`` turn's ``land`` pass runs, the runner's re-submit answers ``hub_node_taken``,
+    ``hub-advance`` answers ``ran=false``, and another driver tick starts no second turn — so one pass runs and
+    the node's exit lands exactly once."""
     entered = threading.Event()
     release = threading.Event()
     hub, double = _slow_land_hub(tmp_path, entered, release)
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    first: dict = {}
-    thread = threading.Thread(
-        target=lambda: first.update(
-            r=hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
-        )
-    )
+    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    assert first.json()["outcome"] == "hub_node_taken"
+    thread = threading.Thread(target=hub.take_turns)
     thread.start()
-    assert entered.wait(timeout=5), "the hub node never started"
+    assert entered.wait(timeout=5), "the deliver turn never started"
 
     replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"
     advance = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert advance.json()["ran"] is False
+    (tick,) = hub.take_turns()
+    assert [t for t in tick.started if t.submission.chunk_id == chunk_id] == []
     assert _passes_started(double) == 1
 
     release.set()
     thread.join(timeout=5)
-    assert first["r"].json()["outcome"] == "hub_node_taken"
+    assert not thread.is_alive()
+    hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
     assert len([t for t in detail["history"] if t["from_node_name"] == "deliver"]) == 1
@@ -292,27 +294,26 @@ def test_replay_and_hub_advance_during_a_slow_hub_node_start_no_second_run(tmp_p
 
     late = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert late.json()["outcome"] == "hub_node_taken"
+    hub.settle_turns()
     assert _passes_started(double) == 1
 
 
 def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flushes_the_facts_behind_it(
     tmp_path: Path,
 ) -> None:
-    """The runner's buffered completion is re-submitted while its hub node is still running: the
-    drain acks the ``hub_node_taken`` answer and drains the generic fact queued behind it, before
-    the node finishes."""
+    """The runner's buffered completion is re-submitted while its ``deliver`` turn is still running: the
+    drain acks the ``hub_node_taken`` answer and drains the generic fact queued behind it, before the turn
+    finishes."""
     entered = threading.Event()
     release = threading.Event()
     hub, double = _slow_land_hub(tmp_path, entered, release)
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
-    thread = threading.Thread(
-        target=lambda: hub.client.post(
-            f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1)
-        )
-    )
+    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    assert first.json()["outcome"] == "hub_node_taken"
+    thread = threading.Thread(target=hub.take_turns)
     thread.start()
-    assert entered.wait(timeout=5), "the hub node never started"
+    assert entered.wait(timeout=5), "the deliver turn never started"
 
     now = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
     store = make_store("sqlite://")
@@ -355,5 +356,7 @@ def test_runner_drain_acks_a_replayed_completion_during_a_slow_hub_node_and_flus
 
     release.set()
     thread.join(timeout=5)
+    assert not thread.is_alive()
+    hub.settle_turns()
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert len([t for t in detail["history"] if t["from_node_name"] == "deliver"]) == 1

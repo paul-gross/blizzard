@@ -771,8 +771,8 @@ def test_validate_delivery_asks_for_exited_status_once_and_only_of_cited_absent_
 
 
 def test_validate_delivery_resolves_each_distinct_commit_at_most_once() -> None:
-    """The resolver is a network call holding the fleet-wide hub-exec slot, so a delta
-    citing one commit across many findings must spend exactly one call on it."""
+    """The resolver is a network call made inside the delivering turn, so a delta citing one
+    commit across many findings must spend exactly one call on it."""
     calls: list[tuple[str, str]] = []
 
     def _stub(repo: str, sha: str) -> CommitResolution:

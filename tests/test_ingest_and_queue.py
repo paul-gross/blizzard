@@ -279,6 +279,7 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     # Report the review node-step's fresh lease so the hub's fence tracks it.
     assert report_lease(hub, chunk_id, epoch=2, seq=1)["applied"] == [1]
     _pass(hub, chunk_id, review_id, 2, artifacts=[])
+    hub.settle_turns()
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
     # Re-ingesting the same pointer once every prior holder is terminal is legal.

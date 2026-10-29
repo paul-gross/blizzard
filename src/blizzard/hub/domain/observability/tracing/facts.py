@@ -151,8 +151,19 @@ class TracedPause:
 
 @domain_model
 @dataclass(frozen=True)
+class TracedHubTurn:
+    """A ``hub_turns`` row with the node of the visit its submission holds — one hub step's turn on its flows."""
+
+    turn_id: str
+    node_id: str
+    started_at: datetime
+    ended_at: datetime | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
 class TracedHubExecSlot:
-    """A ``hub_exec_slot`` row — keyed by node, with no epoch."""
+    """A ``hub_exec_slot`` row — keyed by node, with no epoch. Read for the history the slot recorded before turns."""
 
     slot_id: str
     node_id: str
@@ -234,6 +245,7 @@ class StepFacts:
     chunk_completed: tuple[TracedChunkCompletion, ...] = ()
     questions: tuple[TracedQuestion, ...] = ()
     pauses: tuple[TracedPause, ...] = ()
+    hub_turns: tuple[TracedHubTurn, ...] = ()
     hub_exec_slots: tuple[TracedHubExecSlot, ...] = ()
     hub_polls: tuple[TracedHubPoll, ...] = ()
     bounces: tuple[TracedBounce, ...] = ()
