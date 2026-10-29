@@ -31,7 +31,7 @@ from blizzard.runner.hub.served_projects import (
     served_projects_status,
 )
 from blizzard.runner.leases.asks import IReadAskRepository, OpenAsk
-from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.escalations import EscalationClosure, IReadEscalationRepository, ParkedEscalation
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.model import SlotBinding, binding_usage, free_slots, open_lease_count
@@ -258,6 +258,7 @@ class EscalationView:
     harness_version: str | None = None
     wrapped_takeover_command: str | None = None
     cause: str | None = None
+    closure: EscalationClosure | None = None
 
 
 @domain_model
@@ -386,9 +387,16 @@ class RunnerStatusService:
         ]
 
     def escalations(self) -> list[EscalationView]:
+        return self._escalation_views(self._escalations.open_escalations())
+
+    def closed_escalations(self, limit: int) -> list[EscalationView]:
+        """The newest ``limit`` escalations the hub ended, newest closure first."""
+        return self._escalation_views(self._escalations.closed_escalations(limit))
+
+    def _escalation_views(self, escalations: list[ParkedEscalation]) -> list[EscalationView]:
         held_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
         views: list[EscalationView] = []
-        for escalation in self._escalations.open_escalations():
+        for escalation in escalations:
             session = escalation.session
             harness = None  # pragma: no mutate (equivalent: read only with a session; none resumes to "" first)
             if session is not None:
@@ -428,6 +436,7 @@ class RunnerStatusService:
                     harness_version=escalation.harness_version,
                     wrapped_takeover_command=commands.wrapped,
                     cause=escalation.cause,
+                    closure=escalation.closure,
                 )
             )
         return views

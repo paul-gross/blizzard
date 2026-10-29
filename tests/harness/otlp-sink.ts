@@ -101,6 +101,8 @@ export interface OtlpSink {
   endpoint: string;
   /** Every span exported so far, in arrival order. */
   spans(): ReceivedSpan[];
+  /** The connections open on the sink now; a hung sink holds every one it accepted until the exporter drops it. */
+  openConnections(): number;
   close(): Promise<void>;
 }
 
@@ -118,11 +120,16 @@ function bodyOf(request: http.IncomingMessage): Promise<Buffer> {
 
 /**
  * Accepts trace, metric, and log exports with `200`, anything else with `404`. Only trace exports are decoded; the
- * other two are acknowledged and dropped.
+ * other two are acknowledged and dropped. `hang` accepts each connection and reads each request, and never answers.
  */
-export async function startOtlpSink(): Promise<OtlpSink> {
+export async function startOtlpSink(options: { hang?: boolean } = {}): Promise<OtlpSink> {
   const received: ReceivedSpan[] = [];
+  let open = 0;
   const server = http.createServer((request, response) => {
+    if (options.hang === true) {
+      request.resume();
+      return;
+    }
     const path = (request.url ?? '').split('?')[0] ?? '';
     if (request.method !== 'POST' || !EXPORT_PATHS.includes(path)) {
       request.resume();
@@ -141,6 +148,12 @@ export async function startOtlpSink(): Promise<OtlpSink> {
       () => response.writeHead(400, { 'content-length': '0' }).end(),
     );
   });
+  // Node answers a request still unanswered at `requestTimeout` with a 408; a hung sink never answers at all.
+  if (options.hang === true) server.requestTimeout = 0;
+  server.on('connection', (socket) => {
+    open++;
+    socket.once('close', () => open--);
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
@@ -149,6 +162,7 @@ export async function startOtlpSink(): Promise<OtlpSink> {
   return {
     endpoint: `http://127.0.0.1:${port}`,
     spans: () => [...received],
+    openConnections: () => open,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());

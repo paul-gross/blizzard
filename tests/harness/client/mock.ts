@@ -1,5 +1,6 @@
 // The mock fleet publishes no OpenAPI document, so the few lever and control shapes the harness uses are typed here
 // by hand, and only those.
+import type { Json } from './engine';
 import type { RouteClaimResponse } from './wire/hub/types.gen';
 
 /** What the mock forge answers `POST /_repos` with. */
@@ -58,14 +59,20 @@ export interface MockRunnerLeverListing {
   levers: string[];
 }
 
-export type MockDriveAnswer<V extends string> = V extends 'register' ? MockDriveRegister : V extends 'claim' | 'claim-next' ? MockDriveClaim : V extends 'complete' ? MockDriveComplete : V extends 'peek' ? MockDrivePeek : V extends 'report-external-usage' | 'report-external-usage-miss' ? MockDriveUsageReport : import('./engine').Json;
+export type MockDriveAnswer<V extends string> = V extends 'register' ? MockDriveRegister : V extends 'claim' | 'claim-next' ? MockDriveClaim : V extends 'complete' ? MockDriveComplete : V extends 'peek' ? MockDrivePeek : V extends 'report-external-usage' | 'report-external-usage-miss' ? MockDriveUsageReport : Json;
 
 /** One node of a seeded chunk's graph; only what a runner-tier test sets. */
 export interface MockNodeSpec {
   executor?: string;
+  session?: string;
   prompt?: string;
   judged_by?: string;
+  judgement_prompt?: string;
+  /** How many retries the node grants before its attempt escalates. */
+  retries_max?: number;
   choices?: { name: string; to: string; description?: string }[];
+  /** A hub-executed node's choices, by name. */
+  judgement?: { choices: Record<string, { description: string; to: string }> };
   produces?: string[];
 }
 
@@ -76,6 +83,10 @@ export interface MockChunkSpec {
   graph_id?: string;
   entry: string;
   nodes: Record<string, MockNodeSpec>;
+  /** The chunk's `{source, ref}` work refs. */
+  work_refs?: { source: string; ref: string }[];
+  /** Graph-scoped artifacts baked into the chunk's mint; `asset` is the one kind the hub synthesizes. */
+  graph_artifacts?: { name: string; kind?: 'asset'; content: string }[];
   status?: 'ready' | 'not_ready' | 'paused' | 'needs_human' | 'delivering' | 'done' | 'stopped';
 }
 
@@ -125,4 +136,6 @@ export interface MockCapturedRequest {
   method: string;
   path: string;
   headers: Record<string, string>;
+  /** The parsed JSON body; `null` when the body was empty or not JSON. */
+  body: Json;
 }

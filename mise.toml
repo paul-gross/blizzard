@@ -48,7 +48,7 @@ description = "Run the winter-binding tier (blizzard:winter-binding) — the win
 run = "BLIZZARD_WINTER_BINDING=1 uv run pytest -m winter_binding tests/winter/"
 
 [tasks.service-test]
-description = "Run the service tier's pytest half — the cases whose subject is Python itself; the Playwright half is `mise run playwright`. A running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope). The hub against the mock runner + mock forge runs in the Playwright half. sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
+description = "Run the service tier's pytest half — the cases whose subject is Python itself; the Playwright half is `mise run playwright`. A running daemon's HTTP API exercised from outside with the counterpart mocked. The runner's own mock-hub scenarios (unreachable→buffered, dropped-ack→idempotent, stale-envelope) and the hub against the mock runner + mock forge run in the Playwright half. sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"
 
 [tasks.playwright]

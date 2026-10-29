@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ESCALATION_TRANSITIONS",
+    "EscalationClosure",
     "EscalationState",
     "EscalationVerb",
     "IReadEscalationRepository",
@@ -51,6 +52,16 @@ ESCALATION_TRANSITIONS: Mapping[EscalationState, frozenset[EscalationVerb]] = Ma
 
 @domain_model
 @dataclass(frozen=True)
+class EscalationClosure:
+    """The hub having ended an escalated chunk — the ``stopped`` or ``done`` status observed,
+    and the instant the runner recorded it, distinct from the escalating lease's own close."""
+
+    reason: str
+    closed_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
 class ParkedEscalation:
     """A closed-``escalated`` lease not yet superseded.
 
@@ -72,6 +83,8 @@ class ParkedEscalation:
     #: recorded none.
     harness_version: str | None = None
     cause: str | None = None
+    #: The hub closure that ended it; ``None`` while it stands open.
+    closure: EscalationClosure | None = None
 
     @property
     def session(self) -> SessionReference | None:  # ast-grep-ignore: bzh:property-delegates
@@ -107,6 +120,11 @@ class IReadEscalationRepository(Protocol):
         """Every escalated chunk still unsuperseded.
 
         See :class:`ParkedEscalation` for what "open" means here."""
+        ...
+
+    def closed_escalations(self, limit: int) -> list[ParkedEscalation]:
+        """The newest ``limit`` escalations the hub ended, newest closure first, one per chunk —
+        each the chunk's latest escalation carrying the newest hub closure recorded after it."""
         ...
 
     def open_escalation_for_chunk(self, chunk_id: str) -> ParkedEscalation | None:

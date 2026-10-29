@@ -306,4 +306,5 @@ export type { RunnerDeclining };
 export type { MockRunner };
 export type { Barrier, BarrierSubscription, Frame, Subscription } from './events';
 export type { MockHubClient } from './client/mock-hub';
+export type { MockChunkSpec } from './client/mock';
 export type { RunnerClient, RunnerHostClient, TickPass } from './client/runner';

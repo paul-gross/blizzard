@@ -2124,8 +2124,27 @@
         "title": "EscalationChangedPayload",
         "type": "object"
       },
+      "EscalationClosureView": {
+        "description": "The hub having ended an escalated chunk \u2014 ``reason`` is the hub status observed, ``stopped`` or ``done``;\n``closed_at`` is when the runner recorded that closure, distinct from the escalation's own park-time\n``closed_at``.",
+        "properties": {
+          "closed_at": {
+            "title": "Closed At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "closed_at"
+        ],
+        "title": "EscalationClosureView",
+        "type": "object"
+      },
       "EscalationListResponse": {
-        "description": "Every escalation still open \u2014 no later lease mint, and the hub has not ended the chunk.",
+        "description": "Every escalation still open \u2014 no later lease mint, and the hub has not ended the chunk \u2014 or, under\n``state=closed``, the newest page of escalations the hub ended.",
         "properties": {
           "items": {
             "default": [],
@@ -2163,6 +2182,16 @@
           "closed_at": {
             "title": "Closed At",
             "type": "string"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationClosureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "effort": {
             "anyOf": [
@@ -2272,7 +2301,8 @@
           "harness_version",
           "wrapped_takeover_command",
           "cause",
-          "project_id"
+          "project_id",
+          "closure"
         ],
         "title": "EscalationView",
         "type": "object"
@@ -8741,7 +8771,7 @@
     },
     "/runners/{runner_id}/api/escalations": {
       "get": {
-        "description": "Every escalation still open \u2014 no later lease mint, and the hub has not ended the chunk.",
+        "description": "Every escalation still open \u2014 no later lease mint, and the hub has not ended the chunk \u2014 or, under\n``state=closed``, the newest ``limit`` the hub ended, newest closure first, one per chunk.\n\n``limit`` pages only the closed history: the open set is bounded by the chunks parked on this\nrunner now, not by its history, and the dashboard renders it whole.",
         "operationId": "list_escalations_runners__runner_id__api_escalations_get",
         "parameters": [
           {
@@ -8753,6 +8783,32 @@
               "description": "The runner's hub-minted id.",
               "title": "Runner Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "closed"
+              ],
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],

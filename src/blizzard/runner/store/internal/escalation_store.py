@@ -12,12 +12,19 @@ from sqlalchemy import Row, Select
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.leases.closure import ESCALATION_REASONS, cause_of
-from blizzard.runner.leases.escalations import IWriteEscalationRepository, ParkedEscalation
-from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION
+from blizzard.runner.leases.escalations import EscalationClosure, IWriteEscalationRepository, ParkedEscalation
+from blizzard.runner.store.internal.base import LIVE_ESCALATION, UNRESOLVED_ESCALATION, Unsuperseded
 from blizzard.runner.store.schema import escalation_closures, lease_closures, lease_context, lease_spawns, leases
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
+
+# A later closure of the same chunk, in append order, supersedes an earlier one.
+_LATER_CLOSURE = escalation_closures.alias("later_escalation_closures")
+_NEWEST_ESCALATION_CLOSURE = Unsuperseded(
+    _LATER_CLOSURE.c.id,
+    (_LATER_CLOSURE.c.chunk_id == escalation_closures.c.chunk_id, _LATER_CLOSURE.c.id > escalation_closures.c.id),
+)
 
 
 class EscalationStore:
@@ -32,6 +39,18 @@ class EscalationStore:
             .where(LIVE_ESCALATION.clause(self._store))
             .where(UNRESOLVED_ESCALATION.clause(self._store))
             .order_by(lease_closures.c.closed_at.desc())
+        )
+        return [self._row_to_escalation(r) for r in self._store.all(stmt)]
+
+    def closed_escalations(self, limit: int) -> list[ParkedEscalation]:
+        # Each chunk's newest closure, kept in SQL (`bzh:newest-per-key-read`), joined to the
+        # escalation it closed — the strict `>` mirrors `UNRESOLVED_ESCALATION`.
+        stmt = (
+            self._escalation_select(closed=True)
+            .where(LIVE_ESCALATION.clause(self._store))
+            .where(_NEWEST_ESCALATION_CLOSURE.clause(self._store))
+            .order_by(escalation_closures.c.closed_at.desc(), escalation_closures.c.id.desc())
+            .limit(limit)
         )
         return [self._row_to_escalation(r) for r in self._store.all(stmt)]
 
@@ -62,7 +81,7 @@ class EscalationStore:
             conn.execute(self._store.insert(escalation_closures).values(chunk_id=chunk_id, reason=reason, closed_at=at))
         _log.info("escalation closed by the hub", chunk_id=chunk_id, reason=reason)
 
-    def _escalation_select(self) -> Select[Any]:
+    def _escalation_select(self, *, closed: bool = False) -> Select[Any]:
         st = self._store
         # The lease's current generation's own recorded version — `id`
         # orders "newest generation" here exactly as the liveness store's own
@@ -75,10 +94,24 @@ class EscalationStore:
             .correlate(leases)
             .scalar_subquery()
         )
+        escalated = sa.join(lease_closures, leases, leases.c.lease_id == lease_closures.c.lease_id).join(
+            lease_context, lease_context.c.lease_id == leases.c.lease_id
+        )
+        closure_columns: tuple[Any, ...] = (sa.null().label("closure_reason"), sa.null().label("closure_closed_at"))
+        if closed:
+            escalated = escalated.join(
+                escalation_closures,
+                sa.and_(
+                    escalation_closures.c.chunk_id == lease_closures.c.chunk_id,
+                    escalation_closures.c.closed_at > lease_closures.c.closed_at,
+                ),
+            )
+            closure_columns = (
+                escalation_closures.c.reason.label("closure_reason"),
+                escalation_closures.c.closed_at.label("closure_closed_at"),
+            )
         return st.select(
-            sa.join(lease_closures, leases, leases.c.lease_id == lease_closures.c.lease_id).join(
-                lease_context, lease_context.c.lease_id == leases.c.lease_id
-            ),
+            escalated,
             lease_closures.c.lease_id,
             lease_closures.c.chunk_id,
             lease_closures.c.node_id,
@@ -94,6 +127,7 @@ class EscalationStore:
             lease_context.c.resolved_model,
             lease_context.c.resolved_effort,
             latest_harness_version.label("harness_version"),
+            *closure_columns,
         ).where(lease_closures.c.reason.in_(sorted(ESCALATION_REASONS)))
 
     @staticmethod
@@ -111,6 +145,9 @@ class EscalationStore:
             resolved_effort=r.resolved_effort,
             harness_version=r.harness_version,
             cause=cause_of(str(r.reason), r.escalation_cause),
+            closure=EscalationClosure(reason=str(r.closure_reason), closed_at=r.closure_closed_at)
+            if r.closure_closed_at is not None
+            else None,
         )
 
 

@@ -220,6 +220,15 @@ class AskListResponse(WireModel):
     items: list[AskView] = []
 
 
+class EscalationClosureView(WireModel):
+    """The hub having ended an escalated chunk — ``reason`` is the hub status observed, ``stopped`` or ``done``;
+    ``closed_at`` is when the runner recorded that closure, distinct from the escalation's own park-time
+    ``closed_at``."""
+
+    reason: str
+    closed_at: str
+
+
 class EscalationView(WireModel):
     """One parked escalation, carrying its literal takeover command — ``GET /api/escalations``."""
 
@@ -244,10 +253,13 @@ class EscalationView(WireModel):
     cause: str | None = None
     #: The chunk's project, as the hub names it; ``None`` until a binding names one.
     project_id: str | None = None
+    #: The hub closure that ended the escalation; ``None`` while it stands open.
+    closure: EscalationClosureView | None = None
 
 
 class EscalationListResponse(WireModel):
-    """Every escalation still open — no later lease mint, and the hub has not ended the chunk."""
+    """Every escalation still open — no later lease mint, and the hub has not ended the chunk — or, under
+    ``state=closed``, the newest page of escalations the hub ended."""
 
     items: list[EscalationView] = []
 

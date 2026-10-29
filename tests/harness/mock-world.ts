@@ -7,6 +7,7 @@ import { startMockHub } from './daemons/mock-hub';
 import { isAlive, killLive, type LiveDaemon, logTail, stopDaemon, stopLive } from './daemons/process';
 import { runDir } from './env';
 import { scanLog } from './logs';
+import type { RunnerHost } from './runner-host';
 import { type RunnerBinding, runnerWorld } from './runner-world';
 
 /** A test's own mock hub: its process, stopped, killed, and started again under the URL it first held, and its clients. */
@@ -23,9 +24,13 @@ export interface MockHub extends MockHubClient {
   readonly logPath: string;
   /** The tail of the mock hub's log, as a failing test has it attached. */
   logTail(): string;
+  /** The `/api/fleet` plane as `host`'s runner named `runner`, or as the host itself when none is named, by the token its `.env` holds now. */
+  fleetOf(host: RunnerHost, runner?: string): ReturnType<MockHubClient['fleet']>;
 }
 
 interface MockWorldFixtures {
+  /** Starts the mock hub offering an IdP (`--offer-idp`), held across its restarts, so a host's first boot finds one. */
+  mockHubOfferIdp: boolean;
   mockHub: MockHub;
   /** A loopback hub-auth stub with the key set the test gives it, closed when the test ends. */
   authStub: (keys?: unknown[]) => Promise<AuthStub>;
@@ -43,10 +48,12 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
     await use({ hub: { url: mockHub.url } });
   },
 
-  mockHub: async ({ worldContext, ledger }, use, testInfo) => {
+  mockHubOfferIdp: [false, { option: true }],
+
+  mockHub: async ({ worldContext, ledger, mockHubOfferIdp }, use, testInfo) => {
     const dir = path.join(runDir(), 'mock-hubs', uniqueName(testInfo));
     fs.mkdirSync(dir, { recursive: true });
-    let daemon: LiveDaemon = await startMockHub(dir);
+    let daemon: LiveDaemon = await startMockHub(dir, { offerIdp: mockHubOfferIdp });
     const { url, logPath } = daemon;
     const tail = (): string => logTail(logPath);
     const clients = mockHubApi({ context: worldContext, testInfo, url, ledger, logContext: tail });
@@ -62,10 +69,16 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
         },
         start: async () => {
           if (isAlive(daemon.pid)) throw new Error('the mock hub is running; stop() or kill() it before start()');
-          daemon = await startMockHub(dir, { port: Number(new URL(url).port) });
+          daemon = await startMockHub(dir, { port: Number(new URL(url).port), offerIdp: mockHubOfferIdp });
         },
         logPath,
         logTail: tail,
+        fleetOf(host, runner) {
+          const tokens = host.hubTokens();
+          const token = runner === undefined ? tokens.host : tokens.runners[runner];
+          if (token === undefined) throw new Error(`the host's .env holds no token for ${runner === undefined ? 'the host' : `runner ${runner}`}`);
+          return clients.fleet(token);
+        },
       });
     } finally {
       // The process now, not the one the fixture started: a `start()` replaced it.

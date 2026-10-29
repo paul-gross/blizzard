@@ -83,6 +83,7 @@ describe('MachineDetailView', () => {
         project_id: null,
         session_name: null,
         wrapped_takeover_command: null,
+        closure: null,
       },
     });
 
@@ -107,6 +108,7 @@ describe('MachineDetailView', () => {
         project_id: null,
         session_name: null,
         wrapped_takeover_command: null,
+        closure: null,
       },
     });
 
@@ -134,6 +136,7 @@ describe('MachineDetailView', () => {
         project_id: null,
         session_name: null,
         wrapped_takeover_command: null,
+        closure: null,
       },
     });
 
@@ -149,6 +152,7 @@ describe('MachineDetailView', () => {
       closed_at: '2026-07-16T11:00:00.000Z',
       resume_command: 'cd /ws/beta && claude --resume sess-new',
       wrapped_takeover_command: wrapped,
+      closure: null,
       cause: null,
       effort: null,
       harness_id: null,

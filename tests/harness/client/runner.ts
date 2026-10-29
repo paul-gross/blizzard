@@ -3,6 +3,7 @@ import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { type ApiResponse, type Engine, expecting, type LogContext, type Verbs, verbs } from './engine';
 import type { Ledger } from './ledger';
 import type {
+  ArtifactScope,
   EscalationListResponse,
   FactListResponse,
   FloorClearView,
@@ -12,6 +13,8 @@ import type {
   RunnerControlView,
   RunnerStatusView,
   TickPassResponse,
+  TranscriptResponse,
+  WorkerArtifact,
 } from './wire/runner/types.gen';
 
 /** The calls one runner of a host answers, under `<host>/runners/<id>`. Types come from `wire/runner`. */
@@ -24,7 +27,12 @@ export interface RunnerClient {
   leases(): Promise<ApiResponse<LeaseListResponse>>;
   /** The runner's facts as `FactView`s, unmapped: `seq`, `kind`, `chunk_id` and `acked_at` survive as the runner sent them. */
   facts(options?: { limit?: number }): Promise<ApiResponse<FactListResponse>>;
-  escalations(): Promise<ApiResponse<EscalationListResponse>>;
+  /** `GET …/api/escalations`: the open set by default; `state: 'closed'` pages the ended ones, each with its closure. */
+  escalations(options?: { state?: 'open' | 'closed'; limit?: number }): Promise<ApiResponse<EscalationListResponse>>;
+  /** `GET …/api/leases/{id}/artifacts`, narrowed to one `scope`; `headers` act as the lease's worker (`workerHeaders`). */
+  leaseArtifacts(leaseId: string, options?: { scope?: ArtifactScope; headers?: Record<string, string> }): Promise<ApiResponse<WorkerArtifact[]>>;
+  /** `GET …/api/leases/{id}/transcript`: the lease's resolved transcript. */
+  leaseTranscript(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<TranscriptResponse>>;
   /** `PATCH …/api/runner`: the runner's local pause, or its release. */
   setPaused(paused: boolean, by?: string): Promise<ApiResponse<RunnerControlView>>;
   pauseChunk(chunkId: string): Promise<ApiResponse>;
@@ -100,7 +108,17 @@ export function runnerHostApi(options: {
         },
         leases: () => raw.get('/api/leases'),
         facts: (factOptions = {}) => raw.get('/api/facts', factOptions.limit === undefined ? {} : { params: { limit: factOptions.limit } }),
-        escalations: () => raw.get('/api/escalations'),
+        escalations: (listOptions = {}) => {
+          const params = Object.fromEntries(Object.entries(listOptions).filter(([, value]) => value !== undefined)) as Record<string, string | number>;
+          return raw.get('/api/escalations', { params });
+        },
+        leaseArtifacts: (leaseId, artifactOptions = {}) =>
+          raw.get(`/api/leases/${encodeURIComponent(leaseId)}/artifacts`, {
+            params: artifactOptions.scope === undefined ? {} : { scope: artifactOptions.scope },
+            headers: artifactOptions.headers,
+          }),
+        leaseTranscript: (leaseId, transcriptOptions = {}) =>
+          raw.get(`/api/leases/${encodeURIComponent(leaseId)}/transcript`, { headers: transcriptOptions.headers }),
         setPaused: (paused, by) => raw.patch('/api/runner', { data: by === undefined ? { paused } : { paused, by } }),
         pauseChunk: (chunkId) => chunk(chunkId, 'pause'),
         resumeChunk: (chunkId) => chunk(chunkId, 'resume'),

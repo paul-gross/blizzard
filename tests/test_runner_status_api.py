@@ -41,6 +41,7 @@ from tests.runner_fakes import (
     FakeHarness,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_host_stores,
     make_store,
     make_stores,
@@ -617,6 +618,7 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "wrapped_takeover_command": None,
         "cause": None,
         "project_id": None,
+        "closure": None,
     }
 
 
@@ -950,6 +952,91 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
         resp = client.get("/api/escalations")
 
     assert resp.json()["items"] == []
+
+
+def _seed_escalation(store: SqlAlchemyRunnerStore, chunk_id: str, *, escalated_at: datetime, epoch: int = 1) -> None:
+    lease_id = f"lease_{chunk_id}_{epoch}"
+    _seed_lease(store, lease_id=lease_id, chunk_id=chunk_id, epoch=epoch, created_at=escalated_at)
+    store.record_closure(
+        lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="escalated", closed_at=escalated_at
+    )
+
+
+@pytest.mark.component
+def test_the_default_answer_lists_only_open_escalations_without_a_closure(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_escalation(store, "ch_open", escalated_at=_NOW)
+    _seed_escalation(store, "ch_closed", escalated_at=_NOW)
+    store.record_escalation_closure(chunk_id="ch_closed", reason="stopped", at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        default = client.get("/api/escalations").json()
+        explicit = client.get("/api/escalations", params={"state": "open"}).json()
+
+    assert default == explicit
+    assert [(i["chunk_id"], i["closure"]) for i in default["items"]] == [("ch_open", None)]
+
+
+@pytest.mark.component
+def test_state_closed_lists_a_hub_closed_escalation_with_its_closure(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    _seed_escalation(store, "ch_open", escalated_at=_NOW)
+    _seed_escalation(store, "ch_1", escalated_at=_NOW)
+    hub_closed_at = _NOW + timedelta(minutes=7)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=hub_closed_at)
+
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations", params={"state": "closed"})
+
+    assert resp.status_code == 200, resp.text
+    (item,) = resp.json()["items"]
+    assert (item["chunk_id"], item["lease_id"]) == ("ch_1", "lease_ch_1_1")
+    assert item["closed_at"] == _NOW.isoformat()
+    assert item["closure"] == {"reason": "stopped", "closed_at": hub_closed_at.isoformat()}
+
+
+@pytest.mark.component
+def test_state_closed_reads_each_chunks_newest_closure_newest_first_bounded_by_limit(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for n in range(3):
+        _seed_escalation(store, f"ch_{n}", escalated_at=_NOW)
+        store.record_escalation_closure(chunk_id=f"ch_{n}", reason="done", at=_NOW + timedelta(minutes=n + 1))
+    store.record_escalation_closure(chunk_id="ch_0", reason="stopped", at=_NOW + timedelta(minutes=9))
+
+    with runner_client(app) as client:
+        every = client.get("/api/escalations", params={"state": "closed"}).json()["items"]
+        page = client.get("/api/escalations", params={"state": "closed", "limit": 2}).json()["items"]
+
+    assert [(i["chunk_id"], i["closure"]["reason"]) for i in every] == [
+        ("ch_0", "stopped"),
+        ("ch_2", "done"),
+        ("ch_1", "done"),
+    ]
+    assert [i["chunk_id"] for i in page] == ["ch_0", "ch_2"]
+
+
+@pytest.mark.component
+def test_a_closure_before_a_later_escalation_does_not_close_it(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_escalation_closure(chunk_id="ch_1", reason="stopped", at=_NOW)
+    _seed_escalation(store, "ch_1", escalated_at=_NOW + timedelta(minutes=1))
+
+    with runner_client(app) as client:
+        closed = client.get("/api/escalations", params={"state": "closed"}).json()["items"]
+        open_ = client.get("/api/escalations").json()["items"]
+
+    assert closed == []
+    assert [i["chunk_id"] for i in open_] == ["ch_1"]
+
+
+@pytest.mark.component
+@pytest.mark.parametrize("params", [{"state": "parked"}, {"state": "closed", "limit": 0}])
+def test_an_unknown_state_or_an_out_of_range_limit_is_refused(tmp_path: Path, params: dict[str, str | int]) -> None:
+    app, _store = _app_with_status(tmp_path)
+    with runner_client(app) as client:
+        resp = client.get("/api/escalations", params=params)
+
+    assert resp.status_code == 422
 
 
 # --- GET /takeovers — the stranded-takeover recovery surface ---
