@@ -24,10 +24,11 @@ def test_invocation_usage_is_chunk_filtered_paged_and_attributed(tmp_path: Path)
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
     )
-    samples: list[tuple[str, str, UsageKind, str]] = [
+    samples: list[tuple[str, str, UsageKind, str | None]] = [
         ("ch_1", "lease_1", "spawn", "claude_code"),
         ("ch_other", "lease_2", "spawn", "opencode"),
         ("ch_1", "lease_1", "judge", "claude_code"),
+        ("ch_1", "lease_legacy", "spawn", None),
     ]
     for chunk, lease, kind, harness in samples:
         store.record_usage(
@@ -80,6 +81,8 @@ def test_invocation_usage_is_chunk_filtered_paged_and_attributed(tmp_path: Path)
     assert [(item["lease_id"], item["kind"], item["harness_id"]) for item in second.json()["items"]] == [
         ("lease_1", "judge", "claude_code")
     ]
-    assert client.get("/api/chunks/ch_1/usage").json()["items"] == first.json()["items"] + second.json()["items"]
+    items = client.get("/api/chunks/ch_1/usage").json()["items"]
+    assert items[:2] == first.json()["items"] + second.json()["items"]
+    assert items[2]["harness_id"] is None
     assert client.get("/api/chunks/ch_unknown/usage").json()["items"] == []
     assert client.get("/api/chunks/ch_1/usage", params={"limit": 201}).status_code == 422

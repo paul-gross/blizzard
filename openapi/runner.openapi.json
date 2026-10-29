@@ -4345,8 +4345,15 @@
             "type": "integer"
           },
           "harness_id": {
-            "title": "Harness Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
           },
           "kind": {
             "title": "Kind",

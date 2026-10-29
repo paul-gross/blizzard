@@ -2389,7 +2389,7 @@ export type InvocationUsageView = {
     /**
      * Harness Id
      */
-    harness_id: string;
+    harness_id: string | null;
     /**
      * Kind
      */

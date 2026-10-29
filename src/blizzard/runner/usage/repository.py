@@ -242,7 +242,7 @@ class InvocationUsage:
     epoch: int
     generation: int
     kind: str
-    harness_id: str
+    harness_id: str | None
     model: str | None
     recorded_at: datetime
 
