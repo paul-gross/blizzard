@@ -1,6 +1,6 @@
 # CI
 
-The policy behind CI — the branch and release model, one repo one wheel, the five test tiers — is owned by
+The policy behind CI — the branch and release model, one repo one wheel, the six test tiers — is owned by
 blizzard-context's
 [`verification/blizzard.md`](https://github.com/paul-gross/blizzard-context/blob/master/verification/blizzard.md); this
 file is the in-repo operator reference for running it.
