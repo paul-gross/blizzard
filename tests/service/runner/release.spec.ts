@@ -155,7 +155,7 @@ test('test_a_declined_next_step_is_released_to_a_neighbour_and_waits_ready_while
   const [next] = await until(host, () => leases(host, NEIGHBOUR, chunkId), (found) => found.length === 1);
   expect(next!.lease_id).not.toBe(original.lease_id);
   expect(next!.epoch).toBeGreaterThan(original.epoch);
-  expect(next!.node_name).toBe('build');
+  expect(next!.node_name).toBe('review');
   expect(await leases(host, FIRST, chunkId)).toHaveLength(1);
 });
 
@@ -180,7 +180,7 @@ test('test_a_released_chunk_is_claimed_cold_by_its_first_runner_once_its_gate_re
   const next = await until(host, () => leases(host, FIRST, chunkId), (found) => found.length === 2);
   const reclaimed = next.find((lease) => lease.lease_id !== original.lease_id)!;
   expect(reclaimed.epoch).toBeGreaterThan(original.epoch);
-  expect(reclaimed.node_name).toBe('build');
+  expect(reclaimed.node_name).toBe('review');
   expect(await leases(host, NEIGHBOUR, chunkId)).toEqual([]);
 });
 
