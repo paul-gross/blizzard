@@ -122,12 +122,14 @@ test('test_two_session_lineages_interleave_on_one_dispatch_loop_with_no_cross_ta
   const opencode = (await mockHub.seed.chunk(opencodeSpec)).body.chunk_id;
   const status = await reader(mockHub);
   const host = await runnerHosts.create(options());
+  const runner = host.runners['runner-local']!;
+  expect((await runner.chunkUsage(claude)).body.items).toEqual([]);
+  expect((await runner.chunkUsage(opencode)).body.items).toEqual([]);
   for (let pass = 0; pass < MAX_STEPS; pass++) {
     if (await status(claude) === 'done' && await status(opencode) === 'done') break;
     await host.step();
   }
   expect([await status(claude), await status(opencode)]).toEqual(['done', 'done']);
-  const runner = host.runners['runner-local']!;
   const first = await leases(host, claude);
   const second = await leases(host, opencode);
   expect(first).toHaveLength(1);
