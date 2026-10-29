@@ -96,6 +96,15 @@ export interface MockChunkSpec {
   garden_run?: { routine_name: string; scope_slug: string };
   /** The canned rows the chunk's analytics reads serve, as the mock's `AnalyticsSpec` names them. */
   analytics?: Record<string, Record<string, unknown>[]>;
+  /** The garden findings the chunk's accepted, minted proposal answers; absent, the chunk answers no proposal at all. */
+  garden_answered_findings?: {
+    finding_id: string;
+    routine_name: string;
+    scope_slug: string;
+    class: string;
+    locus: string;
+    summary: string;
+  }[];
 }
 
 export interface MockChunkSeeded {
