@@ -240,11 +240,8 @@ class ChunkArtifactsStore:
         content: str,
         at: datetime,
     ) -> bool:
-        """Append one hub-node progress artifact **outside** a transition (#65),
-        idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
-        durable side, and the mid-run marker callback's write. Returns False, writing
-        nothing, on a replay — the row's existence — or when the write fence refuses
-        (``bzh:epoch-fencing``)."""
+        """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
+        ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
         with self._store.write("record_hub_artifact") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
@@ -292,8 +289,8 @@ class ChunkArtifactsStore:
         repository_id: str,
         at: datetime,
     ) -> bool:
-        """The marker, the landed row and the close intents of one merge, in one transaction admitted past
-        the fence, which is evaluated only to answer whether it would have refused."""
+        """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
+        ``IWriteChunkArtifactsRepository.record_landing``."""
         name = f"{MARKER_PREFIX}{repo}"
         with self._store.write("record_landing") as conn:
             lock_chunk_row(conn, chunk_id)

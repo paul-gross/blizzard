@@ -50,15 +50,10 @@ class ChunkLifecycleStore:
         return int(key[0]) if key is not None else 0
 
     def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
-        """Append the ``chunk.stopped`` fact, release any live route, and release any
-        held fleet-wide hub-exec slot — all on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), so a ``kill -9`` cannot leave the chunk durably
-        ``stopped`` with its route still live. The route check runs against this same
-        connection (:func:`route_of_conn`), so there is no read-then-write race. ``at`` is
-        passed in, stamped by the caller after the row lock — a claim that wins the row
-        lock first still mints a route sorting newer than this release, since the
-        release's own timestamp is never older than the wait it just cleared. The slot
-        release is unconditional."""
+        """`src/blizzard/hub/domain/chunk/ports/lifecycle.py`'s `IWriteChunkLifecycleRepository.record_stop_locked`.
+
+        The route check runs on the same connection (:func:`route_of_conn`), so there is no
+        read-then-write race; the slot release is unconditional."""
         conn = conn_of(handle)
         result = conn.execute(
             self._store.insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by)
@@ -78,13 +73,11 @@ class ChunkLifecycleStore:
         return int(key[0]) if key is not None else 0
 
     def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
-        """Append the ``chunk.completed`` fact, release any live route, and release any
-        held fleet-wide hub-exec slot — all on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), mirroring :meth:`record_stop_locked`, so a
-        ``kill -9`` cannot leave the chunk durably ``done`` with its route still live. The
-        caller has already checked the chunk is not already ``done`` — this always writes
-        a fresh row. ``at`` is passed in, stamped by the caller after the row lock — see
-        :meth:`record_stop_locked` for why the ordering matters."""
+        """See ``src/blizzard/hub/domain/chunk/ports/lifecycle.py``'s
+        ``IWriteChunkLifecycleRepository.record_completion_locked``.
+
+        The route check runs on the same connection (:func:`route_of_conn`); the slot release is
+        unconditional."""
         conn = conn_of(handle)
         result = conn.execute(
             self._store.insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by)

@@ -84,10 +84,9 @@ class ChunkWorkRefsStore:
         )
 
     def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
-        """`find_live_holder`'s batched sibling — every pointer with a live (non-terminal)
-        chunk holding it, keyed by pointer; a pointer with no live holder has no entry at
-        all (not mapped to None). Statuses are read after the pointer rows' connection has
-        closed, not nested inside it."""
+        """See ``src/blizzard/hub/domain/chunk/ports/work_refs.py``'s ``IReadChunkWorkRefsRepository.live_holders``.
+
+        Statuses are read after the pointer rows' connection has closed, not nested inside it."""
         pointers = list(pointers)
         if not pointers:
             return {}
