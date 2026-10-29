@@ -24,8 +24,8 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryEdit
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
-from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.forge.registry import ForgeCallRefused, TurnCutOff, _BudgetGate, _RefsHandle
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -330,7 +330,11 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
             return None
 
     flag = TurnCutOff()
-    gate = _BudgetGate(ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))), BudgetKey("frg_fixture", None), ForgePriority.LANDING)
+    gate = _BudgetGate(
+        ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))),
+        BudgetKey("frg_fixture", None),
+        ForgePriority.LANDING,
+    )
     refs = _RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)  # type: ignore[arg-type]
     flag.set()
 
