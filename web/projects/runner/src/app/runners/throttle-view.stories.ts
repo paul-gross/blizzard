@@ -15,7 +15,7 @@ const held: runnerApi.ThrottleStatusView = {
   ...open, state: 'declining', declining: ['floor'],
   floor: { ...open.floor, admits: false, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: '5h', expected_reset: '2026-10-22T14:00:00Z',
-    awaits_sample: true, grace_opens_at: '2026-10-22T15:00:00Z',
+    awaits_sample: true, grace_opens_at: '2026-10-22T15:00:00Z', lease_id: null,
   } },
 };
 

@@ -180,6 +180,7 @@ def _throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
             hold=FloorHoldView(
                 kind=hold.kind,
                 harness_id=hold.harness_id,
+                lease_id=hold.lease_id,
                 window=hold.window,
                 expected_reset=iso_utc(hold.expected_reset).replace("+00:00", "Z"),
                 awaits_sample=hold.awaits_sample,

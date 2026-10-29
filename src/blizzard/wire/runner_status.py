@@ -37,6 +37,7 @@ class FloorHoldView(WireModel):
     expected_reset: str
     awaits_sample: bool
     grace_opens_at: str | None
+    lease_id: str | None = None
 
 
 class FloorClearStatusView(WireModel):

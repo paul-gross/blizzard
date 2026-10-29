@@ -90,6 +90,7 @@ def test_a_mark_holds_until_its_reset_naming_its_harness_and_held_window() -> No
     assert answer.hold is not None
     assert (answer.hold.kind, answer.hold.harness_id, answer.hold.window) == (HoldKind.MARK, "claude-code", "five_hour")
     assert answer.hold.expected_reset == _RESET
+    assert answer.hold.lease_id == "lease_1"
 
 
 def test_a_mark_outranks_an_older_sample_under_the_line() -> None:
@@ -235,6 +236,7 @@ def test_an_exhausted_window_holds_until_its_reset_with_no_mark() -> None:
     assert not answer.admits
     assert answer.hold is not None
     assert (answer.hold.kind, answer.hold.window, answer.hold.harness_id) == (HoldKind.WINDOW, "five_hour", None)
+    assert answer.hold.lease_id is None
 
 
 def test_an_exhausted_window_past_its_reset_awaits_a_sample_within_the_grace() -> None:

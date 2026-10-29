@@ -9,7 +9,7 @@ const THROTTLE: runnerApi.ThrottleStatusView = {
   state: 'declining', declining: ['floor'],
   floor: { subscription: 'anthropic', admits: false, clear: null, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: null, expected_reset: '2026-10-22T14:00:00Z',
-    awaits_sample: false, grace_opens_at: null,
+    awaits_sample: false, grace_opens_at: null, lease_id: null,
   } },
   levers: [], on_decline: 'hold', on_usage_limit: 'release',
 };

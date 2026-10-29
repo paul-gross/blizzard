@@ -45,13 +45,15 @@ class HoldKind(StrEnum):
 class FloorHold:
     """One hold standing: its kind, the harness that marked it (a mark's) or the window it names (an exhausted
     window's), its expected reset, and whether a sample must confirm it open once that reset passes — ``False`` when
-    the expected reset decides alone."""
+    the expected reset decides alone. A mark's hold also names the lease whose invocation met the limit
+    (``lease_id``); a window's has none."""
 
     kind: HoldKind
     harness_id: str | None
     window: str | None
     expected_reset: datetime
     awaits_sample: bool
+    lease_id: str | None = None
 
 
 @domain_model
@@ -133,6 +135,7 @@ def _mark_hold(
         window=mark.window,
         expected_reset=expected,
         awaits_sample=sampled and not from_fallback,
+        lease_id=mark.lease_id,
     )
     if sample is not None and _held_window_turned_over(mark, sample):
         return None

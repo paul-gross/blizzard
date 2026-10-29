@@ -6,7 +6,7 @@ const throttle: runnerApi.ThrottleStatusView = {
   state: 'declining', declining: ['floor'],
   floor: { subscription: 'anthropic', admits: false, clear: null, hold: {
     kind: 'usage limit', harness_id: 'claude_code', window: '5h', expected_reset: '2026-10-22T14:00:00Z',
-    awaits_sample: true, grace_opens_at: '2026-10-22T15:00:00Z',
+    awaits_sample: true, grace_opens_at: '2026-10-22T15:00:00Z', lease_id: null,
   } },
   levers: [{ name: 'pace', setting: '7d, lead 5 points', reading: '86% spent', admits: false, until: '2026-10-22T16:00:00Z' }],
   on_decline: 'hold', on_usage_limit: 'release',

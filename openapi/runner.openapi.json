@@ -2867,6 +2867,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
           "window": {
             "anyOf": [
               {
@@ -2885,7 +2896,8 @@
           "window",
           "expected_reset",
           "awaits_sample",
-          "grace_opens_at"
+          "grace_opens_at",
+          "lease_id"
         ],
         "title": "FloorHoldView",
         "type": "object"
