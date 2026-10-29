@@ -78,7 +78,7 @@ export async function walk(options: {
     `${options.hub.url}/api/auth/${provider}/authorize${options.invite === undefined ? '' : `?invite=${encodeURIComponent(options.invite)}`}`;
   let session = false;
   for (let hop = 0; hop < MAX_HOPS; hop++) {
-    const response = await options.context.fetch(url, { maxRedirects: 0, failOnStatusCode: false, timeout: 30_000 });
+    const response = await options.context.fetch(url, { maxRedirects: 0, failOnStatusCode: false, timeout: 30_000, maxRetries: 3 });
     session ||= response.headersArray().some((header) => header.name.toLowerCase() === 'set-cookie' && header.value.startsWith(`${SESSION_COOKIE}=`));
     const status = response.status();
     const location = response.headers().location;

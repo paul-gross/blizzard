@@ -4,6 +4,7 @@ import { loginThroughCli } from './login';
 import { type People, type Person, peopleFactory } from './people';
 import { type CliResult, CliTimeout, type Prompt, runCommand } from './cli';
 import { forgeApi, type ForgeApi, type HubApi, hubApi, idpApi, mockRunnerApi } from './client/clients';
+import { type Federation, federationClient } from './federation';
 import { fleetApi, type Verbs } from './client/engine';
 import type { Role, RunnerAddRequest, RunnerDeclining } from './client/wire/hub/types.gen';
 import { type Events, eventStream, type Subscription } from './events';
@@ -41,6 +42,8 @@ interface Fixtures {
   user: Person;
   /** Signs people in through the stub IdP: `create` for further invited people, `signIn` for an identity the test names. */
   people: People;
+  /** Drives sign-in bounces from a browser at a runner host to the hub and back, the runner's and the hub's cookies kept apart. */
+  federation: Federation;
   /** A session-free hub client; its context is independent of the signed-in admin and refused sign-in walks. */
   anonymous: HubApi;
   /** Stub IdP controls, available only on a hub owned by this test. */
@@ -100,6 +103,12 @@ export const test = mergeTests(tenancy, runnerWorld).extend<Fixtures>({
       unique: (prefix) => uniqueName(testInfo, prefix),
     });
     await use(people);
+    await disposeAll();
+  },
+
+  federation: async ({ testHub, playwright }, use) => {
+    const { federation, disposeAll } = federationClient({ hub: testHub.coordinates, newContext: () => playwright.request.newContext() });
+    await use(federation);
     await disposeAll();
   },
 
@@ -297,6 +306,7 @@ export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export type { OtlpSink, ReceivedItem, ReceivedSpan } from './otlp-sink';
 export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
+export type { Bounce, Delivered, Federation } from './federation';
 export type { RunnerHosts } from './runner-world';
 export type { RunnerHost, RunnerHostOptions } from './runner-host';
 export { HOLD_OPEN, holdingChunk, runningLeaseWithWorker, seededLeaseWithWorker, stepUntil } from './runner-steps';

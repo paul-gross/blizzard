@@ -66,6 +66,8 @@ export async function send(engine: Engine, method: string, route: string, option
         headers: { ...engine.headers, ...options.headers },
         maxRedirects: options.maxRedirects,
         failOnStatusCode: false,
+        // A keep-alive socket the daemon closed while the test waited on another process resets; only a read is safe to resend.
+        maxRetries: method === 'GET' ? 3 : 0,
       }),
     (answer) => answer.status(),
   );

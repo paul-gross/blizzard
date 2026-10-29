@@ -29,8 +29,8 @@ export interface SignedIn extends Landing {
 }
 
 export interface People {
-  /** Invites a person into the test's tenant as the tenant's admin does, then walks with the invitation's token. */
-  create(options?: { role?: Role }): Promise<Person>;
+  /** Invites a person into the test's tenant as the tenant's admin does, then walks with the invitation's token, through `provider` when named. */
+  create(options?: { role?: Role; provider?: string }): Promise<Person>;
   /**
    * Walks for an identity the test names and returns where it landed: a refused, uninvited sign-in, or the bootstrap on a
    * fresh hub. It binds no tenant, so it never forces the superuser's sign-in.
@@ -91,6 +91,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
 
   const create: People['create'] = async (options = {}) => {
     const role = options.role ?? 'contributor';
+    requireProvider(context.testHub.coordinates, options.provider ?? DEFAULT_PROVIDER);
     // The superuser signs in on a fresh hub here, before the first call that needs its session.
     await context.testHub.superuser();
     const tenant = await context.tenantOf();
@@ -101,7 +102,7 @@ export function peopleFactory(context: PeopleContext): { people: People; dispose
     context.ledger.add('invitation', invited.body.invitation.invitation_id as string);
 
     const own = await open();
-    const landing = await walk({ context: own, hub: context.testHub.coordinates, email, invite: invited.body.token as string });
+    const landing = await walk({ context: own, hub: context.testHub.coordinates, email, invite: invited.body.token as string, provider: options.provider });
     if (!landing.session) {
       throw new Error(`signing ${email} in with their invitation set no session; the walk landed at ${landing.status} ${landing.location ?? ''}: ${landing.body.slice(0, 300)}`);
     }
