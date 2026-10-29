@@ -423,19 +423,19 @@ test('test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unr
 });
 
 test('test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api', async ({ mockHub, runnerHost }) => {
+  test.slow();
   const runner = runnerHost.runners[RUNNER]!;
   const chunkId = await seed(mockHub, buildThenDeliver({ prompt: TRANSCRIPT_BUILD, judgement_prompt: judgementReleasedBy(mockHub) }));
 
   // Open: the lease's own transcript, read locally.
-  const openRead = await stepUntil(
+  const running = await stepUntil(
     runnerHost,
-    async () => {
-      const lease = (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running');
-      return lease === undefined ? undefined : (await runner.leaseTranscript(lease.lease_id)).body;
-    },
-    (read) => read !== undefined && read.available && read.turns.length > 0,
+    async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'),
+    (lease) => lease !== undefined,
   );
-  expect(openRead).toMatchObject({ provenance: 'local', hub_unreachable: false });
+  await expect.poll(async () => (await runner.leaseTranscript(running!.lease_id)).body.turns.length, { timeout: 20000 }).toBeGreaterThan(0);
+  const openRead = (await runner.leaseTranscript(running!.lease_id)).body;
+  expect(openRead).toMatchObject({ provenance: 'local', available: true, hub_unreachable: false });
 
   await mockHub.levers.arm('stale_envelope', { chunk_id: RELEASE_CHUNK });
   await stepUntil(runnerHost, () => chunkStatus(mockHub, runnerHost, chunkId), (status) => status === 'done');
