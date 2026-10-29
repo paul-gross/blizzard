@@ -11382,12 +11382,6 @@
    "over_cap": 0,
    "total": 79
   },
-  "service/test_runner_garden_findings_service.py": {
-   "comments": 3,
-   "docstrings": 13,
-   "over_cap": 0,
-   "total": 104
-  },
   "service/test_runner_init_service.py": {
    "comments": 5,
    "docstrings": 8,

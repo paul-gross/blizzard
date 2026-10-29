@@ -6,6 +6,7 @@ import type {
   ArtifactScope,
   EscalationListResponse,
   FactListResponse,
+  FindingView,
   DashboardView,
   FloorClearView,
   HeartbeatResponse,
@@ -43,6 +44,8 @@ export interface RunnerClient {
   escalations(options?: { state?: 'open' | 'closed'; limit?: number }): Promise<ApiResponse<EscalationListResponse>>;
   /** `GET …/api/leases/{id}/artifacts`, narrowed to one `scope`; `headers` act as the lease's worker (`workerHeaders`). */
   leaseArtifacts(leaseId: string, options?: { scope?: ArtifactScope; headers?: Record<string, string> }): Promise<ApiResponse<WorkerArtifact[]>>;
+  /** `GET …/api/leases/{id}/garden/findings`: the routine run's live finding bucket; `headers` act as the lease's worker. */
+  leaseGardenFindings(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<FindingView[]>>;
   /** `GET …/api/leases/{id}/transcript`: the lease's resolved transcript. */
   leaseTranscript(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<TranscriptResponse>>;
   /** `GET …/api/leases/{id}/analytics/{kind}/{dimension}`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
@@ -145,6 +148,8 @@ export function runnerHostApi(options: {
             params: artifactOptions.scope === undefined ? {} : { scope: artifactOptions.scope },
             headers: artifactOptions.headers,
           }),
+        leaseGardenFindings: (leaseId, findingOptions = {}) =>
+          raw.get(`/api/leases/${encodeURIComponent(leaseId)}/garden/findings`, { headers: findingOptions.headers }),
         leaseTranscript: (leaseId, transcriptOptions = {}) =>
           raw.get(`/api/leases/${encodeURIComponent(leaseId)}/transcript`, { headers: transcriptOptions.headers }),
         leaseAnalytics: (leaseId, kind, dimension, analyticsOptions = {}) =>
