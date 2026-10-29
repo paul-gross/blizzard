@@ -3420,6 +3420,147 @@
       "path": "hub finding",
       "short_help": "Read findings, and close or reopen them."
     },
+    "flow": {
+      "commands": {
+        "list": {
+          "help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict\nand landing.\n\nShows only flows with a chunk in line or a change in the last 48 hours unless --all.",
+          "params": [
+            {
+              "help": "Every flow, not only those with a chunk in line or a change in the last 48 hours.",
+              "hidden": false,
+              "kind": "option",
+              "name": "everything",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub flow list",
+          "short_help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict and landing."
+        },
+        "show": {
+          "help": "Show one flow: its open turn, the chunks in line with their place, and its last verdict and landing.\n\nWith --record, the flow's record instead \u2014 every submission, turn, landing and withdrawal, newest first, up to\n--limit entries.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "flow_id",
+              "opts": [
+                "flow_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the flow's record, newest first, instead.",
+              "hidden": false,
+              "kind": "option",
+              "name": "record",
+              "opts": [
+                "--record"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "With --record, the most entries to print.",
+              "hidden": false,
+              "kind": "option",
+              "name": "limit",
+              "opts": [
+                "--limit"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer range"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub flow show",
+          "short_help": "Show one flow: its open turn, the chunks in line with their place, and its last verdict and landing."
+        }
+      },
+      "help": "Inspect each branch's delivery line and its record.",
+      "params": [],
+      "path": "hub flow",
+      "short_help": "Inspect each branch's delivery line and its record."
+    },
     "forge": {
       "commands": {
         "create": {
