@@ -22,11 +22,13 @@ from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateBudgets, IWorkSourceRateGate
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkSourceError
 
 
+@collaborator
 @dataclass(frozen=True)
 class WorkSourceEntry:
     """One stored source record with the forge it names and its revealed credential, resolved to the adapter it
@@ -56,9 +58,15 @@ class WorkSourceEntry:
         if kind is None:
             raise WorkSourceError(f"work source {record.slug} has unknown provider {record.fields.provider!r}")
         gate = budgets.sweeping(record.fields.forge_id, record.fields.secret) if budgets is not None else None
-        if instrument is None:
-            return kind(record, forge, secret, gate=gate)
-        return kind(record, forge, secret, instrument, gate)
+        if gate is None:
+            return kind(record, forge, secret) if instrument is None else kind(record, forge, secret, instrument)
+
+        def teach(client: httpx2.Client) -> None:
+            client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
+            if instrument is not None:
+                instrument(client)
+
+        return kind(record, forge, secret, teach, gate)
 
     @classmethod
     def built(
@@ -122,9 +130,6 @@ class WorkSourceEntry:
     def client(self) -> httpx2.Client:
         headers = {"Authorization": f"token {self.token}"}
         client = httpx2.Client(base_url=self.api_base, headers=headers, timeout=30.0)
-        if self.gate is not None:
-            gate = self.gate
-            client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
         self.instrument(client)
         return client
 
