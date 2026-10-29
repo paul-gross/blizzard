@@ -52,7 +52,8 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and any held fleet-wide
-        hub-exec slot, mirroring :meth:`record_stop_locked`. The caller has already
+        hub-exec slot, mirroring :meth:`record_stop_locked`, and enqueue the chunk's close
+        intents. The caller has already
         checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
         caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
         ``chunk_completed.id``."""

@@ -1,11 +1,10 @@
 """The injected error-wrapping seam for ``hub/store/internal/``.
 
-Shaped after ``blizzard.hub.auth.errors``: a driver exception is translated into the
-domain :class:`HubStoreError` at the one site it is caught, logged once at ERROR
-(``bzh:structlog-logging``) so no call site re-logs it. Unlike the auth seam, the wrap
-site is a connection-acquiring collaborator that encloses the caller's whole unit of
-work — not just acquisition — so a fault anywhere inside a ``with`` block is caught
-here too."""
+A driver exception is translated into the domain :class:`HubStoreError` at the one
+site it is caught, logged once at ERROR (``bzh:structlog-logging``) so no call site
+re-logs it. The wrap site is a connection-acquiring collaborator that encloses the
+caller's whole unit of work — not just acquisition — so a fault anywhere inside a
+``with`` block is caught here too."""
 
 from __future__ import annotations
 

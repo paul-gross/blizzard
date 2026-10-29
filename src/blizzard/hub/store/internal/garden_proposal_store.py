@@ -147,13 +147,9 @@ class GardenProposalStore:
         )
 
     def _is_closed(self, conn: Any, proposal_id: str) -> bool:
-        """Whether `proposal_id` already carries a closure. A bare `SELECT` here would
-        race a concurrent close landing on `garden_proposal_closures` — a different
-        table, so the two transactions never contend on the same row — so this first
-        locks the proposal's own row with the no-op `UPDATE` `next_route_seq` uses for
-        the same shape of hazard: whichever of a close or this write starts first holds
-        the row until it commits, and the other blocks and then re-reads fresh
-        (`tests/test_garden_proposal_closure_race.py`)."""
+        """Whether `proposal_id` already carries a closure. Locks the proposal's own row
+        before reading closures
+        (`tests/test_garden_proposal_closure_race.py::test_is_closed_locks_the_proposal_row_before_reading_closures`)."""
         stmts = statements_of(conn)
         conn.execute(
             stmts.update(garden_proposals)
@@ -314,11 +310,9 @@ class GardenProposalStore:
     ) -> list[GardenProposalCounts]:
         """One `GROUP BY` query over a left join to `garden_proposal_closures` — a
         proposal with no closure row still groups in (as `NULL`/`NULL`, `OPEN`'s own
-        shape), folded through :func:`garden_proposal_state` in Python rather
-        than a Python-side fold over ungrouped rows (`GardenRunStore._fact_counts_by_set`'s
-        own shape). Grouped by `(project_id, origin, routine_name, class_)`: a
-        routine named by both origins returns one row per origin, and a routine name two projects hold returns one
-        row per project."""
+        shape), folded through :func:`garden_proposal_state` in Python. Grouped by
+        `(project_id, origin, routine_name, class_)`: a routine named by both origins returns one row per origin, and
+        a routine name two projects hold returns one row per project."""
         c = garden_proposals.c
         closures_c = garden_proposal_closures.c
         stmt = self._store.select(

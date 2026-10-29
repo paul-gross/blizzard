@@ -91,12 +91,8 @@ class ChunkEscalationsStore:
             return int(key[0]) if key is not None else 0
 
     def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
-        """Record one delivery kick-back **idempotently by** ``(chunk_id, epoch)`` (#64).
-
-        A pre-check within the same transaction (mirroring
-        ``ChunkHubExecStore.record_hub_step_transition``) rather than a DB constraint: a
-        redelivery replay at the coordinator's same ``hub_epoch`` re-enters harmlessly.
-        Returns True iff it wrote."""
+        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
+        ``IWriteChunkEscalationsRepository.record_bounce``."""
         with self._store.write("record_bounce") as conn:
             already = conn.execute(
                 self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
@@ -124,11 +120,8 @@ class ChunkEscalationsStore:
         cause: str,
         detail: str,
     ) -> BounceEscalationOutcome:
-        """Escalate a bounce-capped chunk **atomically and idempotently** (#64).
-
-        The hub lease and the escalation fact land in one transaction, guarded by the
-        escalation's existence at this epoch. No transition: the chunk's held route and
-        stuck node are untouched."""
+        """See ``src/blizzard/hub/domain/chunk/ports/escalations.py``'s
+        ``IWriteChunkEscalationsRepository.record_bounce_escalation``."""
         with self._store.write("record_bounce_escalation") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
@@ -161,10 +154,8 @@ class ChunkEscalationsStore:
         hold an open escalation, and neither can one a later lease or requeue supersedes, so each is
         excluded in the query rather than loaded and dropped by the fold.
 
-        A **drop-only** narrowing, sound because each superseding arm (a lease minted, or a requeue
-        recorded, strictly after the escalation) is one ``ChunkFacts.open_escalation`` also has
-        (``src/blizzard/hub/domain/chunk/model.py``), so a chunk dropped here is one the fold would drop too; arms
-        it lacks (completion) only leave extra work for the fold, never a wrong answer."""
+        A **drop-only** narrowing: each excluding arm must be one that
+        ``src/blizzard/hub/domain/chunk/model.py``'s ``ChunkFacts.open_escalation`` also closes on."""
         live_chunk_ids = self._store.select(s.chunks, s.chunks.c.chunk_id).where(
             maybe_live(self._store), s.chunks.c.chunk_id.not_in(ephemeral_ids_select(self._store))
         )

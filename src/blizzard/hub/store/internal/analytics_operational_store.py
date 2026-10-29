@@ -1,8 +1,6 @@
 """SQLAlchemy adapter for the operational analytics query seam (package-private).
 Reads ``transitions``/``lease_facts``/``usage_facts``/``chunk_migrations``
-directly, the same tables the chunk-seam adapters (``hub/store/internal/chunk_*_store.py``)
-write — several ``internal/`` adapters sharing one engine is established (see
-:mod:`analytics_event_query_store`). Filtering stays portable SQL (``bzh:sql-portable``);
+directly. Filtering stays portable SQL (``bzh:sql-portable``);
 the business rules live in the domain-owned fold this adapter only fetches and maps
 rows for."""
 
@@ -278,9 +276,8 @@ def _to_spend_stats(row: Any) -> SpendStats:
 def _judged_distribution_stmt(stmts: ScopedStatements, criteria: OperationalCriteria) -> Select[Any]:
     """One row per ``(node, choice)`` matching ``criteria`` — only rows carrying a
     ``choice_name``, anti-joined against ``chunk_bounces`` on ``(chunk_id, epoch)`` so a
-    kick-back's own same-epoch routing transition is excluded too (``src/blizzard/hub/delivery/hub_node.py``
-    records both). A migration-completed step is not counted here either — a documented
-    gap, see ``docs/deployment/analytics.md``."""
+    kick-back's own same-epoch routing transition is excluded too. A migration-completed
+    step is not counted here either — a documented gap, see ``docs/deployment/analytics.md``."""
     t, b = s.transitions, s.chunk_bounces
     bounced = stmts.scope_join(t, b, (b.c.chunk_id == t.c.chunk_id) & (b.c.epoch == t.c.epoch), isouter=True)
     stmt = stmts.select(bounced, t.c.from_node_id, t.c.choice_name, func.count().label("occurrences"))
@@ -324,10 +321,9 @@ def _candidate_chunk_ids_stmt(stmts: ScopedStatements, criteria: OperationalCrit
 
 def _chunk_max_lease_epoch_stmt(stmts: ScopedStatements, criteria: OperationalCriteria) -> Select[Any]:
     """Each candidate chunk's own newest lease epoch, deliberately unwindowed by
-    ``criteria`` — a lease minted after ``until`` (or before ``since``) still proves an
-    in-window candidate epoch IS superseded (positive end-of-attempt evidence for
-    ``resolve_attempt_failures``), so whether it is over cannot itself be decided from
-    inside the window."""
+    ``criteria`` — a lease minted outside the window still supersedes an in-window
+    epoch (``src/blizzard/hub/domain/observability/analytics/operational.py``'s
+    ``resolve_attempt_failures``)."""
     t = s.lease_facts
     stmt = stmts.select(t, t.c.chunk_id, func.max(t.c.epoch).label("max_epoch"))
     return stmt.where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(stmts, criteria))).group_by(t.c.chunk_id)
@@ -335,9 +331,9 @@ def _chunk_max_lease_epoch_stmt(stmts: ScopedStatements, criteria: OperationalCr
 
 def _chunk_transitions_stmt(stmts: ScopedStatements, criteria: OperationalCriteria) -> Select[Any]:
     """Every transition ever recorded for a candidate chunk — unfiltered by
-    ``criteria``'s own window/graph: ``resolve_attempt_failures`` resolves a failed
-    attempt's node from whatever movement came before it, which can predate the window
-    a caller asked about."""
+    ``criteria``'s own window/graph, since a failed attempt's node can resolve from a
+    movement predating the window (``src/blizzard/hub/domain/observability/analytics/operational.py``'s
+    ``resolve_attempt_failures``)."""
     t = s.transitions
     cols = (t.c.chunk_id, t.c.epoch, t.c.transition_id, t.c.from_node_id, t.c.to_node_id, t.c.graph_id, t.c.recorded_at)
     return stmts.select(t, *cols).where(t.c.chunk_id.in_(_candidate_chunk_ids_stmt(stmts, criteria)))

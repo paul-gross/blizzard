@@ -59,11 +59,8 @@ class ChunkMovementStore:
             return row.to_node_id if row is not None else None
 
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
-        """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
-        — the idempotency probe a re-applied cross-graph completion short-circuits on (#90).
-
-        A migration writes no ``transitions`` row, so the transition-replay probe cannot
-        see it; this is its counterpart, on :meth:`record_migration`'s natural key."""
+        """See ``src/blizzard/hub/domain/chunk/ports/movement.py``'s
+        ``IReadChunkMovementRepository.accepted_migration``."""
         with self._store.read("accepted_migration") as conn:
             return self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch)
 
@@ -212,11 +209,8 @@ class ChunkMovementStore:
         clear_intent: bool = False,
         migration_id: str | None = None,
     ) -> str | FenceRefusal | None:
-        """Record a cross-graph migration **atomically and idempotently** (#90).
-
-        One transaction: the fact, the ``chunks.graph_id`` re-pin, the route release
-        (unless ``release_route``, #111), this step's artifacts, and the
-        intent clear (``clear_intent``, #124). Keyed ``(chunk_id, from_node_id, epoch)``."""
+        """See ``src/blizzard/hub/domain/chunk/ports/movement.py``'s
+        ``IWriteChunkMovementRepository.record_migration``."""
         with self._store.write("record_migration") as conn:
             lock_chunk_row(conn, chunk_id)
             return self._record_migration_conn(
@@ -477,11 +471,11 @@ class ChunkMovementStore:
         epoch: int,
         at: datetime,
     ) -> None:
-        """A cross-graph restart's migration half (#371), inside the restart's own transaction: the
+        """A cross-graph restart's migration half, inside the restart's own transaction: the
         fact that owns the re-pin, the pin, and the standing intent this eager move supersedes.
-        Stamped at the restart's own ``(recorded_at, epoch)``, so ``latest_movement``'s kind rank
-        settles which of the two the chunk stands on. No route release — the holding runner keeps
-        it and re-enters — and no ``decision_id``, which is the restart fact's alone."""
+        Stamped at the restart's own ``(recorded_at, epoch)`` — the tie
+        ``src/blizzard/hub/domain/chunk/model.py``'s ``ChunkFacts.latest_movement`` breaks. No route
+        release and no ``decision_id``, which is the restart fact's alone."""
         conn.execute(
             self._store.insert(s.chunk_migrations).values(
                 migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,

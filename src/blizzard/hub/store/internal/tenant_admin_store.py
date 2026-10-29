@@ -2,9 +2,8 @@
 
 ``tenants`` and ``tenant_deletions`` are on the global list, so the directory reads and renames through the hub-level
 connections. A creation runs inside an identity unit of work, the one transaction that may write both the global
-identity tables and a tenant's own: the tenant's connections on that transaction insert its ``tenants`` row first
-(:meth:`~blizzard.hub.store.scoped.ScopedConnections.founding`), and every later tenant-owned write there — the
-packaged graphs, the ``hub`` sequence, the default project — locks the row it inserted. The first admin's membership
+identity tables and a tenant's own, opened through ``src/blizzard/hub/store/scoped.py``'s
+``ScopedConnections.founding``. The first admin's membership
 is written through the unit's own membership repository, so the tenant and its admin commit or roll back together."""
 
 from __future__ import annotations

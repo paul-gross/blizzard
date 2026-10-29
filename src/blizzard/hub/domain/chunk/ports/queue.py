@@ -33,9 +33,9 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
-        Idempotent: a chunk already promoted keeps its first row, so a re-promote writes
-        nothing. Returns the freshly-written ``chunk_promoted.id``, or ``None`` on that
-        no-op replay — there is no fresh row to name."""
+        Idempotent while promoted: a chunk currently promoted keeps its row, so a re-promote
+        writes nothing; one demoted since promotes again. Returns the freshly-written
+        ``chunk_promoted.id``, or ``None`` on that no-op replay — there is no fresh row to name."""
         ...
 
     def record_promote_with_position_locked(

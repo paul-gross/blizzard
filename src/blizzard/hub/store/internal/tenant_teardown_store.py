@@ -1,12 +1,11 @@
 """SQLAlchemy adapter for tenant deletion (package-private).
 
-The close is a hub-level write over the global ``tenants`` and ``tenant_deletions``: it locks every tenant's row first —
-among them the tenant's own, the same row every scoped write of the tenant locks before its first statement — and only
-then checks that another tenant stays open and records the deletion fact, so a write in flight either committed before
-the close or is refused after it, and two closes of different tenants never both pass the last-open-tenant check. The
-drain and the completion are the tenant's teardown writes
-(:meth:`~blizzard.hub.store.scoped.ScopedConnections.teardown`): each locks the deletion fact, which also serializes two
-drains of one tenant, and removes rows through the tenant's own builders.
+The close is a hub-level write over the global ``tenants`` and ``tenant_deletions``: it locks every tenant's row first
+and only then checks that another tenant stays open and records the deletion fact, so a write in flight either
+committed before the close or is refused after it, and two closes of different tenants never both pass the
+last-open-tenant check. The drain and the completion are the tenant's teardown writes
+(``src/blizzard/hub/store/scoped.py``'s
+``ScopedConnections.teardown``).
 
 The drain walks :data:`DRAIN_ORDER` — the reverse of ``schema.metadata.sorted_tables`` restricted to tenant-owned
 tables, children before parents — from the top on every batch, deleting each table's rows by primary key. Nothing
@@ -45,12 +44,8 @@ def _deletion(row: Any) -> TenantDeletion:
 
 def _lock_every_tenant(conn: Connection) -> set[str]:
     """Take every ``tenants`` row's write lock — one no-op ``UPDATE`` each, in ``tenant_id`` order — and name the rows
-    locked. The last-open-tenant check reads the other tenants' rows, so locking the closing tenant's own row alone lets
-    two closes of different tenants each pass it under Postgres' READ COMMITTED, neither seeing the other's uncommitted
-    deletion fact. Taken in one order, the locks queue the second close behind the first, whose committed fact its
-    check then reads (``bzh:store-exclusive-write``; ``FOR UPDATE`` renders nothing on SQLite). On SQLite the first
-    ``UPDATE`` takes the single writer lock, as the own-row lock did. The race is verified on SQLite only; on Postgres
-    it stays unverified."""
+    locked
+    (``tests/test_tenant_teardown.py::test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check``)."""
     tenants = conn.execute(select(_t.tenant_id).order_by(_t.tenant_id)).scalars().all()
     return {
         each

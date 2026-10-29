@@ -166,9 +166,8 @@ def is_landing_marker(name: str, data: str) -> bool:
 
 
 def insert_chunk_rows(conn: Connection, chunk: Chunk) -> None:
-    """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows on a
-    caller-supplied ``conn`` — the caller owns the transaction boundary, so a composite
-    write can fold this into its own transaction. The row names the chunk's project."""
+    """Insert one chunk's ``chunks`` row and its ``chunk_work_refs`` rows, on the caller's
+    connection, inside the caller's transaction. The row names the chunk's project."""
     stmts = statements_of(conn)
     conn.execute(
         stmts.insert(s.chunks).values(
@@ -230,10 +229,9 @@ def inserted_id(result: CursorResult[Any]) -> int:
 
 
 def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int:
-    """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows on a
-    caller-supplied ``conn`` — mirrors :func:`insert_chunk_rows`'s shared-connection
-    shape. No idempotency check; the caller owns it. Returns the freshly-inserted
-    ``chunk_promoted.id``."""
+    """Insert one chunk's ``chunk_promoted`` and ``queue_positions`` rows, on the caller's
+    connection, inside the caller's transaction. No idempotency check; the caller owns it.
+    Returns the freshly-inserted ``chunk_promoted.id``."""
     stmts = statements_of(conn)
     at = after_newest(conn, s.chunk_demoted.c.demoted_at, chunk_id, at)
     result = conn.execute(stmts.insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
@@ -242,9 +240,9 @@ def insert_promote_rows(conn: Connection, chunk_id: str, *, position: float, at:
 
 
 def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: datetime) -> int:
-    """Insert one chunk's ``chunk_demoted`` and ``queue_positions`` rows on a caller-supplied
-    ``conn`` — the demote twin of :func:`insert_promote_rows`. No idempotency check; the caller
-    owns it. Returns the freshly-inserted ``chunk_demoted.id``."""
+    """Insert one chunk's ``chunk_demoted`` and ``queue_positions`` rows, on the caller's
+    connection, inside the caller's transaction. No idempotency check; the caller owns it.
+    Returns the freshly-inserted ``chunk_demoted.id``."""
     stmts = statements_of(conn)
     at = after_newest(conn, s.chunk_promoted.c.promoted_at, chunk_id, at)
     result = conn.execute(stmts.insert(s.chunk_demoted).values(chunk_id=chunk_id, demoted_at=at))
@@ -253,10 +251,8 @@ def insert_demote_rows(conn: Connection, chunk_id: str, *, position: float, at: 
 
 
 def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime) -> int:
-    """Insert one ``chunk_deleted`` row on a caller-supplied ``conn`` —
-    mirrors :func:`insert_chunk_rows`'s shared-connection shape, so the withdrawal
-    half of a composite delete write can fold this into its own transaction. Returns
-    the freshly-inserted ``chunk_deleted.id``."""
+    """Insert one ``chunk_deleted`` row, on the caller's connection, inside the caller's
+    transaction. Returns the freshly-inserted ``chunk_deleted.id``."""
     result = conn.execute(
         statements_of(conn).insert(s.chunk_deleted).values(chunk_id=chunk_id, deleted_at=at, deleted_by=by)
     )
@@ -264,10 +260,8 @@ def record_deleted_row(conn: Connection, chunk_id: str, *, by: str, at: datetime
 
 
 def record_grouped_row_conn(conn: Connection, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
-    """Insert one ``chunk_grouped`` row on a caller-supplied ``conn`` —
-    mirrors :func:`record_deleted_row`'s shared-connection shape, so the fold's own
-    composite write can fold every target's row into one transaction. Returns the
-    freshly-inserted ``chunk_grouped.id``."""
+    """Insert one ``chunk_grouped`` row, on the caller's connection, inside the caller's
+    transaction. Returns the freshly-inserted ``chunk_grouped.id``."""
     result = conn.execute(
         statements_of(conn).insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
     )
@@ -409,24 +403,21 @@ def lock_chunk_row(conn: Connection, chunk_id: str) -> None:
     """Take the chunk row's write lock, as the first statement after the scoped write's own
     tenant-row lock — a no-op ``UPDATE`` on a row the caller already knows exists
     (``bzh:sql-portable``, ``bzh:store-exclusive-write``; ``tests/test_route_seq_concurrency.py``).
-    On SQLite the tenant-row lock already took the single writer lock, so no later read races a
-    writer; on Postgres, this queues a concurrent locker of the same row. Every guard read a
-    decision rests on must follow this call."""
+    On Postgres this queues a concurrent locker of the same row; SQLite's writer lock is
+    ``src/blizzard/hub/store/scoped.py``'s. Every guard read a decision rests on must follow this call."""
     conn.execute(statements_of(conn).update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
 
 
 def lock_keys(conn: Connection, namespace: str, keys: Sequence[str]) -> None:
     """Take the write lock of each ``(tenant_id, namespace, key)`` row of ``keyed_locks``, in
     sorted key order, as the first statements after the scoped write's own tenant-row lock — for
-    a decision whose race has no existing row to lock (``bzh:store-exclusive-write``). The
-    scoped insert stamps the write's tenant into the key, so two tenants locking one graph name
-    or work ref each hold their own row, serialized only within the tenant. A no-op
+    a decision whose race has no existing row to lock (``bzh:store-exclusive-write``). Rows are
+    per tenant through ``src/blizzard/hub/store/scoped.py``'s scoped insert. A no-op
     ``UPDATE`` on an absent row locks nothing, so each row is first inserted if unseen: in its
     own savepoint, so a concurrent insert of the same key loses with an ``IntegrityError`` that
     rolls back only that insert (the shape of ``review_findings_store._mint_scope_if_unseen``).
-    The ``UPDATE`` then locks a row that exists: on SQLite the tenant-row lock already holds the
-    single writer lock; on Postgres, a concurrent locker of the same key queues behind this
-    transaction's commit. Rows are never deleted."""
+    The ``UPDATE`` then locks a row that exists: on Postgres, a concurrent locker of the same key
+    queues behind this transaction's commit. Rows are never deleted."""
     stmts = statements_of(conn)
     lock = s.keyed_locks
     for key in sorted(set(keys)):

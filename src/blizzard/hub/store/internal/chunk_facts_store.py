@@ -173,12 +173,7 @@ class ChunkFactsStore:
         return self._load(conn, chunk_ids)
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
-        """See :meth:`~blizzard.hub.domain.chunk.ports.facts.IReadChunkFactsRepository.load_all_facts` —
-        one bounded query per fact table across the whole store, grouped by
-        chunk id in Python, rather than :meth:`load_facts`'s per-chunk fan-out.
-        ``activity_facts_since`` is this shape's precedent. Every family reproduces
-        :meth:`load_facts`'s row construction verbatim; only ``chunk_pause_facts`` is read
-        in an explicit order, since :meth:`ChunkFacts.open_pause` indexes its list's tail."""
+        """`src/blizzard/hub/domain/chunk/ports/facts.py`'s `IReadChunkFactsRepository.load_all_facts`."""
         with self._store.read("load_all_facts") as conn:
             return self._load(conn, None)
 

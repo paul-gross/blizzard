@@ -76,7 +76,6 @@ class ChunkQuestionsStore:
         asked_at: datetime,
         harness_id: str | None = None,
     ) -> FenceRefusal | None:
-        # Idempotent by question_id: a store-and-forward replay re-lands the same row.
         with self._store.write("record_question") as conn:
             lock_chunk_row(conn, chunk_id)
             exists = conn.execute(

@@ -1,7 +1,6 @@
 """The host-keyed reads of a host's reported subscription usage and roster (package-private).
 
-Two adapters read them — the host registry for the operator's host view, the runner registry for a hosted runner's
-registration — so the statements live here once, one query per id batch (``bzh:bulk-reconstitution``)."""
+One query per id batch (``bzh:bulk-reconstitution``)."""
 
 from __future__ import annotations
 

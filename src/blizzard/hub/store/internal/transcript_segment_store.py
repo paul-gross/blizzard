@@ -315,10 +315,8 @@ class TranscriptSegmentStore:
         ]
 
     def runner_id_for_lease(self, chunk_id: str, node_id: str, epoch: int) -> str | None:
-        """The single ``runner_id`` on a lease's stored segments — asserted, not
-        assumed: a ``LIMIT 1`` with no ``ORDER BY`` would silently 403 the legitimate
-        owner should two runners' rows ever share one key, so a violation raises here
-        instead of picking an arbitrary row."""
+        """The single ``runner_id`` on a lease's stored segments; more than one raises
+        (``tests/test_transcript_segment_store.py::test_runner_id_for_lease_raises_when_two_runners_hold_the_same_lease_key``)."""
         with self._store.read("runner_id_for_lease") as conn:
             rows = conn.execute(_lease_runner_ids_stmt(self._store, chunk_id, node_id, epoch)).all()
         if not rows:

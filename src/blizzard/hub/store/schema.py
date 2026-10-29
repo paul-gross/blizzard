@@ -137,7 +137,6 @@ graph_nodes = Table(
     Column("action_args", Text, nullable=True),
     # The ``run`` of a hub node the carry-over could not name an action for, verbatim; null on every other node.
     Column("legacy_run", Text, nullable=True),
-    # Null/false disallows proposed work items.
 )
 Index("ix_graph_nodes_tenant_graph_id", graph_nodes.c.tenant_id, graph_nodes.c.graph_id)
 
@@ -859,7 +858,7 @@ Index(
     transitions.c.recorded_at,
     transitions.c.transition_id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (recorded_at, transition_id) for hub-wide ordered reads across every tenant.
 Index("ix_transitions_recorded_at_transition_id", transitions.c.recorded_at, transitions.c.transition_id)
 
 # Transitions into a given node.
@@ -900,7 +899,7 @@ Index(
     chunk_migrations.c.recorded_at,
     chunk_migrations.c.migration_id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (recorded_at, migration_id) for hub-wide ordered reads across every tenant.
 Index("ix_chunk_migrations_recorded_at_migration_id", chunk_migrations.c.recorded_at, chunk_migrations.c.migration_id)
 
 # --- Artifacts (the chunk artifact store) --------------------------------------
@@ -1192,7 +1191,7 @@ lease_facts = Table(
 Index("ix_lease_facts_tenant_chunk_id_epoch", lease_facts.c.tenant_id, lease_facts.c.chunk_id, lease_facts.c.epoch)
 # (tenant_id, minted_at) for one tenant's ordered reads.
 Index("ix_lease_facts_tenant_minted_at", lease_facts.c.tenant_id, lease_facts.c.minted_at)
-# The hub-wide twin: the egress backfill reads every open tenant's epochs minted in a window.
+# (minted_at) for hub-wide reads of a time window across every tenant.
 Index("ix_lease_facts_minted_at", lease_facts.c.minted_at)
 
 # --- Epoch owners (first owner wins; null runner_id means hub) -----
@@ -1210,7 +1209,7 @@ epoch_owners = Table(
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_epoch_owners_tenant_recorded_at_id", epoch_owners.c.tenant_id, epoch_owners.c.recorded_at, epoch_owners.c.id)
 Index("ix_epoch_owners_tenant_chunk_id", epoch_owners.c.tenant_id, epoch_owners.c.chunk_id, epoch_owners.c.epoch)
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (recorded_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_epoch_owners_recorded_at_id", epoch_owners.c.recorded_at, epoch_owners.c.id)
 
 # --- Routes (route.created / route.released) ----------------------------------
@@ -1292,7 +1291,7 @@ Index(
     route_released.c.released_at,
     route_released.c.id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (released_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_route_released_released_at_id", route_released.c.released_at, route_released.c.id)
 
 # --- Route capability tokens (route_token_minted) ----------------
@@ -1631,7 +1630,7 @@ Index(
     chunk_stopped.c.stopped_at,
     chunk_stopped.c.id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (stopped_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_chunk_stopped_stopped_at_id", chunk_stopped.c.stopped_at, chunk_stopped.c.id)
 
 # An operator's manual completion — outranks a ``chunk_stopped`` row recorded
@@ -1653,7 +1652,7 @@ Index(
     chunk_completed.c.completed_at,
     chunk_completed.c.id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (completed_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_chunk_completed_completed_at_id", chunk_completed.c.completed_at, chunk_completed.c.id)
 
 # The fact that makes an unacquired chunk ephemeral by deletion — a
@@ -1724,7 +1723,7 @@ escalations = Table(
 Index("ix_escalations_tenant_chunk_id", escalations.c.tenant_id, escalations.c.chunk_id)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_escalations_tenant_recorded_at_id", escalations.c.tenant_id, escalations.c.recorded_at, escalations.c.id)
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (recorded_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_escalations_recorded_at_id", escalations.c.recorded_at, escalations.c.id)
 
 # --- Usage facts (usage.recorded) --------------------------------
@@ -1756,11 +1755,11 @@ usage_facts = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_usage_facts_tenant_id"), nullable=False),
 )
 Index("ix_usage_facts_tenant_chunk_id", usage_facts.c.tenant_id, usage_facts.c.chunk_id)
-# The analytics spend-by-node grouping — otherwise a temp B-tree.
+# (tenant_id, node_id) for one tenant's per-node grouping.
 Index("ix_usage_facts_tenant_node_id", usage_facts.c.tenant_id, usage_facts.c.node_id)
 # (tenant_id, recorded_at, id) for one tenant's ordered reads.
 Index("ix_usage_facts_tenant_recorded_at_id", usage_facts.c.tenant_id, usage_facts.c.recorded_at, usage_facts.c.id)
-# The hub-wide twin: the egress sweep pages every open tenant's usage in this order.
+# (recorded_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_usage_facts_recorded_at_id", usage_facts.c.recorded_at, usage_facts.c.id)
 
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
@@ -1830,8 +1829,7 @@ Index(
 answer_deliveries = Table(
     "answer_deliveries",
     metadata,
-    # answer.delivered (runner-minted): the resume-with-answer executed. Board detail
-    # only — the chunk's status already flipped to running at question.answered.
+    # answer.delivered (runner-minted): the resume-with-answer executed.
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("question_id", String, nullable=False),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
@@ -1854,7 +1852,7 @@ decisions = Table(
     Column("decision_id", String, primary_key=True, info={"hub_unique": True}),  # dec_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("node_id", String, nullable=False),  # the gate node awaiting the decision
-    Column("node_name", String, nullable=False),  # the node's name — what runner gate-config matches
+    Column("node_name", String, nullable=False),  # the gate node's name
     Column("epoch", Integer, nullable=False),  # the parked step's fence; stale decisions rejected
     # JSON list of {name, description, requires_checks} — the buttons
     Column("choices", Text, nullable=False),
@@ -1890,7 +1888,7 @@ Index(
     decisions.c.submitted_at,
     decisions.c.decision_id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (submitted_at, decision_id) for hub-wide ordered reads across every tenant.
 Index("ix_decisions_submitted_at_decision_id", decisions.c.submitted_at, decisions.c.decision_id)
 
 decision_resolutions = Table(
@@ -1974,7 +1972,7 @@ Index(
     chunk_restarts.c.recorded_at,
     chunk_restarts.c.id,
 )
-# The hub-wide twin: the trace sweep's closing-candidates read pages every open tenant's rows in this order.
+# (recorded_at, id) for hub-wide ordered reads across every tenant.
 Index("ix_chunk_restarts_recorded_at_id", chunk_restarts.c.recorded_at, chunk_restarts.c.id)
 
 # --- Chunk pause facts (chunk.paused / chunk.resumed) -----------
@@ -2141,8 +2139,7 @@ runner_registrations = Table(
     # The runner's own browser-reachable base URL — nullable: a runner that
     # registers none cannot be a federation target. Refreshed in place.
     Column("public_url", Text, nullable=True),
-    # The runner's allowed redirect URIs, JSON `list[str]` — exact-matched
-    # against a presented `redirect_uri` before a JWT is minted (the open-redirect guard).
+    # The runner's allowed redirect URIs, JSON `list[str]`.
     Column("redirect_uris", Text, nullable=True),
     # The runner's reported capability snapshot, JSON `list[dict]`, one per harness binding.
     Column("capabilities", Text, nullable=True),
@@ -2408,10 +2405,10 @@ auth_state = Table(
     Column("kind", String, nullable=False),
     Column("provider_name", String, nullable=False),
     Column("return_to", String, nullable=False),
-    Column("code_challenge", String, nullable=True),  # reserved for #96's PKCE public client
+    Column("code_challenge", String, nullable=True),  # reserved for a PKCE public client
     Column("created_at", UtcDateTime, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
-    Column("user_id", String, nullable=True),  # cli_login rows only — see note above
+    Column("user_id", String, nullable=True),
     # The sha256 hex of the invitation token a provider_login row was started with; NULL for every other sign-in.
     Column("invitation_token_hash", String, nullable=True),
 )
@@ -2554,7 +2551,7 @@ hub_event_log = Table(
 )
 
 Index("ix_hub_event_log_recorded_at", hub_event_log.c.recorded_at)
-# The exports' newest-of-a-kind reads (their failure and latch) — each a seek to one kind's newest row.
+# (kind, recorded_at) for a seek to one kind's newest row.
 Index("ix_hub_event_log_kind_recorded_at", hub_event_log.c.kind, hub_event_log.c.recorded_at)
 
 # --- Trace export cursor (trace_cursor) ---------------------------------------
@@ -2786,7 +2783,7 @@ Index(
     transcript_event_derivations.c.segment_id,
     transcript_event_derivations.c.extractor_version,
 )
-# The hub-wide twin: the egress sweep pages every open tenant's markers in this order.
+# (derived_at, segment_id, extractor_version, tenant_id) for hub-wide ordered reads across every tenant.
 Index(
     "ix_transcript_event_derivations_egress_order",
     transcript_event_derivations.c.derived_at,
@@ -2821,7 +2818,7 @@ Index(
     transcript_event_drops.c.dropped_at,
     transcript_event_drops.c.segment_id,
 )
-# The hub-wide twin: the egress sweep pages every open tenant's drops in this order.
+# (dropped_at, segment_id, tenant_id) for hub-wide ordered reads across every tenant.
 Index(
     "ix_transcript_event_drops_egress_order",
     transcript_event_drops.c.dropped_at,
@@ -2838,9 +2835,7 @@ Index(
 
 # --- Work items (hub-owned work items) ---------------------------
 # A mutable entity row, not a fact table: title/body/edited_at change in place, and
-# closure is recorded on the row itself (nullable ``closed_at`` + ``closure``) rather
-# than a separate append-only table, because there is exactly one current state to read
-# back — never a history of edits (``bzh:facts-not-status``, Recorded position).
+# closure is the nullable ``closed_at`` + ``closure`` pair (``bzh:facts-not-status``).
 
 work_items = Table(
     "work_items",

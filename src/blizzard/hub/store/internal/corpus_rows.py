@@ -1,9 +1,9 @@
 """The statements and row mappers behind the trace and egress sweeps' corpus reads (package-private).
 
-Every function here runs on a connection it is handed and never opens one: the sweep corpus group
-(``hub_scoped_corpus``) opens each read marked hub-scoped and calls in. Each statement reads across
-every tenant and leaves out every closed one through :func:`open_tenant`, the one closed-tenant
-filter every corpus read applies, and answers each row's ``tenant_id`` beside it. Chunk ids are
+Every function here runs on a connection it is handed, marked hub-scoped, and never opens one.
+Each statement reads across every tenant and leaves out every closed one through
+:func:`open_tenant`, the one closed-tenant filter every corpus read applies, and answers each
+row's ``tenant_id`` beside it. Chunk ids are
 hub-minted, so a filter on chunk ids needs no tenant beside it; a question or segment id is
 runner-minted, so a statement matching one row to another by such an id matches the tenant too.
 Hydration is a fixed set of batched statements per id batch, whatever the chunk count

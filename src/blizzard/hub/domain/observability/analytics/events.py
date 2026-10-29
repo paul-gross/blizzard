@@ -273,11 +273,10 @@ class IReadTranscriptEvents(Protocol):
         ...
 
     def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
-        """``segment_derivation_input``'s batched sibling — every requested id's decoded
-        turns and content fingerprint, in a bounded number of queries per id batch. An id
-        that doesn't exist is absent, the same as ``segment_derivation_input`` returning
-        ``None``. A segment whose content fails to decode is *also* absent — unlike the
-        singular, which lets that failure raise."""
+        """``segment_derivation_input``'s batched sibling — every requested id's decoded turns
+        and content fingerprint, in a bounded number of queries per id batch. An id that doesn't
+        exist is absent, as is a segment whose content fails to decode (the singular raises
+        instead); a caller observing a drop diffs the requested ids against the result's keys."""
         ...
 
     def segment_contexts(self, segment_ids: Sequence[str]) -> dict[str, SegmentContext]:

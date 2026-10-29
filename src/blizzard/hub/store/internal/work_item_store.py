@@ -337,11 +337,8 @@ class WorkItemStore:
 
     @staticmethod
     def _close_conn(conn: Connection, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> None:
-        """Close an open item on a caller-supplied ``conn`` — extracted from :meth:`close`
-        so :meth:`delete_chunk_and_withdraw_hub_items_locked` can fold the same write into its
-        own transaction. No rowcount check: closing an item already closed,
-        or one that never existed, is a silent no-op here, exactly as :meth:`close` was
-        before this extraction."""
+        """Closes an open item, on the caller's connection, inside the caller's transaction.
+        Closing an item already closed, or one that never existed, is a silent no-op."""
         conn.execute(
             statements_of(conn)
             .update(s.work_items)

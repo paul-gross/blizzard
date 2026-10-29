@@ -1,18 +1,9 @@
 """The tenant statement guard — a ``before_execute`` listener that refuses a statement reaching a tenant-owned table
 without naming its tenant.
 
-It is the key-scoping core's walker (:class:`~blizzard.foundation.store.statement_guard.KeyedStatementGuard`)
-configured for ``tenant_id``: it walks every compiled ``Select``, ``Update`` and ``Delete``, nested ones included, and
-fails when a tenant-owned table is rendered in a ``FROM`` without being scoped; and every ``Insert`` into a
-tenant-owned table whose column list lacks ``tenant_id``. A table is scoped by an equality among the conjuncts of a
-condition that filters its rows — the statement's ``WHERE``, an inner join's ``ON``, or the ``ON`` of the left outer
-join it is the right side of — that equates its ``tenant_id`` to a bound value, to the ``tenant_id`` of a tenant-owned
-table it correlates to, or to the ``tenant_id`` of another table in the statement that is scoped. A statement carrying
-the :data:`~blizzard.hub.tenancy.HUB_SCOPED_OPTION` execution option, on itself or on its connection or engine, is
-deliberately cross-tenant and passes unwalked. Raw SQL (``text()``, ``exec_driver_sql``) is not walked.
-
-The hub's guard watches only ``schema.metadata``'s tables: a migration's frozen ``sa.table()`` constructs and the runner
-store's tables are other objects, so they pass. It is installed process-wide, and only when the process was started
+It is ``src/blizzard/foundation/store/statement_guard.py``'s ``KeyedStatementGuard`` configured for ``tenant_id``,
+watching ``schema.metadata``'s tables; its exemption option is :data:`~blizzard.hub.tenancy.HUB_SCOPED_OPTION`. It is
+installed process-wide, and only when the process was started
 with ``BLIZZARD_TENANT_GUARD=1`` — production leaves it off.
 """
 

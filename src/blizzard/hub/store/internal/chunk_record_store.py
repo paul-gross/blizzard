@@ -106,10 +106,9 @@ class ChunkRecordStore:
         return chunk_row(conn, row)
 
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
-        """`get`'s batched sibling — every requested id's row plus its work refs
-        (`bzh:bulk-reconstitution`). An id that doesn't exist or is ephemeral
-        is silently dropped, the same as `get` returning None for it. Reads each batch's
-        full ``chunks`` rows once, via :func:`ephemeral_ids_in`."""
+        """`src/blizzard/hub/domain/chunk/ports/record.py`'s `IReadChunkRecordRepository.get_many`.
+
+        Reads each batch's full ``chunks`` rows once, via :func:`ephemeral_ids_in`."""
         if not chunk_ids:
             return {}
         with self._store.read("get_many") as conn:
@@ -167,8 +166,7 @@ class ChunkRecordStore:
     def list_all(self) -> list[Chunk]:
         """Every non-ephemeral chunk, newest-minted first. Reads ``chunk_work_refs`` with
         one bulk query grouped by chunk id in Python rather than a per-chunk
-        query, the same shape the facts seam's ``load_all_facts`` reads its own tables in —
-        so the list route's own chunk read is bounded regardless of fleet size too."""
+        query, so the read stays bounded regardless of fleet size."""
         with self._store.read("list_all") as conn:
             ephemeral = ephemeral_ids(conn)
             rows = [
@@ -353,9 +351,8 @@ class ChunkRecordStore:
     def set_intended_migration_locked(
         self, handle: ILockedChunkRead, chunk_id: str, *, intended: IntendedMigration | None
     ) -> None:
-        """Set, overwrite, or clear a chunk's standing migration intent, on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``). A plain column
-        overwrite, editable at any non-terminal status; the column carries no timestamp."""
+        """`src/blizzard/hub/domain/chunk/ports/record.py`'s
+        `IWriteChunkRecordRepository.set_intended_migration_locked`."""
         self._set_intended_migration_conn(conn_of(handle), chunk_id, intended=intended)
 
     def _set_intended_migration_conn(

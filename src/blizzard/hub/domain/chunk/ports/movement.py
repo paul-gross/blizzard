@@ -74,11 +74,11 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         clear_intent: bool = False,
         migration_id: str | None = None,
     ) -> str | FenceRefusal | None:
-        """Record a cross-graph migration atomically and idempotently, behind the write fence
-        (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin,
-        the route release (unless ``release_route`` is ``False``), the step's ``artifacts``, and
-        — when ``clear_intent`` — the intent clear. Returns the
-        ``migration_id``, ``None`` on replay, or the :class:`FenceRefusal` that wrote nothing."""
+        """Record a cross-graph migration atomically and idempotently per ``(chunk_id, from_node_id, epoch)``,
+        behind the write fence (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id``
+        re-pin, the route release (unless ``release_route`` is ``False``), the step's ``artifacts``, and — when
+        ``clear_intent`` — the intent clear. Returns the ``migration_id``, ``None`` on replay, or the
+        :class:`FenceRefusal` that wrote nothing."""
         ...
 
     def record_transition_locked(

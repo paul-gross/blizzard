@@ -362,8 +362,7 @@ class ChunkEventsStore:
     def activity_events_since(
         self, since: datetime, *, limit: int, lens: FeedLens | None = None
     ) -> list[OperationalEvent]:
-        """See
-        :meth:`~blizzard.hub.domain.chunk.ports.events.IReadChunkEventsRepository.activity_events_since`."""
+        """`src/blizzard/hub/domain/chunk/ports/events.py`'s `IReadChunkEventsRepository.activity_events_since`."""
         with self._store.read("activity_events_since") as conn:
             deleted = _deleted_chunk_ids_stmt(self._store)
             stmt = (

@@ -5,9 +5,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 claim; nothing here derives status. Timestamps arrive already stamped
 (``bzh:injected-clock``).
 
-``record_hub_step_transition`` stays one transaction on one connection, unchanged by
-the seam carve — the shared row helpers below are plain function calls inside that same
-``with self._store.write(...)`` block, never a second connection."""
+``record_hub_step_transition`` is one transaction on one connection — the shared row
+helpers below are plain function calls inside that same ``with self._store.write(...)``
+block, never a second connection."""
 
 from __future__ import annotations
 
@@ -51,12 +51,11 @@ class ChunkHubExecStore:
             )
 
     def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
-        """Acquire this tenant's hub-execution slot, **atomically** (crash-derivable
-        fact, ``bzh:facts-not-status`` — never an in-process lock, so the invariant
-        checker can assert at most one live slot per tenant and a ``kill -9`` mid-run
-        leaves a stale, reclaimable row rather than a wedged tenant). The scoped write
-        opens on the tenant row's lock (``bzh:store-exclusive-write``), so two acquires
-        in one tenant serialize before the read-then-insert below, while another
+        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
+        ``IWriteChunkHubExecRepository.acquire_hub_exec_slot``.
+
+        The scoped write opens on the tenant row's lock (``bzh:store-exclusive-write``), so two
+        acquires in one tenant serialize before the read-then-insert below, while another
         tenant's acquire never waits on this one's slot."""
         with self._store.write("acquire_hub_exec_slot") as conn:
             live_rows = conn.execute(
@@ -112,11 +111,8 @@ class ChunkHubExecStore:
         artifacts: list[StoredArtifact],
         release_route: bool,
     ) -> bool:
-        """Record a generic hub command node's exit transition **atomically and idempotently**
-        (#65) — ``ChunkDeliveryStore.finalize_delivery``'s counterpart, generalized to any
-        authored target. Returns False, writing nothing, on a redelivery replay — the
-        transition's existence at ``(chunk_id, from_node_id, epoch)`` — or when the write
-        fence refuses (``bzh:epoch-fencing``)."""
+        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
+        ``IWriteChunkHubExecRepository.record_hub_step_transition``."""
         with self._store.write("record_hub_step_transition") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
@@ -175,8 +171,8 @@ class ChunkHubExecStore:
     def record_hub_node_poll(
         self, chunk_id: str, *, node_id: str, epoch: int, at: datetime, next_poll_at: datetime | None = None
     ) -> None:
-        """Append one pending-poll-attempt fact (#66) — never a transition, no
-        idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
+        """See ``src/blizzard/hub/domain/chunk/ports/hub_exec.py``'s
+        ``IWriteChunkHubExecRepository.record_hub_node_poll``."""
         with self._store.write("record_hub_node_poll") as conn:
             conn.execute(
                 self._store.insert(s.hub_node_poll).values(

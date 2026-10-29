@@ -41,7 +41,7 @@ _LATCH_KINDS: tuple[HubEventKind, ...] = (_FAILED, "trace-export-recovered")
 
 class TraceStore:
     """The trace export's reads and its cursor's appends. The cursor is hub-level, and so are the export's failure and
-    recovery events, read from ``hub_events``, the hub's own event log its sweep records them in. ``hydration`` opens a
+    recovery events, read from ``hub_events``. ``hydration`` opens a
     tenant's reads a chunk's facts are completed through, and ``tenant_name`` names an open tenant."""
 
     def __init__(

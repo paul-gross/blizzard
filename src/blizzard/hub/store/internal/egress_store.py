@@ -1,8 +1,7 @@
 """SQLAlchemy adapter for the egress export seam (package-private).
 
 Reads the cursor and its latch and appends the cursor's fact rows (``bzh:facts-not-status``). Usage facts past a cursor
-position span every tenant, so they come from the sweep corpus (:class:`IReadUsageCorpus`); closed steps are read
-through :class:`~blizzard.hub.store.internal.trace_store.TraceStore`, the trace sweep's own reader."""
+position span every tenant, so they come from the sweep corpus (:class:`IReadUsageCorpus`)."""
 
 from __future__ import annotations
 
@@ -36,7 +35,7 @@ _NO_FILES = json.dumps([])
 
 class EgressStore:
     """The egress export's usage reads and its cursor's appends. The cursor is hub-level, and so are the export's
-    failure and recovery events, read from ``hub_events``, the hub's own event log its sweep records them in."""
+    failure and recovery events, read from ``hub_events``."""
 
     def __init__(self, store: HubStoreConnections, *, hub_events: IReadHubEventLog, usage: IReadUsageCorpus) -> None:
         self._store = store

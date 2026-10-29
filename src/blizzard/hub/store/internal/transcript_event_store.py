@@ -1,8 +1,6 @@
 """SQLAlchemy adapter for the transcript-event seam (package-private).
 
-Reads ``transcript_segments`` directly — the same table :mod:`transcript_segment_store`
-adapts — rather than depending on that adapter: two ``internal/`` adapters sharing one
-engine and schema module is established, not a coupling between them. All
+Reads ``transcript_segments`` directly. All
 ``sqlalchemy``/``zlib``/``hashlib``/``json`` usage stays confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
@@ -35,9 +33,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 
 # --- statements: nothing below executes a statement built elsewhere, so the unit tier
-# compiles the real ones under both dialects (`bzh:sql-portable`). The derivation sweep's
-# corpus reads span every tenant through the hub-scoped seam; every builder here takes the
-# tenant's ``ScopedStatements``.
+# compiles the real ones under both dialects (`bzh:sql-portable`). Every builder here takes
+# the tenant's ``ScopedStatements``.
 
 #: `drop_segments`'s own batch size — an unbounded `IN (...)` over a mass, simultaneous
 #: visibility loss has no ceiling; this bounds each DELETE regardless of stale-set size.
@@ -290,8 +287,7 @@ def content_fingerprint(records: Sequence[Any]) -> str:
     """A deterministic fingerprint of a segment's own content plus its own
     ``harness_version`` — content via each record's ``content_digest``,
     harness_version folded in too since a still-rejected re-offer can refresh it with no
-    content change. Rebased onto persisted state, not raw content: recomputing it never
-    reads a content byte."""
+    content change. Recomputing it never reads a content byte."""
     return fingerprint_from_parts([(row.content_digest, row.harness_version) for row in records])
 
 
@@ -312,8 +308,7 @@ def _provenance(rows: Sequence[Any]) -> SegmentProvenance:
 
 def _decode_turns(records: Sequence[Any]) -> list[TranscriptTurn]:
     """Every non-rejected record's turns, decompressed and concatenated in range order —
-    the domain's own decode, independent of ``hub/api``'s (``bzh:domain-core``: this
-    adapter owns its own reads, never reaches into an outer layer for them)."""
+    (``bzh:domain-core``)."""
     turns: list[TranscriptTurn] = []
     for row in records:
         if row.rejected or row.content is None:
@@ -417,10 +412,9 @@ class TranscriptEventStore:
         }
 
     def segment_derivation_inputs(self, segment_ids: Sequence[str]) -> dict[str, SegmentDerivationInput]:
-        """This adapter stays a pure read (no logger: ``bzh:dependency-inversion``), so a
-        caller that needs to observe one of the drops
-        :meth:`~blizzard.hub.domain.observability.analytics.events.IReadTranscriptEvents.segment_derivation_inputs`
-        allows for diffs the requested ``segment_ids`` against this result's keys itself."""
+        """`src/blizzard/hub/domain/observability/analytics/events.py`'s
+        `IReadTranscriptEvents.segment_derivation_inputs`. A pure read, logging no drop
+        (``bzh:dependency-inversion``)."""
         result: dict[str, SegmentDerivationInput] = {}
         if not segment_ids:
             return result

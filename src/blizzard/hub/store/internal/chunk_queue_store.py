@@ -60,8 +60,6 @@ class ChunkQueueStore:
         return result
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
-        # Idempotent while promoted: a chunk already currently promoted writes nothing, so a
-        # double promote (board click, CLI retry) is a harmless no-op; one demoted since promotes again.
         with self._store.write("record_promote") as conn:
             if currently_promoted_ats(conn, [chunk_id]):
                 return None
@@ -85,8 +83,9 @@ class ChunkQueueStore:
         return insert_demote_rows(conn_of(handle), chunk_id, position=position, at=at)
 
     def record_queue_positions(self, positions: Sequence[tuple[str, float]], *, at: datetime) -> None:
-        """Append every ``(chunk_id, position)`` pair in one multi-row insert — a
-        whole-order replace of N chunks costs one write transaction, not N."""
+        """`src/blizzard/hub/domain/chunk/ports/queue.py`'s `IWriteChunkQueueRepository.record_queue_positions`.
+
+        One multi-row insert carries every pair."""
         if not positions:
             return
         with self._store.write("record_queue_positions") as conn:

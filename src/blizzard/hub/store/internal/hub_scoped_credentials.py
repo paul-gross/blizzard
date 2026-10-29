@@ -18,8 +18,8 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.store.schema import host_token_revocations, hosts, runner_registrations, runner_token_revocations
 from blizzard.hub.tenancy import TenantId
 
-#: Opens a read, named by its operation, whose every statement is marked hub-scoped — the aggregate's
-#: ``hub_scoped_read`` bound to the hub-level connections, so this group never holds an unmarked one.
+#: Opens a read, named by its operation, whose every statement is marked hub-scoped
+#: (``src/blizzard/hub/store/internal/hub_scoped_reads.py``).
 MarkedRead = Callable[[str], AbstractContextManager[Connection]]
 
 
@@ -72,8 +72,7 @@ class CredentialReads:
 
     def runner_by_id(self, runner_id: str) -> TenantRunner | None:
         """The runner ``runner_id`` names — a hub-minted id, so at most one tenant holds it — or
-        ``None`` when no tenant does; how a sign-in naming a runner as its client finds the runner's
-        tenant."""
+        ``None`` when no tenant does."""
         with self._read("resolve a runner id") as conn:
             row = conn.execute(
                 select(runner_registrations.c.tenant_id, runner_registrations.c.runner_id).where(
@@ -84,7 +83,7 @@ class CredentialReads:
 
     def host_by_id(self, host_id: str) -> TenantHost | None:
         """The host ``host_id`` names — a hub-minted id, so at most one tenant holds it — or ``None`` when no
-        tenant does; how a sign-in naming a host as its client finds the host's tenant."""
+        tenant does."""
         with self._read("resolve a host id") as conn:
             row = conn.execute(
                 select(hosts.c.tenant_id, hosts.c.host_id).where(hosts.c.host_id == host_id)
