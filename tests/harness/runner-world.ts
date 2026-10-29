@@ -5,6 +5,7 @@ import { type Barrier, type BarrierSubscription, openRunnerStream, type Subscrip
 import { DEFAULT_RUNNER_OPTIONS, type HubBinding, type RunnerHost, type RunnerHostOptions, runnerHostBuilder } from './runner-host';
 import { type ScratchDirs, scratchDirs, startPreHostDaemon } from './scratch-dirs';
 import { startVendorUsage, type VendorUsage } from './vendor-usage';
+import { startWorkerCheckpoint, type WorkerCheckpoint } from './worker-checkpoint';
 
 /** The options a runner host is built with; `test.use({ … })` sets them for a file or a describe, `runnerHosts.create` per host. */
 export interface RunnerHostFixtureOptions {
@@ -37,6 +38,8 @@ interface RunnerWorldFixtures extends RunnerHostFixtureOptions {
   runnerBinding: RunnerBinding;
   /** A loopback stand-in for the vendors' usage endpoints, closed when the test ends. */
   vendorUsage: VendorUsage;
+  /** A place a mock worker stops until the test releases it, closed (and everything held released) when the test ends. */
+  workerCheckpoint: WorkerCheckpoint;
   /** The test's runner host: a real `blizzard-runner host` built through the CLI and the documented files. */
   runnerHost: RunnerHost;
   /** Further runner hosts, each its own directory, port and runners. */
@@ -92,6 +95,12 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
     const vendor = await startVendorUsage();
     await use(vendor);
     await vendor.close();
+  },
+
+  workerCheckpoint: async ({}, use) => {
+    const checkpoint = await startWorkerCheckpoint();
+    await use(checkpoint);
+    await checkpoint.close();
   },
 
   runnerHostBuilder: async ({ runnerBinding, worldContext, ledger, vendorUsage }, use, testInfo) => {
