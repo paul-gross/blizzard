@@ -143,8 +143,7 @@ class PackagedGraphs:
     @property
     def paths(self) -> list[Path]:
         """Every packaged graph's ``graph.yaml``, sorted by directory name so a report over
-        them reads the same way twice. The filename is the membership test, not a name blocklist that would
-        need maintaining: a directory carrying no ``graph.yaml`` is skipped by construction."""
+        them reads the same way twice. A directory carrying no ``graph.yaml`` is skipped."""
         return sorted(self.root.glob("*/graph.yaml"), key=lambda path: path.parent.name)
 
     @property

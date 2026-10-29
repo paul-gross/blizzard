@@ -1,7 +1,6 @@
 """Where the hub keeps its files under its runtime root.
 
-Named once so the config registry, the composition root and the secret-key provider agree on every path
-``docs/backup.md`` tells an operator to protect."""
+Each path is named once and shared; ``docs/backup.md`` tells an operator which to protect."""
 
 from __future__ import annotations
 
@@ -12,5 +11,5 @@ STORE_FILENAME = "hub.db"
 SIGNING_KEYS_PARTS = ("auth", "signing-keys")
 #: Under the data directory: the keys that seal every stored secret.
 SECRET_KEYS_PARTS = ("auth", "secret-keys")
-#: Under the data directory: scratch clones a hub `run:` step once used; nothing writes it now, so it is reclaimable.
+#: Under the data directory: a scratch-clone directory nothing writes; it is reclaimable.
 WORKDIRS_DIRNAME = "hub_workdirs"

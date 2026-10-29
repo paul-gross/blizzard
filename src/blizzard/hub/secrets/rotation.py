@@ -60,11 +60,11 @@ def rotate_keys(
     """Re-seal every row not under the target generation — one transaction per tenant, one
     ``repos`` member per open tenant.
 
-    ``keys`` mints the target generation (the environment source's is its current one, so it mints
-    nothing, and older rows open through ``BZ_HUB_SECRET_KEY_PREVIOUS``). Only once every tenant has
-    been re-sealed does it promote that generation and prune any generation no row references. A
-    tenant that fails leaves the old generation current: the tenants before it open through the
-    minted generation, and a re-run moves every tenant again. ``cipher_for`` builds the cipher over
+    ``keys`` mints the target generation (the environment source's: see
+    `src/blizzard/hub/secrets/internal/env_keys.py`). Only once every tenant has been re-sealed does it
+    promote that generation and prune any generation no row references. A tenant that fails leaves the
+    old generation current: the tenants before it open through the minted generation, and a re-run
+    moves every tenant again. ``cipher_for`` builds the cipher over
     the key view rotation seals and opens through."""
     rows = [repo.list_sealed() for repo in repos]
     missing = uncovered_key_ids(_key_ids(rows), keys.available_ids())

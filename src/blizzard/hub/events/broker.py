@@ -1,8 +1,5 @@
-"""The hub event broker — its typed ``publish_*`` wrappers and event-type vocabulary over
-the kind-agnostic core shared with the runner. The history/replay/
-live-fanout machinery — id minting, the bounded ring, per-connection queues — lives in
-:mod:`blizzard.foundation.events.broker`; this module owns only what is hub-specific: the
-event-type names, their payload shapes, and each mutation seam's ``publish_*`` helper."""
+"""The hub event broker — its event-type names, their payload shapes, and each mutation seam's
+``publish_*`` helper, over the shared core in `src/blizzard/foundation/events/broker.py`."""
 
 from __future__ import annotations
 
@@ -27,8 +24,7 @@ EVENT_TYPES: tuple[str, ...] = tuple(HubEventType)
 
 
 class EventBroker(_EventBroker):
-    """The hub's typed ``publish_*`` wrappers over the shared broker core
-    (:class:`blizzard.foundation.events.broker.EventBroker`), adding only the
+    """The hub's typed ``publish_*`` wrappers over the shared broker core, adding only the
     hub's own event shapes."""
 
     def publish_chunk_changed(
@@ -52,10 +48,9 @@ class EventBroker(_EventBroker):
 
         Optionals are added to the payload only when supplied, never serialized as ``null``. ``key`` is
         the table-qualified natural key of the fact this frame describes, absent when there is no such
-        fact. ``by`` rides the ``deleted`` cause, ``reason`` the ``released`` one; ``runner_name`` is
-        resolved by the publisher, never here.
+        fact. ``by`` rides the ``deleted`` cause, ``reason`` the ``released`` one.
         ``project_id`` is the chunk's project, absent only when the chunk is gone. ``terminal`` is judged
-        here from ``status`` over :data:`TERMINAL_STATUSES` — the set ``ChunkSummary.terminal`` reads."""
+        here from ``status`` over :data:`TERMINAL_STATUSES`."""
         payload = ChunkChangedPayload(
             chunk_id=chunk_id,
             status=status,
@@ -104,14 +99,14 @@ class EventBroker(_EventBroker):
     def publish_decision_resolved(
         self, chunk_id: str, decision_id: str, *, key: str | None = None, project_id: str | None = None
     ) -> int:
-        """A ``decision.resolved`` landed — the holding runner will advance the chunk."""
+        """A ``decision.resolved`` landed."""
         payload = DecisionResolvedPayload(
             chunk_id=chunk_id, decision_id=decision_id, key=key, project_id=project_id
         ).to_payload()
         return self.publish(HubEventType.DECISION_RESOLVED, payload)
 
     def publish_queue_changed(self) -> int:
-        """The ready queue's membership or order changed — the board re-peeks.
+        """The ready queue's membership or order changed.
 
         Carries no ``key``: a reorder writes N rows with no per-row news, so
         there is no single durable fact this frame could name."""

@@ -145,8 +145,7 @@ from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from blizzard.wire.components import HUB_SCHEMA_COMPONENTS
 
-#: The transcript-event derivation sweep's own interval — a module
-#: constant; its own change probe skips the pass when nothing changed.
+#: The transcript-event derivation sweep's own interval.
 EVENT_DERIVATION_INTERVAL_SECONDS = 60
 
 #: The close-intent drain sweep's own interval.
@@ -177,11 +176,9 @@ class Sweep:
 
     @classmethod
     def all(cls, app: FastAPI) -> Iterator[Sweep]:
-        """One timed sweep per sweep the hub built — forge status, event derivation, close drain and tenant
-        teardown always, trace export when tracing is enabled, fact egress when a directory is configured —
-        none for a ``stepped`` one, and none on the store-free app. Each pass opens its ``sweep <name>`` root
-        on the app's platform tracer. Each sweep's jitter is drawn uniformly from ``[0, interval_seconds)``
-        here so their recurring cadence decorrelates from its second pass on."""
+        """One timed sweep per sweep the hub built, none for a ``stepped`` one, and none on the store-free app.
+        Each pass opens its ``sweep <name>`` root on the app's platform tracer. Each sweep's jitter is drawn
+        uniformly from ``[0, interval_seconds)`` so their recurring cadence decorrelates from its second pass on."""
         services: HubServices | None = app.state.services
         if services is None:
             return
@@ -414,9 +411,8 @@ def _annotate_chunk(request: Request) -> None:
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message
-    and drive the sweeps across the app's lifetime. The tasks are created here — not in
-    :func:`build_hosted_app` — because this is the one place that runs for every app the
-    ``lifespan`` fires for."""
+    and drive the sweeps across the app's lifetime (pinned:
+    ``tests/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
     services: HubServices | None = app.state.services
     if services is not None:
         services.action_loop.start()
@@ -525,10 +521,9 @@ def create_app(
     app.include_router(project_findings_router)
     app.include_router(project_garden_proposals_router)
     app.include_router(project_garden_runs_router)
-    # Outside the fleet gate — pinned by `tests/test_fleet_identity.py`'s tokenless-401 case.
+    # Outside the fleet gate — pinned: `tests/test_fleet_identity.py::test_no_token_is_refused_as_missing`.
     app.include_router(fleet_identity_router)
-    # The runner-authenticated fleet router — a fleet verb is authenticated
-    # *because of where it is mounted*; see `blizzard.hub.api.fleet`.
+    # The runner-authenticated fleet router; see `src/blizzard/hub/api/fleet.py`.
     app.include_router(fleet_host_router)
     app.include_router(fleet_router)
     # The claim route is the other `/api/fleet` path outside that gate's retirement refusal.
@@ -542,9 +537,8 @@ def create_app(
 
 
 def _transcript_caps(config: HubConfig) -> TranscriptCaps:
-    """The configured ingest ceilings, each falling back to the domain's own default —
-    resolved here rather than in `HubConfig`, which carries overrides and never restates
-    a value the domain owns."""
+    """The configured ingest ceilings, each falling back to the domain's own default
+    (see ``TranscriptCapsConfig`` in `src/blizzard/hub/config.py`)."""
     defaults = TranscriptCaps()
     configured = config.transcripts
     return TranscriptCaps(
@@ -650,7 +644,8 @@ def build_hosted_app(
         version_window=version_window,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
-    # fail *readiness*, not *boot* (pinned: `test_ready_probe_false_on_unmigrated_store`).
+    # fail *readiness*, not *boot* (pinned:
+    # `tests/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
     flow_driver: FlowDriver | None = None
     if readiness.evaluate().ready:
         tenants = core.every_open()
@@ -762,9 +757,8 @@ class OrphanedProviders:
         return cls(frozenset(services.identities.distinct_provider_names() - configured))
 
     def check(self) -> None:
-        """Fail boot with an actionable error — a rename must not silently orphan
-        identities and re-mint duplicate users on the next login. Checked regardless of
-        ``auth.mode``: an operator flipping back to ``none`` does not erase the guarantee."""
+        """Fail boot with an actionable error (pinned:
+        ``tests/test_auth_provider_immutability.py::test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider``)."""
         if self.names:
             raise ConfigError(
                 "stored identities reference OAuth provider name(s) "
