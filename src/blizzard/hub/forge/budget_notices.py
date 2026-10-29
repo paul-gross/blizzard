@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from blizzard.foundation.store.utc import iso_utc
+
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.forge.budget import BudgetNotice, BudgetNoticeKind, ForgeBudgets
@@ -41,7 +43,7 @@ class BudgetNoticeDrain:
                     "bucket": notice.bucket,
                     "remaining": notice.remaining,
                     "limit": notice.limit,
-                    "reset": notice.reset.isoformat(),
+                    "reset": iso_utc(notice.reset),
                 },
                 at=at,
             )
@@ -51,7 +53,7 @@ class BudgetNoticeDrain:
 def _message(notice: BudgetNotice) -> str:
     key = f"forge {notice.key.forge_id} ({notice.key.secret_name or 'anonymous'}, {notice.bucket})"
     left = f"{notice.remaining}/{notice.limit} left" if notice.limit is not None else "no reading"
-    until = notice.reset.isoformat()
+    until = iso_utc(notice.reset)
     match notice.kind:
         case BudgetNoticeKind.BUDGET_LOW:
             return f"{key}: rate budget low ({left}); lower-priority calls wait until {until}"

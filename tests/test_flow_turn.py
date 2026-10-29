@@ -8,13 +8,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import insert, select
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
@@ -24,7 +25,8 @@ from blizzard.hub.domain.config.repositories import RepositoryEdit
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.landing import VisitForges
-from blizzard.hub.forge.registry import ForgeCallRefused, TurnCutOff, _RefsHandle
+from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.registry import ForgeCallRefused, TurnCutOff, _BudgetGate, _RefsHandle
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support import OP, TEST_HUB_ACTIONS, HubHarness, build_hub, hub_scoped, pointer_token, report_lease, stamp
@@ -328,7 +330,8 @@ def test_a_forge_call_after_the_cut_off_is_refused_before_it_is_sent() -> None:
             return None
 
     flag = TurnCutOff()
-    refs = _RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), flag)  # type: ignore[arg-type]
+    gate = _BudgetGate(ForgeBudgets(clock=FixedClock(datetime(2026, 10, 29, tzinfo=UTC))), BudgetKey("frg_fixture", None), ForgePriority.LANDING)
+    refs = _RefsHandle(_Adapter(), frozenset({Capability.REFS_READ}), gate, flag)  # type: ignore[arg-type]
     flag.set()
 
     with pytest.raises(ForgeCallRefused):

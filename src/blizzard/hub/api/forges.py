@@ -79,7 +79,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
                 bucket=reading.bucket,
                 limit=reading.limit,
                 remaining=reading.remaining,
-                reset=reading.reset.isoformat(),
+                reset=iso_utc(reading.reset),
             )
             for key, reading in services.forge_budgets.forge_readings(record.forge_id)
         ],
