@@ -12,7 +12,7 @@ import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
 import { profileProject } from './projects';
-import { checkProfile, discoverProfiles, mergeProfile, readProfile, type TomlTable } from './profiles';
+import { checkProfile, discoverProfiles, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
 
 export { profileProject };
 
@@ -38,10 +38,10 @@ export function resolveLevel(declared: Level | undefined, raise: boolean): Level
 
 /**
  * What a test may hand a hub of its own, and only at `fresh-hub`: `hubConfig` and `hubEnv` are refused anywhere else, a
- * misspelled `hubConfig` key and a `hubEnv` name the environment contract sets are refused everywhere. Throws before
+ * misspelled `hubConfig` key and a `hubEnv` name the environment contract or a profile sets are refused everywhere. Throws before
  * any hub starts.
  */
-export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: Record<string, string>, contractSet: string[] = Object.keys(readContract().set)): void {
+export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: Record<string, string>, contractSet: string[] = Object.keys(readContract().set), ownedByProfile: string[] = profileEnvNames()): void {
   const named = [...(Object.keys(hubConfig).length > 0 ? ['hubConfig'] : []), ...(Object.keys(hubEnv).length > 0 ? ['hubEnv'] : [])];
   if (named.length > 0 && served !== 'fresh-hub') {
     throw new Error(`${named.join(' and ')} reach a hub of the test's own, and this test is served "${served}". Declare isolation "fresh-hub".`);
@@ -49,6 +49,7 @@ export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: R
   const problems = checkProfile(hubConfig).map((problem) => `hubConfig ${problem}`);
   for (const name of Object.keys(hubEnv)) {
     if (contractSet.includes(name)) problems.push(`hubEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`);
+    if (ownedByProfile.includes(name)) problems.push(`hubEnv ${name}: a hub profile sets it (harness/profiles.ts), so a test cannot change it`);
   }
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
 }
@@ -229,7 +230,9 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
     const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
     const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
-    const stack = await startStack(dir, 0, profile, hubEnv);
+    // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
+    const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
+    const stack = await startStack(dir, 0, profile, env);
     const { coordinates } = stack;
     let hubProcess = stack.hub;
     const control: FreshHubControl = {
@@ -243,14 +246,14 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       },
       start: async () => {
         if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
-        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
         return coordinates;
       },
       reset: async () => {
         if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before reset()');
         fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
         await initHub(dir, stack.profile);
-        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
         return coordinates;
       },
     };

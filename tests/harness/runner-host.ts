@@ -13,6 +13,7 @@ import { BLIZZARD_ROOT, binDir, daemonEnv, mockBinDir, readContract, requireBina
 import { scanLog } from './logs';
 import { checkOwnedKeys, checkProfile, expandProfile, mergeHostProfile, parseProfile, type TomlTable } from './profiles';
 import { type OtlpSink, startOtlpSink } from './otlp-sink';
+import { type OriginReads, originReads } from './runner-git';
 import type { VendorUsage } from './vendor-usage';
 
 /** The Linux `sockaddr_un` bound the host's `host.sock` must fit, terminator excluded. */
@@ -75,7 +76,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
-export interface RunnerHost {
+export interface RunnerHost extends OriginReads {
   /** The host directory. */
   readonly dir: string;
   /** Minted fixture workspace; its basic provider creates one environment named for each chunk. */
@@ -516,7 +517,9 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const runners: RunnerHost['runners'] = {};
       for (const entry of entries) runners[entry.name] = { ...api.runner(entry.id), id: entry.id, name: entry.name };
 
+      const reads = originReads(origins, env, root);
       return {
+        ...reads,
         dir,
         workspace,
         url,

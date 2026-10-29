@@ -37,6 +37,25 @@ export function discoverProfiles(root: string = SERVICE_HUB_DIR): ProfileFolder[
   return profiles;
 }
 
+/**
+ * The environment a hub of a profile is started with, by profile name (`''` is the default). A profile file is hub
+ * config and cannot carry environment, so the test-action fence is named here, applied to every hub of the profile
+ * the harness starts, shared or fresh, and refused to a test's `hubEnv`.
+ */
+export const PROFILE_ENV: Record<string, Record<string, string>> = {
+  actions: { BLIZZARD_TEST_ACTIONS: '1', BLIZZARD_CRASH_FENCE: '1' },
+};
+
+/** The environment the profile `name` starts its hubs with; empty for a profile that names none. */
+export function profileEnv(name: string): Record<string, string> {
+  return PROFILE_ENV[name] ?? {};
+}
+
+/** Every variable some profile owns, which no test's `hubEnv` may name. */
+export function profileEnvNames(): string[] {
+  return [...new Set(Object.values(PROFILE_ENV).flatMap((env) => Object.keys(env)))];
+}
+
 export type TomlTable = Record<string, unknown>;
 
 /** Parses a profile's TOML, integers as `bigint` so the checker can tell `1` from `1.0`. */

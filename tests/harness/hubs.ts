@@ -119,8 +119,8 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
   };
 }
 
-export async function startHubStack(dir: string, index: number, profile: TomlTable): Promise<HubCoordinates> {
-  return (await startStack(dir, index, profile)).coordinates;
+export async function startHubStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubCoordinates> {
+  return (await startStack(dir, index, profile, hubEnv)).coordinates;
 }
 
 /**

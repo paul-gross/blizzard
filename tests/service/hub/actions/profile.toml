@@ -1,0 +1,18 @@
+# The actions profile: the default profile's content, run on hubs carrying the test-action fence (harness/profiles.ts).
+[sweeps.forge_status]
+mode = "stepped"
+
+[sweeps.event_derivation]
+mode = "stepped"
+
+[sweeps.close_drain]
+mode = "stepped"
+
+[sweeps.tenant_teardown]
+mode = "stepped"
+
+[sweeps.trace_export]
+mode = "stepped"
+
+[sweeps.egress]
+mode = "stepped"

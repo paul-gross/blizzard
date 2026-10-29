@@ -27,7 +27,8 @@
     "BLIZZARD_LEASE_TOKEN",
     "BLIZZARD_RUNNER_ASK_CMD",
     "BLIZZARD_ELICITATION",
-    "BLIZZARD_TMPDIR"
+    "BLIZZARD_TMPDIR",
+    "BLIZZARD_CRASH_POINT"
   ],
   "unsetPrefixes": ["OTEL_", "BZ_HUB_TOKEN"],
   "isolatedConfigHome": true,

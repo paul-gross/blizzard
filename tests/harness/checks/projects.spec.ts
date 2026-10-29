@@ -48,6 +48,12 @@ test('a fleet subfolder named after a hub profile rides that profile’s setup w
   fs.rmSync(root, { recursive: true });
 });
 
+test('a fleet subfolder named actions rides the actions profile’s setup with one worker', () => {
+  const root = tree(['actions'], ['fleet/actions']);
+  expect(table(root)('service-fleet-actions')).toMatchObject({ testDir: path.join(root, 'fleet', 'actions'), dependencies: ['setup-service-hub-actions'], workers: 1 });
+  fs.rmSync(root, { recursive: true });
+});
+
 test('a fleet subfolder naming no hub profile is no project', () => {
   const root = tree(['auth'], ['fleet/plain']);
   expect(table(root)('service-fleet-plain')).toBeUndefined();
@@ -80,4 +86,5 @@ test('the fleet projects map to the hub projects, for the shared hub and the fre
   expect(profileProject('service-hub-auth')).toBe('service-hub-auth');
   expect(profileProject('harness')).toBe('service-hub');
   expect(profileProject('harness-auth')).toBe('service-hub-auth');
+  expect(profileProject('harness-actions')).toBe('service-hub-actions');
 });
