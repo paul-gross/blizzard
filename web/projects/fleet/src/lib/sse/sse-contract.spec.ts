@@ -8,6 +8,7 @@ import {
   type ChunkChanged,
   type DecisionEvent,
   type EventLoggedEvent,
+  type FlowEvent,
   type HostEvent,
   type HubEventPayload,
   type KeyedEvent,
@@ -42,6 +43,7 @@ import queueChangedGolden from '../../../../../../contracts/sse/queue-changed.js
 import questionAnsweredGolden from '../../../../../../contracts/sse/question-answered.json';
 import questionAskedGolden from '../../../../../../contracts/sse/question-asked.json';
 import hostChangedGolden from '../../../../../../contracts/sse/host-changed.json';
+import flowChangedGolden from '../../../../../../contracts/sse/flow-changed.json';
 import runnerChangedGolden from '../../../../../../contracts/sse/runner-changed.json';
 import runnerAskChangedGolden from '../../../../../../contracts/sse/runner/ask-changed.json';
 import runnerEnvironmentChangedGolden from '../../../../../../contracts/sse/runner/environment-changed.json';
@@ -116,6 +118,7 @@ const HUB_GOLDENS: Readonly<Record<string, GoldenCases>> = {
   'queue-changed': queueChangedGolden as GoldenCases,
   'runner-changed': runnerChangedGolden as GoldenCases,
   'host-changed': hostChangedGolden as GoldenCases,
+  'flow-changed': flowChangedGolden as GoldenCases,
   'event-logged': eventLoggedGolden as GoldenCases,
 };
 const HUB_CASES = casesOf(hubManifest, HUB_GOLDENS);
@@ -166,6 +169,8 @@ type DecisionFrame = DecisionEvent & KeyedEvent;
 type QueueChangedFrame = Record<never, never>;
 type RunnerFrame = RunnerEvent & KeyedEvent;
 type HostFrame = HostEvent & KeyedEvent;
+/** A flow fact's frame names no fact identity: the record is read through the flow. */
+type FlowFrame = FlowEvent;
 type EventLoggedFrame = EventLoggedEvent & KeyedEvent;
 
 interface HubFrameFieldSpecs {
@@ -177,6 +182,7 @@ interface HubFrameFieldSpecs {
   'queue-changed': FrameFieldSpec<QueueChangedFrame>;
   'runner-changed': FrameFieldSpec<RunnerFrame>;
   'host-changed': FrameFieldSpec<HostFrame>;
+  'flow-changed': FrameFieldSpec<FlowFrame>;
   'event-logged': FrameFieldSpec<EventLoggedFrame>;
 }
 
@@ -224,6 +230,10 @@ const HUB_FRAME_FIELD_SPECS: HubFrameFieldSpecs = {
   'host-changed': {
     required: exactRequired<HostFrame>()({ host_id: true, kind: true }),
     optional: exactOptional<HostFrame>()({ host_name: true, by: true, key: true }),
+  },
+  'flow-changed': {
+    required: exactRequired<FlowFrame>()({ flow_id: true, kind: true, submission_id: true, chunk_id: true }),
+    optional: exactOptional<FlowFrame>()({ outcome: true }),
   },
   'event-logged': {
     required: exactRequired<EventLoggedFrame>()({
