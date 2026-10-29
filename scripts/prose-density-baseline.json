@@ -11328,12 +11328,6 @@
    "over_cap": 0,
    "total": 236
   },
-  "service/test_host_halted_runner_service.py": {
-   "comments": 7,
-   "docstrings": 9,
-   "over_cap": 0,
-   "total": 373
-  },
   "service/test_host_ingest_service.py": {
    "comments": 3,
    "docstrings": 13,

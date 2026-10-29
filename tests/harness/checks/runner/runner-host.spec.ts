@@ -133,6 +133,40 @@ test.describe('an unstarted host', () => {
     expect(runnerHost.pid).toBeDefined();
     expect((await runnerHost.step()).outcome).toBe('completed');
   });
+
+  test('prepares documented files before boot and refuses live changes', async ({ runnerHost }) => {
+    const name = 'runner-local';
+    runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'missing' } });
+    await runnerHost.restart();
+    expect((await runnerHost.api.health()).status).toBe(200);
+    expect((await runnerHost.api.ready()).body.detail).toContain("names subscription 'missing'");
+    expect((await runnerHost.runners[name]?.expecting(503).status())?.status).toBe(503);
+    expect(() => runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'anthropic' } })).toThrow(/stop the host/);
+    await runnerHost.stop();
+    runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'anthropic' } });
+    await runnerHost.restart();
+    expect((await runnerHost.runners[name]?.status())?.status).toBe(200);
+  });
+
+  test('rejects unknown runner names and carries enrolled tokens and an explicit id into first boot', async ({ runnerHost, mockHub }) => {
+    const name = 'runner-local';
+    const configFile = path.join(runnerHost.dir, 'blizzard-host.toml');
+    const envFile = path.join(runnerHost.dir, '.env');
+    const before = { config: fs.readFileSync(configFile, 'utf8'), env: fs.readFileSync(envFile, 'utf8'), id: runnerHost.runners[name]?.id };
+    expect(() => runnerHost.prepareStopped({ runnerSubscriptions: { [name]: 'missing' }, runnerIds: { absent: 'rn_wrong' } })).toThrow(/no runner absent/);
+    expect(() => runnerHost.prepareStopped({ runnerIds: { [name]: 'rn_wrong' }, runnerTokens: { [name]: 'bad\ntoken' } })).toThrow(/contains a newline/);
+    expect(fs.readFileSync(configFile, 'utf8')).toBe(before.config);
+    expect(fs.readFileSync(envFile, 'utf8')).toBe(before.env);
+    expect(runnerHost.runners[name]?.id).toBe(before.id);
+    const enrolled = (await mockHub.seed.runner({ name: 'standalone' })).body;
+    runnerHost.prepareStopped({ runnerIds: { [name]: enrolled.runner_id }, runnerTokens: { [name]: enrolled.token } });
+    expect(runnerHost.runners[name]?.id).toBe(enrolled.runner_id);
+    expect(fs.readFileSync(path.join(runnerHost.dir, '.env'), 'utf8')).toContain(`BZ_HUB_TOKEN_RUNNER_LOCAL=${enrolled.token}`);
+    await runnerHost.restart();
+    expect((await runnerHost.api.health()).status).toBe(200);
+    expect((await runnerHost.api.ready()).body.detail).toContain(enrolled.runner_id);
+    expect((await runnerHost.runners[name]?.expecting(503).status())?.status).toBe(503);
+  });
 });
 
 test.describe('a timed host', () => {
