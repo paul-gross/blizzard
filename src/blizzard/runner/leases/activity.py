@@ -24,7 +24,7 @@ from blizzard.runner.leases.git_commit_declaration import DeclaredLeaseCommit, I
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, LeaseLivenessFacts
 from blizzard.runner.leases.model import ClosedLease, Lease
 from blizzard.runner.leases.overload import IReadOverloadRepository, backing_off_facts
-from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository
 
 #: Deliberately **conservative**: bounded below by the longest tool call a healthy worker makes.
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
@@ -266,7 +266,7 @@ class LocalLeaseService:
         clock: IClock,
         process: IProcessProbe,
         *,
-        lease_record: IReadLeaseRecordRepository,
+        lease_record: IReadChunkLeaseRepository,
         liveness: IReadLeaseLivenessRepository,
         asks: IReadAskRepository,
         environments: IReadEnvironmentRepository,

@@ -46,7 +46,7 @@ from blizzard.runner.leases.operator_requests import (
     IWriteRequeueRepository,
 )
 from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverloadRepository
-from blizzard.runner.leases.record import IReadLeaseRecordRepository, IWriteLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository, IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository, IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository, IWriteLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
@@ -97,7 +97,7 @@ class IRunnerBinding(Protocol):
 
 
 class IReadRunnerStore(
-    IReadLeaseRecordRepository,
+    IReadChunkLeaseRepository,
     IReadLeaseSessionRepository,
     IReadLeaseLivenessRepository,
     IReadLeaseResumeIntentRepository,
@@ -196,7 +196,7 @@ class RunnerReadStores:
     """The read-only runner-store bundle — every field typed to its concept's read
     Protocol only, over the same instances :meth:`of` is given."""
 
-    lease_record: IReadLeaseRecordRepository
+    lease_record: IReadChunkLeaseRepository
     session: IReadLeaseSessionRepository
     liveness: IReadLeaseLivenessRepository
     resume_intent: IReadLeaseResumeIntentRepository
