@@ -70,8 +70,27 @@ export interface GardenProposalRow {
   closure?: { closure: string; reason: string } | null;
 }
 
+/** A telemetry signal a worker exports to its runner, `POST /runners/{id}/v1/{signal}`. */
+export type TelemetrySignal = 'traces' | 'metrics' | 'logs';
+
+/** One telemetry export: its body, the content type it declares, and the worker's headers that carry its lease token. */
+export interface TelemetryExport {
+  body: Uint8Array | string;
+  contentType: string;
+  /** The worker's credential, as `workerHeaders` gives it. */
+  headers: Record<string, string>;
+}
+
+/** The host's routes that answer the same over TCP and over its Unix socket: a spec loops over the two transports. */
+export interface HostRoutes {
+  /** `GET /api/health`, with `params` as its query. */
+  health(params?: Record<string, string>): Promise<ApiResponse>;
+  /** `POST /runners/{id}/v1/{signal}`: a worker's OTLP export to the runner that leased it. */
+  exportTelemetry(runnerId: string, signal: TelemetrySignal, telemetry: TelemetryExport): Promise<ApiResponse>;
+}
+
 /** The calls the runner host answers for itself, and the way to one of its runners. */
-export interface RunnerHostClient {
+export interface RunnerHostClient extends HostRoutes {
   readonly url: string;
   /** `GET /api/host/runners`. */
   runners(): Promise<ApiResponse<HostRunnerListResponse>>;
@@ -115,6 +134,12 @@ export function runnerHostApi(options: {
   const host = under('');
   return {
     url: options.url,
+    health: (params) => host.get('/api/health', params === undefined ? {} : { params }),
+    exportTelemetry: (runnerId, signal, telemetry) =>
+      host.post(`/runners/${encodeURIComponent(runnerId)}/v1/${signal}`, {
+        data: Buffer.from(telemetry.body),
+        headers: { 'content-type': telemetry.contentType, ...telemetry.headers },
+      }),
     runners: () => host.get('/api/host/runners'),
     subscriptions: () => host.get('/api/host/subscriptions'),
     clearSubscriptionFloor: (slug, by) => host.post(`/api/host/subscriptions/${encodeURIComponent(slug)}/floor/clear`, { data: by === undefined ? {} : { by } }),
@@ -174,8 +199,8 @@ export function runnerHostApi(options: {
 /** The pass a step ran: when it started and finished, how it ended, and the error a failed pass recorded. */
 export type TickPass = TickPassResponse;
 
-/** The step routes a runner host answers over its Unix socket. */
-export interface HostSocketClient {
+/** The routes a runner host answers over its Unix socket: the step routes, and those it answers over TCP too. */
+export interface HostSocketClient extends HostRoutes {
   /** `POST /runners/{id}/api/ticks`: one pass of one runner, answered once the pass has completed. */
   stepRunner(runnerId: string): Promise<TickPass>;
   /** `POST /api/host/ticks`: one pass of the host's own sweeps, answered once the pass has completed. */
@@ -183,26 +208,48 @@ export interface HostSocketClient {
 }
 
 /**
- * The step routes over the host's Unix socket, which the human-lane gate always admits, so stepping works on a host whose
- * hub offers an IdP. A request has no client timeout of its own: the test's bounds it. An answer other than `200`
- * rejects with the route, the status and body, and the host log from `logContext`.
+ * The host's routes over its Unix socket, which the human-lane gate always admits, so stepping works on a host whose
+ * hub offers an IdP. A request has no client timeout of its own: the test's bounds it. A step answered other than `200`
+ * rejects with the route, the status and body, and the host log from `logContext`; the shared routes answer as their TCP
+ * form does, any status returned.
  */
 export function hostSocketApi(options: { socket: string; logContext: LogContext }): HostSocketClient {
-  const post = (route: string): Promise<TickPass> =>
+  const send = (method: string, route: string, headers: Record<string, string>, body?: Uint8Array | string): Promise<{ status: number; text: string; headers: Record<string, string> }> =>
     new Promise((resolve, reject) => {
-      const request = http.request({ socketPath: options.socket, path: route, method: 'POST', headers: { 'content-length': '0' } }, (response) => {
+      const payload = body === undefined ? undefined : Buffer.from(body);
+      const request = http.request({ socketPath: options.socket, path: route, method, headers: { 'content-length': String(payload?.length ?? 0), ...headers } }, (response) => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
-          if (response.statusCode === 200) return resolve(JSON.parse(text) as TickPass);
-          reject(new Error(`POST ${route} over ${options.socket} answered ${response.statusCode}: ${text}\nhost log:\n${options.logContext()}`));
-        });
+        response.on('end', () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString('utf8'),
+            headers: Object.fromEntries(Object.entries(response.headers).map(([name, value]) => [name, [value].flat().join(', ')])),
+          }),
+        );
       });
-      request.on('error', (error) => reject(new Error(`POST ${route} over ${options.socket} failed: ${error.message}\nhost log:\n${options.logContext()}`, { cause: error })));
-      request.end();
+      request.on('error', (error) => reject(new Error(`${method} ${route} over ${options.socket} failed: ${error.message}\nhost log:\n${options.logContext()}`, { cause: error })));
+      request.end(payload);
     });
+  const answered = async (method: string, route: string, headers: Record<string, string> = {}, body?: Uint8Array | string): Promise<ApiResponse> => {
+    const answer = await send(method, route, headers, body);
+    let parsed: unknown = answer.text;
+    try {
+      parsed = answer.text === '' ? undefined : JSON.parse(answer.text);
+    } catch {
+      // Not JSON: the text stands.
+    }
+    return { status: answer.status, ok: answer.status >= 200 && answer.status < 300, body: parsed, headers: answer.headers };
+  };
+  const post = async (route: string): Promise<TickPass> => {
+    const answer = await send('POST', route, {});
+    if (answer.status === 200) return JSON.parse(answer.text) as TickPass;
+    throw new Error(`POST ${route} over ${options.socket} answered ${answer.status}: ${answer.text}\nhost log:\n${options.logContext()}`);
+  };
   return {
+    health: (params) => answered('GET', `/api/health${params === undefined ? '' : `?${new URLSearchParams(params)}`}`),
+    exportTelemetry: (runnerId, signal, telemetry) =>
+      answered('POST', `/runners/${encodeURIComponent(runnerId)}/v1/${signal}`, { 'content-type': telemetry.contentType, ...telemetry.headers }, telemetry.body),
     stepRunner: (runnerId) => post(`/runners/${encodeURIComponent(runnerId)}/api/ticks`),
     stepHost: () => post('/api/host/ticks'),
   };

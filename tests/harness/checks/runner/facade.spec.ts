@@ -21,6 +21,15 @@ test('cli returns a non-zero exit as a result, not a throw', async ({ runnerHost
   expect(result.code).not.toBe(0);
 });
 
+test('the host answers its shared routes alike over TCP and over its socket', async ({ runnerHost }) => {
+  for (const [transport, routes] of [['tcp', runnerHost.api], ['socket', runnerHost.socketApi]] as const) {
+    expect((await routes.health({ probe: 'x' })).status, transport).toBe(200);
+    // No lease token: the runner refuses the export on either transport, with the same answer.
+    const refused = await routes.exportTelemetry(runnerHost.runners['runner-local']!.id, 'traces', { body: '{}', contentType: 'application/json', headers: {} });
+    expect(refused.status, transport).toBe(403);
+  }
+});
+
 test('a host without runnerOtlp has no sink', async ({ runnerHost }) => {
   expect(runnerHost.otlp).toBeUndefined();
 });

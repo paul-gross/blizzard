@@ -294,7 +294,7 @@ export const runnerTest = mockWorld;
 /** The runner host's wire types, for a spec that builds a typed literal: `satisfies RunnerWire.FactView`. */
 export type * as RunnerWire from './client/wire/runner/types.gen';
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
-export type { OtlpSink, ReceivedSpan } from './otlp-sink';
+export type { OtlpSink, ReceivedItem, ReceivedSpan } from './otlp-sink';
 export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
 export type { RunnerHosts } from './runner-world';
@@ -303,10 +303,12 @@ export { HOLD_OPEN, holdingChunk, runningLeaseWithWorker, seededLeaseWithWorker,
 export type { VendorUsage } from './vendor-usage';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';
+export { chunkTraceId } from './trace-ids';
+export { claudeCodeExports } from './telemetry-bodies';
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
 export type { RunnerDeclining };
 export type { MockRunner };
 export type { Barrier, BarrierSubscription, Frame, Subscription } from './events';
 export type { MockHubClient } from './client/mock-hub';
 export type { MockChunkSpec } from './client/mock';
-export type { RunnerClient, RunnerHostClient, TickPass } from './client/runner';
+export type { HostRoutes, RunnerClient, RunnerHostClient, TickPass } from './client/runner';
