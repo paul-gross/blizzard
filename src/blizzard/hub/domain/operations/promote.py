@@ -88,8 +88,7 @@ class PromoteService:
         self._record = record
         self._queue = queue
         self._facts = facts
-        # The locked-transaction seam (``bzh:store-exclusive-write``): promotability is judged
-        # from facts read under the chunk's row lock, never a caller's pre-lock snapshot.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
 

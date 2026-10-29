@@ -45,16 +45,12 @@ from tests.support import (
     write_mock_harness_credentials,
 )
 
-# The fixture project repo the loop drives and the owner the forge/hub address it under
-# (the repository record's owner, which `land` qualifies each repo with).
+# The fixture project repo the loop drives, under the repository record's owner.
 OWNER = "blizzard"
 REPO = f"{OWNER}/{REPO_NAME}"
 
-# The mock harness's fence var, forwarded to workers through the spawn-environment
-# allowlist's operator-extension knob; see MOCK_HARNESS_ENV_PASSTHROUGH.
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
-# The vars every scripted mock-fleet scenario's worker child needs — mock-only names, so
-# they ride the allowlist's operator-extension knob rather than the base allowlist.
+# The mock-only vars every scenario's worker child needs, via the allowlist's operator-extension knob.
 MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR)
 
 
@@ -172,8 +168,7 @@ def run_hub(
     if not rehost:
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     if export_to or annotation_interval_seconds is not None or egress is not None:
-        # Flags read once, at `host` startup: set before the
-        # daemon starts, not mutable afterward.
+        # Flags read once, at `host` startup.
         config = load_hub_config(hub_dir)
         overrides: dict[str, object] = {}
         if annotation_interval_seconds is not None:
@@ -198,8 +193,7 @@ def run_hub(
     try:
         await_http(proc, client, "/api/health", log=log)
         if not rehost:
-            # The one work source every scenario ingests against; `annotate` opts it into
-            # the forge-status label sweep.
+            # The one work source every scenario ingests against.
             forge_api = f"http://127.0.0.1:{forge_port}"
             sources = [fixture_work_source(REPO_NAME, REPO, forge_api, annotate=annotate)]
             create_work_sources(client, sources)
@@ -243,8 +237,7 @@ def runner_config(
         hub_url=f"http://127.0.0.1:{hub_port}",
         workspaces=(basic_workspace(workspace),),
         harness_sections=sections(
-            # The mock façade rejects any ``--permission-mode``, so ``None`` omits it; both health
-            # probes read a fixture credential file, since neither mock is a logged-in provider CLI.
+            # The mock façade rejects any ``--permission-mode``; both health probes read a fixture credential file.
             dataclasses.replace(
                 claude_code(base),
                 binary=str(bin_dir / "mock-claude-code"),
@@ -254,8 +247,7 @@ def runner_config(
             dataclasses.replace(opencode(base), binary=str(bin_dir / "mock-opencode"), auth_path=opencode_auth),
             base=base.harness_sections,
         ),
-        # A path that is never created, so the external-usage sampler's missing-credentials
-        # soft failure trips before any request is built.
+        # A path never created: the sampler soft-fails before any request is built.
         subscriptions=sampler_without_credentials(runner_dir),
         worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
     )

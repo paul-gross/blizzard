@@ -88,7 +88,7 @@ class TraceExportFailure:
 
 
 class IReadStepCorpus(Protocol):
-    """The trace and egress sweeps' window of closed steps, read across every open tenant."""
+    """A window of closed steps across every open tenant."""
 
     def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         """As :meth:`IReadTraceSteps.closing_candidates`, over every open tenant's closing facts."""

@@ -383,8 +383,7 @@ class FactIngestService:
             )
             return True, None
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-            # Runner-scoped and hub-read-only. Stamped off the payload — when the runner decided, not
-            # when its buffer drained, which may be an outage later.
+            # Runner-scoped and hub-read-only; stamped as :class:`LocalPause` states.
             pause = LocalPause.of(kind, fact, now=now)
             local_pause_id = self._fleet.record_local_pause(
                 runner_id, paused=pause.paused, at=pause.at, by=pause.by, reason=pause.reason

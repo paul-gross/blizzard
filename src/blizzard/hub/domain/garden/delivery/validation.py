@@ -46,8 +46,6 @@ LiveFindings = Mapping[str, str]
 ExitedResolver = Callable[[frozenset[str]], frozenset[str]]
 
 
-# The GitHub adapter already fetches the commit body carrying `authored_at`, so widening
-# `CommitResolver` to return it costs no extra forge round trip.
 @domain_model
 @dataclass(frozen=True)
 class CommitResolution:
@@ -88,8 +86,7 @@ class ValidatedDelivery:
     deltas: list[DeliveredDelta]
     proposals: list[ProposalCandidate]
     proposal_sources: list[str] = field(default_factory=list[str])  # proposals[i]'s own artifact name, positionally
-    #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when
-    #: never attempted; materialization must not re-resolve to fill the gap (no backfill).
+    #: `(repo, sha)`'s resolved authored instant — `None` when unresolved, absent when never attempted.
     introduced_at: dict[tuple[str, str], datetime | None] = field(
         default_factory=dict[tuple[str, str], datetime | None]
     )
@@ -145,9 +142,8 @@ def select_proposal_artifacts(names: Sequence[str], latest: Mapping[str, NamedAr
 def is_finding_id_shaped(value: str) -> bool:
     """Whether `value` parses as a well-formed `fin_<ULID>` id — the shape rule a
     proposal's `findings` entry is discriminated on: true resolves against
-    `live_findings` exactly as before this submission-local `ref` existed; false
-    resolves against a `ref` an `add` op in this same delivery carries. Shared with
-    `materialize` so the discrimination is asked once."""
+    `live_findings`; false resolves against a `ref` an `add` op in this same delivery
+    carries. Shared with `src/blizzard/hub/domain/garden/delivery/materialize.py`."""
     parsed = Id.parse(value)
     return parsed is not None and parsed.has_prefix(IdPrefix.FINDING)
 

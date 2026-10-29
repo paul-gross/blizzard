@@ -31,7 +31,7 @@ class IReadChunkFactsRepository(Protocol):
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling (`bzh:bulk-reconstitution`) — every id's
         :class:`ChunkFacts`, keyed by chunk id. An id that doesn't exist or is ephemeral
-        is silently dropped, the same as :meth:`load_facts` returning ``None`` for it."""
+        is silently dropped, the same as `load_facts` returning ``None`` for it."""
         ...
 
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

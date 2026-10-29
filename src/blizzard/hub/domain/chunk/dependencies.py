@@ -2,9 +2,8 @@
 
 A chunk names the chunks it depends on (``blizzard.hub.domain.chunk.ports.dependencies``);
 :func:`decide_declare` owns what declaring decides, and release has no window. Declaring runs
-under the shared row lock (``bzh:store-exclusive-write``)
-``ClaimService``/``EditService``/``RestartService``/``DeleteService`` all take, plus a
-residual fleet-wide ``threading.Lock`` the cycle check alone still needs — pinned by
+under the row lock (``bzh:store-exclusive-write``) plus a residual per-tenant
+``threading.Lock`` the cycle check alone still needs — pinned by
 ``tests/test_dependency_race.py`` and ``tests/test_dependency_service_component.py``."""
 
 from __future__ import annotations
@@ -59,10 +58,8 @@ class NoStandingDependencyToRelease(Exception):
 
 
 class PrerequisiteIsEphemeral(Exception):
-    """A **declaration** named an ephemeral (grouped-away or deleted) prerequisite,
-    raised by :class:`DependencyService` from a fresh ``is_ephemeral`` read taken under
-    the row lock — closing the race against every writer sharing it, `GroupService`
-    included. Release never raises it."""
+    """A **declaration** named an ephemeral (grouped-away or deleted) prerequisite, as read
+    under the row lock. Release never raises it."""
 
     def __init__(self, chunk_id: str) -> None:
         super().__init__(f"chunk {chunk_id} is ephemeral and cannot be named as a prerequisite")
@@ -136,13 +133,12 @@ class DependencyService:
         cycle_lock: threading.Lock,
     ) -> None:
         self._dependencies = dependencies
-        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
-        # CAS shares — the row lock over the two named chunks.
+        # ``bzh:store-exclusive-write`` — the row lock over the two named chunks.
         self._exclusive = exclusive
         self._clock = clock
-        # The residual fleet-wide lock GroupService also shares: row locks alone cannot
+        # The residual per-tenant lock: row locks alone cannot
         # close a race between two declares closing a cycle through chunks neither one
-        # names, so the cycle check itself still needs one lock over the whole graph.
+        # names, so the cycle check itself still needs one lock over the tenant's whole dependency graph.
         self._cycle_lock = cycle_lock
 
     def declare(self, dependent: Chunk, prerequisite: PrerequisiteScope, *, by: str) -> DependencyEdge:
@@ -234,10 +230,9 @@ class BlockedMarking:
 @domain_model
 @dataclass(frozen=True)
 class ChunkNeighbor:
-    """One neighbor at one hop of :func:`derive_chunk_neighborhood` —
-    the neighbor's own id, its status where it resolved, and the edge's own satisfaction.
-    ``status`` is ``None`` only for the residual race a neighbor's facts fail to resolve;
-    the edge is still drawn, unsatisfied, rather than dropped."""
+    """One neighbor at one hop of :func:`derive_chunk_neighborhood`. ``status`` is ``None`` only
+    when the neighbor's facts fail to resolve, and the edge is still drawn; ``satisfied`` per
+    `blizzard-context:/domain/work/statuses.md` §The neighborhood."""
 
     chunk_id: str
     status: ChunkStatus | None

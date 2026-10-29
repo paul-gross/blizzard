@@ -30,9 +30,8 @@ def read_version(named: str | None) -> str:
 @domain_model
 @dataclass(frozen=True)
 class ExtractedEvent:
-    """One recognized occurrence, still payload-shaped as a plain mapping — the
-    derivation service serializes it and stamps the node-step context this
-    layer never sees. ``subject``/``tool`` are the projection its extractor supplies;
+    """One recognized occurrence, still payload-shaped as a plain mapping and carrying no
+    node-step context. ``subject``/``tool`` are the projection its extractor supplies;
     ``subject`` is ``None`` for a kind with no natural one."""
 
     kind: str

@@ -1,6 +1,6 @@
 """Route claim — how a runner takes work.
 
-The ``POST /routes`` domain rule: the hub accepts **exactly one** claim per chunk, and
+The hub accepts **exactly one** claim per chunk, and
 the winning claim's result carries the chunk's first node envelope. A runner marked
 ``hub_paused`` is refused before the race is run, and only for new claims.
 The load-facts → check-live-route → record-route sequence is an atomic CAS."""
@@ -317,8 +317,7 @@ class ClaimService:
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
         # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
         self._registry = registry
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the route CAS runs in
-        # one row-locked write transaction, never an in-process lock.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired

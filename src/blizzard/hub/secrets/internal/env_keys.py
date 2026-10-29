@@ -32,6 +32,7 @@ class EnvKeyProvider:
         return frozenset(self._by_id)
 
     def mint(self) -> KeyGeneration:
+        """The generations are the environment's, so rotation seals into the current one."""
         return self._current
 
     def promote(self, key_id: str) -> None:

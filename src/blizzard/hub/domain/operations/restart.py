@@ -65,10 +65,8 @@ class RestartGraphPinChanged(Exception):
 
 
 class RestartCurrentNodeUnknown(Exception):
-    """The chunk stands on a node its own pinned graph does not carry.
-
-    Refused rather than rewound to the entry node, as the claim path refuses one: the position
-    is real, and defaulting it away would discard every node already come through."""
+    """The chunk stands on a node its own pinned graph does not carry — refused, never rewound
+    (``tests/test_operator_verb_rules.py::test_restart_landing_refuses_an_unmatched_current_node``)."""
 
     def __init__(self, node_id: str, graph_id: str) -> None:
         super().__init__(f"chunk stands on node {node_id} which graph {graph_id} does not carry")
@@ -183,7 +181,7 @@ class RestartService:
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
         self._clock = clock
-        # Read and write the chunk's facts under one row lock (``bzh:store-exclusive-write``).
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
     def restart(
@@ -202,8 +200,6 @@ class RestartService:
         write. :func:`plan_restart` decides against the facts and the record re-read under the row
         lock; every refusal writes nothing. Returns the ``chunk_restarts.id``."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            # A `None` load means gone under this lock — refuse rather than substitute a
-            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
@@ -221,9 +217,6 @@ class RestartService:
                 to_graph=to_graph,
                 to_graph_retired=to_graph is not None and self._graphs.is_retired(to_graph.graph_id),
             )
-            # `record_restart_locked` derives the fence epoch inside its own transaction —
-            # one above every prior attempt, so the displaced worker's completion is
-            # rejected (`bzh:epoch-fencing`).
             restart_id = self._movement.record_restart_locked(
                 handle,
                 chunk.chunk_id,

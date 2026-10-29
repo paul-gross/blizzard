@@ -636,11 +636,10 @@ class GroupService:
     ) -> None:
         self._work_refs = work_refs
         self._dependencies = dependencies
-        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
-        # CAS shares — the row lock over the survivor and every named merge id.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
-        # The residual fleet-wide lock DependencyService's own cycle check also shares —
+        # The residual per-tenant lock DependencyService's own cycle check also shares —
         # closes the race a row lock over this fold's own chunks alone cannot.
         self._cycle_lock = cycle_lock
 

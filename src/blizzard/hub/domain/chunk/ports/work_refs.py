@@ -80,7 +80,7 @@ def live_work_ref_statuses(
 
 
 class IReadWorkRefsCorpus(Protocol):
-    """The forge-status sweep's corpus, read across every open tenant."""
+    """Every open tenant's live work refs."""
 
     def live_work_refs(self) -> Sequence[TenantWorkRef]:
         """Every open tenant's work-ref rows whose chunk is neither grouped away nor deleted."""
@@ -88,8 +88,8 @@ class IReadWorkRefsCorpus(Protocol):
 
     def live_work_refs_signature(self) -> Mapping[TenantId, WorkRefsSignature]:
         """A one-statement, hub-wide read of each tenant's fingerprint of what :meth:`live_work_refs`
-        and the status derivation read — the change probe that lets the sweep skip the unbounded
-        read, its value per tenant. A tenant holding none of those rows has no entry."""
+        and the status derivation read, per tenant — equal signatures mean neither moved. A tenant
+        holding none of those rows has no entry."""
         ...
 
 
@@ -112,8 +112,8 @@ class IReadChunkWorkRefsRepository(Protocol):
         ...
 
     def live_work_refs_signature(self) -> WorkRefsSignature:
-        """A one-statement fingerprint of what :meth:`live_work_refs` reads — the change probe
-        that lets a standing sweep skip the unbounded read while it is unchanged."""
+        """A one-statement fingerprint of what :meth:`live_work_refs` reads — equal
+        signatures mean it is unchanged."""
         ...
 
 

@@ -42,8 +42,7 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
         """Record ``chunk.promoted`` and its resolved queue position (the tail or an anchor's slot) on
-        ``handle``'s already-locked connection (``bzh:store-exclusive-write``;
-        :class:`~blizzard.hub.domain.operations.promote.PromoteService`'s only write) — a crash
+        ``handle``'s already-locked connection (``bzh:store-exclusive-write``) — a crash
         lands both facts or neither, never one without the other. Not idempotent: the caller
         judged, under the same lock, that the chunk is not currently promoted. Returns the freshly-written
         ``chunk_promoted.id``."""
@@ -53,8 +52,7 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         self, handle: ILockedChunkRead, chunk_id: str, *, position: float, at: datetime
     ) -> int:
         """Record ``chunk.demoted`` and its resolved backlog position on ``handle``'s already-locked
-        connection (``bzh:store-exclusive-write``;
-        :class:`~blizzard.hub.domain.operations.demote.DemoteService`'s only write) — a crash lands both
+        connection (``bzh:store-exclusive-write``) — a crash lands both
         facts or neither, never a demoted chunk ranked by its stale ready-queue position. Not idempotent:
         the caller judged, under the same lock, that the chunk is currently promoted. Returns the
         freshly-written ``chunk_demoted.id``."""

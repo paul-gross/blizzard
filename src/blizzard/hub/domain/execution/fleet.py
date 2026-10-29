@@ -286,9 +286,7 @@ class FleetService:
 
     def set_paused(self, registration: RunnerRegistration, *, paused: bool, by: str) -> int:
         """Flip the fleet's brake for an added runner, connected or not, returning the freshly-written
-        ``runner_pause_facts.id`` (the activity-feed's key). Takes the loaded
-        registration (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to
-        it (404 if unknown) before calling this."""
+        ``runner_pause_facts.id``. Takes the loaded registration (``bzh:domain-takes-objects``)."""
         fact_id = self._registry.record_pause(registration.runner_id, paused=paused, at=self._clock.now(), by=by)
         _log.info("runner pause set", runner_id=registration.runner_id, paused=paused, by=by)
         return fact_id
@@ -309,9 +307,8 @@ class FleetService:
         self, runner_id: str, *, slug: str, name: str, sampled_at: datetime, windows_json: str, at: datetime
     ) -> None:
         """Land one declared subscription's reported usage sample —
-        refresh-in-place per ``(runner_id, slug)``, mirroring :meth:`record_local_pause`'s
-        no-known-runner-required acceptance: the fact rides the same outbound buffer, so
-        it can legitimately arrive ahead of the registration that follows it."""
+        refresh-in-place per ``(runner_id, slug)``, with no known runner required
+        (:meth:`record_local_pause`)."""
         self._registry.record_external_usage(
             runner_id, slug=slug, name=name, sampled_at=sampled_at, windows_json=windows_json, at=at
         )
@@ -321,8 +318,7 @@ class FleetService:
         self, runner_id: str, *, slug: str, name: str, missed_at: datetime, reason: str, at: datetime
     ) -> None:
         """Land one declared subscription's reported miss — refresh-in-place
-        per ``(runner_id, slug)``, mirroring :meth:`record_external_usage`'s own
-        no-known-runner-required acceptance."""
+        per ``(runner_id, slug)``, with no known runner required (:meth:`record_local_pause`)."""
         self._registry.record_external_usage_miss(
             runner_id, slug=slug, name=name, missed_at=missed_at, reason=reason, at=at
         )
@@ -331,9 +327,7 @@ class FleetService:
         )
 
     def get_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
-        """One runner's derived liveness over its loaded registration
-        (``bzh:domain-takes-objects``) — the edge resolves ``runner_id`` to it (404 if
-        unknown) before calling this."""
+        """One runner's derived liveness over its loaded registration (``bzh:domain-takes-objects``)."""
         return self._liveness(registration)
 
     def own_liveness(self, registration: RunnerRegistration) -> RunnerLiveness:
@@ -344,7 +338,7 @@ class FleetService:
 
     def list_with_liveness(self, *, now: datetime, include_retired: bool = False) -> list[RunnerLiveness]:
         """Every added runner, oldest first and never-connected ones included, with its derived
-        liveness as of the caller's ``now`` — the ``GET /runners`` view; retired runners only when
+        liveness as of the caller's ``now``; retired runners only when
         ``include_retired``."""
         return [
             RunnerLiveness.of(r, now=now, threshold=self._stale_after)

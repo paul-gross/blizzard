@@ -1,5 +1,5 @@
-"""The close-intent drain sweep: retires pending ``close_intents`` rows, a bounded number per pass,
-unconditionally like the event-derivation sweep. Dependency-free
+"""The close-intent drain sweep: retires pending ``close_intents`` rows, a bounded number per pass.
+Dependency-free
 (``bzh:domain-core``): every collaborator is an injected Protocol, so :meth:`sweep` is one
 complete, directly-callable step (``bzh:steppable-loop``); ground is
 ``blizzard-context:/architecture/crash-correctness/hub.md``'s own."""
@@ -56,7 +56,7 @@ CLOSE_DRAIN_PASS_LIMIT = 100
 def close_intent_is_due(now: datetime, *, attempt_count: int | None, last_attempt_at: datetime | None) -> bool:
     """Due with no prior attempt at all; otherwise due once
     ``backoff_delay(n, base, cap)`` has passed since the last one — a pure domain
-    rule (``bzh:domain-core``), applied by ``CloseIntentDrainer.sweep`` over each pending intent's history."""
+    rule (``bzh:domain-core``)."""
     if not attempt_count or last_attempt_at is None:
         return True
     threshold = backoff_delay(
@@ -126,11 +126,11 @@ class TenantCloseIntent:
 
 
 class IReadCloseIntentCorpus(Protocol):
-    """The close-drain sweep's corpus, read across every open tenant."""
+    """The pending close intents, read across every open tenant."""
 
     def pending_close_intents(self) -> Sequence[TenantCloseIntent]:
         """Every open tenant's pending intent whose chunk is neither grouped away nor deleted, with
-        its attempt history, in intent order; due-ness is the drainer's call."""
+        its attempt history, in intent order, whether due or not."""
         ...
 
 

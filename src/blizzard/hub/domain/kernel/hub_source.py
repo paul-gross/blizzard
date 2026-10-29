@@ -1,4 +1,4 @@
-"""The built-in hub work source's reserved name — read by config, garden and work items alike."""
+"""The built-in hub work source's reserved name, shared across the domain packages."""
 
 from __future__ import annotations
 

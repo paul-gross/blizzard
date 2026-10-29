@@ -53,12 +53,11 @@ def refuse_release(route: Route | None, facts: ChunkFacts, *, runner_id: str, ep
 
 
 class ReleaseService:
-    """Give a chunk's route back at its holder's own request — ``POST /api/fleet/chunks/{id}/release``."""
+    """Give a chunk's route back at its holder's own request."""
 
     def __init__(self, *, route: IWriteChunkRouteRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
         self._route = route
-        # The holder and epoch checks race a claim or completion, so read and write share one
-        # row-locked transaction (``bzh:store-exclusive-write``).
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._clock = clock
 

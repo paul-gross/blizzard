@@ -1,7 +1,6 @@
 """The operational analytics query seam — durations, spend, and outcomes
-derived at query time (``bzh:facts-not-status``) over facts the hub already holds.
-New, not an extension of :mod:`queries` (``bzh:controller-read-only``): that module reads
-the derived-event projection alone. The folds below are pure functions over
+derived at query time (``bzh:facts-not-status``) over facts the hub already holds
+(``bzh:controller-read-only``). The folds below are pure functions over
 already-loaded facts (``bzh:domain-core``) — the adapter fetches and maps, this module
 decides."""
 
@@ -115,10 +114,10 @@ class ChunkSpendPage:
 @domain_model
 @dataclass(frozen=True)
 class OutcomeStats:
-    """One node's judged-choice distribution and attempt-failure count — two
-    distinct quantities, never blended: a judged failure edge consumes no retry budget,
-    while a crash, verdict-less exit, or reap does. A delivery kick-back
-    (``chunk_bounces``) counts as neither."""
+    """One node's judged-choice distribution and attempt-failure count — two distinct
+    quantities, never blended; which consumes the retry budget is owned by
+    ``blizzard-context:/domain/graphs/nodes.md``'s ``retries`` facet, and a delivery
+    kick-back, counted as neither, by :class:`~blizzard.hub.domain.chunk.model.BounceFact`."""
 
     node_id: str
     choice_counts: dict[str, int]
@@ -366,10 +365,9 @@ def summarize_outcomes(judged: Mapping[str, dict[str, int]], failures: Mapping[s
 
 
 class IReadOperationalAnalytics(Protocol):
-    """Read-only operational-datasets query Protocol — the durations,
-    spend, and outcomes routes' own seam (``bzh:controller-read-only``,
-    ``bzh:repository-split``). No write repository backs it: every dataset here is
-    derived at read time over facts other services already write."""
+    """Read-only operational-datasets query Protocol (``bzh:controller-read-only``,
+    ``bzh:repository-split``): every dataset is derived at read time, with no write
+    repository of its own."""
 
     def durations_by_node(self, criteria: OperationalCriteria) -> list[DurationStats]:
         """Completed-step duration rollups grouped by the step's node — one entry
@@ -390,9 +388,9 @@ class IReadOperationalAnalytics(Protocol):
     def spend_by_graph(self, criteria: OperationalCriteria) -> list[SpendStats]:
         """The same rollup grouped by each usage fact's chunk's *current* graph pin — a
         chunk that migrated attributes every usage fact it ever recorded to where it
-        lives today, not to the graph it was in when the cost was incurred (a documented
-        simplification: ``usage_facts`` carries no ``graph_id`` of its own, and is
-        deliberately not epoch-fenced either)."""
+        lives today, not to the graph it was in when the cost was incurred
+        (``tests/test_analytics_spend_api.py::test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_graph``;
+        ``docs/deployment/analytics.md`` §Interpreting the numbers)."""
         ...
 
     def spend_by_chunk(self, criteria: OperationalCriteria, *, cursor: str | None = None, limit: int) -> ChunkSpendPage:

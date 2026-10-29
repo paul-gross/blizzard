@@ -1,6 +1,6 @@
 """Mint-time graph validation.
 
-The rules ``POST /api/graphs`` runs before minting a graph immutable: errors reject the
+The rules a graph passes before it is minted immutable: errors reject the
 definition, warnings mint it flagged. Pure domain logic over an already-parsed
 :class:`GraphDoc` (``bzh:domain-core``) — no filesystem, no framework. Reachability is
 a warning, not an error: cycles are intentional and retries escape to escalation."""

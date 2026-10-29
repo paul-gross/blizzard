@@ -9,8 +9,7 @@ removed.
 
 A delete request drains inline under :data:`DRAIN_PASS_ROWS`; when that runs out first, the ``tenant_teardown`` sweep
 (:class:`TenantTeardownSweep`) carries on, one bounded pass per tenant per interval (``bzh:steppable-loop``), from
-wherever the tables stand — a hub killed mid-drain finishes the job after restart. The concrete store lives at
-``src/blizzard/hub/store/internal/tenant_teardown_store.py`` (``bzh:dependency-inversion``)."""
+wherever the tables stand — a hub killed mid-drain finishes the job after restart."""
 
 from __future__ import annotations
 

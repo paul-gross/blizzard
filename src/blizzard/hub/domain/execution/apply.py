@@ -152,9 +152,8 @@ class ApplyResult:
 
     @classmethod
     def hub_node_taken_replay(cls) -> ApplyResult:
-        """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node.
-        Distinct from :meth:`migrated_replay` because a hub landing **retained** the
-        route, which a ``MIGRATED`` reply would release (pinned by tests/test_migration_apply.py)."""
+        """A lost-ack re-flush of a completion whose migration landed on a **hub-executed** node
+        (``tests/test_migration_apply.py::test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken``)."""
         return cls(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
 
 
@@ -197,7 +196,7 @@ class ApplyService:
         self._movement = movement
         self._decisions = decisions
         self._escalations = escalations
-        # Re-derives the current-node rule under the row lock (``bzh:store-exclusive-write``).
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._route = route
         self._artifacts = artifacts
@@ -383,8 +382,8 @@ class ApplyService:
         targets: MigrationTargets,
         artifacts: Sequence[CompletionArtifact],
     ) -> ApplyResult:
-        """Take a cross-graph edge — land on its resolved target, or escalate once per epoch. An
-        unresolved target answers ``PARKED_AT_GATE``: ``FAILURE`` would requeue and supersede it."""
+        """Take a cross-graph edge — land on its resolved target, or escalate once per epoch
+        (:meth:`ApplyResult.escalated`)."""
         if re_escalates(facts, edge, targets, epoch=submission.epoch):
             return ApplyResult.escalated(edge.target_graph)
         if targets.cross_graph is not None:

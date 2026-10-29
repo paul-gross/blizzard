@@ -14,8 +14,7 @@ from typing import TypedDict
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.roles import domain_model
 
-# One conservative URL path segment — no `/`, since the consuming route percent-encodes a
-# bare name into it. Shared by both name grammars below (`canon:one-owner`).
+# One conservative URL path segment, so never a `/`. Shared by both name grammars below (`canon:one-owner`).
 _ARTIFACT_NAME_SEGMENT = r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*"
 
 _GRAPH_ARTIFACT_NAME = re.compile(rf"^{_ARTIFACT_NAME_SEGMENT}$")

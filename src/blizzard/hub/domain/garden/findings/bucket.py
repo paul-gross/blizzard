@@ -48,8 +48,8 @@ def is_exited_citable(finding: Finding, run: RunContext) -> bool:
 class FindingBucketReader:
     """Reads a run's :class:`FindingBucket`: its routine's own non-exited findings across every
     scope, plus non-exited review-sourced findings on the run's own scope — all within the run's
-    project, so a same-slug scope of another project never joins. Exited findings are dropped in
-    the store query, so the read costs the same however many have exited."""
+    project, so a same-slug scope of another project never joins. Exited rows are excluded per
+    :meth:`IReadFindingRepository.list_for_routine`'s `exclude_exited`."""
 
     def __init__(self, findings: IReadFindingRepository) -> None:
         self._findings = findings
@@ -62,9 +62,8 @@ class FindingBucketReader:
         return FindingBucket.of(rows, own_scope=run.scope_slug)
 
     def exited_among(self, run: RunContext, finding_ids: Collection[str]) -> frozenset[str]:
-        """Which of `finding_ids` are exited findings a run could otherwise have cited — same
-        project, and either the routine's own finding in any scope or a review-sourced finding on
-        the run's scope — in one bulk read, so delivery can tell an exited id from an unknown one."""
+        """Which of `finding_ids` satisfy :func:`is_exited_citable`, in one bulk read, so delivery
+        can tell an exited id from an unknown one."""
         if not finding_ids:
             return frozenset()
         return frozenset(

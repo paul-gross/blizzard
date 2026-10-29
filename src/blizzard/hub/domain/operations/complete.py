@@ -1,8 +1,7 @@
 """Chunk completion — the operator's manual closure of a chunk, reachable from any non-``done``
-status including ``stopped``. Appends the ``chunk.completed`` fact, which
-``ChunkFacts._operator_completion_outranks_stop`` lets outrank a stop at or before it
-(``bzh:facts-not-status``), releasing any live route and held hub-exec slot in the same store
-transaction, mirroring ``StopService``. Idempotent by no-op: an already-``done`` chunk writes
+status including ``stopped``. Appends the ``chunk.completed`` fact (its precedence over a stop is
+``ChunkFacts.status``'s, ``bzh:facts-not-status``) and releases any live route and held hub-exec
+slot in the same store transaction. Idempotent by no-op: an already-``done`` chunk writes
 no second fact and is never refused."""
 
 from __future__ import annotations
@@ -28,9 +27,7 @@ class CompleteService:
     ) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
-        # The locked-transaction seam (``bzh:store-exclusive-write``): the already-``done``
-        # guard this completion no-ops on is re-derived here, under the same row lock the
-        # write lands under, never trusted from a caller's pre-lock snapshot.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
     def complete(self, chunk: Chunk, *, by: str) -> int | None:

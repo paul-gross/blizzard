@@ -1,13 +1,9 @@
 """Projects in a configuration document, and the project a document entry or a legacy import acts in
-(``bzh:config-apply``).
+(``bzh:config-apply``); the ``projects`` section is planned here for :mod:`blizzard.hub.domain.config.apply`.
 
-The apply knows no project, so its ``projects`` section is planned here and handed to it already planned. Each entry
-declares a project by slug — its name and description, and the sources and repositories it links — and reconciles
-before the scopes and routines, so they may name a project the same document declares. A ``sources`` or
-``repositories`` list an entry states is the project's whole set, each named by id, slug or a slug it left: one it
-leaves out is unlinked, which retires that
-link; a list the entry omits leaves the stored links. A slug some project left is refused rather than taken, naming the
-project that left it."""
+Each entry declares a project by slug — its name and description, and the sources and repositories it links. A
+``sources`` or ``repositories`` list an entry states is the whole set, each named by id, slug or a slug it left; one
+left out is unlinked, and an omitted list leaves the stored links. A slug some project left is refused, naming it."""
 
 from __future__ import annotations
 

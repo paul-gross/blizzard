@@ -1,7 +1,7 @@
 """A routine's per-scope last-swept table and its windowed measurement series — a read
 over `finding_sets`, each row joined to its own artifact's `produced_at`. Last-swept is
 unwindowed: a scope swept months ago must never read as never. The measurement
-series is cut to `[since, until)` by the store, in SQL, like the garden trend window."""
+series is cut to `[since, until)` by the store."""
 
 from __future__ import annotations
 

@@ -28,9 +28,8 @@ KIND_AGENT_SPAWN = "agent_spawn"
 @domain_model
 @dataclass(frozen=True)
 class SegmentProvenance:
-    """A segment's own frozen harness identity — one per
-    :meth:`IWriteTranscriptEvents.replace_segment_events` call, since it is the same for
-    every event that call writes, never repeated per row. Each field ``None`` means
+    """A segment's own frozen harness identity, one per
+    :meth:`IWriteTranscriptEvents.replace_segment_events` call. Each field ``None`` means
     unknown, never a value."""
 
     harness_id: str | None
@@ -42,10 +41,8 @@ class SegmentProvenance:
 @domain_model
 @dataclass(frozen=True)
 class TranscriptEvent:
-    """One derived occurrence, ready to store. ``segment_id``/``extractor_version`` are
-    not carried here — they are the same for every event in one
-    :meth:`IWriteTranscriptEvents.replace_segment_events` call, so that method takes them
-    once rather than every row repeating them."""
+    """One derived occurrence, ready to store; its ``segment_id``/``extractor_version`` are
+    :meth:`IWriteTranscriptEvents.replace_segment_events`' own arguments."""
 
     kind: str
     turn_path: str
@@ -151,8 +148,7 @@ DERIVATION_TRANSITIONS: Mapping[MarkerState, Mapping[DerivationVerb, DerivationA
 
 
 def marker_state(marker_fingerprint: str | None, current_fingerprint: str | None) -> MarkerState:
-    """A segment with no current content (``None``) is gone; one with no current-version marker
-    is underived; else its marker is current or stale by fingerprint."""
+    """No current content (``None``) is gone; no marker is none; else current or stale by fingerprint."""
     if current_fingerprint is None:
         return MarkerState.GONE
     if marker_fingerprint is None:
@@ -187,10 +183,8 @@ class CandidacyRead:
 @domain_model
 @dataclass(frozen=True)
 class DerivationSignature:
-    """A cheap aggregate fingerprint of every input :meth:`IReadTranscriptEvents.candidacy`
-    and its visibility read see today: row count, highest
-    ``transcript_segments.id``, latest ``received_at``, and ``chunks`` row count. No
-    per-row content is read; two equal signatures mean nothing relevant changed."""
+    """The aggregate fingerprint :meth:`IReadTranscriptEvents.derivation_signature` reads:
+    segment count, highest segment id, latest ``received_at``, and chunk count."""
 
     segment_count: int
     max_segment_id: int | None
@@ -201,10 +195,9 @@ class DerivationSignature:
 @domain_model
 @dataclass(frozen=True)
 class SegmentDerivationInput:
-    """Everything a segment offers the derivation service: decoded once,
-    fingerprinted once. ``complete`` is ``False`` when a record is a content hole —
-    ``turns`` is then a partial view, declared rather than indistinguishable from a
-    session that read nothing."""
+    """A segment's content, decoded once and fingerprinted once. ``complete`` is ``False``
+    when a record is a content hole — ``turns`` is then a partial view, declared rather
+    than indistinguishable from a session that read nothing."""
 
     segment_id: str
     chunk_id: str
@@ -318,6 +311,5 @@ class IWriteTranscriptEvents(IReadTranscriptEvents, Protocol):
     def drop_segments(self, segment_ids: frozenset[str], *, at: datetime) -> None:
         """One transaction: delete every row and marker every one of ``segment_ids`` ever
         produced, at every extractor version, and write each segment's drop fact stamped
-        ``at`` — set-scoped rather than one transaction per segment, since segments leave
-        the visible set in batches. A no-op for an empty set."""
+        ``at``. A no-op for an empty set."""
         ...

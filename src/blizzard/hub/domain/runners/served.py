@@ -13,8 +13,7 @@ from blizzard.hub.domain.runners.registration import ServedEntry
 
 
 class IServedProjects(Protocol):
-    """The tenant's projects as a declaration resolves against them, read afresh on every call;
-    :class:`~blizzard.hub.domain.projects.bulk_resolve.BulkProjectResolver` is one."""
+    """The tenant's projects as a declaration resolves against them, read afresh on every call."""
 
     def resolve_ids(self, references: Sequence[str]) -> Mapping[str, str | None]:
         """Each distinct reference with the id of the project it names, ``None`` when none does — in one read."""

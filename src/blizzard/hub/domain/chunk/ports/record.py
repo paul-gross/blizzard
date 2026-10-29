@@ -95,8 +95,7 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph, on
         ``handle``'s already-locked connection (``bzh:store-exclusive-write``).
 
-        A plain column overwrite, not an append-only fact: ``graph_id`` was already a
-        mint-time column with no fact log behind it."""
+        A plain column overwrite."""
         ...
 
     def set_defaults_locked(

@@ -236,8 +236,7 @@ class EditService:
     ) -> None:
         self._record = record
         self._graphs = graphs
-        # The locked-transaction seam (``bzh:store-exclusive-write``) ClaimService's own
-        # CAS shares — the same row lock, never an in-process lock.
+        # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
     def set_graph(self, chunk: Chunk, *, graph: Graph) -> None:
@@ -276,8 +275,6 @@ class EditService:
         The facts and the record are re-read under the shared row lock, so a concurrent edit landing
         before it neither loses its write to the trio's carry-forward nor skews the pin check."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            # A `None` load means gone under this lock — refuse rather than substitute a
-            # synthetic status, mirroring `DeleteService.delete`/`DependencyService.declare`.
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)

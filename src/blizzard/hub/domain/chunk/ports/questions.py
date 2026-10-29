@@ -19,12 +19,12 @@ class IReadChunkQuestionsRepository(Protocol):
         ...
 
     def list_open_questions(self, *, project: ProjectId | None = None) -> list[NodeQuestion]:
-        """Every unanswered question on a chunk not yet stopped or done, across the fleet — the
-        ``hub status`` surface — or only the given project's."""
+        """Every unanswered question on a chunk not yet stopped or done, across the fleet,
+        or only the given project's."""
         ...
 
     def load_questions(self, chunk_id: str) -> list[NodeQuestion]:
-        """A chunk's questions, open and answered — the chunk-detail surface."""
+        """A chunk's questions, open and answered."""
         ...
 
 

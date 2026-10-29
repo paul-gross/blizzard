@@ -1,7 +1,6 @@
 """Work-source records: the stored shape, validation, sparse merge, and the seams.
 
-A work source has the shape a repository has: an immutable id every stored reference holds, a tenant-unique renameable
-slug whose former values keep resolving until another record claims them, and a free display name. ``hub`` is never a
+A work source has the slugged configured-record shape (``bzh:configured-record``). ``hub`` is never a
 work source's slug, current or former: the built-in source holds that key."""
 
 from __future__ import annotations

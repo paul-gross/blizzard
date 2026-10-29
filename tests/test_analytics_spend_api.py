@@ -1,22 +1,26 @@
-"""The analytics spend routes (component tier): the
-TRANSCRIPT_READ auth triad, real usage/cost rollups by node, graph, and chunk, every
-shared filter, cursor paging and NDJSON parity for the per-chunk grouping, and the
-reconciliation test against ``UsageTotal.of`` and ``GET /api/spend``."""
+"""The analytics spend routes (component tier): the TRANSCRIPT_READ auth triad, real
+usage/cost rollups by node, graph, and chunk, every shared filter, cursor paging and NDJSON
+parity for the per-chunk grouping, a migrated chunk's earlier usage attributed to its current
+graph, and the reconciliation test against ``UsageTotal.of`` and ``GET /api/spend``."""
 
 from __future__ import annotations
 
 import json
 from datetime import timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
 from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from tests.support import FakeWorkSource, build_hub, pointer_token, seed_session, seed_user
+from tests.support import FakeWorkSource, build_hub, claim_route, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -52,6 +56,21 @@ nodes:
     prompt: Review it.
     judgement:
       prompt: Assess the review.
+      choices:
+        pass:
+          description: Complete.
+          to: done
+"""
+
+_OTHER_GRAPH_YAML = """
+name: spend-fixture-other
+entry: triage
+nodes:
+  triage:
+    executor: runner
+    prompt: Triage it.
+    judgement:
+      prompt: Assess.
       choices:
         pass:
           description: Complete.
@@ -197,6 +216,39 @@ def test_spend_by_graph_groups_on_the_chunks_current_graph(tmp_path: Path) -> No
             "cost_partial": False,
             "estimated_cost_usd": None,
         }
+    ]
+
+
+def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_graph(tmp_path: Path) -> None:
+    hub, token, graph_id, nodes = _seeded_hub(tmp_path)
+    admin_token = seed_session(hub, seed_user(hub, username="admin2", role=Role.ADMIN))
+    other = hub.client.post("/api/graphs", json={"definition_yaml": _OTHER_GRAPH_YAML}, headers=_cookie(admin_token))
+    assert other.status_code == 201, other.text
+    other_graph_id = other.json()["graph_id"]
+    other_nodes = {n["name"]: n["node_id"] for n in other.json()["nodes"]}
+    chunk_id = _mint_chunk(hub, token)
+    claim_route(hub, chunk_id)
+    _push_usage(hub, chunk_id=chunk_id, node_id=nodes["build"], epoch=1, seq=1, cost_usd=0.1)
+
+    cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_migration(
+        chunk_id,
+        from_node_id=nodes["build"],
+        from_graph_id=graph_id,
+        to_graph_id=other_graph_id,
+        landed_node_id=other_nodes["triage"],
+        choice_name="migrate",
+        model=None,
+        epoch=2,
+        at=hub.clock.now(),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+
+    resp = hub.client.get("/api/analytics/spend/graphs", headers=_cookie(token))
+
+    assert [(row["key"], row["graph_name"]) for row in resp.json()["spend"]] == [
+        (other_graph_id, "spend-fixture-other")
     ]
 
 

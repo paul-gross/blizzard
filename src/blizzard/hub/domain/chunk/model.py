@@ -47,7 +47,7 @@ def person_note(text: str | None) -> str | None:
 @domain_model
 @dataclass(frozen=True)
 class WorkRef:
-    """One wrapped work item — ``{source, ref}``, superseding ``{provider, url}``.
+    """One wrapped work item.
     ``source`` names a configured work source; ``ref`` is that
     source's own item token (a GitHub issue number). Contents never stored."""
 
@@ -226,9 +226,7 @@ def mint_chunk(
 ) -> Chunk:
     """Mint a resting chunk of ``project_id`` pinned to ``graph_id`` holding ``work_refs``,
     timestamped at the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every
-    mint names its project; none is inferred here. Every call site but a routine run's own
-    passes neither preference — the empty-preference policy given one home here; a routine
-    run is the first to source one, from its own routine's defaults."""
+    mint names its project; none is inferred here. An omitted preference is empty."""
     return Chunk(
         chunk_id=Id.mint_at(IdPrefix.CHUNK, at).value,
         graph_id=graph_id,
@@ -390,7 +388,7 @@ class QuestionFact:
 class DecisionFact:
     """A gate's ``decision.submitted`` row and whether anything has closed it. An **open**
     decision — carrying neither its own resolution row nor a restart that superseded it
-    (#370) — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
+    — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
     hydrating repository so the derivation reads a plain boolean. ``closed`` is a second,
     later state: a fact consumed the decision — a transition, a migration, an escalation or a
     restart — so a decision can be resolved yet not closed while the runner has not moved on."""
@@ -404,7 +402,7 @@ class DecisionFact:
 @domain_model
 @dataclass(frozen=True)
 class BounceFact:
-    """A ``chunk_bounces`` row — one delivery kick-back (#64). Contention, not failure: a
+    """A ``chunk_bounces`` row — one delivery kick-back. Contention, not failure: a
     bounce consumes no node retry, and only crossing the node's ``bounce_cap`` escalates.
     ``(chunk_id, epoch)`` is the natural key guarding against a redelivery replay
     double-counting; ``envelope`` is the opaque JSON kick-back payload."""
@@ -418,7 +416,7 @@ class BounceFact:
 @domain_model
 @dataclass(frozen=True)
 class HubNodePollFact:
-    """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node (#66).
+    """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node.
     Append-only. ``epoch`` is the arrival epoch of the current visit to ``node_id``, not
     a fresh one per poll. Pending-ness (:meth:`ChunkFacts.hub_node_pending`) derives from these rows
     plus the newest transition, so a ``kill -9`` between polls resumes from the store."""
@@ -465,14 +463,14 @@ class MigrationFact:
 @domain_model
 @dataclass(frozen=True)
 class RestartFact:
-    """A ``chunk.restarted`` fact — an operator forced the chunk onto a node, now (#370).
+    """A ``chunk.restarted`` fact — an operator forced the chunk onto a node, now.
 
     A movement fact of its own, never a transition. Its ``epoch`` fences the attempt it
     preempts; ``to_node_executor`` is resolved at read time as a transition's target's is."""
 
     to_node_id: str
     from_node_id: str | None
-    #: The graph ``to_node_id`` belongs to — the *target* graph for a cross-graph move (#371).
+    #: The graph ``to_node_id`` belongs to — the *target* graph for a cross-graph move.
     graph_id: str
     epoch: int
     recorded_at: datetime
@@ -1079,14 +1077,14 @@ class ChunkFacts:
     # The chunk's cross-graph migration facts — each re-pins the chunk and
     # re-queues it, superseding an earlier transition for the terminal/hub-node checks.
     migrations: list[MigrationFact] = field(default_factory=list[MigrationFact])
-    # The chunk's operator restart facts (#370) — a third movement family beside the two above.
+    # The chunk's operator restart facts — a third movement family beside the two above.
     restarts: list[RestartFact] = field(default_factory=list[RestartFact])
     pauses: list[PauseFact] = field(default_factory=list[PauseFact])
     usage: list[UsageFact] = field(default_factory=list[UsageFact])
-    # The chunk's recorded delivery kick-backs (#64) — feeds :meth:`ChunkFacts.bounce_count` /
+    # The chunk's recorded delivery kick-backs — feeds :meth:`ChunkFacts.bounce_count` /
     # :meth:`ChunkFacts.bounces_over_cap` and the chunk-detail bounce history. Never a status.
     bounces: list[BounceFact] = field(default_factory=list[BounceFact])
-    # The chunk's recorded hub-node poll attempts (#66) — feeds :meth:`ChunkFacts.hub_node_pending`.
+    # The chunk's recorded hub-node poll attempts — feeds :meth:`ChunkFacts.hub_node_pending`.
     # Never a status: pending is a facet of ``delivering``.
     hub_node_polls: list[HubNodePollFact] = field(default_factory=list[HubNodePollFact])
 
@@ -1121,7 +1119,7 @@ class ChunkFacts:
         return max(self.migrations, key=lambda m: (m.recorded_at, m.epoch))
 
     def newest_restart(self) -> RestartFact | None:
-        """The chunk's newest operator restart fact, or ``None`` (#370).
+        """The chunk's newest operator restart fact, or ``None``.
 
         Ordered by ``(recorded_at, epoch)`` — the same key ``newest_transition`` uses."""
         if not self.restarts:
@@ -1149,7 +1147,7 @@ class ChunkFacts:
         """The chunk's latest fencing epoch — the newest across its leases, restarts, and
         epoch owners.
 
-        A restart mints an epoch with no attempt behind it (#370), and a claim reserves one
+        A restart mints an epoch with no attempt behind it, and a claim reserves one
         before its lease is reported: the fence has to rise the moment either lands."""
         epochs = (
             [lease.epoch for lease in self.leases]
@@ -1273,7 +1271,7 @@ class ChunkFacts:
         return any(restart.epoch > epoch for restart in self.restarts)
 
     def entered_by_restart(self) -> bool:
-        """The chunk's current node visit was forced by an operator restart (#370).
+        """The chunk's current node visit was forced by an operator restart.
 
         True until the chunk moves again, so every re-entry into that visit — the first
         one and any crash-recovery repeat — runs on a freshly minted session."""
@@ -1281,7 +1279,7 @@ class ChunkFacts:
         return movement is not None and movement.kind is MovementKind.RESTART
 
     def newest_transition_is_terminal(self) -> bool:
-        """The newest accepted transition's target is the reserved terminal (``done``, #63).
+        """The newest accepted transition's target is the reserved terminal (``done``).
 
         The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A later
         movement of any other family supersedes the transition entirely: a
@@ -1314,7 +1312,7 @@ class ChunkFacts:
 
     def status(self) -> ChunkStatus:
         """Derive a chunk's single status from its facts, first match wins. ``done`` is the
-        **only** terminal (#63): reached via the terminal transition, an operator's manual
+        **only** terminal: reached via the terminal transition, an operator's manual
         completion — not the landed
         fact, since an authored ``merged -> <node>`` edge can land every repo and keep the
         chunk running post-merge."""
@@ -1384,8 +1382,8 @@ class ChunkFacts:
         """The newest escalation nothing later superseded, or ``None``.
 
         Closed by supersession, never a resolution fact: a later lease mint, a
-        ``requeue.recorded`` or an operator restart (#370) hands the work back to the fleet,
-        and a later **completion** — stopped or done — is the chunk ending without one (#293)."""
+        ``requeue.recorded`` or an operator restart hands the work back to the fleet,
+        and a later **completion** — stopped or done — is the chunk ending without one."""
         if not self.escalations:
             return None
         newest = max(self.escalations, key=lambda e: e.recorded_at)
@@ -1459,27 +1457,26 @@ class ChunkFacts:
         return self.routes.newest is not None
 
     def has_landed_repos(self, artifacts: Sequence[StoredArtifact] = ()) -> bool:
-        """True iff any repo has landed for this chunk — informational, never a status (#63).
+        """True iff any repo has landed for this chunk — informational, never a status.
 
-        ``artifacts`` carries the generic ``merged/<repo>`` marker convention (#67) — the
-        current landing truth; the fact inputs are read alongside for back-compat, so a
-        historical chunk still reads landed."""
+        ``artifacts`` carries the ``merged/<repo>`` markers; a marker or a recorded landing
+        fact counts."""
         return self.landed_with(LandedRepos.of(artifacts).names)
 
     def landed_with(self, repo_names: Collection[str]) -> bool:
         """True iff any repo has landed for this chunk: a ``merged/<repo>`` marker names one
-        (``repo_names``), or the back-compat delivery facts already record a landing."""
+        (``repo_names``), or the delivery facts already record a landing."""
         return self.delivery_landed or bool(self.landed_repos) or bool(repo_names)
 
     def bounce_count(self) -> int:
-        """The chunk's total recorded delivery kick-backs (#64) — informational.
+        """The chunk's total recorded delivery kick-backs — informational.
 
         Feeds the cap check (``bounces_over_cap``) and the chunk-detail bounce history;
         never itself a status — a bounce is contention, not failure."""
         return len(self.bounces)
 
     def bounces_over_cap(self, cap: int) -> bool:
-        """True once the chunk's bounce count has **crossed** ``cap`` (#64).
+        """True once the chunk's bounce count has **crossed** ``cap``.
 
         Crossed, not reached: a node whose ``bounce_cap`` is 5 tolerates 5 kick-backs
         before this flips True on the 6th — the cap counts bounces a chunk survives before
@@ -1487,7 +1484,7 @@ class ChunkFacts:
         return self.bounce_count() > cap
 
     def hub_node_poll_history(self, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
-        """A hub node's poll attempts for one (node, epoch) visit, oldest first (#66).
+        """A hub node's poll attempts for one (node, epoch) visit, oldest first.
 
         The earliest entry bounds ``poll_timeout``, the newest gates ``poll_interval`` —
         read off this history rather than in-memory state, so a ``kill -9`` resumes here."""
@@ -1496,7 +1493,7 @@ class ChunkFacts:
         )
 
     def hub_node_pending(self) -> HubNodePollFact | None:
-        """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty (#66).
+        """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty.
 
         Not a distinct status: the chunk still derives ``delivering``. A poll fact recorded
         for the newest transition's ``(to_node_id, epoch)`` with no later transition means
@@ -1529,10 +1526,9 @@ def is_landed_revision(content: str) -> bool:
 @domain_model
 @dataclass(frozen=True)
 class LandedRepos:
-    """Repos landed via a hub command node's ``merged/<repo>`` marker artifact (#67).
+    """Repos landed via a hub command node's ``merged/<repo>`` marker artifact.
 
-    No engine code names a "deliver" node, so a chunk's landed detail is read off its
-    own node artifacts rather than a privileged fact family. ``artifacts`` arrive in durable
+    ``artifacts`` arrive in durable
     write order, so the newest-written marker decides a repo's sha."""
 
     names: frozenset[str]
@@ -1872,12 +1868,11 @@ class IReadWorkItemRepository(Protocol):
     def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
         """Up to ``limit`` items at ``source``, newest first (a total order —
         ``work_item_id`` breaks a same-instant ``created_at`` tie, ULIDs sorting lexically
-        by creation), open and closed alike — bounded the same way every other operator
-        feed in this hub is (the activity feed, ``/api/events``)."""
+        by creation), open and closed alike."""
         ...
 
     def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, HubWorkItem]:
-        """``get``'s batched sibling (`bzh:bulk-reconstitution`) — every requested
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`) — every requested
         pointer's item, keyed by pointer. A pointer naming no item is absent, the same
         as ``get`` returning ``None`` for it."""
         ...
@@ -1952,8 +1947,7 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
     ) -> int:
         """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
         withdraw every open ``hub:``-source item it holds, atomically on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``;
-        :class:`~blizzard.hub.domain.operations.delete.DeleteService`). A ``forge:`` pointer on the
+        already-locked connection (``bzh:store-exclusive-write``). A ``forge:`` pointer on the
         same chunk is left untouched. Returns the freshly-written ``chunk_deleted.id``."""
         ...
 

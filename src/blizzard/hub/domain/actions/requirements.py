@@ -1,7 +1,6 @@
 """What each hub action needs its repositories' forges to offer, keyed by action name.
 
-A requirement belongs to the action rather than the graph, so a graph names no capability and every graph version is
-checked the same way. Each entry is a function of the resolved repository, so a requirement that varies by repository
+Each entry is a function of the resolved repository, so a requirement that varies by repository
 changes only what an entry answers."""
 
 from __future__ import annotations

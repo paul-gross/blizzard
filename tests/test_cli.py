@@ -586,8 +586,7 @@ _STORE_WRITERS = {
 def test_every_store_writing_verb_refuses_a_held_directory_in_one_wording(
     verb: str, held_by: str, tmp_path: Path
 ) -> None:
-    """One guard stands in front of `transcript`, `tick` and `host`: the lock holder's pid or the answering socket
-    is named, the action it stops is named, and the store is left as it was."""
+    """One guard fronts `transcript`, `tick` and `host`: it names the holder and the action, and leaves the store."""
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
     _enable_transcript_shipping(root)

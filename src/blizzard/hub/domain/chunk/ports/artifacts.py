@@ -37,7 +37,7 @@ class IReadChunkArtifactsRepository(Protocol):
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
         """True iff a marker/log artifact named ``name`` is already recorded for this
-        exact (chunk, node, epoch) — the ``produces:`` re-run skip probe (#65)."""
+        exact (chunk, node, epoch)."""
         ...
 
 
@@ -56,7 +56,7 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         content: str,
         at: datetime,
     ) -> bool:
-        """Append one hub-node progress artifact OUTSIDE a transition (#65).
+        """Append one hub-node progress artifact OUTSIDE a transition.
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
         recorded this artifact writes nothing a second time. Also behind the write fence

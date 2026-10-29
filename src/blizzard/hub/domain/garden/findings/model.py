@@ -42,7 +42,7 @@ WITHDRAWN_KINDS = EXIT_KINDS - OUTFLOW_KINDS
 class UnknownFactKindError(ValueError):
     """A `finding_facts` row named a `kind` outside `FACT_KINDS` — refused at the
     write path so `derive_liveness`'s newest-fact-wins fold, which assumes every kind is
-    one of the nine, never has to reason about a stray value."""
+    in `FACT_KINDS`, never has to reason about a stray value."""
 
     def __init__(self, kind: str) -> None:
         super().__init__(f"unknown finding-fact kind {kind!r}")
@@ -379,8 +379,7 @@ class IReadFindingRepository(Protocol):
     def get(self, finding_id: str) -> Finding | None: ...
 
     def get_many(self, finding_ids: Sequence[str]) -> dict[str, Finding]:
-        """`get`'s batched sibling, keyed by `finding_id` — a bulk exit verb's read side,
-        so it costs one query pair, not one pair per row."""
+        """`get`'s batched sibling, keyed by `finding_id`; an unknown id is absent."""
         ...
 
     def get_with_facts(self, finding_id: str) -> tuple[Finding, list[FindingFact]] | None:
@@ -412,8 +411,7 @@ class IReadFindingRepository(Protocol):
         self, project_id: str, scope_slug: str | None = None, *, include_gone: bool = False
     ) -> list[Finding]:
         """Every finding of `project_id` across every routine; `scope_slug=None` reads every
-        scope. Reads the project's whole bucket by construction — the project-led indexes narrow
-        past `tenant_id, project_id` only on `routine_name`, which this never filters on."""
+        scope."""
         ...
 
     def list_by_source(
@@ -425,8 +423,7 @@ class IReadFindingRepository(Protocol):
         include_gone: bool = False,
         exclude_exited: bool = False,
     ) -> list[Finding]:
-        """Every finding under `scope_slug` carrying `source` — filtered
-        on `ix_findings_tenant_project_scope_source`, indexed unlike `list_across_routines`.
+        """Every finding under `scope_slug` carrying `source`.
         `exclude_exited` is `list_for_routine`'s."""
         ...
 
@@ -601,10 +598,8 @@ class FindingExitService:
         self._exit(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
 
     def deliver(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
-        """Delivery-triggered closure — `resolved`'s provisional sibling:
-        the owning routine's next run re-checks a `delivered` finding, settling it to
-        `resolved` if it still holds or reviving it to `live` if it does not, rather than
-        a delivery alone declaring the ground changed."""
+        """Delivery-triggered closure — `resolved`'s provisional sibling
+        (blizzard-context:/domain/findings-and-proposals.md §Liveness is derived, and reversible)."""
         at = self._clock.now()
         self._record(
             findings, lambda batch, _: deliver_facts(batch, note=note, actor=actor, at=at, proposal_id=proposal_id)
