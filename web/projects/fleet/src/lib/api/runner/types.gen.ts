@@ -2505,6 +2505,70 @@ export type IntendedMigrationView = {
 };
 
 /**
+ * InvocationUsagePage
+ */
+export type InvocationUsagePage = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Items
+     */
+    items: Array<InvocationUsageView>;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * InvocationUsageView
+ */
+export type InvocationUsageView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Generation
+     */
+    generation: number;
+    /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+};
+
+/**
  * LandedRepoView
  *
  * One repo's actual merged revision; URL absent without a known PR forge.
@@ -5358,6 +5422,51 @@ export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmen
 };
 
 export type GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponse = GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses[keyof GetTranscriptSegmentRunnersRunnerIdApiChunksChunkIdTranscriptsSegmentIdGetResponses];
+
+export type ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/runners/{runner_id}/api/chunks/{chunk_id}/usage';
+};
+
+export type ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetError = ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetErrors[keyof ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetErrors];
+
+export type ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvocationUsagePage;
+};
+
+export type ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetResponse = ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetResponses[keyof ChunkInvocationUsageRunnersRunnerIdApiChunksChunkIdUsageGetResponses];
 
 export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetData = {
     body?: never;

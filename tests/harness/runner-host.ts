@@ -78,6 +78,8 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
 export interface RunnerHost {
   /** The host directory. */
   readonly dir: string;
+  /** Minted fixture workspace; its basic provider creates one environment named for each chunk. */
+  readonly workspace: string;
   readonly url: string;
   /** The host's Unix socket, `<dir>/host.sock`. */
   readonly socket: string;
@@ -494,6 +496,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
       return {
         dir,
+        workspace,
         url,
         socket,
         home,
