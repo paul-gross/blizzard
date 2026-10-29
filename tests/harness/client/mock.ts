@@ -94,6 +94,15 @@ export interface MockChunkSpec {
   status?: 'ready' | 'not_ready' | 'paused' | 'needs_human' | 'delivering' | 'done' | 'stopped';
   /** Makes the chunk a routine run; without it the analytics reads refuse for want of a run context. */
   garden_run?: { routine_name: string; scope_slug: string };
+  /** The chunk's seeded garden proposals; one carrying a `closure` is closed, the rest open. Needs `garden_run`. */
+  garden_proposals?: {
+    proposal_id: string;
+    class: string;
+    title: string;
+    body: string;
+    findings: string[];
+    closure?: { closure: 'passed' | 'accepted'; reason: string };
+  }[];
   /** The canned rows the chunk's analytics reads serve, as the mock's `AnalyticsSpec` names them. */
   analytics?: Record<string, Record<string, unknown>[]>;
   /** The garden findings the chunk's accepted, minted proposal answers; absent, the chunk answers no proposal at all. */

@@ -1,4 +1,6 @@
 import { expect } from '@playwright/test';
+import type { MockChunkSpec } from './client/mock';
+import type { MockHub } from './mock-world';
 import type { RunnerHost } from './runner-host';
 
 // Waits on a stepped runner host: every wait is a pass of the host, never a clock.
@@ -42,4 +44,31 @@ export async function runningLeaseWithWorker(host: RunnerHost, chunkId: string) 
     (found) => found !== undefined,
   );
   return { lease: lease!, headers: headers! };
+}
+
+/** A one-node chunk whose worker judgement turn is held open, so its lease stays running for the spec to read through. */
+export function holdingChunk(): MockChunkSpec {
+  return {
+    entry: 'build',
+    nodes: {
+      build: {
+        executor: 'runner',
+        session: 'resume',
+        judged_by: 'worker',
+        prompt: 'pass\n',
+        judgement_prompt: HOLD_OPEN,
+        choices: [{ name: 'pass', description: 'committed and green', to: 'done' }],
+        retries_max: 1,
+      },
+    },
+    work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }],
+  };
+}
+
+/** Seeds `spec` and steps until its sole lease is running with a worker credential that answers. */
+export async function seededLeaseWithWorker(mockHub: MockHub, host: RunnerHost, spec: MockChunkSpec) {
+  const seeded = await mockHub.seed.chunk(spec);
+  expect(seeded.status).toBe(201);
+  const { lease, headers } = await runningLeaseWithWorker(host, seeded.body.chunk_id);
+  return { leaseId: lease.lease_id, headers };
 }

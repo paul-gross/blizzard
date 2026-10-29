@@ -11388,12 +11388,6 @@
    "over_cap": 0,
    "total": 104
   },
-  "service/test_runner_garden_proposals_service.py": {
-   "comments": 3,
-   "docstrings": 16,
-   "over_cap": 0,
-   "total": 149
-  },
   "service/test_runner_init_service.py": {
    "comments": 5,
    "docstrings": 8,
