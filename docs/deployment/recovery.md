@@ -134,7 +134,7 @@ The full sweep — the same recovery asserted at every boundary the crash-point 
 the hub's own pass boundaries: the effect writer's `action.after-effect.before-write` and
 `action.after-write.before-resume`, and the flow driver's turns — `flow.after-submit.before-turn` between a submission
 and its turn, `flow.after-turn-start.before-pass` between a turn's start and its pass, `flow.after-poll.before-turn-end`
-between a pending pass's poll row and its turn's end, and `flow.boot.after-interrupt` between one tenant's interrupted
+inside the transaction holding a pending pass's poll row and its turn's end, and `flow.boot.after-interrupt` between one tenant's interrupted
 turns and the next's at boot — is `mise run crash-sweep`, and the tag release workflow runs it in CI.
 
 [tests/test_systemd_units.py](../../tests/test_systemd_units.py) guards the unit files, holding their `ExecStart` to the
