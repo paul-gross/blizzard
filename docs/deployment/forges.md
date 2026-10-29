@@ -111,11 +111,11 @@ owns the pre-flight check an upgrade runs first.
 ## The rate budget
 
 The hub keeps one rate budget per forge and secret — a source or repository with no secret shares the forge's anonymous
-budget — in memory, shared by every caller that reaches the forge under that key: a `deliver` step's landing, the
-commit check, and each work source's forge-status labels, closes and fetches. The budget learns from the
-`X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers the forge answers with, and once its
-remaining falls it turns the least important callers away before a request is sent, so each one waits for the reset
-rather than spending the last of the budget and failing:
+budget — in memory, shared by every caller that reaches the forge under that key: a `deliver` step's landing, the commit
+check, and each work source's forge-status labels, closes and fetches. The budget learns from the `X-RateLimit-Limit`,
+`X-RateLimit-Remaining` and `X-RateLimit-Reset` headers the forge answers with, and once its remaining falls it turns
+the least important callers away before a request is sent, so each one waits for the reset rather than spending the last
+of the budget and failing:
 
 | Caller                                                                  | Sent while the remaining is   |
 | ----------------------------------------------------------------------- | ----------------------------- |
@@ -131,9 +131,9 @@ least a minute. A landing turned away answers `pending` and is polled again at t
 the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`.
 Nothing is listed before the forge has answered.
 
-The hub records `forge-budget-low` (warning) when a budget first turns a caller away, and `forge-rate-limited`
-(warning) when the forge first refuses one for its rate — each at most once per budget per reset window, naming the
-forge, the secret, the bucket, the last remaining and limit, and the reset
+The hub records `forge-budget-low` (warning) when a budget first turns a caller away, and `forge-rate-limited` (warning)
+when the forge first refuses one for its rate — each at most once per budget per reset window, naming the forge, the
+secret, the bucket, the last remaining and limit, and the reset
 ([observability.md](./observability.md#the-operational-event-log)). A notice lost to a restart is not recorded.
 
 ## A missing capability
