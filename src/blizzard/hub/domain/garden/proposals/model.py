@@ -403,9 +403,7 @@ class IReadGardenProposalRepository(Protocol):
         self, project_id: str, routine_name: str, *, state: RoutineProposalState = RoutineProposalState.ALL
     ) -> list[GardenProposal]:
         """Every proposal `routine_name` has raised, newest first — `list_all`'s
-        routine-narrowed sibling (mirrors `IReadFindingRepository.list_for_routine`). A
-        proposal carries no scope column, so unlike a finding bucket this is never
-        narrowed further. Includes an `operator`-origin proposal that names
+        routine-narrowed sibling, across every scope. Includes an `operator`-origin proposal that names
         `routine_name`. ``OPEN``/``CLOSED`` select closure state before hydrating
         proposal bodies and linked findings; ``ALL`` reads the full history."""
         ...

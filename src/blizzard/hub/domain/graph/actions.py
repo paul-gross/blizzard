@@ -1,10 +1,8 @@
 """The hub action catalogue — every action a hub node may name, described without its
 implementation.
 
-Graph validation reads it to judge a node's ``action:`` and ``with:``, and the executor
-reads it to know what a visit is handed. It lives in ``graph`` because validation does
-(``bzh:domain-package-layers``), and it is a value composition hands to both, never a
-global either reads, so a test can hand its own."""
+It lives in ``graph`` (``bzh:domain-package-layers``) and is shared; it is a value handed
+in, never a global read, so a test can hand its own."""
 
 from __future__ import annotations
 

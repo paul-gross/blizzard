@@ -1,6 +1,5 @@
 """The garden formats — a run's finding delta, its proposal candidates, and a review round's
-finding delta — as the garden domain reads them, and the port that parses one from raw JSON;
-a parse failure raises the domain's own rejection."""
+finding delta — as the garden domain reads them, and the port that parses one from raw JSON."""
 
 from __future__ import annotations
 

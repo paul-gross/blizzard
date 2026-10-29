@@ -48,9 +48,7 @@ class NewFinding:
     locus: str
     summary: str
     introduced: str | None
-    #: `introduced`'s own authored instant, already resolved by validation
-    #: — never re-resolved here, so a delivery spends the forge slot at most once.
-    introduced_at: datetime | None
+    introduced_at: datetime | None  # `introduced`'s authored instant, as validation resolved it
 
 
 @domain_model
@@ -89,8 +87,7 @@ class NewFindingSet:
 class NewProposal:
     """A fully-formed ``garden_proposals`` row plus its ``garden_proposal_findings`` link
     rows (``finding_ids``). ``source_artifact_id``/``ref`` are a delivered proposal's own
-    idempotence key, the pair the store dedupes a re-delivery visit against, the way
-    ``finding_sets.artifact_id`` already dedupes a delta."""
+    idempotence key."""
 
     proposal_id: str
     routine_name: str
@@ -119,9 +116,7 @@ class DeltaMaterialization:
 @dataclass(frozen=True)
 class DeliveryPlan:
     """Everything :class:`IWriteGardenDeliveryRepository` needs to do its writes — every
-    id already minted, every timestamp already stamped (`bzh:injected-clock`). The store
-    still resolves one thing of its own: a proposal's citation of a ref whose delta
-    turns out to already be materialized, against the id that earlier visit minted."""
+    id already minted, every timestamp already stamped (`bzh:injected-clock`)."""
 
     chunk_id: str
     node_id: str
@@ -131,8 +126,7 @@ class DeliveryPlan:
     run: RunContext
     deltas: list[DeltaMaterialization]
     proposals: list[NewProposal]
-    #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op
-    #: names — the store re-checks it under the finding's row lock and returns ``GUARD_LOST`` on a move.
+    #: Finding id → the state validation judged it in, for every finding an `observed`/`gone` op names.
     expect: dict[str, str] = field(default_factory=dict[str, str])
 
 
@@ -144,9 +138,7 @@ class IReadGardenDeliveryRepository(Protocol):
 
     def already_delivered(self, *, chunk_id: str, node_id: str, epoch: int) -> bool:
         """Whether the ``(chunk_id, node_id, epoch)`` marker already exists — the same
-        check :meth:`IWriteGardenDeliveryRepository.deliver` makes internally, exposed so a
-        caller can short-circuit before re-validating a retry's content against state that
-        may have drifted since the original, successful attempt."""
+        check :meth:`IWriteGardenDeliveryRepository.deliver` makes."""
         ...
 
 
@@ -157,7 +149,11 @@ class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
     ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
     project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
-    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome: ...
+    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
+        """A delta whose ``artifact_id`` is already materialized is skipped, and a proposal's citation
+        of a ref in it resolves to the id minted then; a proposal already present by
+        ``(source_artifact_id, ref)`` is not re-inserted."""
+        ...
 
 
 def build_delivery_plan(

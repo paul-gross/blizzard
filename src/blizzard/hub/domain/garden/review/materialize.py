@@ -66,9 +66,7 @@ REVIEW_MINT_CONTEXT = ChangeContext(actor="system", door=Door.API)
 @dataclass(frozen=True)
 class ReviewFindingsPlan:
     """Everything :class:`IWriteReviewFindingsRepository` needs to do its writes — every
-    id, timestamp, and scope description already composed (`bzh:injected-clock`). The
-    store still mints any unseen scope named here, in the same transaction as the
-    findings and facts, but writes this plan's own description rather than its own."""
+    id, timestamp, and scope description already composed (`bzh:injected-clock`)."""
 
     chunk_id: str
     node_id: str
@@ -104,14 +102,14 @@ class IReadReviewFindingsRepository(Protocol):
 
     def already_delivered(self, *, chunk_id: str) -> bool:
         """Whether ``chunk_id`` already carries a review-findings-delivered marker — the
-        same check :meth:`IWriteReviewFindingsRepository.deliver` makes internally, exposed
-        so a caller can short-circuit before re-parsing a replay's artifact."""
+        same check :meth:`IWriteReviewFindingsRepository.deliver` makes."""
         ...
 
 
 class IWriteReviewFindingsRepository(IReadReviewFindingsRepository, Protocol):
     """Materialize one :class:`ReviewFindingsPlan`, atomically and idempotently, keyed
-    on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped."""
+    on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped. A scope the
+    plan names that the project lacks is minted, by :meth:`ReviewFindingsPlan.scope_mint`, with the delivery."""
 
     def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome: ...
 

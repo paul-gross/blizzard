@@ -1,10 +1,9 @@
 """Garden-proposal-closure-triggered finding resolutions: delivery-triggered closure,
 when the item an accepted proposal minted is delivered, and
 the worker-facing read, the findings a chunk's own accepted, minted
-proposal answers. Delivery closure is gated on `has_delivery_for_proposal`, not any one
-finding's current state, so a crash-retry
-(`blizzard-context:/architecture/crash-correctness/hub.md`) still completes an
-interrupted closure and a later reopen is never silently redone."""
+proposal answers. Delivery closure is gated on
+:meth:`IReadFindingRepository.has_delivery_for_proposal`
+(`blizzard-context:/architecture/crash-correctness/hub.md`)."""
 
 from __future__ import annotations
 

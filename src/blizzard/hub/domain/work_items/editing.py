@@ -226,8 +226,8 @@ class WorkItemEditService:
     def edit(self, item: HubWorkItem, edit: WorkItemEdit) -> HubWorkItem:
         """Write ``edit``'s revision of ``item`` — the record this call itself guards — in
         place; raises :class:`~blizzard.hub.domain.work_items.model.WorkItemNotEditable` when
-        ``item`` already carries a closure, checked here and re-checked by the store's own
-        ``closed_at IS NULL`` guard against a closure racing in between."""
+        ``item`` already carries a closure, checked here and again on a closure race per
+        :meth:`IWriteWorkItemRepository.edit`."""
         require_open_for(item, WorkItemVerb.EDIT)
         revision = edit.resolve_against(item)
         updated = self._items.edit(

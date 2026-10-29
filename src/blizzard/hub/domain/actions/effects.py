@@ -64,7 +64,7 @@ class EffectStatus(StrEnum):
 @dataclass(frozen=True)
 class EffectResult:
     """How the hub took one effect. ``detail`` is the service's or the fence's own explanation, empty on
-    :attr:`EffectStatus.RECORDED`, which an action copies into the failure markers its prompts read."""
+    :attr:`EffectStatus.RECORDED`."""
 
     status: EffectStatus
     detail: str = ""

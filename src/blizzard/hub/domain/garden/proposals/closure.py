@@ -203,7 +203,7 @@ class IReadGardenProposalClosureRepository(Protocol):
 
     def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposalClosure]:
         """Every closure among `proposal_ids`, keyed by `proposal_id` — a proposal with
-        no closure is simply absent. One batch read, for a list view's fan-out."""
+        no closure is simply absent, read in one batch."""
         ...
 
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:

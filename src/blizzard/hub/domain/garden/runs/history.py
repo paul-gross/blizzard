@@ -6,10 +6,8 @@ gardening: runs are readable).
 enumerable (`bzh:facts-not-status`) — a run's `outcome` is derived fresh from the
 chunk's own facts every read, never stored, the way every other chunk status is. The
 delta a delivered set actually published is read back from its own artifact, parsed as
-`DeliveredDelta` — never reconstructed from `finding_facts` — and an add op is linked
-to the finding id it minted positionally, by the order `GardenDelivery.deliver` wrote
-both in; a set predating that linkage naturally yields no matched adds rather than a
-fabricated one."""
+`DeliveredDelta` — never reconstructed from `finding_facts` — with each add op linked
+to its minted finding id by :func:`_set_delta`."""
 
 from __future__ import annotations
 
@@ -244,13 +242,10 @@ def _observed_ids(delta: DeliveredDelta) -> list[str]:
 
 
 def _set_delta(raw: DeliveredSetRaw, delta: DeliveredDelta, findings: Mapping[str, Finding]) -> DeliveredSetDelta:
-    """Fold one delivered set's parsed artifact into its own added/observed/gone groups —
-    an add op is zipped positionally against `raw.add_finding_ids`, never
-    `strict`: a set predating the `finding_facts.finding_set_id` linkage carries no add
-    ids at all, and every add on it degrades to an unmatched `finding_id=None` rather
-    than raising or fabricating one. An observed op degrades the same way in the other
-    direction: an id `findings` holds no row for keeps its descriptive fields `None`,
-    rather than dropping the entry or inventing text for it."""
+    """Fold one delivered set's parsed artifact into its own added/observed/gone groups — an add
+    op is zipped positionally against `raw.add_finding_ids`. Degradation is pinned by
+    `tests/test_garden_run_domain.py`'s `test_an_add_op_with_no_matching_fact_degrades_to_an_unmatched_finding_id`
+    and `test_an_observed_op_with_no_finding_row_keeps_its_id_and_degrades_to_none_fields`."""
     add_ids = iter(raw.add_finding_ids)
     added: list[AddedFinding] = []
     observed: list[ObservedFinding] = []
@@ -368,11 +363,8 @@ class GardenRunService:
         self, *, since: datetime | None = None, until: datetime | None = None, project_id: str | None = None
     ) -> list[RunSummary]:
         """Every run in the window :meth:`RunWindow.of` settles against now, of `project_id` only when it is given.
-        One bulk
-        `get_many` and one bulk `load_facts_for` resolve every window run's chunk and
-        chunk facts (`bzh:bulk-reconstitution`) — `records` is already the window's own
-        bounded set (`runs_in_window`'s own SQL `WHERE`), so the batch cost tracks runs
-        in the window."""
+        One bulk `get_many` and one bulk `load_facts_for` resolve every window run's chunk and
+        chunk facts (`bzh:bulk-reconstitution`)."""
         window = RunWindow.of(since, until, now=self._clock.now())
         records = self._repo.runs_in_window(since=window.since, until=window.until, project_id=project_id)
         chunk_ids = [record.identity.chunk_id for record in records]

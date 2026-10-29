@@ -155,7 +155,7 @@ class Reification:
 
 
 class GraphMintService:
-    """Validate, reify, and persist a graph — the ``POST /graphs`` domain rule.
+    """Validate, reify, and persist a graph.
 
     Holds the *write* graph repository; the model refuses an invalid definition
     (:class:`~blizzard.hub.domain.graph.validation.GraphValidationError`) before anything persists."""
@@ -192,12 +192,8 @@ class GraphMintService:
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no graph of its name has ever existed.
 
-        Idempotent by name, and once under concurrency: the name is re-read under its lock
-        (``bzh:store-exclusive-write``), so of two overlapping first calls one mints and the
-        other returns that graph. A ``None`` from ``get_enabled_by_name`` is ambiguous, so
-        :meth:`~blizzard.hub.domain.graph.model.IReadGraphRepository.any_minted` disambiguates
-        — a cheap existence probe, not a full listing, to check membership
-        by name — pinned by
+        Idempotent by name, and once under concurrency (``bzh:store-exclusive-write``). A ``None`` from
+        ``get_enabled_by_name`` is ambiguous, so :meth:`IReadGraphRepository.any_minted` disambiguates, pinned by
         tests/test_graph_lifecycle_api.py::test_retiring_every_version_of_the_default_graph_survives_a_restart"""
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
