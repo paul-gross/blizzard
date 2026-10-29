@@ -200,10 +200,11 @@ those.
 
 `blizzard runner status` prints `throttle:` immediately after the brake, beside its later `gates:` line. It names the
 state (`braked`, `declining`, or `admitting`), each declining throttle, the floor's subscription or runner target,
-answer, hold (a usage-limit mark's hold names the lease that met the limit) and reset/grace or hand clear, configured levers, and the `on_decline` and `on_usage_limit` choices. A
-braked runner still shows its floor answer. The runner panel's `/host` rows show the same throttle reading without a
-clear control; follow a runner's name to `/machine/<runner-id>` to inspect it and clear a held floor. The confirmation
-names every runner spending a subscription, or the sole runner when it names no subscription.
+answer, hold (a usage-limit mark's hold names the lease that met the limit) and reset/grace or hand clear, configured
+levers, and the `on_decline` and `on_usage_limit` choices. A braked runner still shows its floor answer. The runner
+panel's `/host` rows show the same throttle reading without a clear control; follow a runner's name to
+`/machine/<runner-id>` to inspect it and clear a held floor. The confirmation names every runner spending a
+subscription, or the sole runner when it names no subscription.
 
 ### Stepping a host
 
