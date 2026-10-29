@@ -373,5 +373,4 @@ class FlowStore:
         ]
 
 
-def _conforms_flows(x: FlowStore) -> IWriteFlows:
-    return x
+_flows_conforms: type[IWriteFlows] = FlowStore

@@ -607,5 +607,4 @@ def _target(graph: Graph, to_node_name: str) -> str | None:
     return target.node_id if target is not None else None
 
 
-def _conforms_refusals(x: HubNodeRouter) -> IHubStepRefusals:
-    return x
+_refusals_conforms: type[IHubStepRefusals] = HubNodeRouter
