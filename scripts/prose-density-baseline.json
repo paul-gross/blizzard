@@ -11364,12 +11364,6 @@
    "over_cap": 2,
    "total": 225
   },
-  "service/test_platform_tracing_service.py": {
-   "comments": 4,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 260
-  },
   "service/test_release_service.py": {
    "comments": 9,
    "docstrings": 7,

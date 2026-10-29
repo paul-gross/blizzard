@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { parse, stringify } from 'smol-toml';
 import { type CliResult, runCommand } from './cli';
-import { hostSocketApi, type RunnerClient, type RunnerHostClient, runnerHostApi, type TickPass } from './client/runner';
+import { type HostSocketClient, hostSocketApi, type RunnerClient, type RunnerHostClient, runnerHostApi, type TickPass } from './client/runner';
 import type { Ledger } from './client/ledger';
 import { type LiveDaemon, freePort, isAlive, killLive, logTail, stopDaemon, stopLive } from './daemons/process';
 import { startRunnerHost } from './daemons/runner-host';
@@ -70,6 +70,8 @@ export interface RunnerHost {
   /** Its runners by name, each a client at the host's URL under the id enrollment gave. */
   readonly runners: Record<string, RunnerClient & { id: string; name: string }>;
   readonly api: RunnerHostClient;
+  /** The same host routes over `host.sock`, with the step routes. */
+  readonly socketApi: HostSocketClient;
   /** The pid of the host process now running, or last run; `undefined` before a first boot. */
   readonly pid: number | undefined;
   readonly logPath: string;
@@ -88,10 +90,11 @@ export interface RunnerHost {
   /** Empties the stopped host's `.env`, as a host no hub added holds no token; the next boot reads none. Throws when the host is running. */
   clearHubTokens(): void;
   /**
-   * The headers a worker of lease `leaseId` calls the runner with: a bearer of the lease token the runner exported to
-   * it, as the mock harness recorded at spawn. Throws when no spawned session recorded that lease.
+   * The headers a worker of lease `leaseId` calls the runner with: the lease token the runner exported to it, as the
+   * mock harness recorded at spawn, as a bearer or, with `'lease-token'`, in `X-Blizzard-Lease-Token` as the worker's
+   * exporter sends it. Throws when no spawned session recorded that lease.
    */
-  workerHeaders(leaseId: string): Record<string, string>;
+  workerHeaders(leaseId: string, form?: 'bearer' | 'lease-token'): Record<string, string>;
   /** The installed `blizzard` CLI, by absolute path: a worker's own `PATH` need not hold it, as under `npx playwright test`. */
   readonly cliBinary: string;
   /**
@@ -453,6 +456,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         home,
         runners,
         api,
+        socketApi: sock,
         get pid() {
           return daemon?.pid;
         },
@@ -469,7 +473,10 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           fs.writeFileSync(path.join(dir, hostEnvContract().file), '');
         },
         cliBinary: requireBinary(binDir(), 'blizzard'),
-        workerHeaders: (leaseId) => ({ Authorization: `Bearer ${recordedLeaseToken(sessionsDir, leaseId)}` }),
+        workerHeaders(leaseId, form = 'bearer'): Record<string, string> {
+          const token = recordedLeaseToken(sessionsDir, leaseId);
+          return form === 'bearer' ? { Authorization: `Bearer ${token}` } : { 'X-Blizzard-Lease-Token': token };
+        },
         reconfigure(overlay) {
           const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];
           if (daemon !== undefined && isAlive(daemon.pid)) problems.push('the host is running; stop() it before reconfigure()');
