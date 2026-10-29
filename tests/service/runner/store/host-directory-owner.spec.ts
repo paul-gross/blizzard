@@ -27,6 +27,20 @@ function tree(root: string): Record<string, string> {
   return files;
 }
 
+/** The names of the files under `root`, read without opening any; an entry that vanishes while listed is not one. */
+function fileNames(root: string): string[] {
+  return fs
+    .readdirSync(root, { recursive: true, encoding: 'utf8' })
+    .filter((entry) => {
+      try {
+        return fs.statSync(path.join(root, entry)).isFile();
+      } catch {
+        return false;
+      }
+    })
+    .sort();
+}
+
 /** What a refused verb would change under a running host, whose own store churns as it ticks: the files present, and the host file and token bytes. */
 function heldShape(root: string): {
   files: string[];
@@ -34,7 +48,7 @@ function heldShape(root: string): {
   env: string;
 } {
   return {
-    files: Object.keys(tree(root)),
+    files: fileNames(root),
     hostFile: fs.readFileSync(path.join(root, 'blizzard-host.toml'), 'utf8'),
     env: fs.readFileSync(path.join(root, '.env'), 'utf8'),
   };

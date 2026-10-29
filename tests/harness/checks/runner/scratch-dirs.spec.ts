@@ -12,6 +12,18 @@ test('a scratch root over the socket limit is refused, naming the socket path an
   expect(fs.existsSync(scratchRoot)).toBe(false);
 });
 
+// A world that binds no hub: asking for `runnerBinding` throws, so a test passing here started no mock hub.
+const noHub = test.extend({
+  runnerBinding: async ({}, _use) => {
+    throw new Error('a hub was bound');
+  },
+});
+
+noHub('the fixture runs the CLI without a hub being bound', async ({ scratchDirs: dirs }) => {
+  const done = await dirs.cli(['host', '--dir', dirs.make('unbound'), '--check']);
+  expect(done.code).not.toBe(0);
+});
+
 test.describe('the scratch directories fixture', () => {
   test.describe.configure({ mode: 'serial' });
   let made: string | undefined;
