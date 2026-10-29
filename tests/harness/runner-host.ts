@@ -44,6 +44,8 @@ export interface RunnerHostOptions {
    * sink that accepts each connection and never answers.
    */
   runnerOtlp: boolean | 'hung';
+  /** Export to a sink owned by the test rather than creating a host-owned sink. */
+  runnerTraceEndpoint: string | undefined;
   /**
    * Files of a harness bundle, by path under the bundle directory (`opencode/opencode.json`), written into a test-owned
    * directory before the host boots. A profile names the directory as `${bundle}`, as in `harness.config_dir`.
@@ -75,6 +77,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerSampling: false,
   runnerSubscribed: true,
   runnerOtlp: false,
+  runnerTraceEndpoint: undefined,
   runnerBundle: {},
   runnerStubs: {},
   runnerModelPrices: {},
@@ -324,6 +327,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
 
   const create = async (given: Partial<RunnerHostOptions> = {}): Promise<RunnerHost> => {
     let options: RunnerHostOptions = { ...DEFAULT_RUNNER_OPTIONS, ...given };
+    if (options.runnerTraceEndpoint !== undefined && options.runnerOtlp !== false) throw new Error('runnerTraceEndpoint and runnerOtlp cannot both be set');
     const profile = profileFor(testInfo.file, options.runnerConfig);
     const problems = checkHostOptions(profile, options.runnerEnv, options.runnerWinterTrap);
     if (problems.length > 0) throw new Error(`the runner host options are unsound:\n${problems.join('\n')}`);
@@ -504,7 +508,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const hostEnv = (): NodeJS.ProcessEnv => ({
         BZ_TRANSCRIPTS_ROOT: transcriptsRoot(),
         ...env,
-        ...(otlp === undefined ? {} : { OTEL_EXPORTER_OTLP_ENDPOINT: otlp.endpoint }),
+        ...(otlp === undefined && options.runnerTraceEndpoint === undefined ? {} : { OTEL_EXPORTER_OTLP_ENDPOINT: otlp?.endpoint ?? options.runnerTraceEndpoint }),
       });
       const sessionsDir = options.runnerEnv.BLIZZARD_MOCK_HARNESS_STATE_DIR ?? path.join(workspace, '.blizzard-mock-harness', 'sessions');
 

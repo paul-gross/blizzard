@@ -26,6 +26,9 @@ import { mockWorld } from './mock-world';
 import { type RunnerBinding, runnerWorld } from './runner-world';
 import { type Project, sharesTenant, tenancy } from './tenancy';
 import { uiWorld } from './ui';
+import type { OtlpSink } from './otlp-sink';
+import { mergeHostProfile, mergeProfile } from './profiles';
+import { startCollector, type Collector } from './collector';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -298,6 +301,35 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
   },
 });
 
+/** A traced companion owns its hub and sink; both daemons export to that same sink. */
+const traceTest = test.extend<{ traceSink: OtlpSink }>({
+  traceSink: async ({ otlpSink }, use) => { await use(await otlpSink()); },
+  hubEnv: async ({ hubEnv, traceSink }, use) => { await use({ ...hubEnv, OTEL_EXPORTER_OTLP_ENDPOINT: traceSink.endpoint }); },
+  hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n }, sweeps: { trace_export: { mode: 'timed' } } })); },
+  runnerConfig: async ({ runnerConfig }, use) => { await use(mergeHostProfile(runnerConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n } })); },
+  runnerTraceEndpoint: async ({ traceSink }, use) => { await use(traceSink.endpoint); },
+});
+
+/** Register one execution of a scenario as the fresh-hub trace-only companion to its ordinary test. */
+export function traced(title: string, body: Parameters<typeof traceTest>[2]): void {
+  traceTest.describe(`${title} trace companion`, () => {
+    traceTest.use({ isolation: 'fresh-hub' });
+    traceTest(`${title}_traced`, body);
+  });
+}
+
+export const collectorTest = test.extend<{ collector: Collector; collectorWait: number }>({
+  collectorWait: [1, { option: true }],
+  collector: async ({ collectorWait }, use, testInfo) => {
+    const collector = await startCollector(testInfo.outputPath('collector'), collectorWait);
+    try { await use(collector); } finally { await collector.close(); }
+  },
+  hubEnv: async ({ hubEnv, collector }, use) => { await use({ ...hubEnv, OTEL_EXPORTER_OTLP_ENDPOINT: collector.endpoint }); },
+  hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 3n, platform: true, platform_sample_ratio: 0 }, sweeps: { trace_export: { mode: 'timed' } } })); },
+  runnerConfig: async ({ runnerConfig }, use) => { await use(mergeHostProfile(runnerConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 3n, platform: true, platform_sample_ratio: 0 } })); },
+  runnerTraceEndpoint: async ({ collector }, use) => { await use(collector.endpoint); },
+});
+
 /** The runner world's `test`: a mock hub the test owns and runner clients, with no shared hub in reach. */
 export const runnerTest = mockWorld;
 
@@ -318,7 +350,10 @@ export type { WorkerCheckpoint } from './worker-checkpoint';
 export type { Viewport } from './ui';
 export { expect };
 export { packagedSystemArtifact } from './system-artifacts';
-export { chunkTraceId } from './trace-ids';
+export { chunkTraceId, chunkSpanId, lifetimeTraceId, lifetimeSpanId, spanId, stepKeyText } from './trace-ids';
+export type { StepKey } from './trace-ids';
+export { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, isFleet, roleOf, tracesOf } from './fleet-traces';
+export type { InvocationExpect, StepExpect, StepTrace } from './fleet-traces';
 export { claudeCodeExports } from './telemetry-bodies';
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
 export type { RunnerDeclining };

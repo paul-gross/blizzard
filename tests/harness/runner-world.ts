@@ -16,6 +16,7 @@ export interface RunnerHostFixtureOptions {
   runnerSampling: RunnerHostOptions['runnerSampling'];
   runnerSubscribed: RunnerHostOptions['runnerSubscribed'];
   runnerOtlp: RunnerHostOptions['runnerOtlp'];
+  runnerTraceEndpoint: RunnerHostOptions['runnerTraceEndpoint'];
   runnerBundle: RunnerHostOptions['runnerBundle'];
   runnerStubs: RunnerHostOptions['runnerStubs'];
   runnerWinterTrap: RunnerHostOptions['runnerWinterTrap'];
@@ -91,6 +92,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   runnerSampling: [DEFAULT_RUNNER_OPTIONS.runnerSampling, { option: true }],
   runnerSubscribed: [DEFAULT_RUNNER_OPTIONS.runnerSubscribed, { option: true }],
   runnerOtlp: [DEFAULT_RUNNER_OPTIONS.runnerOtlp, { option: true }],
+  runnerTraceEndpoint: [DEFAULT_RUNNER_OPTIONS.runnerTraceEndpoint, { option: true }],
   runnerBundle: [DEFAULT_RUNNER_OPTIONS.runnerBundle, { option: true }],
   runnerStubs: [DEFAULT_RUNNER_OPTIONS.runnerStubs, { option: true }],
   runnerWinterTrap: [DEFAULT_RUNNER_OPTIONS.runnerWinterTrap, { option: true }],
@@ -114,10 +116,10 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHosts: async (
-    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs, runnerWinterTrap },
+    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap },
     use,
   ) => {
-    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs, runnerWinterTrap };
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap };
     await use({
       create: async (options = {}) => {
         runnerBinding.admit?.();

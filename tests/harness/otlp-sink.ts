@@ -31,10 +31,25 @@ const schema = protobuf.Root.fromJSON({
       fields: {
         traceId: { type: 'bytes', id: 1 },
         spanId: { type: 'bytes', id: 2 },
+        traceState: { type: 'string', id: 3 },
+        parentSpanId: { type: 'bytes', id: 4 },
         name: { type: 'string', id: 5 },
+        kind: { type: 'int32', id: 6 },
+        startTimeUnixNano: { type: 'fixed64', id: 7 },
+        endTimeUnixNano: { type: 'fixed64', id: 8 },
         attributes: { rule: 'repeated', type: 'KeyValue', id: 9 },
+        droppedAttributesCount: { type: 'uint32', id: 10 },
+        events: { rule: 'repeated', type: 'SpanEvent', id: 11 },
+        droppedEventsCount: { type: 'uint32', id: 12 },
+        links: { rule: 'repeated', type: 'SpanLink', id: 13 },
+        droppedLinksCount: { type: 'uint32', id: 14 },
+        status: { type: 'SpanStatus', id: 15 },
+        flags: { type: 'fixed32', id: 16 },
       },
     },
+    SpanEvent: { fields: { timeUnixNano: { type: 'fixed64', id: 1 }, name: { type: 'string', id: 2 }, attributes: { rule: 'repeated', type: 'KeyValue', id: 3 }, droppedAttributesCount: { type: 'uint32', id: 4 } } },
+    SpanLink: { fields: { traceId: { type: 'bytes', id: 1 }, spanId: { type: 'bytes', id: 2 }, traceState: { type: 'string', id: 3 }, attributes: { rule: 'repeated', type: 'KeyValue', id: 4 }, droppedAttributesCount: { type: 'uint32', id: 5 }, flags: { type: 'fixed32', id: 6 } } },
+    SpanStatus: { fields: { message: { type: 'string', id: 2 }, code: { type: 'int32', id: 3 } } },
     ScopeSpans: { fields: { scope: { type: 'InstrumentationScope', id: 1 }, spans: { rule: 'repeated', type: 'Span', id: 2 } } },
     ResourceSpans: { fields: { resource: { type: 'Resource', id: 1 }, scopeSpans: { rule: 'repeated', type: 'ScopeSpans', id: 2 } } },
     ExportTraceServiceRequest: { fields: { resourceSpans: { rule: 'repeated', type: 'ResourceSpans', id: 1 } } },
@@ -125,13 +140,34 @@ function plainAttributes(attributes: RawKeyValue[] | undefined): Record<string, 
   return Object.fromEntries((attributes ?? []).map((pair) => [pair.key, plainValue(pair.value)]));
 }
 
+function attributeTypes(attributes: RawKeyValue[] | undefined): Record<string, string> {
+  return Object.fromEntries((attributes ?? []).map(({ key, value }) => [key,
+    value?.stringValue !== undefined ? 'string' : value?.boolValue !== undefined ? 'bool' :
+      value?.intValue !== undefined ? 'int' : value?.doubleValue !== undefined ? 'double' :
+        value?.arrayValue !== undefined && (value.arrayValue.values ?? []).every((item) => item.stringValue !== undefined) ? 'string[]' : 'invalid']));
+}
+
 /** A span the sink received, its attribute values as plain JS values. */
 export interface ReceivedSpan {
   name: string;
   /** The span's trace id, hex. */
   traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  traceState: string;
+  kind: number;
+  startTimeUnixNano: string;
+  endTimeUnixNano: string;
+  status: { code: number; message: string };
+  flags: number;
+  droppedAttributesCount: number;
+  droppedEventsCount: number;
+  droppedLinksCount: number;
+  events: { name: string; timeUnixNano: string; attributes: Record<string, unknown>; attributeTypes?: Record<string, string>; droppedAttributesCount: number }[];
+  links: { traceId: string; spanId: string; traceState: string; attributes: Record<string, unknown>; attributeTypes?: Record<string, string>; droppedAttributesCount: number; flags: number }[];
   attributes: Record<string, unknown>;
-  scope: { name: string; version: string };
+  attributeTypes?: Record<string, string>;
+  scope: { name: string; version: string; attributes?: Record<string, unknown> };
   /** The exporting resource's attributes, `service.name` among them. */
   resource: Record<string, unknown>;
 }
@@ -139,8 +175,17 @@ export interface ReceivedSpan {
 interface RawTraceRequest {
   resourceSpans?: {
     resource?: { attributes?: RawKeyValue[] };
-    scopeSpans?: { scope?: { name?: string; version?: string }; spans?: { name?: string; traceId?: Uint8Array; attributes?: RawKeyValue[] }[] }[];
+    scopeSpans?: { scope?: { name?: string; version?: string; attributes?: RawKeyValue[] }; spans?: RawSpan[] }[];
   }[];
+}
+
+interface RawSpan {
+  name?: string; traceId?: Uint8Array; spanId?: Uint8Array; parentSpanId?: Uint8Array; traceState?: string;
+  kind?: number; startTimeUnixNano?: string; endTimeUnixNano?: string; attributes?: RawKeyValue[];
+  status?: { code?: number; message?: string }; flags?: number; droppedAttributesCount?: number;
+  droppedEventsCount?: number; droppedLinksCount?: number;
+  events?: { name?: string; timeUnixNano?: string; attributes?: RawKeyValue[]; droppedAttributesCount?: number }[];
+  links?: { traceId?: Uint8Array; spanId?: Uint8Array; traceState?: string; attributes?: RawKeyValue[]; droppedAttributesCount?: number; flags?: number }[];
 }
 
 /** Decodes a trace export's body into its spans. */
@@ -151,8 +196,22 @@ export function decodeSpans(body: Uint8Array): ReceivedSpan[] {
       (scopeSpans.spans ?? []).map((span) => ({
         name: span.name ?? '',
         traceId: Buffer.from(span.traceId ?? []).toString('hex'),
+        spanId: Buffer.from(span.spanId ?? []).toString('hex'),
+        parentSpanId: span.parentSpanId?.length ? Buffer.from(span.parentSpanId).toString('hex') : null,
+        traceState: span.traceState ?? '',
+        kind: span.kind ?? 0,
+        startTimeUnixNano: span.startTimeUnixNano ?? '0',
+        endTimeUnixNano: span.endTimeUnixNano ?? '0',
+        status: { code: span.status?.code ?? 0, message: span.status?.message ?? '' },
+        flags: span.flags ?? 0,
+        droppedAttributesCount: span.droppedAttributesCount ?? 0,
+        droppedEventsCount: span.droppedEventsCount ?? 0,
+        droppedLinksCount: span.droppedLinksCount ?? 0,
+        events: (span.events ?? []).map((event) => ({ name: event.name ?? '', timeUnixNano: event.timeUnixNano ?? '0', attributes: plainAttributes(event.attributes), attributeTypes: attributeTypes(event.attributes), droppedAttributesCount: event.droppedAttributesCount ?? 0 })).sort((a, b) => BigInt(a.timeUnixNano) < BigInt(b.timeUnixNano) ? -1 : BigInt(a.timeUnixNano) > BigInt(b.timeUnixNano) ? 1 : 0),
+        links: (span.links ?? []).map((link) => ({ traceId: Buffer.from(link.traceId ?? []).toString('hex'), spanId: Buffer.from(link.spanId ?? []).toString('hex'), traceState: link.traceState ?? '', attributes: plainAttributes(link.attributes), attributeTypes: attributeTypes(link.attributes), droppedAttributesCount: link.droppedAttributesCount ?? 0, flags: link.flags ?? 0 })),
         attributes: plainAttributes(span.attributes),
-        scope: { name: scopeSpans.scope?.name ?? '', version: scopeSpans.scope?.version ?? '' },
+        attributeTypes: attributeTypes(span.attributes),
+        scope: { name: scopeSpans.scope?.name ?? '', version: scopeSpans.scope?.version ?? '', attributes: plainAttributes(scopeSpans.scope?.attributes) },
         resource: plainAttributes(resourceSpans.resource?.attributes),
       })),
     ),
