@@ -88,7 +88,6 @@ export interface MockChunkSpec {
   project_id?: string;
   graph_id?: string;
   default_harnesses?: string[];
-  work_refs?: { source: string; ref: string }[];
   entry: string;
   nodes: Record<string, MockNodeSpec>;
   /** The chunk's `{source, ref}` work refs. */
