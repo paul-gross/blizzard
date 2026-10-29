@@ -145,8 +145,9 @@ writes no second fact and is not a 409 — deliberately asymmetric with stop, wh
 chunk.
 
 `chunk done` releases any live route in the same store transaction as the fact write, exactly as stop does, closes
-`completed` each of the chunk's flow submissions waiting its turn (one mid-turn closes at its turn's end), and enqueues a close intent per still-open work-item ref in that same transaction (`_enqueue_close_intents`)
-— hand-completing closes out the chunk's issue the way landing would, once the drain sweep retires it.
+`completed` each of the chunk's flow submissions waiting its turn (one mid-turn closes at its turn's end), and enqueues
+a close intent per still-open work-item ref in that same transaction (`_enqueue_close_intents`) — hand-completing closes
+out the chunk's issue the way landing would, once the drain sweep retires it.
 
 The `chunk.stopped` fact is irreversible — there is no un-stop — but no longer the guaranteed last word: an operator can
 still complete the chunk afterward, and the derived status then reads `done`. Between a `chunk.stopped` and a
