@@ -914,6 +914,22 @@
               }
             ]
           },
+          "flow_places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkFlowPlaceView"
+            },
+            "title": "Flow Places",
+            "type": "array"
+          },
+          "flow_record": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FlowFactView"
+            },
+            "title": "Flow Record",
+            "type": "array"
+          },
           "graph_created_at": {
             "anyOf": [
               {
@@ -1193,6 +1209,8 @@
           "landed",
           "bounces",
           "escalation",
+          "flow_places",
+          "flow_record",
           "project_id",
           "project_slug",
           "project_name"
@@ -1247,6 +1265,76 @@
           "detail"
         ],
         "title": "ChunkEscalationView",
+        "type": "object"
+      },
+      "ChunkFlowPlaceView": {
+        "description": "A chunk's place on one flow its open submission holds.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "repository_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Name"
+          },
+          "repository_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Slug"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FlowPlaceState",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "flow_id",
+          "resource",
+          "repository_slug",
+          "repository_name",
+          "branch",
+          "state",
+          "position",
+          "next_poll_at"
+        ],
+        "title": "ChunkFlowPlaceView",
         "type": "object"
       },
       "ChunkNeighborView": {
@@ -1485,6 +1573,14 @@
             "title": "Environment Count",
             "type": "integer"
           },
+          "flow_places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkFlowPlaceView"
+            },
+            "title": "Flow Places",
+            "type": "array"
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
@@ -1623,6 +1719,7 @@
           "awaiting_external_merge",
           "landed_repos",
           "landed",
+          "flow_places",
           "project_id",
           "project_slug",
           "project_name"
@@ -2948,6 +3045,93 @@
         ],
         "title": "FloorStatusView",
         "type": "object"
+      },
+      "FlowFactKind": {
+        "description": "What one entry of a flow's record says happened.",
+        "enum": [
+          "submitted",
+          "turn-started",
+          "turn-ended",
+          "landed",
+          "withdrawn"
+        ],
+        "title": "FlowFactKind",
+        "type": "string"
+      },
+      "FlowFactView": {
+        "description": "One entry of a flow's record.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FlowFactKind",
+            "x-blizzard-open": true
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "flow_id",
+          "submission_id",
+          "chunk_id",
+          "kind",
+          "at",
+          "outcome",
+          "revision"
+        ],
+        "title": "FlowFactView",
+        "type": "object"
+      },
+      "FlowPlaceState": {
+        "description": "Where an open submission stands on a flow it holds.",
+        "enum": [
+          "landing",
+          "next",
+          "waiting",
+          "polling",
+          "passed-over"
+        ],
+        "title": "FlowPlaceState",
+        "type": "string"
       },
       "GardenProposalClosureKind": {
         "description": "How a garden proposal closed \u2014 recorded on the row itself when it closes, never\nderived from anything else.",

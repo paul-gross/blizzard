@@ -16,7 +16,7 @@ from sqlalchemy import Connection, Row
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY
 from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.delivery.flows import Flow, FlowFactKind, FlowLanding, TurnEvent, Withdrawal
+from blizzard.hub.domain.delivery.flows import Flow, FlowFact, FlowFactKind, FlowLanding, TurnEvent, Withdrawal
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import statements_of
 
@@ -28,6 +28,19 @@ _turns = s.hub_turns
 
 def flow_of(row: Row[Any]) -> Flow:
     return Flow(flow_id=row.flow_id, repository_id=row.repository_id, branch=row.branch, created_at=row.created_at)
+
+
+def fact_of(row: Row[Any]) -> FlowFact:
+    return FlowFact(
+        id=row.id,
+        flow_id=row.flow_id,
+        submission_id=row.submission_id,
+        chunk_id=row.chunk_id,
+        kind=row.kind,
+        at=row.at,
+        outcome=row.outcome,
+        revision=row.revision,
+    )
 
 
 def flows_held(conn: Connection, submission_ids: Sequence[str]) -> dict[str, tuple[Flow, ...]]:

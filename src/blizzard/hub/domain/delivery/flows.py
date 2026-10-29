@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Literal, get_args
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
@@ -18,13 +18,16 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.model import ChunkFacts, HubNodePollFact
 from blizzard.hub.domain.config.repositories import RepositoryResolution
-from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
 from blizzard.hub.domain.graph.model import Node
 
 #: Why a submission left its flows: the lever that ended its chunk, or any other move off the visit.
 type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
 #: What a flow's record says happened.
 type FlowFactKind = Literal["submitted", "turn-started", "turn-ended", "landed", "withdrawn"]
+#: Where an open submission stands on a flow it holds: taking its turn, next to take one, eligible behind another,
+#: waiting on its next poll, or passed over while its chunk is not ``delivering`` or its visit not current.
+type FlowPlaceState = Literal["landing", "next", "waiting", "polling", "passed-over"]
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
@@ -129,8 +132,9 @@ class Turn:
 @domain_model
 @dataclass(frozen=True)
 class FlowFact:
-    """One entry in a flow's append-only record."""
+    """One entry in a flow's append-only record; ``id`` orders the record, newest highest."""
 
+    id: int
     flow_id: str
     submission_id: str
     chunk_id: str
@@ -138,6 +142,23 @@ class FlowFact:
     at: datetime
     outcome: str | None = None
     revision: str | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class FlowOverview:
+    """A flow with the newest of its record: its newest fact's instant, its last verdict — the newest ``turn-ended``
+    fact whose outcome closed its submission and is not one of :data:`NOT_VERDICTS` — and its last landing, each
+    ``None`` while the record holds none."""
+
+    flow: Flow
+    newest_at: datetime | None = None
+    last_verdict: FlowFact | None = None
+    last_landing: FlowFact | None = None
+
+    def is_active(self, *, in_line: bool, since: datetime) -> bool:
+        """Whether a board shows the flow: a submission is open on it, or its record moved at or after ``since``."""
+        return in_line or (self.newest_at is not None and self.newest_at >= since)
 
 
 @domain_model
@@ -210,6 +231,18 @@ class AdmittedTurn:
 
     turn: Turn
     submission: Submission
+
+
+#: The turn outcomes and withdrawals that are never a verdict on a submission.
+NOT_VERDICTS = frozenset(
+    {
+        TURN_INTERRUPTED,
+        TURN_CUT_OFF,
+        TURN_ESCALATED,
+        *RESERVED_WAITS,
+        *get_args(Withdrawal.__value__),
+    }
+)
 
 
 def is_stuck(outcomes: Sequence[str]) -> bool:
@@ -391,13 +424,12 @@ class FlowLine:
     def eligible(self, submission: Submission, *, now: datetime) -> bool:
         """Its chunk is ``delivering``, its visit is current and has no open turn, and its next poll is due: no
         poll row for the visit, or ``PollPolicy.due_at`` of the newest one has passed."""
-        facts = self.facts[submission.chunk_id]
-        if not may_pass(facts, submission):
+        if not may_pass(self.facts[submission.chunk_id], submission):
             return False
         if submission.submission_id in self.turning:
             return False
-        polls = facts.hub_node_poll_history(node_id=submission.node_id, epoch=submission.epoch)
-        return not polls or self.policies[submission.submission_id].due_at(polls[-1]) <= now
+        due = self._due_at(submission)
+        return due is None or due <= now
 
     def is_next(self, submission: Submission, *, now: datetime) -> bool:
         """It is eligible, and on every flow it holds no eligible submission arrived before it. A visit holding
@@ -411,3 +443,63 @@ class FlowLine:
             and self.eligible(other, now=now)
             for other in self.submissions
         )
+
+    def places(self, *, now: datetime) -> tuple[FlowPlace, ...]:
+        """Every place the line's submissions hold, in arrival order, each submission's in ``flows`` order."""
+        return tuple(place for submission in self.submissions for place in self.places_of(submission, now=now))
+
+    def places_of(self, submission: Submission, *, now: datetime) -> tuple[FlowPlace, ...]:
+        """The submission's place on each flow it holds. Its state is one across its flows: ``landing`` while it has
+        an open turn, ``passed-over`` while it may not pass, ``polling`` until its next poll is due, ``next`` when
+        :meth:`is_next`, else ``waiting``. Its position on a flow is one when landing or next, else one plus the
+        eligible submissions that arrived before it there."""
+        state, due = self._state(submission, now=now)
+        return tuple(
+            FlowPlace(
+                submission=submission,
+                flow=flow,
+                state=state,
+                position=1 if state in ("landing", "next") else 1 + self._eligible_ahead(submission, flow, now=now),
+                due_at=due,
+            )
+            for flow in submission.flows
+        )
+
+    def _state(self, submission: Submission, *, now: datetime) -> tuple[FlowPlaceState, datetime | None]:
+        if submission.submission_id in self.turning:
+            return "landing", None
+        if not may_pass(self.facts[submission.chunk_id], submission):
+            return "passed-over", None
+        due = self._due_at(submission)
+        if due is not None and due > now:
+            return "polling", due
+        return ("next" if self.is_next(submission, now=now) else "waiting"), None
+
+    def _eligible_ahead(self, submission: Submission, flow: Flow, *, now: datetime) -> int:
+        return sum(
+            1
+            for other in self.submissions
+            if other.arrival < submission.arrival
+            and any(held.flow_id == flow.flow_id for held in other.flows)
+            and self.eligible(other, now=now)
+        )
+
+    def _due_at(self, submission: Submission) -> datetime | None:
+        """When the visit's next poll is due, or ``None`` while it has no poll row."""
+        polls = self.facts[submission.chunk_id].hub_node_poll_history(
+            node_id=submission.node_id, epoch=submission.epoch
+        )
+        return self.policies[submission.submission_id].due_at(polls[-1]) if polls else None
+
+
+@domain_model
+@dataclass(frozen=True)
+class FlowPlace:
+    """One open submission's place on one flow it holds, as :meth:`FlowLine.places_of` judges it; ``due_at`` is when
+    its next poll is due while it is ``polling``, else ``None``."""
+
+    submission: Submission
+    flow: Flow
+    state: FlowPlaceState
+    position: int
+    due_at: datetime | None = None

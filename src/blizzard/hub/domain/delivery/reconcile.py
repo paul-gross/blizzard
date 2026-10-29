@@ -29,8 +29,6 @@ from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
     TURN_SUPERSEDED,
     AdmittedTurn,
-    FlowLine,
-    PollPolicy,
     Submission,
     Turn,
     TurnEvent,
@@ -38,6 +36,7 @@ from blizzard.hub.domain.delivery.flows import (
     held_resources,
     withdrawal_for,
 )
+from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
@@ -93,6 +92,7 @@ class FlowLineReconciler:
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
         exclusive: IChunkExclusiveWrites,
+        lines: FlowLineFactory,
         clock: IClock,
     ) -> None:
         self._flows = flows
@@ -108,6 +108,7 @@ class FlowLineReconciler:
         self._links = links
         self._catalogue = catalogue
         self._clock = clock
+        self._lines = lines
 
     def reconcile(self, floor: int) -> LineReconciliation:
         """Submit every chunk standing at a hub step with no open submission for its visit, then close every open
@@ -195,21 +196,7 @@ class FlowLineReconciler:
         subs = self._flows.open_submissions_from(floor)
         if not subs:
             return []
-        turning = frozenset(turn.submission_id for turn in self._flows.open_turns())
-        chunk_ids = sorted({sub.chunk_id for sub in subs})
-        loaded = self._facts.load_facts_for(chunk_ids)
-        nodes = self._nodes(chunk_ids)
-        line = FlowLine(
-            submissions=tuple(subs),
-            facts={chunk_id: ChunkFacts.or_default(loaded.get(chunk_id)) for chunk_id in chunk_ids},
-            policies={
-                sub.submission_id: PollPolicy.of(node)
-                if (node := nodes.get((sub.chunk_id, sub.node_id)))
-                else PollPolicy()
-                for sub in subs
-            },
-            turning=turning,
-        )
+        line = self._lines.line(subs, turning=frozenset(turn.submission_id for turn in self._flows.open_turns()))
         passed_over = frozenset(sub.submission_id for sub in subs if not line.eligible(sub, now=now))
         admitted: list[AdmittedTurn] = []
         for sub in subs:
@@ -338,18 +325,7 @@ class FlowLineReconciler:
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:
         """Each named chunk's graph's node names, by ``(chunk_id, node_id)``."""
-        return {key: node.name for key, node in self._nodes(chunk_ids).items()}
-
-    def _nodes(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], Node]:
-        """Each named chunk's graph's nodes, by ``(chunk_id, node_id)``."""
-        chunks = self._record.get_many(list(chunk_ids))
-        graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
-        return {
-            (chunk.chunk_id, node.node_id): node
-            for chunk in chunks.values()
-            if (graph := graphs.get(chunk.graph_id)) is not None
-            for node in graph.nodes
-        }
+        return {key: node.name for key, node in self._lines.nodes(chunk_ids).items()}
 
 
 def _hub_node_of(facts: ChunkFacts, graph: Graph | None) -> Node | None:

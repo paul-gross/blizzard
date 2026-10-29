@@ -169,6 +169,63 @@ def test_a_visit_holding_nothing_is_next_whenever_it_is_eligible() -> None:
     assert not _line((nothing, _at_node(epoch=2))).is_next(nothing, now=_AT)
 
 
+# --- Places --------------------------------------------------------------------------------------------------------
+
+
+def _places(line: FlowLine, sub: Submission, *, now: datetime = _AT) -> list[tuple[str, str, int]]:
+    return [(place.flow.flow_id, place.state, place.position) for place in line.places_of(sub, now=now)]
+
+
+def test_the_turning_submission_is_landing_and_the_next_eligible_one_is_next() -> None:
+    first, second, third = (_submission(f"ch_{i}", i, _MAIN) for i in (1, 2, 3))
+    line = _line((first, _at_node()), (second, _at_node()), (third, _at_node()), turning=frozenset({"fsub_ch_1"}))
+
+    assert _places(line, first) == [("flw_main", "landing", 1)]
+    assert _places(line, second) == [("flw_main", "next", 1)]
+    assert _places(line, third) == [("flw_main", "waiting", 2)]
+
+
+def test_a_submission_next_on_one_flow_but_not_another_is_waiting_on_both() -> None:
+    ahead, both = _submission("ch_1", 1, _OTHER), _submission("ch_2", 2, _MAIN, _OTHER)
+    line = _line((ahead, _at_node()), (both, _at_node()))
+
+    assert _places(line, ahead) == [("flw_other", "next", 1)]
+    assert _places(line, both) == [("flw_main", "waiting", 1), ("flw_other", "waiting", 2)]
+
+
+def test_a_chunk_a_person_holds_is_passed_over_and_counts_for_no_one_behind_it() -> None:
+    held, paused, behind = (_submission(f"ch_{i}", i, _MAIN) for i in (1, 2, 3))
+    escalated = _at_node(leases=[LeaseFact(2, _AT)], escalations=[EscalationFact(epoch=2, recorded_at=_AT)])
+    pause = _at_node(pauses=[PauseFact(paused=True, set_at=_AT, set_by="op")])
+    line = _line((held, escalated), (paused, pause), (behind, _at_node()))
+
+    assert _places(line, held) == [("flw_main", "passed-over", 1)]
+    assert _places(line, paused) == [("flw_main", "passed-over", 1)]
+    assert _places(line, behind) == [("flw_main", "next", 1)]
+
+
+def test_a_visit_waiting_on_its_poll_is_polling_until_due_with_its_due_instant() -> None:
+    first, polled = _submission("ch_1", 1, _MAIN), _submission("ch_2", 2, _MAIN)
+    poll = HubNodePollFact(_DELIVER, 1, _AT)
+    due = PollPolicy().due_at(poll)
+    line = _line((first, _at_node()), (polled, _at_node(hub_node_polls=[poll])))
+
+    [place] = line.places_of(polled, now=_AT)
+    assert (place.state, place.position, place.due_at) == ("polling", 2, due)
+    assert _places(line, polled, now=due) == [("flw_main", "waiting", 2)]
+
+
+def test_the_lines_places_run_in_arrival_order() -> None:
+    first, second = _submission("ch_1", 1, _MAIN, _OTHER), _submission("ch_2", 2, _MAIN)
+    line = _line((first, _at_node()), (second, _at_node()))
+
+    assert [(p.submission.chunk_id, p.flow.flow_id, p.state) for p in line.places(now=_AT)] == [
+        ("ch_1", "flw_main", "next"),
+        ("ch_1", "flw_other", "next"),
+        ("ch_2", "flw_main", "waiting"),
+    ]
+
+
 # --- What a visit holds ----------------------------------------------------------------------------------------------
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,9 +23,11 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
@@ -115,9 +117,6 @@ from blizzard.wire.chunk import (
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.project import ProjectRequiredBody, SourceNotLinkedBody
 from blizzard.wire.work_source import WorkItemAuthorView
-
-#: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
-BOARD_DONE_WINDOW = timedelta(hours=48)
 
 #: How many of the most recently finished ``done`` chunks stay on it however old, per tenant (per project
 #: under ``?project=``) — the board's Done lane is never emptier than this while that many exist.
@@ -308,6 +307,9 @@ def list_chunks(
         name: services.work_sources.get(name)
         for name in sorted({pointer.source for chunk in page_chunks for pointer in chunk.work_refs})
     }
+    # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
+    # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
+    flow_places = chunk_flow_places(services, page_ids)
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -325,6 +327,7 @@ def list_chunks(
                 runner_names=runner_names,
                 projects=projects,
                 sources=sources,
+                flow_places=flow_places,
             ).summary()
             for chunk in page_chunks
         ],

@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefus
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
+from blizzard.hub.api.flow_places import chunk_flow_places, fact_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
@@ -66,6 +67,7 @@ from blizzard.wire.chunk import (
     TransitionView,
     WorkRefView,
 )
+from blizzard.wire.flow import ChunkFlowPlaceView
 
 
 class _RouteNotInjected(Enum):
@@ -176,6 +178,8 @@ class ChunkView:
     projects: Mapping[ProjectId, Project] | None = None
     #: Request-scoped source resolution; absent on the single-chunk lazy path.
     sources: Mapping[str, IWorkSource | None] | None = None
+    #: Flow places by chunk id — the caller's own read; ``None`` makes each render read the chunk's own.
+    flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
 
     @classmethod
     def of(
@@ -216,6 +220,7 @@ class ChunkView:
         runner_names: Mapping[str, str] | None = None,
         projects: Mapping[ProjectId, Project] | None = None,
         sources: Mapping[str, IWorkSource | None] | None = None,
+        flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route, pointer live-holders, runner names and projects, skipping
@@ -233,7 +238,17 @@ class ChunkView:
             runner_names=runner_names,
             projects=projects,
             sources=sources,
+            flow_places=flow_places,
         )
+
+    def _flow_places(self) -> list[ChunkFlowPlaceView]:
+        """The chunk's flow places: from the injected page read, else one read of the chunk's own line."""
+        places = (
+            self.flow_places
+            if self.flow_places is not None
+            else chunk_flow_places(self.services, [self.chunk.chunk_id])
+        )
+        return places.get(self.chunk.chunk_id, [])
 
     def _project_fields(self) -> ProjectLabelFields:
         """The chunk's project labels: from the injected projects, else one read of its own project."""
@@ -315,6 +330,7 @@ class ChunkView:
             cost=self.usage_total(),
             completed_at=iso_utc(completed_at) if completed_at is not None else None,
             blocked=self.blocked,
+            flow_places=self._flow_places(),
             **self._delivery_fields(self._delivery()),
             **self._project_fields(),
         )
@@ -416,6 +432,11 @@ class ChunkView:
             usage=self._usage_history(),
             pending=self._pending(),
             bounces=self._bounces(),
+            flow_places=self._flow_places(),
+            flow_record=[
+                fact_view(fact)
+                for fact in self.services.flow_views.chunk_records([self.chunk.chunk_id]).get(self.chunk.chunk_id, [])
+            ],
             **project,
         )
 

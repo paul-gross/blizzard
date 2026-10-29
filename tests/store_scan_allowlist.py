@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IReadWorkRefsCorpus
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import IReadConfigChanges
-from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlowViews
 from blizzard.hub.domain.garden.findings.model import IReadFindingRepository
 from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
 from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
@@ -122,6 +122,13 @@ _ANALYTICS_REASON = (
 _DERIVATION_SWEEP_REASON = (
     "the transcript-event derivation sweep reads every segment and derivation marker of the tenant (hub-scoped: of "
     "every open tenant) to find what is not yet derived — a corpus pass, not a per-chunk lookup."
+)
+
+# The tenant's flows: one per branch any of its chunks has landed on.
+_TENANT_FLOWS_REASON = (
+    "the tenant's every flow, by design — the board's Delivery band and `blizzard hub flow list` show each branch the "
+    "tenant lands on; a flow is one per repository branch, so the walk is bounded by the tenant's repositories and "
+    "their base branches, never by its chunks or its facts."
 )
 
 # `ORDER BY ... DESC LIMIT 1` along the index's own order — the plan text cannot show the LIMIT.
@@ -731,6 +738,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ),
         _SIGNATURE_REASON,
     ),
+    IndexWalkAllowance(IReadFlowViews, "flow_overviews", ("flows",), _TENANT_FLOWS_REASON),
     IndexWalkAllowance(
         IReadWorkRefsCorpus,
         "live_work_refs_signature",

@@ -38,11 +38,13 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
+from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.finding_store import FindingStore
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support import (
     OP,
@@ -223,6 +225,9 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ),
     ("GET", "/api/chunks"): _LIST,
     ("GET", "/api/chunks/{chunk_id}"): _f(),
+    ("GET", "/api/flows"): _LIST,
+    ("GET", "/api/flows/{flow_id}"): _f(),
+    ("GET", "/api/flows/{flow_id}/record"): _f(),
     ("PATCH", "/api/chunks/{chunk_id}"): _f({}),
     ("DELETE", "/api/chunks/{chunk_id}"): _f({}),
     ("POST", "/api/chunks/{chunk_id}/complete"): _f({}),
@@ -644,6 +649,16 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     created_repository = _ok(c.post("/api/repositories", json=repository), 201)
     t.keep("repository", created_repository["repository_id"])
     t.keep("forge", created_repository["forge_id"])
+    flow = FlowStore(scoped_connections(hub.engine, harness.tenant), hub.clock).submit(
+        chunk,
+        node_id=node,
+        epoch=1,
+        generation=0,
+        resources=[FlowResource(created_repository["repository_id"], "main")],
+        at=hub.clock.now(),
+    )
+    assert flow is not None
+    t.keep("flow_id", flow.flows[0].flow_id)
     source = {"slug": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(

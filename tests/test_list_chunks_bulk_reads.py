@@ -15,6 +15,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
 from blizzard.hub.domain.runners.route import Route
@@ -23,6 +24,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
@@ -71,6 +73,39 @@ def test_list_chunks_query_count_is_independent_of_fleet_size(tmp_path: Path) ->
 
     assert results == {"small": 3, "large": 9}
     assert small_count == large_count
+
+
+def _seed_in_line(hub, n: int) -> None:  # type: ignore[no-untyped-def]
+    """``n`` chunks, each submitted to the same two flows."""
+    _seed(hub, n)
+    flows = FlowStore(hub_store_connections(hub.engine), hub.clock)
+    for row in hub.client.get("/api/chunks").json()["chunks"]:
+        flows.submit(
+            row["chunk_id"],
+            node_id="nd_deliver",
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("repo_a", "main"), FlowResource("repo_b", "main")],
+            at=_T0,
+        )
+
+
+def test_list_chunks_query_count_is_independent_of_fleet_size_with_its_chunks_in_line(tmp_path: Path) -> None:
+    """Each chunk's place reads the whole line of the flows the page holds: the statement count stays flat however
+    many chunks stand in it."""
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+    small = build_hub(tmp_path / "small")
+    _seed_in_line(small, 3)
+    large = build_hub(tmp_path / "large")
+    _seed_in_line(large, 9)
+
+    def call(hub) -> None:  # type: ignore[no-untyped-def]
+        resp = hub.client.get("/api/chunks")
+        assert resp.status_code == 200, resp.text
+        assert all(len(row["flow_places"]) == 2 for row in resp.json()["chunks"])
+
+    assert count_queries(small.engine, lambda: call(small)) == count_queries(large.engine, lambda: call(large))
 
 
 def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(tmp_path: Path) -> None:

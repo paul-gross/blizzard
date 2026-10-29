@@ -15,6 +15,7 @@ from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
     FlowFact,
     FlowLanding,
+    FlowOverview,
     FlowResource,
     LandingWrite,
     Submission,
@@ -61,6 +62,36 @@ class IReadFlows(Protocol):
     def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
         """Where the visit's newest submission stands in the flows it holds, or ``None`` when it has no open
         submission."""
+        ...
+
+
+class IReadFlowViews(Protocol):
+    """What the surfaces read of the tenant's flows: each flow and the newest of its record, a flow's record paged,
+    and the open submissions a line is judged over."""
+
+    def flow_overviews(self) -> list[FlowOverview]:
+        """Every flow of the tenant, in resource order, each with the newest of its record."""
+        ...
+
+    def flow_overview(self, flow_id: str) -> FlowOverview | None:
+        """One flow with the newest of its record, or ``None`` when the tenant holds no such flow."""
+        ...
+
+    def record_page(self, flow_id: str, *, before: int | None, limit: int) -> list[FlowFact]:
+        """At most ``limit`` of the flow's facts, newest first, each with an ``id`` below ``before`` when given."""
+        ...
+
+    def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
+        """Every open submission holding any of ``flow_ids``, in arrival order, each with every flow it holds."""
+        ...
+
+    def open_submissions_of(self, chunk_ids: Sequence[str]) -> list[Submission]:
+        """Every open submission of the named chunks, in arrival order, each with every flow it holds."""
+        ...
+
+    def chunk_records(self, chunk_ids: Sequence[str]) -> dict[str, list[FlowFact]]:
+        """Every fact each named chunk's submissions wrote, on every flow, in write order, by chunk id; a chunk that
+        never submitted has no entry."""
         ...
 
 

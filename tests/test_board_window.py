@@ -17,7 +17,8 @@ from sqlalchemy import update
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.hub.api import chunks as chunks_api
-from blizzard.hub.api.chunks import BOARD_DONE_FLOOR, BOARD_DONE_WINDOW
+from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
+from blizzard.hub.api.chunks import BOARD_DONE_FLOOR
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.store import schema as s
 from tests.support import HubHarness, count_queries, default_tenant, seed_project
