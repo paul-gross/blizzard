@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261029_0900_close_attempt_resume_at",
+  "head_revision": "20261029_1200_landing_policies",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -2919,6 +2919,77 @@
       ],
       "unique": []
     },
+    "flow_submission_terms": {
+      "checks": [],
+      "columns": {
+        "landing_policy": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "landing_position": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Float"
+        },
+        "park_timeout_hours": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "repository_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "submission_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "submission_id"
+          ],
+          "references": {
+            "columns": [
+              "submission_id"
+            ],
+            "table": "flow_submissions"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "submission_id",
+        "repository_id"
+      ],
+      "unique": []
+    },
     "flow_submissions": {
       "checks": [],
       "columns": {
@@ -4922,6 +4993,18 @@
           "server_default": false,
           "type": "Integer"
         },
+        "kind": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "String"
+        },
+        "last_polled_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
         "next_poll_at": {
           "deprecated": null,
           "nullable": true,
@@ -5654,6 +5737,84 @@
       ],
       "unique": []
     },
+    "project_repository_positions": {
+      "checks": [],
+      "columns": {
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "position": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Float"
+        },
+        "project_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repository_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "set_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "set_by": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "project_id",
+            "repository_id"
+          ],
+          "references": {
+            "columns": [
+              "project_id",
+              "repository_id"
+            ],
+            "table": "project_repository_links"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
     "project_source_link_facts": {
       "checks": [],
       "columns": {
@@ -6160,6 +6321,12 @@
           "server_default": false,
           "type": "String"
         },
+        "landing_policy": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": true,
+          "type": "String"
+        },
         "name": {
           "deprecated": null,
           "nullable": false,
@@ -6171,6 +6338,12 @@
           "nullable": false,
           "server_default": false,
           "type": "String"
+        },
+        "park_timeout_hours": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "Integer"
         },
         "repo": {
           "deprecated": null,

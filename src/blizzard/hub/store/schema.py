@@ -494,6 +494,10 @@ repositories = Table(
     # The forge the repository lives on; nullable and without a foreign key through the forge transition, as
     # ``work_sources.forge_id`` is.
     Column("forge_id", String, nullable=True),
+    # How work lands into the repository; the hub writes it explicitly, the default speaks for an older writer.
+    Column("landing_policy", String, nullable=False, server_default="merge-on-checks"),
+    # How long a parked change may wait; null is the default.
+    Column("park_timeout_hours", Integer, nullable=True),
     PrimaryKeyConstraint("repository_id", name="pk_repositories"),
     UniqueConstraint("tenant_id", "slug", name="uq_repositories_tenant_slug"),
     UniqueConstraint("tenant_id", "forge_api_url", "owner", "repo", name="uq_repositories_tenant_coordinate"),
@@ -660,6 +664,38 @@ Index(
     project_repository_link_facts.c.project_id,
     project_repository_link_facts.c.repository_id,
     project_repository_link_facts.c.id,
+)
+
+# A repository's place in its project's landing order: append-only facts on a link, the newest winning. Lower lands
+# first; a null position, or no fact at all, is unranked. Not a revision of the link.
+project_repository_positions = Table(
+    "project_repository_positions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_id", String, nullable=False),
+    Column("repository_id", String, nullable=False),
+    Column("position", Float, nullable=True),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_project_repository_positions_tenant_id"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["project_id", "repository_id"],
+        ["project_repository_links.project_id", "project_repository_links.repository_id"],
+        name="fk_project_repository_positions_links",
+    ),
+)
+# A link's newest position.
+Index(
+    "ix_project_repository_positions_tenant_link",
+    project_repository_positions.c.tenant_id,
+    project_repository_positions.c.project_id,
+    project_repository_positions.c.repository_id,
+    project_repository_positions.c.id,
 )
 
 # --- Configuration change log (one fact row per committed write to a configured record) ---
@@ -1446,6 +1482,10 @@ hub_node_poll = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_node_poll_tenant_id"), nullable=False),
     # The earliest moment a waiting pass asked to be polled again; null when it named none.
     Column("next_poll_at", UtcDateTime, nullable=True),
+    # What the pass waits on; the hub writes it explicitly, the default speaks for an older writer.
+    Column("kind", String, nullable=False, server_default="pending"),
+    # The newest poll a coalesced wait row stands for; null on a row that stands for one poll.
+    Column("last_polled_at", UtcDateTime, nullable=True),
 )
 Index("ix_hub_node_poll_tenant_chunk_id", hub_node_poll.c.tenant_id, hub_node_poll.c.chunk_id)
 
@@ -1532,6 +1572,32 @@ Index(
     "ix_flow_submission_closures_tenant_submission_id",
     flow_submission_closures.c.tenant_id,
     flow_submission_closures.c.submission_id,
+)
+
+# The terms a visit lands by, one row per repository it holds, written once by the transaction starting its first
+# turn and copied onto a later generation of the same visit.
+flow_submission_terms = Table(
+    "flow_submission_terms",
+    metadata,
+    Column(
+        "submission_id",
+        String,
+        ForeignKey("flow_submissions.submission_id", name="fk_flow_submission_terms_submissions"),
+        nullable=False,
+    ),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_flow_submission_terms_tenant_id"), nullable=False
+    ),
+    Column("repository_id", String, nullable=False),
+    Column("landing_policy", String, nullable=False),
+    Column("park_timeout_hours", Integer, nullable=True),
+    Column("landing_position", Float, nullable=True),  # null is unranked
+    PrimaryKeyConstraint("submission_id", "repository_id", name="pk_flow_submission_terms"),
+)
+Index(
+    "ix_flow_submission_terms_tenant_submission_id",
+    flow_submission_terms.c.tenant_id,
+    flow_submission_terms.c.submission_id,
 )
 
 # One turn a submission takes at the head of its flows; open while ``ended_at`` is null.
