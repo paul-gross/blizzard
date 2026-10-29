@@ -19,6 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.forge.budget import rate_refusal_resume_at
 from blizzard.hub.forge.internal.github_reads import KeptAnswer, KeptAnswers, KeptComparisons, is_object_id
 from blizzard.hub.forge.landing import (
     Change,
@@ -55,8 +56,6 @@ ATTEMPT_TIMEOUT_SECONDS = 30.0
 RETRY_DELAYS_SECONDS = (1.0, 3.0)
 #: How long the repository probe's answer is kept.
 PROBE_MEMO = timedelta(seconds=60)
-#: A rate limit that names no usable instant, and the floor of a secondary limit.
-_DEFAULT_RESUME = timedelta(seconds=60)
 
 _PAGE_SIZE = 100
 _PAGE_MAX = 10
@@ -449,22 +448,15 @@ class GitHubLanding:
         if response.status_code >= 500:
             raise ForgeUnavailable(f"{method} {self._binding.api_url}{path}: HTTP {response.status_code}")
         if response.status_code in (403, 429):
-            resume_at = self._resume_at(response)
+            now = self._clock.now()
+            resume_at = rate_refusal_resume_at(response.status_code, response.headers, _message(response), now)
             if resume_at is not None:
                 raise ForgeRateLimited(resume_at, f"{method} {self._binding.api_url}{path}: rate limited")
         return response
 
-    def _resume_at(self, response: httpx2.Response) -> datetime | None:
-        """When a rate-limited answer says to come back, or ``None`` when the answer is no rate limit."""
-        headers = response.headers
-        secondary = "secondary rate limit" in _message(response).lower()
-        retry_after = headers.get("retry-after")
-        if headers.get("x-ratelimit-remaining") != "0" and retry_after is None and not secondary:
-            return None
-        now = self._clock.now()
-        resume = _seconds_from(now, retry_after) or _reset_at(now, headers.get("x-ratelimit-reset"))
-        resume = resume or now + _DEFAULT_RESUME
-        return max(resume, now + _DEFAULT_RESUME) if secondary else resume
+    async def _learn(self, response: httpx2.Response) -> None:
+        """The client's response hook: every answer's rate headers teach the forge and credential's budget."""
+        self._binding.learn(response.headers)
 
     def _http(self) -> httpx2.AsyncClient:
         if self._client is None:
@@ -475,7 +467,10 @@ class GitHubLanding:
             }
             self._loop = asyncio.get_running_loop()
             self._client = httpx2.AsyncClient(
-                base_url=self._binding.api_url.rstrip("/"), headers=headers, transport=self._transport
+                base_url=self._binding.api_url.rstrip("/"),
+                headers=headers,
+                transport=self._transport,
+                event_hooks={"response": [self._learn]},
             )
             if self._instrument is not None:
                 self._instrument(self._client)
@@ -511,22 +506,6 @@ def _message(response: httpx2.Response) -> str:
     table = as_table(body)
     message = table.get("message") if table is not None else None
     return message if isinstance(message, str) else ""
-
-
-def _seconds_from(now: datetime, raw: str | None) -> datetime | None:
-    try:
-        seconds = int(raw) if raw is not None else 0
-    except ValueError:
-        return None
-    return now + timedelta(seconds=seconds) if seconds > 0 else None
-
-
-def _reset_at(now: datetime, raw: str | None) -> datetime | None:
-    try:
-        reset = datetime.fromtimestamp(int(raw), tz=now.tzinfo) if raw is not None else None
-    except (ValueError, OverflowError, OSError):
-        return None
-    return reset if reset is not None and reset > now else None
 
 
 def _authored_at(payload: Any) -> datetime | None:

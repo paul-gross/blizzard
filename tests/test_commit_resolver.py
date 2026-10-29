@@ -31,6 +31,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
 from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
 from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.landing import (
     CommitPresence,
@@ -142,12 +143,14 @@ class _Forges:
         self._refs = refs
         self._offered = offered
         self.built: list[RepositoryId] = []
+        self.priorities: list[ForgePriority] = []
 
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
         return self._offered
 
-    def refs(self, repository: RepositoryId) -> IForgeRefs:
+    def refs(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeRefs:
         self.built.append(repository)
+        self.priorities.append(priority)
         if isinstance(self._refs, Exception):
             raise self._refs
         return self._refs
@@ -182,6 +185,14 @@ def test_a_delivered_commit_resolves_through_the_repositorys_refs(loop: ActionLo
     assert refs.asked == [_SHA]
 
 
+def test_the_commit_check_asks_at_sweeping_priority(loop: ActionLoop) -> None:
+    forges = _Forges(_Refs(CommitPresence(exists=True)))
+
+    _resolver(forges, loop)("widget", _SHA)
+
+    assert forges.priorities == [ForgePriority.SWEEPING]
+
+
 def test_a_commit_the_forge_does_not_hold_resolves_absent(loop: ActionLoop) -> None:
     assert _resolver(_Forges(_Refs(CommitPresence(exists=False))), loop)("widget", _SHA) == CommitResolution(
         exists=False
@@ -193,6 +204,7 @@ def test_a_commit_the_forge_does_not_hold_resolves_absent(loop: ActionLoop) -> N
     [
         pytest.param(ForgeUnavailable("down"), id="forge-unavailable"),
         pytest.param(ForgeNotFound(ForgeObject.REPOSITORY), id="repository-unseen"),
+        pytest.param(ForgeBudgetLow(_AUTHORED, "low"), id="budget-low"),
     ],
 )
 def test_a_forge_that_cannot_say_degrades_to_none(loop: ActionLoop, failure: Exception) -> None:

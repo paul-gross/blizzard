@@ -79,8 +79,15 @@ class _Harness:
         self.clock = FixedClock(_NOW)
         self.sleeps: list[float] = []
         self.lock_during_sleep: list[bool] = []
+        self.learned: list[Mapping[str, str]] = []
         binding = ForgeBinding(
-            kind="github", api_url=api_url, owner="acme", repo="widget", token="tok", write_lock=lambda: self.lock
+            kind="github",
+            api_url=api_url,
+            owner="acme",
+            repo="widget",
+            token="tok",
+            write_lock=lambda: self.lock,
+            learn=self.learned.append,
         )
         self.forge = GitHubLanding(
             binding, clock=self.clock, sleep=self._sleep, transport=httpx2.MockTransport(self.recorded)

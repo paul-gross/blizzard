@@ -86,6 +86,7 @@ from blizzard.hub.domain.graph.model import HUB_DEFAULT_FAILURE_CHOICE, Graph, I
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.forge.budget import ForgePriority
 from blizzard.hub.forge.landing import RepositoryForge
 from blizzard.hub.forge.registry import ForgeRegistry, TurnCutOff
 from blizzard.hub.tenancy import TenantClosed, UnknownTenant
@@ -347,7 +348,9 @@ class TurnRunner:
             for target in resolution.targets:
                 repository = RepositoryId(target.record)
                 try:
-                    forges[repository] = self._forges.repository_forge(repository, cut_off=cut_off)
+                    forges[repository] = self._forges.repository_forge(
+                        repository, cut_off=cut_off, priority=ForgePriority.LANDING
+                    )
                 except RepositorySecretUnavailable as exc:
                     detail = f"repository {target.slug}: {exc}"
                     step = "repository-secret-unavailable"

@@ -22,6 +22,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.forge.budget import ForgePriority
 from blizzard.hub.forge.landing import IForgeRefs
 
 #: The longest the writer waits on the forge for one cited commit.
@@ -33,7 +34,7 @@ class IForgeRefsSource(Protocol):
 
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]: ...
 
-    def refs(self, repository: RepositoryId) -> IForgeRefs: ...
+    def refs(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeRefs: ...
 
 
 class SeamCommitResolver:
@@ -72,7 +73,7 @@ class SeamCommitResolver:
                 return None
             if Capability.COMMITS_READ not in self._forges.offered(forges[row.fields.forge_id], row.repository_id):
                 return None
-            refs = self._forges.refs(row.repository_id)
+            refs = self._forges.refs(row.repository_id, priority=ForgePriority.SWEEPING)
             future = self._loop.submit(refs.commit_exists(commit))
             try:
                 presence = future.result(timeout=self._timeout)

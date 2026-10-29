@@ -14,6 +14,7 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import ISecretReader
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
 from blizzard.hub.live_config import ConfigObjectCache
@@ -37,10 +38,11 @@ def build_forge_registry(
     objects: ConfigObjectCache,
     secrets: ISecretReader,
     clock: IClock,
+    budgets: ForgeBudgets,
     capabilities: Mapping[str, frozenset[Capability]] = FORGE_KIND_CAPABILITIES,
     instrument: Callable[[httpx2.AsyncClient], None] | None = None,
 ) -> ForgeRegistry:
-    """A tenant's registry over its repository and forge records, cache, and secret reader."""
+    """A tenant's registry over its repository and forge records, cache, secret reader, and rate budgets."""
     return ForgeRegistry(
         records=records,
         forges=forges,
@@ -48,4 +50,5 @@ def build_forge_registry(
         secrets=secrets,
         build=lambda binding: build_forge_adapter(binding, clock=clock, instrument=instrument),
         capabilities=capabilities,
+        budgets=budgets,
     )

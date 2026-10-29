@@ -133,6 +133,7 @@ from blizzard.hub.domain.runners.registration import RunnerRetired
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.layout import SIGNING_KEYS_PARTS
@@ -592,13 +593,14 @@ def build_hosted_app(
             instrument_client=platform_tracing.instrument_client,
         )
 
-    def forge_registry(stores: TenantStores, live: LiveConfig) -> ForgeRegistry:
+    def forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
         return build_forge_registry(
             records=stores.repository_records,
             forges=stores.forge_records,
             objects=live.objects,
             secrets=live.secrets,
             clock=stores.clock,
+            budgets=budgets,
             instrument=platform_tracing.instrument_client,
         )
 
