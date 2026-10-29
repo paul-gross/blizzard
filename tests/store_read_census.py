@@ -889,6 +889,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
     (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
     (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
+    (IReadUsageRepository, "lease_usage_facts"): lambda w: w.read.usage.lease_usage_facts(w.lease_1),
     (IReadExternalUsageRepository, "last_external_usage_attempt_at"): lambda w: (
         w.host_read.external_usage.last_external_usage_attempt_at(w.usage_slug)
     ),

@@ -4423,6 +4423,29 @@
         "title": "LeaseListResponse",
         "type": "object"
       },
+      "LeaseUsageResponse": {
+        "description": "The usage facts one lease recorded, oldest first.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UsageFactView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_id",
+          "items"
+        ],
+        "title": "LeaseUsageResponse",
+        "type": "object"
+      },
       "LeaseView": {
         "description": "One lease \u2014 active or recently-closed \u2014 with its joined binding facts and\nderived state.",
         "properties": {
@@ -7104,6 +7127,101 @@
           "held_since"
         ],
         "title": "UnmatchedBindingView",
+        "type": "object"
+      },
+      "UsageFactView": {
+        "description": "One usage fact a lease recorded: an invocation's own tokens and cost, never a sum.\n\n``kind`` is the invocation (``spawn``, ``resume``, ``judge``) and ``generation`` the lease's spawn\nordinal. A null ``cost_usd`` is an unknown cost; ``estimated_cost_usd`` is the zero-cost steps' estimate.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "generation",
+          "node_id",
+          "epoch",
+          "model",
+          "harness_id",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "estimated_cost_usd",
+          "recorded_at"
+        ],
+        "title": "UsageFactView",
         "type": "object"
       },
       "ValidationError": {
@@ -10633,6 +10751,60 @@
           }
         },
         "summary": "Get Transcript",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/runners/{runner_id}/api/leases/{lease_id}/usage": {
+      "get": {
+        "description": "The usage facts ``lease_id`` recorded \u2014 404 iff no such lease.",
+        "operationId": "get_lease_usage_runners__runner_id__api_leases__lease_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The runner's hub-minted id.",
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "description": "The runner's hub-minted id.",
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lease Usage",
         "tags": [
           "runner"
         ]

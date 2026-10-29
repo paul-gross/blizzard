@@ -82,6 +82,7 @@ from blizzard.runner.api.ticks import router as ticks_router
 from blizzard.runner.api.traces import router as traces_router
 from blizzard.runner.api.transcript_segments import router as transcript_segments_router
 from blizzard.runner.api.transcripts import router as transcripts_router
+from blizzard.runner.api.usage import router as usage_router
 from blizzard.runner.api.wiring import RunnerRegistry, ServedRunner, ServedWorkspace, bind_runner
 from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
@@ -189,6 +190,7 @@ _RUNNER_HUMAN = (
     chunk_detail_router,
     leases_router,
     transcripts_router,
+    usage_router,
     transcript_segments_router,
     selftests_router,
     fleet_summary_router,

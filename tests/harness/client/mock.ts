@@ -74,6 +74,10 @@ export interface MockNodeSpec {
   /** A hub-executed node's choices, by name. */
   judgement?: { choices: Record<string, { description: string; to: string }> };
   produces?: string[];
+  /** `resume` makes the node continue a session; `session_name` pools one session across nodes. */
+  session_name?: string;
+  /** The harnesses the node's session may run under. */
+  session_harnesses?: string[];
 }
 
 /** `POST /_seed/chunk`: a scripted chunk. Only the fields a test sets are named. */

@@ -41,6 +41,7 @@ __all__ = [
     "IWriteHostLaneRepository",
     "IWriteUsageRepository",
     "InvocationCost",
+    "UsageFactRecord",
     "UsageTotals",
     "charge_range",
     "derive_invocation_cost",
@@ -182,6 +183,26 @@ def charge_range(start: _RangeStart | None, end: _RangeStart | None) -> ChargeRa
 
 @domain_model
 @dataclass(frozen=True)
+class UsageFactRecord:
+    """One recorded usage fact as the runner stored it — an invocation's own figures, never a sum."""
+
+    kind: str
+    generation: int
+    node_id: str
+    epoch: int
+    model: str
+    harness_id: str | None
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float | None
+    estimated_cost_usd: float | None
+    recorded_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
 class UsageTotals:
     """A summed window of usage facts, its cost read as the one spend figure. The PARTIAL reading is
     the hub's ``UsageTotal``'s (``src/blizzard/hub/domain/chunk/model.py``): ``estimated_cost_usd`` is
@@ -311,6 +332,11 @@ class IReadUsageRepository(Protocol):
     def usage_since(self, at: datetime) -> UsageTotals:
         """Sum every local usage fact recorded at or after ``at`` — see
         :class:`UsageTotals` for the PARTIAL reading of its figure."""
+        ...
+
+    def lease_usage_facts(self, lease_id: str) -> list[UsageFactRecord]:
+        """Every usage fact recorded for ``lease_id``, oldest first — bounded by the lease's
+        own invocations. An unknown lease and a lease with none read alike: empty."""
         ...
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:

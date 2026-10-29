@@ -301,6 +301,34 @@ class FactListResponse(WireModel):
     items: list[FactView] = []
 
 
+class UsageFactView(WireModel):
+    """One usage fact a lease recorded: an invocation's own tokens and cost, never a sum.
+
+    ``kind`` is the invocation (``spawn``, ``resume``, ``judge``) and ``generation`` the lease's spawn
+    ordinal. A null ``cost_usd`` is an unknown cost; ``estimated_cost_usd`` is the zero-cost steps' estimate."""
+
+    kind: str
+    generation: int
+    node_id: str
+    epoch: int
+    model: str
+    harness_id: str | None
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float | None
+    estimated_cost_usd: float | None
+    recorded_at: str
+
+
+class LeaseUsageResponse(WireModel):
+    """The usage facts one lease recorded, oldest first."""
+
+    lease_id: str
+    items: list[UsageFactView] = []
+
+
 class HarnessHealthView(WireModel):
     """One configured harness binding's own computed health —
     ``GET /api/harness-health``, runner-local diagnostics only. ``cause`` is one of
