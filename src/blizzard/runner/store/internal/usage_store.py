@@ -75,11 +75,7 @@ class UsageStore:
         )
 
     def lease_usage_facts(self, lease_id: str) -> list[UsageFactRecord]:
-        stmt = (
-            self._store.select(usage_facts)
-            .where(usage_facts.c.lease_id == lease_id)
-            .order_by(usage_facts.c.id)
-        )
+        stmt = self._store.select(usage_facts).where(usage_facts.c.lease_id == lease_id).order_by(usage_facts.c.id)
         return [
             UsageFactRecord(
                 kind=row.kind,
