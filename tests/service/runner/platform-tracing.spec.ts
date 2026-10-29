@@ -110,7 +110,7 @@ test.describe('a runner host with platform tracing on', () => {
       expect(posted.status, transport).toBe(200);
     }
     await runnerHost.stop();
-    const cli = platformSpans(runnerHost.otlp!.spans()).filter((span) => span.resource['service.name'] === 'blizzard-cli');
+    const cli = platformSpans(runnerHost.otlp!.spans()).filter((span) => span.resource['service.name'] === 'blizzard-cli' && span.name === 'blizzard artifact create');
     expect(cli, runnerHost.logTail()).toHaveLength(2);
     // The receiver drops a span outside the chunk's trace, so both arriving is the trace-parent proof.
     expect(cli.map((span) => span.traceId)).toEqual([trace, trace]);
