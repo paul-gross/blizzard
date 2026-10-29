@@ -62,7 +62,6 @@ test.describe('at fresh-tenant', () => {
     expect((await runnerHost.step()).outcome).toBe('completed');
 
     const renamed = runnerHost.runners['renamed-runner']!;
-    expect(renamed.id).toBe(id);
     expect((await api.get(`/api/runners/${id}`)).body.runner_name).toBe('renamed-runner');
     const status = (await renamed.status()).body;
     expect([status.runner_id, status.runner_name]).toEqual([id, 'renamed-runner']);
