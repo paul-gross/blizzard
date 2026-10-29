@@ -30,6 +30,7 @@ from blizzard.runner.usage.repository import (
     ContextSampleState,
     InvocationCost,
     IWriteUsageRepository,
+    UsageFactRecord,
     UsageTotals,
 )
 
@@ -72,6 +73,31 @@ class UsageStore:
             cost_partial=bool(row.cost_partial),
             estimated_cost_usd=float(row.estimated_cost_usd) if row.estimated_cost_usd is not None else None,
         )
+
+    def lease_usage_facts(self, lease_id: str) -> list[UsageFactRecord]:
+        stmt = (
+            self._store.select(usage_facts)
+            .where(usage_facts.c.lease_id == lease_id)
+            .order_by(usage_facts.c.id)
+        )
+        return [
+            UsageFactRecord(
+                kind=row.kind,
+                generation=row.generation,
+                node_id=row.node_id,
+                epoch=row.epoch,
+                model=row.model,
+                harness_id=row.harness_id,
+                input_tokens=row.input_tokens,
+                output_tokens=row.output_tokens,
+                cache_read_tokens=row.cache_read_tokens,
+                cache_create_tokens=row.cache_create_tokens,
+                cost_usd=row.cost_usd,
+                estimated_cost_usd=row.estimated_cost_usd,
+                recorded_at=as_utc(row.recorded_at),
+            )
+            for row in self._store.all(stmt)
+        ]
 
     def session_cost_basis(self, lease_id: str) -> SessionCostBasis | None:
         with self._store.connect() as conn:

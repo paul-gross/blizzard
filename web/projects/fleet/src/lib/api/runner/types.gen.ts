@@ -2619,6 +2619,22 @@ export type LeaseListResponse = {
 };
 
 /**
+ * LeaseUsageResponse
+ *
+ * The usage facts one lease recorded, oldest first.
+ */
+export type LeaseUsageResponse = {
+    /**
+     * Items
+     */
+    items: Array<UsageFactView>;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+};
+
+/**
  * LeaseView
  *
  * One lease — active or recently-closed — with its joined binding facts and
@@ -4267,6 +4283,69 @@ export type UnmatchedBindingView = {
      * Workdir
      */
     workdir: string;
+};
+
+/**
+ * UsageFactView
+ *
+ * One usage fact a lease recorded: an invocation's own tokens and cost, never a sum.
+ *
+ * ``kind`` is the invocation (``spawn``, ``resume``, ``judge``) and ``generation`` the lease's spawn
+ * ordinal. A null ``cost_usd`` is an unknown cost; ``estimated_cost_usd`` is the zero-cost steps' estimate.
+ */
+export type UsageFactView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd: number | null;
+    /**
+     * Generation
+     */
+    generation: number;
+    /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
 };
 
 /**
@@ -6456,6 +6535,42 @@ export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses =
 };
 
 export type GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponse = GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses[keyof GetTranscriptRunnersRunnerIdApiLeasesLeaseIdTranscriptGetResponses];
+
+export type GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Runner Id
+         *
+         * The runner's hub-minted id.
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/runners/{runner_id}/api/leases/{lease_id}/usage';
+};
+
+export type GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetError = GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetErrors[keyof GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetErrors];
+
+export type GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseUsageResponse;
+};
+
+export type GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetResponse = GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetResponses[keyof GetLeaseUsageRunnersRunnerIdApiLeasesLeaseIdUsageGetResponses];
 
 export type GetRunnerRunnersRunnerIdApiRunnerGetData = {
     body?: never;
