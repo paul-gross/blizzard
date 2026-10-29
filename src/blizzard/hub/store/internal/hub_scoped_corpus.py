@@ -6,11 +6,9 @@ closed tenant — one with a ``tenant_deletions`` row, whether its drain is stil
 through the one predicate ``corpus_rows.open_tenant``, applied to every tenant-owned table a read
 returns rows of; the same predicate leaves out a row naming no tenant. A probe that gates a pass
 (``bzh:probe-gated-pass``) is read hub-wide in one statement and answers per tenant
-(``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. Chunk ids are
-hub-minted, so a filter on a chunk id needs no tenant beside it; a segment id is runner-minted, so a
-read that matches one segment row against another matches the tenant too. The group reads and never
-writes. The trace and egress
-reads' statements live in ``corpus_rows`` and run on the marked connection this group opens."""
+(``bzh:pass-isolates-tenants``): it counts every tenant's rows, closed or not. The group reads and never
+writes. The statements live in ``corpus_rows`` (which owns the id-minting rule for tenant
+matching) and run on the marked connection this group opens."""
 
 from __future__ import annotations
 
