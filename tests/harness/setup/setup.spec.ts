@@ -7,7 +7,7 @@ import { runDir } from '../env';
 import { signInSuperuser } from '../auth';
 import { HubInternal } from '../client/internal';
 import { furnishCommonTenant, hubsFile, type HubCoordinates, type ProjectHubs, startHubStack } from '../hubs';
-import { assertProfilesSound, discoverProfiles, readProfile } from '../profiles';
+import { assertProfilesSound, discoverProfiles, profileEnv, readProfile } from '../profiles';
 
 const FIRST_WAIT_MS = 120_000;
 
@@ -54,7 +54,7 @@ test('start the profile’s shared hubs', async ({ playwright }, testInfo) => {
   const count = folder.name === '' ? Math.ceil(testInfo.config.workers / WORKERS_PER_HUB) : 1;
   const profile = readProfile(folder.file);
   const started = await Promise.allSettled(
-    Array.from({ length: count }, (_, index) => startHubStack(path.join(runDir(), project, `hub-${index}`), index, profile)),
+    Array.from({ length: count }, (_, index) => startHubStack(path.join(runDir(), project, `hub-${index}`), index, profile, profileEnv(folder.name))),
   );
   const hubs = started.flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []));
   const failure = started.find((outcome) => outcome.status === 'rejected');

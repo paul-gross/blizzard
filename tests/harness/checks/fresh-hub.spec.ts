@@ -17,6 +17,11 @@ plain.describe('the hub options are refused before any hub starts', () => {
     expect(() => requireHubOptions('fresh-hub', {}, { BLIZZARD_TENANT_GUARD: '0' })).toThrow(/BLIZZARD_TENANT_GUARD/);
   });
 
+  plain('a hubEnv name a profile owns is refused, naming the variable', () => {
+    expect(() => requireHubOptions('fresh-hub', {}, { BLIZZARD_TEST_ACTIONS: '1' })).toThrow(/hubEnv BLIZZARD_TEST_ACTIONS/);
+    expect(() => requireHubOptions('fresh-hub', {}, { BLIZZARD_CRASH_FENCE: '1' })).toThrow(/hubEnv BLIZZARD_CRASH_FENCE/);
+  });
+
   plain('either option below fresh-hub is refused, naming fresh-hub', () => {
     expect(() => requireHubOptions('fresh-tenant', { tracing: { platform: true } }, {})).toThrow(/hubConfig.*fresh-hub/);
     expect(() => requireHubOptions('common', {}, { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:1' })).toThrow(/hubEnv.*fresh-hub/);

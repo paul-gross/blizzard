@@ -30,14 +30,22 @@ export default defineConfig({
       // The harness's own proof runs on the default profile's setup and is selected by name, never by `service-*`.
       name: 'harness',
       testDir: 'harness/checks',
-      // The auth checks run under their own project, on the auth profile's hubs; the runner checks under theirs, on no hub.
-      testIgnore: ['**/checks/auth/**', '**/checks/runner/**'],
+      // The auth checks run under their own project, on the auth profile's hubs; the actions checks under theirs, on the actions profile's; the runner checks under theirs, on no hub.
+      testIgnore: ['**/checks/auth/**', '**/checks/actions/**', '**/checks/runner/**'],
       dependencies: ['setup-service-hub'],
     },
     {
       name: 'harness-auth',
       testDir: 'harness/checks/auth',
       dependencies: ['setup-service-hub-auth'],
+      workers: 1,
+    },
+    {
+      // The actions profile's hubs carry the test-action fence; one hub, one worker, as any non-default profile.
+      name: 'harness-actions',
+      testDir: 'harness/checks/actions',
+      // The default shared hub is the refusal's control: the fence reaches no hub but this profile's.
+      dependencies: ['setup-service-hub-actions', 'setup-service-hub'],
       workers: 1,
     },
     {

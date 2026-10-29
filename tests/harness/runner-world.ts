@@ -18,6 +18,7 @@ export interface RunnerHostFixtureOptions {
   runnerOtlp: RunnerHostOptions['runnerOtlp'];
   runnerBundle: RunnerHostOptions['runnerBundle'];
   runnerStubs: RunnerHostOptions['runnerStubs'];
+  runnerWinterTrap: RunnerHostOptions['runnerWinterTrap'];
 }
 
 /** Makes further runner hosts beside the test's own, each with options of its own over the test's. */
@@ -92,6 +93,7 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   runnerOtlp: [DEFAULT_RUNNER_OPTIONS.runnerOtlp, { option: true }],
   runnerBundle: [DEFAULT_RUNNER_OPTIONS.runnerBundle, { option: true }],
   runnerStubs: [DEFAULT_RUNNER_OPTIONS.runnerStubs, { option: true }],
+  runnerWinterTrap: [DEFAULT_RUNNER_OPTIONS.runnerWinterTrap, { option: true }],
 
   vendorUsage: async ({}, use) => {
     const vendor = await startVendorUsage();
@@ -112,10 +114,10 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
   },
 
   runnerHosts: async (
-    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs },
+    { runnerBinding, runnerHostBuilder: builder, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs, runnerWinterTrap },
     use,
   ) => {
-    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs };
+    const defaults = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerBundle, runnerStubs, runnerWinterTrap };
     await use({
       create: async (options = {}) => {
         runnerBinding.admit?.();

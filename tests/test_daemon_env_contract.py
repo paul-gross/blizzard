@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.cli.config_inputs import STRICT_CONFIG_ENVIRONMENT_VARIABLE
+from blizzard.foundation import crash
 from blizzard.foundation.runner_token_names import HUB_TOKEN_VARIABLE_PREFIX
 from blizzard.hub.cli.context import ENV_HUB_TENANT
 from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
@@ -40,3 +41,7 @@ def test_refusals_name_the_two_statement_guard_exceptions() -> None:
 def test_hub_coordinates_are_unset_and_the_token_prefix_is_stripped() -> None:
     assert {ENV_HUB_URL, ENV_HUB_TENANT} <= set(DAEMON_ENV["unset"])
     assert HUB_TOKEN_VARIABLE_PREFIX.rstrip("_") in DAEMON_ENV["unsetPrefixes"]
+
+
+def test_the_crash_point_is_unset_so_no_ambient_arming_reaches_a_daemon() -> None:
+    assert crash.ENV_CRASH_POINT in DAEMON_ENV["unset"]

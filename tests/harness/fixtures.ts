@@ -304,6 +304,7 @@ export const runnerTest = mockWorld;
 export type * as RunnerWire from './client/wire/runner/types.gen';
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export type { OtlpSink, ReceivedItem, ReceivedSpan } from './otlp-sink';
+export type { EgressReader, EgressRow } from './egress';
 export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
 export type { Bounce, Delivered, Federation } from './federation';

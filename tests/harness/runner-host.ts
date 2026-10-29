@@ -13,6 +13,7 @@ import { BLIZZARD_ROOT, binDir, daemonEnv, mockBinDir, readContract, requireBina
 import { scanLog } from './logs';
 import { checkOwnedKeys, checkProfile, expandProfile, mergeHostProfile, parseProfile, type TomlTable } from './profiles';
 import { type OtlpSink, startOtlpSink } from './otlp-sink';
+import { type OriginReads, originReads } from './runner-git';
 import type { VendorUsage } from './vendor-usage';
 
 /** The Linux `sockaddr_un` bound the host's `host.sock` must fit, terminator excluded. */
@@ -59,6 +60,11 @@ export interface RunnerHostOptions {
    * of a test-owned cache home the host's `XDG_CACHE_HOME` names. A `runnerEnv` naming `XDG_CACHE_HOME` wins.
    */
   runnerModelPrices: Record<string, Record<string, { input: number; output: number; cache_read: number; cache_write: number }>>;
+  /**
+   * Puts a `winter` that records its invocation and exits 99 first on the host's `PATH`, over the ambient one, so a host
+   * that reaches for winter is caught; the handle's `winterInvoked()` reports it. A `runnerEnv.PATH` beside it is refused.
+   */
+  runnerWinterTrap: boolean;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -72,10 +78,11 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerBundle: {},
   runnerStubs: {},
   runnerModelPrices: {},
+  runnerWinterTrap: false,
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
-export interface RunnerHost {
+export interface RunnerHost extends OriginReads {
   /** The host directory. */
   readonly dir: string;
   /** Minted fixture workspace; its basic provider creates one environment named for each chunk. */
@@ -138,6 +145,8 @@ export interface RunnerHost {
   cli(args: string[]): Promise<CliResult>;
   /** Change documented host files only while stopped; tokens must have been minted by enrollment, not this seam. */
   prepareStopped(layout: { hostToken?: string; runnerTokens?: Record<string, string>; runnerSubscriptions?: Record<string, string>; runnerIds?: Record<string, string> }): void;
+  /** Whether the winter trap has been run since the host was built; `false` on a host built without `runnerWinterTrap`. */
+  winterInvoked(): boolean;
   /** The commit a branch of the minted world's bare origin `repo` points at, or `undefined` when the branch is not there. */
   originHead(repo: string, branch: string): Promise<string | undefined>;
   /** The session records the mock harness kept in the minted workspace, each parsed, in file-name order. */
@@ -279,8 +288,10 @@ export function profileFor(specFile: string, inline: TomlTable): TomlTable {
 }
 
 /** Every problem in a host profile and its env; nothing has started when this is asked. */
-export function checkHostOptions(profile: TomlTable, runnerEnv: Record<string, string>): string[] {
-  return [...checkProfile(profile, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(profile), ...checkRunnerEnv(runnerEnv)];
+export function checkHostOptions(profile: TomlTable, runnerEnv: Record<string, string>, winterTrap = false): string[] {
+  const problems = [...checkProfile(profile, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(profile), ...checkRunnerEnv(runnerEnv)];
+  if (winterTrap && 'PATH' in runnerEnv) problems.push('runnerEnv PATH: runnerWinterTrap puts the trap first on PATH, so a test cannot also set it');
+  return problems;
 }
 
 /** The refusal for a socket path over the limit, naming the path and its length; `undefined` when it fits. */
@@ -314,7 +325,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
   const create = async (given: Partial<RunnerHostOptions> = {}): Promise<RunnerHost> => {
     let options: RunnerHostOptions = { ...DEFAULT_RUNNER_OPTIONS, ...given };
     const profile = profileFor(testInfo.file, options.runnerConfig);
-    const problems = checkHostOptions(profile, options.runnerEnv);
+    const problems = checkHostOptions(profile, options.runnerEnv, options.runnerWinterTrap);
     if (problems.length > 0) throw new Error(`the runner host options are unsound:\n${problems.join('\n')}`);
 
     const index = count++;
@@ -376,6 +387,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         options = { ...options, runnerEnv: { XDG_CACHE_HOME: cache, ...options.runnerEnv } };
       }
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
+      const trapDir = path.join(root, 'trap');
+      const trapSentinel = path.join(trapDir, 'winter-invoked');
+      if (options.runnerWinterTrap) {
+        fs.mkdirSync(trapDir, { recursive: true });
+        fs.writeFileSync(path.join(trapDir, 'winter'), `#!/bin/sh\ntouch '${trapSentinel}'\nexit 99\n`, { mode: 0o755 });
+        env.PATH = [trapDir, env.PATH].filter((entry) => entry !== undefined && entry !== '').join(path.delimiter);
+      }
       const cliEnv = (configHome: string): NodeJS.ProcessEnv => ({ ...env, XDG_CONFIG_HOME: configHome });
       const run = async (command: string, args: string[], cliHome: string): Promise<CliResult> => {
         const result = await runCommand(command, args, { env: cliEnv(cliHome), cwd: root });
@@ -516,7 +534,9 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const runners: RunnerHost['runners'] = {};
       for (const entry of entries) runners[entry.name] = { ...api.runner(entry.id), id: entry.id, name: entry.name };
 
+      const reads = originReads(origins, env, root);
       return {
+        ...reads,
         dir,
         workspace,
         url,
@@ -625,6 +645,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
             runners[name] = { ...api.runner(id), id, name };
           }
         },
+        winterInvoked: () => fs.existsSync(trapSentinel),
         async originHead(repo, branch) {
           const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;

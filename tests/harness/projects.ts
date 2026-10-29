@@ -11,12 +11,13 @@ export const SERVICE_FLEET_DIR = path.join(SERVICE_DIR, 'fleet');
 export type Project = NonNullable<PlaywrightTestConfig['projects']>[number];
 
 /**
- * Where a project's tests ride a hub: `harness` and `harness-auth` ride the default and `auth` profiles, and
- * `service-fleet[-x]` rides `service-hub[-x]`. Any other project is its own profile's.
+ * Where a project's tests ride a hub: `harness`, `harness-auth` and `harness-actions` ride the default, `auth` and
+ * `actions` profiles, and `service-fleet[-x]` rides `service-hub[-x]`. Any other project is its own profile's.
  */
 export function profileProject(projectName: string): string {
   if (projectName === 'harness') return 'service-hub';
   if (projectName === 'harness-auth') return 'service-hub-auth';
+  if (projectName === 'harness-actions') return 'service-hub-actions';
   const fleet = /^service-fleet(-.+)?$/.exec(projectName);
   if (fleet !== null) return `service-hub${fleet[1] ?? ''}`;
   return projectName;

@@ -6,6 +6,7 @@ import { startHub } from './daemons/hub';
 import { startIdp } from './daemons/idp';
 import { type DaemonRecord, type LiveDaemon, recordOf, stopDaemon } from './daemons/process';
 import { HubInternal } from './client/internal';
+import { egressDirectory } from './egress';
 import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
@@ -49,6 +50,8 @@ export interface HubCoordinates {
   commonTenantId?: string;
   /** Present only when the hub's configuration turns authentication on; the one way to ask whether it is. */
   auth?: HubAuth;
+  /** The directory `${egress}` expands to in the hub's profile. */
+  egressPath: string;
   logPath: string;
   forgeLogPath: string;
   daemons: DaemonRecord[];
@@ -76,13 +79,14 @@ export function readProjectHubs(project: string): ProjectHubs {
 export interface HubStack {
   coordinates: HubCoordinates;
   hub: LiveDaemon;
-  /** The profile as the hub's file was written, `${forge}` and `${idp}` expanded; a data reset writes it again. */
+  /** The profile as the hub's file was written, `${forge}`, `${idp}` and `${egress}` expanded; a data reset writes it again. */
   profile: TomlTable;
 }
 
 /**
  * A hub, a mock forge, and a stub IdP of its own. The forge and IdP start first, so the profile's `${forge}` and
- * `${idp}` expand to their URLs before the hub's file is written; `hubEnv` reaches the hub process only.
+ * `${idp}` expand to their URLs before the hub's file is written, and `${egress}` to the stack's export directory;
+ * `hubEnv` reaches the hub process only.
  */
 export async function startStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubStack> {
   const beside = await Promise.allSettled([startForge(dir), startIdp(dir)]);
@@ -95,7 +99,9 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
   }
   const [forge, idp] = running as [DaemonRecord, DaemonRecord];
   let hub: LiveDaemon;
-  const expanded = expandProfile(profile, { idp: idp.url, forge: forge.url });
+  // The export fails its first pass on a directory that does not exist, so the stack makes the one `${egress}` names.
+  fs.mkdirSync(egressDirectory(dir), { recursive: true });
+  const expanded = expandProfile(profile, { idp: idp.url, forge: forge.url, egress: egressDirectory(dir) });
   try {
     hub = await startHub(dir, expanded, hubEnv);
   } catch (error) {
@@ -111,6 +117,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
       forgeUrl: forge.url,
       idpUrl: idp.url,
       auth: authOf(expanded),
+      egressPath: egressDirectory(dir),
       logPath: hub.logPath,
       forgeLogPath: forge.logPath,
       // Plain records: the coordinates are serialized to the run's hubs file.
@@ -119,8 +126,8 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
   };
 }
 
-export async function startHubStack(dir: string, index: number, profile: TomlTable): Promise<HubCoordinates> {
-  return (await startStack(dir, index, profile)).coordinates;
+export async function startHubStack(dir: string, index: number, profile: TomlTable, hubEnv: Record<string, string> = {}): Promise<HubCoordinates> {
+  return (await startStack(dir, index, profile, hubEnv)).coordinates;
 }
 
 /**

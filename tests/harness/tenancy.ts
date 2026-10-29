@@ -7,12 +7,13 @@ import { base, uniqueName } from './base';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, recorderFor } from './client/latency';
 import { hostHub, initHub } from './daemons/hub';
+import { type EgressReader, egressReader } from './egress';
 import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
 import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
 import { profileProject } from './projects';
-import { checkProfile, discoverProfiles, mergeProfile, readProfile, type TomlTable } from './profiles';
+import { checkProfile, discoverProfiles, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
 
 export { profileProject };
 
@@ -36,19 +37,23 @@ export function resolveLevel(declared: Level | undefined, raise: boolean): Level
   return { declared, served: raise ? above : declared };
 }
 
+/** What a test's `hubConfig` may name as `${name}`: the stack's addresses, and the export directory only a hub of its own has. */
+const HUB_CONFIG_PLACEHOLDERS = ['idp', 'forge', 'egress'];
+
 /**
  * What a test may hand a hub of its own, and only at `fresh-hub`: `hubConfig` and `hubEnv` are refused anywhere else, a
- * misspelled `hubConfig` key and a `hubEnv` name the environment contract sets are refused everywhere. Throws before
+ * misspelled `hubConfig` key and a `hubEnv` name the environment contract or a profile sets are refused everywhere. Throws before
  * any hub starts.
  */
-export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: Record<string, string>, contractSet: string[] = Object.keys(readContract().set)): void {
+export function requireHubOptions(served: Level, hubConfig: TomlTable, hubEnv: Record<string, string>, contractSet: string[] = Object.keys(readContract().set), ownedByProfile: string[] = profileEnvNames()): void {
   const named = [...(Object.keys(hubConfig).length > 0 ? ['hubConfig'] : []), ...(Object.keys(hubEnv).length > 0 ? ['hubEnv'] : [])];
   if (named.length > 0 && served !== 'fresh-hub') {
     throw new Error(`${named.join(' and ')} reach a hub of the test's own, and this test is served "${served}". Declare isolation "fresh-hub".`);
   }
-  const problems = checkProfile(hubConfig).map((problem) => `hubConfig ${problem}`);
+  const problems = checkProfile(hubConfig, { placeholders: [...HUB_CONFIG_PLACEHOLDERS] }).map((problem) => `hubConfig ${problem}`);
   for (const name of Object.keys(hubEnv)) {
     if (contractSet.includes(name)) problems.push(`hubEnv ${name}: the environment contract (daemon-env.json) sets it, so a test cannot change it`);
+    if (ownedByProfile.includes(name)) problems.push(`hubEnv ${name}: a hub profile sets it (harness/profiles.ts), so a test cannot change it`);
   }
   if (problems.length > 0) throw new Error(`the hub options are unsound:\n${problems.join('\n')}`);
 }
@@ -148,6 +153,10 @@ export interface TestFixtures {
   hubConfig: TomlTable;
   /** Environment for the fresh hub's process; `fresh-hub` only. */
   hubEnv: Record<string, string>;
+  /**
+   * Reads the export directory a fresh hub writes, which the test's `hubConfig` names as `${egress}`; `fresh-hub` only.
+   */
+  egress: EgressReader;
   level: LevelInfo;
   freshHub: FreshHub;
   testHub: TestHub;
@@ -229,7 +238,9 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
     const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
     const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
-    const stack = await startStack(dir, 0, profile, hubEnv);
+    // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
+    const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
+    const stack = await startStack(dir, 0, profile, env);
     const { coordinates } = stack;
     let hubProcess = stack.hub;
     const control: FreshHubControl = {
@@ -243,14 +254,14 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       },
       start: async () => {
         if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
-        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
         return coordinates;
       },
       reset: async () => {
         if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before reset()');
         fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
         await initHub(dir, stack.profile);
-        hubProcess = await hostHub(dir, { env: hubEnv, port: Number(new URL(coordinates.url).port) });
+        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
         return coordinates;
       },
     };
@@ -281,6 +292,11 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       throw new Error(`freshHub is the lifecycle of a hub of the test's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
     }
     await use(testHub.lifecycle);
+  },
+
+  egress: async ({ level, testHub }, use) => {
+    if (!testHub.fresh) throw new Error(`egress reads the export directory of a hub of the test's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
+    await use(egressReader(testHub.coordinates.egressPath));
   },
 
   tenantOf: async ({ level, testHub, adminClient, touched }, use, testInfo) => {
