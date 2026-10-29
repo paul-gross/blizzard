@@ -29,6 +29,7 @@ from blizzard.hub.composition import (
     build_tenant_stores,
 )
 from blizzard.hub.events.brokers import TenantBrokers
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -209,7 +210,7 @@ def test_hub_scoped_reads_mark_every_statement_they_issue(tmp_path: Path) -> Non
 
 
 def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubServices:
-    def work_sources(_stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
+    def work_sources(_stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
         return WorkSourceRegistry({})
 
     return build_services(

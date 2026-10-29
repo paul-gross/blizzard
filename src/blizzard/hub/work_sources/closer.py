@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
@@ -11,6 +12,11 @@ from blizzard.hub.domain.chunk.model import WorkRef
 class WorkCloseError(Exception):
     """The forge write for closure failed — an unreachable forge, a rate limit, or
     an insufficient-scope token."""
+
+    def __init__(self, message: str = "", *, retry_after: datetime | None = None) -> None:
+        super().__init__(message)
+        #: Set only when the forge's rate budget turned the call away or the forge refused it for rate: when to retry.
+        self.retry_after = retry_after
 
 
 class WorkItemGoneError(WorkCloseError):

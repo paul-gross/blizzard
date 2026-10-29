@@ -23,6 +23,7 @@ from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeId
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceFields, WorkSourceId
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.tenancy import StoreScope
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
@@ -96,6 +97,7 @@ def _registry_world(
         work_item_store=stores.work_item_store,
         edits=stores.work_item_edits,
         resolution=stores.garden_proposal_resolution,
+        budgets=ForgeBudgets(clock=clock),
         close_forge_writes_enabled=close_forge_writes_enabled,
     )
     return registry, authoring, stores, ids

@@ -118,6 +118,7 @@ from blizzard.hub.egress.writer import (
     validate_batch,
 )
 from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema
@@ -1440,7 +1441,7 @@ def build_hub(
     closers[RESERVED_HUB_SOURCE_NAME] = hub_source
     work_source_registry = WorkSourceRegistry(built_sources, closers=closers, editors=editors)
 
-    def tenant_work_sources(stores: TenantStores, _live: LiveConfig) -> IWorkSourceRegistry:
+    def tenant_work_sources(stores: TenantStores, _live: LiveConfig, _budgets: ForgeBudgets) -> IWorkSourceRegistry:
         # The default tenant reads the fakes; any other tenant holds only its own built-in source.
         if stores.scope == default:
             return work_source_registry

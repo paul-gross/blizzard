@@ -9,16 +9,19 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import ClassVar
 
 import httpx2
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import adapter_model
+from blizzard.foundation.untyped import as_table
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
+from blizzard.hub.work_sources.rate_gate import IWorkSourceRateGate
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 _log = get_logger("blizzard.hub.work_sources")
@@ -63,10 +66,21 @@ class GitHubWorkSource:
     Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
     :class:`~blizzard.hub.work_sources.closer.IWorkCloser` over the same client."""
 
-    def __init__(self, client: httpx2.Client, *, source_id: str, slug: str, repo: str, web_base: str) -> None:
+    def __init__(
+        self,
+        client: httpx2.Client,
+        *,
+        source_id: str,
+        slug: str,
+        repo: str,
+        web_base: str,
+        gate: IWorkSourceRateGate | None = None,
+    ) -> None:
         """``source_id`` is the key every pointer it parses holds; ``slug`` is the source's current slug, which its
-        labels and error text render — the adapter is rebuilt when the record's revision moves."""
+        labels and error text render — the adapter is rebuilt when the record's revision moves. ``gate`` admits each
+        forge-calling method once before its first request; ``None`` admits every call."""
         self._client = client
+        self._gate = gate
         self._id = source_id
         self._name = slug
         self._repo = repo
@@ -87,7 +101,21 @@ class GitHubWorkSource:
             return WorkRef(source=self._id, ref=match["number"])
         return None
 
+    def _turned_away(self) -> datetime | None:
+        return self._gate.admit() if self._gate is not None else None
+
+    def _rate_refusal(self, exc: httpx2.HTTPError) -> datetime | None:
+        """When ``exc`` is the forge refusing for rate, the instant it lifts — the gate marking the budget spent."""
+        if self._gate is None or not isinstance(exc, httpx2.HTTPStatusError):
+            return None
+        response = exc.response
+        return self._gate.refused(response.status_code, response.headers, _message(response))
+
     def fetch(self, pointer: WorkRef) -> WorkItem:
+        if (resume_at := self._turned_away()) is not None:
+            raise WorkSourceError(
+                f"{self._name}#{pointer.ref}: rate budget low until {resume_at}", retry_after=resume_at
+            )
         base = f"/repos/{self._repo}/issues/{pointer.ref}"
         try:
             issue = self._client.get(base)
@@ -96,7 +124,9 @@ class GitHubWorkSource:
             comments.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("work-item fetch failed", source=pointer.source, ref=pointer.ref, error=str(exc))
-            raise WorkSourceError(f"failed to read {self._name}#{pointer.ref}: {exc}") from exc
+            raise WorkSourceError(
+                f"failed to read {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)
+            ) from exc
         return WorkItem(
             body=str(issue.json().get("body") or ""),
             title=str(issue.json().get("title") or ""),
@@ -132,11 +162,16 @@ class GitHubWorkSource:
                     resp.raise_for_status()
             except httpx2.HTTPError as exc:
                 _log.error("label bootstrap failed", source=self._name, label=label.name, error=str(exc))
-                raise WorkAnnotateError(f"failed to bootstrap label {label.name!r} for {self._name}: {exc}") from exc
+                raise WorkAnnotateError(
+                    f"failed to bootstrap label {label.name!r} for {self._name}: {exc}",
+                    retry_after=self._rate_refusal(exc),
+                ) from exc
         self._labels_bootstrapped = True
 
     def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
         """Add ``marker``'s label and delete the other one's, a 404 on the delete tolerated."""
+        if (resume_at := self._turned_away()) is not None:
+            raise WorkAnnotateError(f"{self._name}: rate budget low until {resume_at}", retry_after=resume_at)
         self._ensure_labels_bootstrapped()
         try:
             added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[Label(marker).name])
@@ -147,11 +182,16 @@ class GitHubWorkSource:
                 resp.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("set-status failed", source=self._name, ref=pointer.ref, marker=marker.value, error=str(exc))
-            raise WorkAnnotateError(f"failed to set {marker.value} on {self._name}#{pointer.ref}: {exc}") from exc
+            raise WorkAnnotateError(
+                f"failed to set {marker.value} on {self._name}#{pointer.ref}: {exc}",
+                retry_after=self._rate_refusal(exc),
+            ) from exc
 
     def clear_status(self, pointer: WorkRef) -> None:
         """Remove every marker label from ``pointer`` — a 404 (label already
         absent) is the expected steady state, not a failure."""
+        if (resume_at := self._turned_away()) is not None:
+            raise WorkAnnotateError(f"{self._name}: rate budget low until {resume_at}", retry_after=resume_at)
         self._ensure_labels_bootstrapped()
         try:
             for marker in WorkStatusMarker:
@@ -160,7 +200,9 @@ class GitHubWorkSource:
                     resp.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("clear-status failed", source=self._name, ref=pointer.ref, error=str(exc))
-            raise WorkAnnotateError(f"failed to clear status on {self._name}#{pointer.ref}: {exc}") from exc
+            raise WorkAnnotateError(
+                f"failed to clear status on {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)
+            ) from exc
 
     def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
         """Every ref this repo currently labels, discovered per marker via a
@@ -168,6 +210,8 @@ class GitHubWorkSource:
         stale label, and GitHub's default page size would silently strand labels
         past the first page. Pull-request entries (GitHub's issue-list endpoint
         returns both) are filtered out."""
+        if (resume_at := self._turned_away()) is not None:
+            raise WorkAnnotateError(f"{self._name}: rate budget low until {resume_at}", retry_after=resume_at)
         found: dict[WorkRef, set[WorkStatusMarker]] = {}
         try:
             for marker in WorkStatusMarker:
@@ -190,13 +234,19 @@ class GitHubWorkSource:
                     params = None  # the Link header's next URL already carries the query
         except httpx2.HTTPError as exc:
             _log.error("marked-refs discovery failed", source=self._name, error=str(exc))
-            raise WorkAnnotateError(f"failed to discover marked refs for {self._name}: {exc}") from exc
+            raise WorkAnnotateError(
+                f"failed to discover marked refs for {self._name}: {exc}", retry_after=self._rate_refusal(exc)
+            ) from exc
         return {ref: frozenset(markers) for ref, markers in found.items()}
 
     # -- IWorkCloser -----------------------------------------------------------
 
     def close(self, pointer: WorkRef, *, trace: DeliveryTrace | None) -> None:
         """Post the marker-deduped trace comment (if ``trace``), then ``PATCH`` closed; a 404/410 is gone."""
+        if (resume_at := self._turned_away()) is not None:
+            raise WorkCloseError(
+                f"{self._name}#{pointer.ref}: rate budget low until {resume_at}", retry_after=resume_at
+            )
         try:
             if trace is not None:
                 self._post_trace_once(pointer, trace)
@@ -209,7 +259,9 @@ class GitHubWorkSource:
             resp.raise_for_status()
         except httpx2.HTTPError as exc:
             _log.error("close failed", source=self._name, ref=pointer.ref, error=str(exc))
-            raise WorkCloseError(f"failed to close {self._name}#{pointer.ref}: {exc}") from exc
+            raise WorkCloseError(
+                f"failed to close {self._name}#{pointer.ref}: {exc}", retry_after=self._rate_refusal(exc)
+            ) from exc
 
     def _post_trace_once(self, pointer: WorkRef, trace: DeliveryTrace) -> None:
         marker = _trace_marker(trace.chunk_id)
@@ -230,6 +282,16 @@ class GitHubWorkSource:
         if resp.status_code in (404, 410):
             raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
         resp.raise_for_status()
+
+
+def _message(response: httpx2.Response) -> str:
+    """The forge's ``message`` field, or the empty string when the answer carries none."""
+    try:
+        table = as_table(response.json()) if response.content else None
+    except ValueError:
+        return response.text
+    message = table.get("message") if table is not None else None
+    return message if isinstance(message, str) else ""
 
 
 def _trace_marker(chunk_id: str) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -41,6 +42,11 @@ _MARKER_BY_STATUS: dict[ChunkStatus, WorkStatusMarker | None] = {
 class WorkAnnotateError(Exception):
     """The forge write/read for annotation failed — an unreachable forge, a
     rate limit, or an insufficient-scope token."""
+
+    def __init__(self, message: str = "", *, retry_after: datetime | None = None) -> None:
+        super().__init__(message)
+        #: Set only when the forge's rate budget turned the call away or the forge refused it for rate: when to retry.
+        self.retry_after = retry_after
 
 
 class IWorkAnnotator(Protocol):

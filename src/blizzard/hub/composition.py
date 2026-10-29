@@ -906,7 +906,7 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
 
 
 #: Builds a tenant's work-source registry over its stores and its live configuration.
-type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig], IWorkSourceRegistry]
+type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], IWorkSourceRegistry]
 
 #: Builds a tenant's forge registry over its stores, its live configuration, and its rate budgets.
 type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], ForgeRegistry]
@@ -979,7 +979,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     live = build_live_config(stores, cipher=parts.secret_cipher)
     # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
     forge_budgets = ForgeBudgets(clock=clock)
-    work_sources = parts.work_sources(stores, live)
+    work_sources = parts.work_sources(stores, live, forge_budgets)
     forges = parts.forges(stores, live, forge_budgets)
     transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)

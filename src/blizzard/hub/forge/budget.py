@@ -155,6 +155,10 @@ class ForgeBudgets:
         with budget.lock:
             return tuple(budget.readings[name] for name in sorted(budget.readings))
 
+    def sweeping(self, forge_id: str, secret_name: str | None) -> SweepingGate:
+        """The gate ``sweeping`` callers outside the forge seam pass ``(forge_id, secret_name)``'s budget through."""
+        return SweepingGate(self, BudgetKey(forge_id, secret_name), self._clock)
+
     def drain_notices(self) -> tuple[BudgetNotice, ...]:
         """Every notice queued since the last drain, oldest first."""
         with self._guard:
@@ -189,6 +193,31 @@ class ForgeBudgets:
         )
         with self._guard:
             self._notices.append(notice)
+
+
+@dataclass(frozen=True)
+class SweepingGate:
+    """One key's budget bound at ``sweeping``: admission answered rather than raised, refusals read by the one rule."""
+
+    budgets: ForgeBudgets
+    key: BudgetKey
+    clock: IClock
+
+    def admit(self) -> datetime | None:
+        try:
+            self.budgets.admit(self.key, ForgePriority.SWEEPING)
+        except ForgeBudgetLow as exc:
+            return exc.resume_at
+        return None
+
+    def learn(self, headers: Mapping[str, str]) -> None:
+        self.budgets.learn(self.key, headers)
+
+    def refused(self, status: int, headers: Mapping[str, str], message: str) -> datetime | None:
+        resume_at = rate_refusal_resume_at(status, headers, message, self.clock.now())
+        if resume_at is not None:
+            self.budgets.spent(self.key, resume_at)
+        return resume_at
 
 
 def rate_refusal_resume_at(status: int, headers: Mapping[str, str], message: str, now: datetime) -> datetime | None:
