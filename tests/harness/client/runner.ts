@@ -4,6 +4,12 @@ import { type ApiResponse, type Engine, expecting, type LogContext, type Verbs, 
 import type { Ledger } from './ledger';
 import type {
   ArtifactScope,
+  AskListResponse,
+  AskRequest,
+  AskResponse,
+  HarnessHealthListResponse,
+  OpenTakeoverListResponse,
+  TakeoverOpenResponse,
   EscalationListResponse,
   FactListResponse,
   FindingView,
@@ -41,6 +47,16 @@ export interface RunnerClient {
   heartbeat(leaseId: string): Promise<ApiResponse<HeartbeatResponse>>;
   /** The runner's facts as `FactView`s, unmapped: `seq`, `kind`, `chunk_id` and `acked_at` survive as the runner sent them. */
   facts(options?: { limit?: number }): Promise<ApiResponse<FactListResponse>>;
+  /** `GET …/api/asks?open=true`: the questions workers have asked and no one has answered. */
+  asks(): Promise<ApiResponse<AskListResponse>>;
+  /** `POST …/api/leases/{id}/asks`: a question put as the lease's worker; `headers` act as that worker (`workerHeaders`). */
+  ask(leaseId: string, question: string, options: AskRequest['options'], headers: Record<string, string>): Promise<ApiResponse<AskResponse>>;
+  /** `GET …/api/takeovers`: the takeovers a person has open. */
+  takeovers(): Promise<ApiResponse<OpenTakeoverListResponse>>;
+  /** `POST …/api/chunks/{id}/takeovers`: a person takes the chunk's session; `force` kills a live, unparked worker first. */
+  openTakeover(chunkId: string, options?: { force?: boolean }): Promise<ApiResponse<TakeoverOpenResponse>>;
+  /** `GET …/api/harness-health`: the health the runner last cached for each harness. */
+  harnessHealth(): Promise<ApiResponse<HarnessHealthListResponse>>;
   /** `GET …/api/escalations`: the open set by default; `state: 'closed'` pages the ended ones, each with its closure. */
   escalations(options?: { state?: 'open' | 'closed'; limit?: number }): Promise<ApiResponse<EscalationListResponse>>;
   /** `GET …/api/leases/{id}/artifacts`, narrowed to one `scope`; `headers` act as the lease's worker (`workerHeaders`). */
@@ -167,6 +183,11 @@ export function runnerHostApi(options: {
         dashboard: () => raw.get('/api/dashboard'),
         heartbeat: (leaseId) => raw.post('/api/heartbeat', { data: { lease_id: leaseId } }),
         facts: (factOptions = {}) => raw.get('/api/facts', factOptions.limit === undefined ? {} : { params: { limit: factOptions.limit } }),
+        asks: () => raw.get('/api/asks', { params: { open: 'true' } }),
+        ask: (leaseId, question, askOptions, headers) => raw.post(`/api/leases/${encodeURIComponent(leaseId)}/asks`, { data: { question, options: askOptions }, headers }),
+        takeovers: () => raw.get('/api/takeovers'),
+        openTakeover: (chunkId, takeoverOptions = {}) => raw.post(`/api/chunks/${encodeURIComponent(chunkId)}/takeovers`, { data: { force: takeoverOptions.force ?? false } }),
+        harnessHealth: () => raw.get('/api/harness-health'),
         escalations: (listOptions = {}) => {
           const params = Object.fromEntries(Object.entries(listOptions).filter(([, value]) => value !== undefined)) as Record<string, string | number>;
           return raw.get('/api/escalations', { params });
