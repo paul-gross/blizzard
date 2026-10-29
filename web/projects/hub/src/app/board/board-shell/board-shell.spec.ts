@@ -4,35 +4,8 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import { type ChunkSummary, compactRef, type KitAsyncStateValue, KitPanel } from 'fleet';
-import { chunkUsageTotalView } from 'fleet/testing';
+import { chunkUsageTotalView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
-
-const chunkSummary = (overrides: Pick<ChunkSummary, 'chunk_id' | 'graph_id' | 'status'> & Partial<ChunkSummary>): ChunkSummary => ({
-  awaiting_external_merge: false,
-  blocked: null,
-  closed_prs: [],
-  completed_at: null,
-  cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
-  current_node_id: null,
-  current_node_name: null,
-  default_effort: null,
-  default_harnesses: [],
-  default_model: [],
-  environment_count: 0,
-  landed: false,
-  landed_repos: [],
-  open_prs: [],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-  promotable: false,
-  runner_id: null,
-  runner_name: null, workspace_id: null,
-  terminal: false,
-  work_refs: [],
-  ...overrides,
-});
-
 
 const READY = (suffix: string): ChunkSummary => (chunkSummary({
   chunk_id: `ch_01ready${suffix}`,

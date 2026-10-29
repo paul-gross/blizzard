@@ -4,38 +4,20 @@ import { hiddenAtContainerWidth } from 'fleet/testing';
 
 import type { ChunkCountsView, ChunkSummary } from '../../api/hub';
 import { LANES, STATUS_LANE } from '../../core/chunk-lanes';
-import { chunkCountsView } from '../../testing/builders/board';
+import { chunkCountsView, chunkSummary } from '../../testing/builders/board';
 import { chunkUsageTotalView } from '../../testing/builders/chunk';
 import { BoardHeader } from './board-header';
 
-const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
-  chunk_id: id,
-  graph_id: 'gr_1',
-  status,
-  terminal: status === 'done' || status === 'stopped',
-  current_node_id: 'nd_build',
-  work_refs: [],
-  awaiting_external_merge: false,
-  blocked: null,
-  closed_prs: [],
-  completed_at: null,
-  cost: chunkUsageTotalView(),
-  current_node_name: null,
-  default_effort: null,
-  default_harnesses: [],
-  default_model: [],
-  environment_count: 0,
-  landed: false,
-  landed_repos: [],
-  open_prs: [],
-  project_id: null,
-  project_name: null,
-  project_slug: null,
-  promotable: false,
-  runner_id: null,
-  runner_name: null,
-  workspace_id: null,
-});
+const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary =>
+  chunkSummary({
+    chunk_id: id,
+    graph_id: 'gr_1',
+    status,
+    terminal: status === 'done' || status === 'stopped',
+    current_node_id: 'nd_build',
+    cost: chunkUsageTotalView(),
+  });
+
 
 const ZERO_COUNTS: ChunkCountsView = chunkCountsView({
   total: 0,

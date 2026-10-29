@@ -587,6 +587,14 @@ export type ChunkDetail = {
     delete_refusal: ChunkDeleteRefusal | null;
     escalation: ChunkEscalationView | null;
     /**
+     * Flow Places
+     */
+    flow_places: Array<ChunkFlowPlaceView>;
+    /**
+     * Flow Record
+     */
+    flow_record: Array<FlowFactView>;
+    /**
      * Graph Created At
      */
     graph_created_at: string | null;
@@ -711,6 +719,43 @@ export type ChunkEscalationView = {
      * Wrapped Takeover Command
      */
     wrapped_takeover_command: string;
+};
+
+/**
+ * ChunkFlowPlaceView
+ *
+ * A chunk's place on one flow its open submission holds.
+ */
+export type ChunkFlowPlaceView = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    /**
+     * Next Poll At
+     */
+    next_poll_at: string | null;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Name
+     */
+    repository_name: string | null;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string | null;
+    /**
+     * Resource
+     */
+    resource: string;
+    state: FlowPlaceState;
 };
 
 /**
@@ -842,6 +887,10 @@ export type ChunkSummary = {
      * Environment Count
      */
     environment_count: number;
+    /**
+     * Flow Places
+     */
+    flow_places: Array<ChunkFlowPlaceView>;
     /**
      * Graph Id
      */
@@ -1628,6 +1677,57 @@ export type FloorStatusView = {
      */
     subscription: string | null;
 };
+
+/**
+ * FlowFactKind
+ *
+ * What one entry of a flow's record says happened.
+ */
+export type FlowFactKind = 'submitted' | 'turn-started' | 'turn-ended' | 'landed' | 'withdrawn';
+
+/**
+ * FlowFactView
+ *
+ * One entry of a flow's record.
+ */
+export type FlowFactView = {
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    /**
+     * Id
+     */
+    id: number;
+    kind: FlowFactKind;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Revision
+     */
+    revision: string | null;
+    /**
+     * Submission Id
+     */
+    submission_id: string;
+};
+
+/**
+ * FlowPlaceState
+ *
+ * Where an open submission stands on a flow it holds.
+ */
+export type FlowPlaceState = 'landing' | 'next' | 'waiting' | 'polling' | 'passed-over';
 
 /**
  * GardenProposalClosureKind

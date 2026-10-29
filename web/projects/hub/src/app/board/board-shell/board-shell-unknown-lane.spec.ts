@@ -2,39 +2,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkCountsView, ChunkStatus, ChunkSummary } from 'fleet';
-import { chunkCountsView, chunkUsageTotalView } from 'fleet/testing';
+import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
 /** A chunk whose status this build's generated vocabulary does not list, as a newer hub may send. */
 describe('BoardShell unknown status lane', () => {
-  const chunk = (suffix: string, status: string): ChunkSummary => ({
-    awaiting_external_merge: false,
-    blocked: null,
-    closed_prs: [],
-    completed_at: null,
-    cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
-    current_node_name: null,
-    default_effort: null,
-    default_harnesses: [],
-    default_model: [],
-    environment_count: 0,
-    landed: false,
-    landed_repos: [],
-    open_prs: [],
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    promotable: false,
-    runner_id: null,
-    runner_name: null,
-    workspace_id: null,
-    terminal: false,
-    chunk_id: `ch_01${suffix}`,
-    graph_id: 'gr_1',
-    status: status as ChunkStatus,
-    current_node_id: 'nd_build',
-    work_refs: [],
-  });
+  const chunk = (suffix: string, status: string): ChunkSummary =>
+    chunkSummary({ chunk_id: `ch_01${suffix}`, graph_id: 'gr_1', status: status as ChunkStatus, current_node_id: 'nd_build' });
+
 
   const COUNTS: ChunkCountsView = chunkCountsView({
     not_ready: 0,
