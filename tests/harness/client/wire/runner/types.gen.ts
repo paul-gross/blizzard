@@ -1604,6 +1604,10 @@ export type FloorHoldView = {
      */
     kind: string;
     /**
+     * Lease Id
+     */
+    lease_id: string | null;
+    /**
      * Window
      */
     window: string | null;
