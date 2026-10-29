@@ -11292,12 +11292,6 @@
    "over_cap": 0,
    "total": 108
   },
-  "service/test_host_directory_owner_service.py": {
-   "comments": 0,
-   "docstrings": 18,
-   "over_cap": 0,
-   "total": 292
-  },
   "service/test_host_graduation_service.py": {
    "comments": 5,
    "docstrings": 14,

@@ -3,6 +3,7 @@ import { base } from './base';
 import { type RunnerHostClient, runnerHostApi } from './client/runner';
 import { type Barrier, type BarrierSubscription, openRunnerStream, type Subscription } from './events';
 import { DEFAULT_RUNNER_OPTIONS, type HubBinding, type RunnerHost, type RunnerHostOptions, runnerHostBuilder } from './runner-host';
+import { type ScratchDirs, scratchDirs, startPreHostDaemon } from './scratch-dirs';
 import { startVendorUsage, type VendorUsage } from './vendor-usage';
 
 /** The options a runner host is built with; `test.use({ … })` sets them for a file or a describe, `runnerHosts.create` per host. */
@@ -41,6 +42,10 @@ interface RunnerWorldFixtures extends RunnerHostFixtureOptions {
   runnerHosts: RunnerHosts;
   /** Internal: the builder every runner host of the test comes from, stopped when the test ends. */
   runnerHostBuilder: ReturnType<typeof runnerHostBuilder>;
+  /** Directories no host serves, for `blizzard-runner` verbs to run on; no mock hub is started for them. Removed when the test ends. */
+  scratchDirs: ScratchDirs;
+  /** A pre-host daemon still serving `dir`: a listener on its `runner.sock` answering every request `200 {}`; yields the socket. Closed when the test ends. */
+  preHostDaemon: (dir: string) => Promise<string>;
   /** A client for a runner host's local API at `url`; `logContext` names the host log a failure attaches. */
   runnerHostClient: (url: string, options?: { logContext?: () => string; headers?: Record<string, string> }) => RunnerHostClient;
   /** A runner host's event stream, closed when the test ends. */
@@ -108,6 +113,22 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
 
   runnerHost: async ({ runnerHosts }, use) => {
     await use(await runnerHosts.create());
+  },
+
+  scratchDirs: async ({}, use) => {
+    const dirs = scratchDirs();
+    await use(dirs);
+    dirs.dispose();
+  },
+
+  preHostDaemon: async ({}, use) => {
+    const open: { close(): Promise<void> }[] = [];
+    await use(async (dir) => {
+      const daemon = await startPreHostDaemon(dir);
+      open.push(daemon);
+      return daemon.socket;
+    });
+    for (const daemon of open) await daemon.close();
   },
 
   runnerHostClient: async ({ worldContext, ledger }, use, testInfo) => {
