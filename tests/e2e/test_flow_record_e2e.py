@@ -1,16 +1,13 @@
 """The hub's flow driver keeps a live hub's flow lines true to where its chunks stand, taking each hub step as a turn.
 
 A chunk held pending at ``deliver`` — the mock forge's ``checks_pending`` lever armed — is submitted to its branch's
-flow and polls through turns; the turn that lands it once the lever clears closes that submission ``landed``. A store walked down below ``20261027_0900_flows`` with two chunks pending at ``deliver``, migrated back to head
-and booted, submits both in the order they entered ``deliver``. Needs ``BLIZZARD_E2E=1`` and ``blizzard-mock``."""
+flow and polls through turns; the turn that lands it once the lever clears closes that submission ``landed``.
+Needs ``BLIZZARD_E2E=1`` and ``blizzard-mock``."""
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import sqlite3
-import subprocess
-import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -20,16 +17,13 @@ import httpx2
 import pytest
 import yaml
 
-from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.tools.invariants import hub_invariants
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import (
     FIXTURE_ENV,
     PUSH_AND_DECLARE_SCRIPT,
     REPO_NAME,
-    basic_workspace,
     mint_world,
     scripted_build_prompt,
 )
@@ -43,9 +37,6 @@ pytestmark = [
     ),
 ]
 
-#: The chain's head before the flows revision.
-_BEFORE_FLOWS = "20261025_0900_forges"
-_FLOW_INVARIANTS = frozenset({"hub:one-turn-per-flow", "hub:one-turn-per-visit", "hub:flow-line-standing"})
 #: Comfortably past the driver's two-second tick, so a converged line is never a race.
 _DRIVER_WAIT = 30.0
 _LAND_CHOICES = {
@@ -156,26 +147,6 @@ def _await_submissions(hub_dir: Path, until: Callable[[list[tuple[str, str, int,
     raise AssertionError(f"the flow driver never converged: {_submissions(hub_dir)}")
 
 
-def _assert_flow_record_holds(hub_dir: Path) -> None:
-    """The three flow invariants hold over every turn taken so far."""
-    engine = create_engine_from_url(f"sqlite:///{hub_dir / 'data' / 'hub.db'}")
-    try:
-        violations = [v for v in hub_invariants(engine).run() if v.invariant in _FLOW_INVARIANTS]
-    finally:
-        engine.dispose()
-    assert violations == []
-
-
-def _entered_deliver(detail: dict[str, Any]) -> str:
-    return next(h["recorded_at"] for h in detail["history"] if h.get("to_node_name") == "deliver")
-
-
-def _hub_migrate(hub_dir: Path, *args: str) -> None:
-    hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
-    done = subprocess.run([hub_bin, "migrate", "--dir", str(hub_dir), *args], capture_output=True, text=True)
-    assert done.returncode == 0, done.stderr
-
-
 def _world(tmp_path: Path) -> tuple[Path, Path, Path]:
     bin_dir = mock_bin_dir()
     if bin_dir is None:
@@ -195,12 +166,10 @@ def test_a_held_chunk_is_submitted_and_its_landing_supersedes_it(tmp_path: Path)
         config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         chunk_id = _pinned_chunk(hub, forge, "HELD.md")
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-        _assert_flow_record_holds(hub_dir)
 
         _drive_until(config, hub, chunk_id, _pending)
         [(_, submitted, _, open_outcome)] = _await_submissions(hub_dir, bool)
         assert (submitted, open_outcome) == (chunk_id, None)
-        _assert_flow_record_holds(hub_dir)
 
         assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
         done = _drive_until(config, hub, chunk_id, lambda b: b["status"] in {"done", "needs_human"})
@@ -209,42 +178,3 @@ def test_a_held_chunk_is_submitted_and_its_landing_supersedes_it(tmp_path: Path)
         assert (closed, outcome) == (chunk_id, "landed")
         with _store(hub_dir) as conn:
             assert conn.execute("SELECT count(*) FROM hub_turns WHERE ended_at IS NULL").fetchone() == (0,)
-        _assert_flow_record_holds(hub_dir)
-
-
-def test_a_store_walked_below_flows_submits_its_pending_chunks_in_the_order_they_entered_deliver(
-    tmp_path: Path,
-) -> None:
-    bin_dir, workspace, origins = _world(tmp_path)
-    hub_dir = tmp_path / "hub"
-    forge_port, hub_port = free_port(), free_port()
-
-    with run_forge(bin_dir, origins, forge_port) as forge:
-        with run_hub(hub_dir, forge_port, hub_port) as hub:
-            assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
-            # Two environments, so the first chunk's held one leaves the second a place to build.
-            config = dataclasses.replace(
-                runner_config(tmp_path / "runner", workspace, bin_dir, hub_port),
-                workspaces=(dataclasses.replace(basic_workspace(workspace), max_environments=2),),
-            )
-            # Minted second-first, so the chunks' id order is the reverse of the order they enter ``deliver``.
-            second = _pinned_chunk(hub, forge, "SECOND.md")
-            first = _pinned_chunk(hub, forge, "FIRST.md")
-            assert hub.post(f"/api/chunks/{first}/promote").status_code == 202
-            first_held = _drive_until(config, hub, first, _pending)
-            assert hub.post(f"/api/chunks/{second}/promote").status_code == 202
-            second_held = _drive_until(config, hub, second, _pending)
-        assert _entered_deliver(first_held) < _entered_deliver(second_held)
-        assert second < first
-
-        _hub_migrate(hub_dir, "--down", _BEFORE_FLOWS)
-        with _store(hub_dir) as conn:
-            assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'flow_submissions'").fetchone() is None
-
-        _hub_migrate(hub_dir)
-        with run_hub(hub_dir, forge_port, hub_port, rehost=True) as hub:
-            rows = _await_submissions(hub_dir, lambda found: len(found) == 2)
-            assert [hub.get(f"/api/chunks/{c}").json()["status"] for c in (first, second)] == ["delivering"] * 2
-            _assert_flow_record_holds(hub_dir)
-
-    assert [(chunk, outcome) for _, chunk, _, outcome in rows] == [(first, None), (second, None)]

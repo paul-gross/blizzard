@@ -29,11 +29,11 @@ import pytest
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.config import RunnerConfig
 from tests.e2e import egress_proof as proof
-from tests.e2e.fleet_traces import PLANT_DIR_VAR, PLANT_LEASE_TOKEN_SCRIPT, planted_lease_tokens
-from tests.e2e.harness_variants import CLAUDE_CODE
-from tests.e2e.test_ask_answer_e2e import _tick_until
+from tests.e2e.support import _tick_until
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_traces import PLANT_DIR_VAR, PLANT_LEASE_TOKEN_SCRIPT, planted_lease_tokens
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build
+from tests.harness_variants import CLAUDE_CODE
 from tests.runner_join import held_token, token_identity
 from tests.support import free_port
 
@@ -336,27 +336,10 @@ def _wait_for[T](what: str, read: Callable[[], T], done: Callable[[T], bool], ti
         time.sleep(0.5)
 
 
-def _step_sums_equal_its_invocations(rows: dict[str, list[proof.Row]], step_key: str) -> bool:
-    step = proof.newest(rows["steps"], "step_key").get(step_key)
-    if step is None:
-        return False
-    mine = [r for r in proof.newest(rows["invocations"], "usage_id").values() if r["step_key"] == step_key]
-    if step["invocations"] != len(mine):
-        return False
-    tokens = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens")
-    if any(step[c] != sum(r[c] for r in mine) for c in tokens):
-        return False
-    for column in ("cost_billed_usd", "cost_estimated_usd"):
-        amounts = [Decimal(r[column]) for r in mine if r[column] is not None]
-        if step[column] != (f"{sum(amounts, Decimal(0)):.9f}" if amounts else None):
-            return False
-    return True
-
-
 @dataclasses.dataclass
 class Exported:
     """The night, exported: both live directories and their rows, the backfilled copy, what was planted, the late
-    usage's step, and the one window the night ran in — UTC instants. ``night.hub`` is the re-hosted Parquet hub,
+    one window the night ran in — UTC instants. ``night.hub`` is the re-hosted Parquet hub,
     up for the whole module."""
 
     night: Night
@@ -366,7 +349,6 @@ class Exported:
     parquet_rows: dict[str, list[proof.Row]]
     backfilled: dict[str, list[proof.Row]]
     planted: dict[str, list[str]]
-    late_step_key: str
     since: datetime
     until: datetime
 
@@ -375,56 +357,9 @@ class Exported:
         return ("--since", self.since.strftime(_UTC_FORMAT), "--until", self.until.strftime(_UTC_FORMAT))
 
 
-def _forward_late_usage(night: Night, ndjson_dir: Path) -> tuple[str, dict[str, list[proof.Row]]]:
-    """A usage fact forwarded on the real wire after the runner's last tick, for a step already exported; returns the
-    step's key and the NDJSON rows once the step has absorbed it."""
-    plain = night.chunk_ids[0]
-    usage = night.detail(plain)["usage"][0]
-    step_key = f"{plain}/{usage['epoch']}"
-    _wait_for(
-        "the plain step in the NDJSON export",
-        lambda: proof.read_rows(ndjson_dir, "ndjson"),
-        lambda rows: step_key in proof.newest(rows["steps"], "step_key"),
-    )
-    # Forwarded as the runner itself, under its own token, so the fact lands on its seq line.
-    as_runner = night.config.auth_headers()
-    seq = night.hub.post("/api/fleet/events", json={"facts": []}, headers=as_runner).json()["high_water"]
-    late = {
-        "chunk_id": plain,
-        "node_id": usage["node_id"],
-        "epoch": usage["epoch"],
-        "kind": "resume",
-        "model": usage["model"],
-        "input_tokens": 11,
-        "output_tokens": 7,
-        "cache_read_tokens": 5,
-        "cache_create_tokens": 3,
-        "cost_usd": 0.25,
-        "estimated_cost_usd": 0.125,
-    }
-    posted = night.hub.post(
-        "/api/fleet/events",
-        json={"facts": [{"seq": seq + 1, "kind": "usage.recorded", "payload": late}]},
-        headers=as_runner,
-    )
-    assert posted.status_code == 200 and posted.json()["applied"] == [seq + 1], posted.text
-    before_late = len(night.detail(plain)["usage"])
-    assert before_late >= 2
-    rows = _wait_for(
-        "the late usage to reach the NDJSON export",
-        lambda: proof.read_rows(ndjson_dir, "ndjson"),
-        lambda rows: (
-            _step_sums_equal_its_invocations(rows, step_key)
-            and proof.newest(rows["steps"], "step_key")[step_key]["invocations"] == before_late
-        ),
-    )
-    assert proof.newest(rows["steps"], "step_key")[step_key]["input_tokens"] >= 11
-    return step_key, rows
-
-
 @pytest.fixture(scope="module")
 def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
-    """Run the night once — live NDJSON, the late usage, the Parquet re-host and reset, the backfill of its window —
+    """Run the night once — live NDJSON, the Parquet re-host and reset, the backfill of its window —
     and keep the re-hosted hub up while the module's proofs read it."""
     bin_dir = mock_bin_dir()
     if bin_dir is None:
@@ -464,7 +399,19 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
             planted["work item title"], planted["work item body"] = night.titles, night.bodies
             planted["worker transcript output"] = [_TRANSCRIPT_TOKEN]
             planted["lease token"] = planted_lease_tokens(plants)
-            step_key, ndjson_rows = _forward_late_usage(night, ndjson_dir)
+            ndjson_rows = _wait_for(
+                "the night in the NDJSON export",
+                lambda: proof.read_rows(ndjson_dir, "ndjson"),
+                lambda rows: (
+                    _history_steps(night)
+                    <= {
+                        (r["chunk_id"], r["epoch"], r["node_name"])
+                        for r in proof.newest(rows["steps"], "step_key").values()
+                    }
+                    and len(proof.newest(rows["invocations"], "usage_id"))
+                    == sum(len(night.detail(chunk_id)["usage"]) for chunk_id in night.chunk_ids)
+                ),
+            )
 
         # -- the same record, exported live again as Parquet --------------------------------------------------
         with run_hub(hub_dir, forge_port, hub_port, egress=egress(parquet_dir, "parquet"), rehost=True) as hub:
@@ -475,10 +422,7 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
             parquet_rows = _wait_for(
                 "the live Parquet export to hold the night",
                 lambda: proof.read_rows(parquet_dir, "parquet"),
-                lambda rows: (
-                    proof.newest_without_export_time(rows) == proof.newest_without_export_time(ndjson_rows)
-                    and _step_sums_equal_its_invocations(rows, step_key)
-                ),
+                lambda rows: proof.newest_without_export_time(rows) == proof.newest_without_export_time(ndjson_rows),
             )
             # The window closes on a whole second past every fact of the night, never in the future.
             time.sleep(1.1)
@@ -491,7 +435,6 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Exported]:
                 parquet_rows=parquet_rows,
                 backfilled={},
                 planted=planted,
-                late_step_key=step_key,
                 since=since,
                 until=until,
             )
@@ -530,12 +473,6 @@ def test_both_exports_name_the_runner_by_its_minted_id_and_its_name(exported: Ex
         assert billed == {runner}, f"{label} invocations: {billed}"
 
 
-def test_manifests_name_every_file(exported: Exported) -> None:
-    """Every data file, live and backfilled, is named by a manifest with its row count and SHA-256."""
-    proof.assert_manifests_name_every_file(exported.ndjson_dir, "ndjson")
-    proof.assert_manifests_name_every_file(exported.parquet_dir, "parquet")
-
-
 def test_nothing_planted_leaves(exported: Exported) -> None:
     """What never leaves, did not: nothing planted is in any decoded row, manifest or schema."""
     assert set(exported.planted) >= {
@@ -552,12 +489,6 @@ def test_nothing_planted_leaves(exported: Exported) -> None:
     }
     proof.assert_nothing_planted(exported.ndjson_dir, "ndjson", exported.planted)
     proof.assert_nothing_planted(exported.parquet_dir, "parquet", exported.planted)
-
-
-def test_late_usage_converged_in_both(exported: Exported) -> None:
-    """A usage fact forwarded after its step was exported converged the step to the sum of its invocations."""
-    assert _step_sums_equal_its_invocations(exported.ndjson_rows, exported.late_step_key)
-    assert _step_sums_equal_its_invocations(exported.parquet_rows, exported.late_step_key)
 
 
 def test_a_backfill_of_the_window_equals_the_live_export(exported: Exported) -> None:

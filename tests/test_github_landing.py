@@ -8,13 +8,15 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
+from blizzard.hub.delivery.actions.land import _PullRequest, _Run, _Target
+from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES, ForgeId
+from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
 from blizzard.hub.forge.internal.github_landing import ATTEMPT_TIMEOUT_SECONDS, GitHubLanding
 from blizzard.hub.forge.landing import (
     ChangeListing,
@@ -29,6 +31,7 @@ from blizzard.hub.forge.landing import (
     ForgeUnavailable,
     Mergeability,
     MergeMethod,
+    RepositoryForge,
     UpdateMethod,
     UpdateOutcome,
 )
@@ -359,6 +362,35 @@ def test_changes_filter_by_base_and_head_themselves_and_page_closed_ones() -> No
         "100",
     )
     assert len(harness.recorded.requests) == 2
+
+
+@pytest.mark.component
+def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:
+    harness = _Harness({("GET", f"{_REPO}/pulls"): [_reply(200, [], {"ETag": '"v1"'}), _reply(304)]})
+
+    async def poll(forge: GitHubLanding) -> None:
+        record = ResolvedRepository(
+            forge_id=ForgeId("frg_example"), owner="acme", base_branch="main", secret_name="s", record="re_widget"
+        )
+        target = _Target(
+            run=cast(_Run, None),
+            repo="acme/widget",
+            branch="feature-branch",
+            commit="sha1",
+            record=record,
+            forge=RepositoryForge(RepositoryId("re_widget"), forge, forge, forge, forge.OFFERED),
+            forge_label="example",
+        )
+        for _ in range(11):
+            assert await _PullRequest._merged_for_branch(target) is None
+
+    harness.run(poll)
+    requests = harness.recorded.requests
+    assert len(requests) == 11
+    for request in requests[1:]:
+        assert request.url.params["state"] == "closed"
+        assert request.url.params["head"] == "acme:feature-branch"
+        assert request.headers["if-none-match"] == '"v1"'
 
 
 def test_open_change_posts_as_the_hub_user() -> None:

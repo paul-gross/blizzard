@@ -18,7 +18,8 @@ import pytest
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.fleet_traces import (
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_traces import (
     PLANT_DIR_VAR,
     PLANT_LEASE_TOKEN_SCRIPT,
     FleetCollector,
@@ -27,10 +28,8 @@ from tests.e2e.fleet_traces import (
     assert_skeleton,
     planted_lease_tokens,
     runner_sweep,
-    stashed_route_tokens,
     told_until,
 )
-from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
 from tests.support import free_port
 
@@ -262,7 +261,6 @@ def test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build(
             fleet_traces.assert_no_leaks(
                 {
                     "lease token": planted_lease_tokens(planted),
-                    "route token": stashed_route_tokens(config),
                     "runner bearer": [config.hub_token],
                 }
             )

@@ -159,11 +159,12 @@ def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignor
 # --- RESUME — resume in place ---
 
 
-@pytest.mark.unit
+@pytest.mark.component
 def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
+    assert store.resume_intent_lease_ids() == {"lease_1"}
 
     hub = FakeHub()
     hub.chunks["ch_1"] = _running_chunk()

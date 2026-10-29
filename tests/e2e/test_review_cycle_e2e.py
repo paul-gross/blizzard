@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.fleet_traces import (
+from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_traces import (
     FleetCollector,
     InvocationExpect,
     StepExpect,
@@ -21,9 +22,8 @@ from tests.e2e.fleet_traces import (
     assert_skeleton,
     runner_sweep,
 )
-from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
-from tests.fleet_launchers import REPO, drive_until_done, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.harness_variants import MockHarness, both_mock_harnesses
 from tests.support import free_port
 
 pytestmark = [

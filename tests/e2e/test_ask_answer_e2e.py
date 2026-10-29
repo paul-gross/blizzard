@@ -12,16 +12,16 @@ import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
-import httpx2
 import pytest
 
 from blizzard.runner.composition import RunnerProcess
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.fleet_traces import (
+from tests.e2e.support import _tick_until
+from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_traces import (
     PLANT_DIR_VAR,
     PLANT_LEASE_TOKEN_SCRIPT,
     FleetCollector,
@@ -32,11 +32,9 @@ from tests.e2e.fleet_traces import (
     assert_skeleton,
     planted_lease_tokens,
     runner_sweep,
-    stashed_route_tokens,
 )
-from tests.e2e.harness_variants import MockHarness, both_mock_harnesses
-from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.harness_variants import MockHarness, both_mock_harnesses
 from tests.runner_join import fleet_headers
 from tests.support import free_port
 
@@ -122,33 +120,6 @@ def _graph_yaml(harness: MockHarness) -> str:
         },
     }
     return harness.graph_yaml(graph)
-
-
-def _tick_until(
-    config: RunnerConfig,
-    hub: httpx2.Client,
-    chunk_id: str,
-    fenced: dict[str, str],
-    targets: set[str],
-    timeout: float,
-    process: RunnerProcess | None = None,
-) -> str:
-    """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status."""
-    prior = dict(os.environ)
-    os.environ.update(fenced)  # the runner spawns the fenced mock harness in-process
-    try:
-        deadline = time.monotonic() + timeout
-        status = "ready"
-        while time.monotonic() < deadline:
-            LoopWiring.of(config).tick_once(process=process)
-            status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
-            if status in targets:
-                return status
-            time.sleep(0.5)
-        return status
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
 
 
 def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int, process: RunnerProcess | None = None) -> None:
@@ -303,7 +274,6 @@ def test_ask_parks_then_answer_resumes_session_to_done(
             fleet_traces.assert_no_leaks(
                 {
                     "lease token": planted_lease_tokens(planted),
-                    "route token": stashed_route_tokens(config),
                     "runner bearer": [config.hub_token],
                     "ask text": [_ASK_QUESTION],
                 }

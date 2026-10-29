@@ -109,7 +109,7 @@ def _sweep(
     )
 
 
-def _push_usage(hub: HubHarness, chunk_id: str, node_id: str, *, cost: float | None = 0.5) -> None:
+def _push_usage(hub: HubHarness, chunk_id: str, node_id: str, *, cost: float | None = 0.5, late: bool = False) -> None:
     payload = {
         "chunk_id": chunk_id,
         "node_id": node_id,
@@ -122,6 +122,15 @@ def _push_usage(hub: HubHarness, chunk_id: str, node_id: str, *, cost: float | N
         "cache_create_tokens": 5,
         "cost_usd": cost,
     }
+    if late:
+        payload.update(
+            kind="resume",
+            input_tokens=11,
+            output_tokens=7,
+            cache_read_tokens=5,
+            cache_create_tokens=3,
+            estimated_cost_usd=0.125,
+        )
     resp = hub.client.post(
         "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": next(_SEQ), "kind": "usage.recorded", "payload": payload}]},
@@ -352,7 +361,7 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
     assert [r["invocations"] for r in _rows(writer, "steps")] == [1]
 
     hub.clock.advance(timedelta(hours=3))
-    _push_usage(hub, chunk_id, _node_id(graph), cost=0.25)  # forwarded hours late, for a step already written
+    _push_usage(hub, chunk_id, _node_id(graph), cost=0.25, late=True)  # forwarded after the step was written
     _sweep(hub, writer).sweep()
 
     copies = [r for r in _rows(writer, "steps") if r["chunk_id"] == chunk_id]
@@ -363,6 +372,14 @@ def test_late_usage_writes_its_step_again_and_the_newest_copy_agrees_with_its_in
     for column in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens"):
         assert newest[column] == sum(r[column] for r in invoked)  # type: ignore[misc]
     assert newest["cost_billed_usd"] == sum((r["cost_billed_usd"] for r in invoked), Decimal(0))  # type: ignore[misc]
+    assert newest["cost_estimated_usd"] == Decimal("0.125000000")
+    assert [newest[c] for c in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_create_tokens")] == [
+        111,
+        57,
+        15,
+        8,
+    ]
+    assert newest["cost_billed_usd"] == Decimal("0.750000000")
     # The rewrite is partitioned by the step's own end, not by when the usage landed.
     assert {str(b.partition) for b in writer.batches if b.schema.name == "steps"} == {"2026-07-13"}
 

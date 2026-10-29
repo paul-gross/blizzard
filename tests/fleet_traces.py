@@ -1,4 +1,4 @@
-"""Fleet-trace proof for the e2e tier: a real ``otelcol-contrib`` between a real hub (and runner) and a file.
+"""Fleet-trace proof: a real ``otelcol-contrib`` between a real hub (and runner) and a file.
 
 The collector starts before the hub; its file is read back against the dictionary and the span spec, runner
 ``worker`` spans nesting on hub step roots by id (:func:`assert_runner_nesting`). Platform spans share the
@@ -410,8 +410,7 @@ def assert_chunk_trace(
 
 @dataclass(frozen=True)
 class StepExpect:
-    """One step root's expected skeleton: name, outcome, status, destination, child span and event names, and
-    the previous-step link reason (``None`` for a first step).
+    """One step root's name, outcome, status, destination, children, events, and previous-step link.
 
     ``events`` and ``children`` compare as exact multisets; timing-varying counts use ``min_events`` /
     ``min_children``. ``invocation`` events are never compared."""

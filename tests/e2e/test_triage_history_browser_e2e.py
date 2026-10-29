@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e.test_transcript_tab_browser_e2e import _ingest, _mint
+from tests.e2e.support import _ingest, _mint
 from tests.fleet_launchers import mock_bin_dir, run_forge, run_hub
 from tests.runner_join import fleet_headers
 from tests.support import free_port

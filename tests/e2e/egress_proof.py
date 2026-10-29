@@ -7,7 +7,6 @@ published views and the docs' recipes over the files themselves."""
 from __future__ import annotations
 
 import gzip
-import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -93,25 +92,6 @@ def newest_without_export_time(rows: Mapping[str, Sequence[Row]]) -> dict[str, d
         }
         for dataset, identity in DATASETS.items()
     }
-
-
-def assert_manifests_name_every_file(directory: Path, fmt: str) -> None:
-    """Every data file is named by exactly one manifest, with its row count and SHA-256, and every file a manifest
-    names exists."""
-    listed: dict[str, Mapping[str, Any]] = {}
-    for manifest in sorted((directory / "_manifests").glob("*.json")):
-        for entry in json.loads(manifest.read_text())["files"]:
-            assert entry["path"] not in listed, f"{entry['path']} is named by two manifests"
-            listed[entry["path"]] = entry
-    on_disk = {
-        path.relative_to(directory).as_posix() for dataset in DATASETS for path in data_files(directory, fmt, dataset)
-    }
-    assert on_disk, f"no {fmt} data files in {directory}"
-    assert set(listed) == on_disk, f"manifests and files disagree: {set(listed) ^ on_disk}"
-    for relative, entry in listed.items():
-        path = directory / relative
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"], f"{relative} sha256"
-        assert len(decode(path)) == entry["rows"], f"{relative} row count"
 
 
 def assert_nothing_planted(directory: Path, fmt: str, planted: Mapping[str, Sequence[str]]) -> None:

@@ -19,8 +19,8 @@ import pytest
 
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton, unix_ns
 from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.fleet_traces import FleetCollector, StepExpect, assert_skeleton, unix_ns
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
 from tests.support import free_port
 

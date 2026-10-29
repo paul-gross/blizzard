@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.e2e.fleet_traces import FleetCollector, fleet_collector
+from tests.fleet_traces import FleetCollector, fleet_collector
 
 if TYPE_CHECKING:
     # Annotation-only: the module must stay importable on a machine that has never
