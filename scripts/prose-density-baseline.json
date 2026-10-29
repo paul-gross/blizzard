@@ -11262,12 +11262,6 @@
    "over_cap": 0,
    "total": 50
   },
-  "service/test_claude_code_bundle_service.py": {
-   "comments": 2,
-   "docstrings": 7,
-   "over_cap": 0,
-   "total": 85
-  },
   "service/test_credential_renewal_service.py": {
    "comments": 7,
    "docstrings": 5,
