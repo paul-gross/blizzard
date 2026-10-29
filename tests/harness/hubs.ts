@@ -50,6 +50,8 @@ export interface HubCoordinates {
   commonTenantId?: string;
   /** Present only when the hub's configuration turns authentication on; the one way to ask whether it is. */
   auth?: HubAuth;
+  /** The directory `${egress}` expands to in the hub's profile. */
+  egressPath: string;
   logPath: string;
   forgeLogPath: string;
   daemons: DaemonRecord[];
@@ -115,6 +117,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
       forgeUrl: forge.url,
       idpUrl: idp.url,
       auth: authOf(expanded),
+      egressPath: egressDirectory(dir),
       logPath: hub.logPath,
       forgeLogPath: forge.logPath,
       // Plain records: the coordinates are serialized to the run's hubs file.

@@ -7,7 +7,7 @@ import { base, uniqueName } from './base';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, recorderFor } from './client/latency';
 import { hostHub, initHub } from './daemons/hub';
-import { egressDirectory, type EgressReader, egressReader } from './egress';
+import { type EgressReader, egressReader } from './egress';
 import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
 import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
@@ -296,7 +296,7 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
 
   egress: async ({ level, testHub }, use) => {
     if (!testHub.fresh) throw new Error(`egress reads the export directory of a hub of the test's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
-    await use(egressReader(egressDirectory(path.dirname(testHub.coordinates.logPath))));
+    await use(egressReader(testHub.coordinates.egressPath));
   },
 
   tenantOf: async ({ level, testHub, adminClient, touched }, use, testInfo) => {
