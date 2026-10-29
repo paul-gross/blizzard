@@ -11388,12 +11388,6 @@
    "over_cap": 0,
    "total": 155
   },
-  "service/test_runner_auth_service.py": {
-   "comments": 8,
-   "docstrings": 9,
-   "over_cap": 0,
-   "total": 138
-  },
   "service/test_runner_bindings_service.py": {
    "comments": 0,
    "docstrings": 2,

@@ -9,7 +9,6 @@ import json
 import os
 import sqlite3
 import subprocess
-import time
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +22,6 @@ from blizzard.runner.host_config import RunnerEntry
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.leases.lease_auth import LeaseToken
-from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.runtime import sqlite_store_file
 from blizzard.runner.store.schema import external_usage_samples
 from blizzard.runner.throttle.settings import ThrottleSettings
@@ -50,28 +48,9 @@ def tick_env() -> dict[str, str]:
     return fenced
 
 
-def drive_ticks(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: float = 0.5) -> None:
-    """Run ``ticks`` synchronous reconciliation passes with the harness fence set."""
-    prior = dict(os.environ)
-    os.environ.update(fenced)
-    try:
-        for _ in range(ticks):
-            LoopWiring.of(config).tick_once()
-            time.sleep(pause)
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
-
-
 def fleet_chunk_status(hub: httpx2.Client, chunk_id: str) -> str:
     """The mock hub's own status read."""
     return hub.get(f"/api/fleet/chunks/{chunk_id}", headers=fleet_headers(hub)).json()["status"]
-
-
-def seed_chunk(hub: httpx2.Client) -> str:
-    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(WORK_REF_URL))
-    assert resp.status_code == 201, resp.text
-    return resp.json()["chunk_id"]
 
 
 def worker_credential(config: RunnerConfig, lease_id: str) -> dict[str, str]:
