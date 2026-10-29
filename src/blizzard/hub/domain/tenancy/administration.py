@@ -6,8 +6,7 @@ A tenant is created in one write transaction: its ``tenants`` row, the packaged 
 tenant starts with a project), and — when one is named — its first admin's membership. Nothing of a tenant whose
 creation failed survives, and a tenant is usable the moment its creation commits. A tenant's name is a label of 1 to 64
 characters with no leading or trailing whitespace: it is never refused for being taken, and never stands in for the
-tenant's id. The concrete store lives at ``src/blizzard/hub/store/internal/tenant_admin_store.py``
-(``bzh:dependency-inversion``)."""
+tenant's id."""
 
 from __future__ import annotations
 
@@ -123,9 +122,8 @@ DEFAULT_PROJECT_NAME = "Default"
 class TenantAdministration:
     """Creates, renames and lists the hub's tenants.
 
-    ``mint_packaged`` reconciles the packaged graph set into the graphs it is handed — the same reconciliation the
-    hub-level graph sync runs for each tenant. ``changed`` is told after every committed change to the tenant set
-    or a tenant's name, so what the hub holds in memory about its open tenants is read again."""
+    ``mint_packaged`` reconciles the packaged graph set into the graphs it is handed. ``changed`` is told after
+    every committed change to the tenant set or a tenant's name."""
 
     def __init__(
         self,

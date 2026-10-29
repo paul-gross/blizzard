@@ -135,8 +135,7 @@ class DeclarableRecord(Protocol):
 
 
 class ProjectRecord(Protocol):
-    """A project, as the writer of an apply reads it: a project is created or edited, never retired, so it is no
-    :class:`DeclarableRecord`."""
+    """A project: created or edited, never retired, so it is no :class:`DeclarableRecord`."""
 
     @property
     def project_id(self) -> str: ...
@@ -149,8 +148,8 @@ class ProjectRecord(Protocol):
 
 
 class LinkRecord(Protocol):
-    """A project's link to a work source or a repository, as the writers of an apply and of an import read it:
-    ``target`` is the linked record's id, and a link is unlinked while ``linked`` is false."""
+    """A project's link to a work source or a repository: ``target`` is the linked record's id, and a link is unlinked
+    while ``linked`` is false."""
 
     KIND: ClassVar[RecordKind]
     LABEL: ClassVar[str]

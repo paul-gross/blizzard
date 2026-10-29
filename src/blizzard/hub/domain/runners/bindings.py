@@ -1,8 +1,7 @@
 """A runner's bindings and subscription checked against its host's latest report.
 
-Nothing here is stored: a host reports on every tick, so a flag kept from the runner's last registration would go
-stale between the report and the next registration. A flagged binding is never refused — the runner keeps
-registering — it is only offered no work."""
+Nothing here is stored: every flag is derived from the host's latest report. A flagged binding is never refused — the
+runner keeps registering — it is only offered no work."""
 
 from __future__ import annotations
 

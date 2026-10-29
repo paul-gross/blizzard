@@ -291,12 +291,11 @@ class IHubKeyProvider(Protocol):
 
 
 class IRotatableHubKeyProvider(IHubKeyProvider, Protocol):
-    """A key source an offline rotation can move to a new current generation. A source whose generations are
-    set outside the hub (the environment) answers :meth:`mint` with its current generation and treats
-    :meth:`promote` and :meth:`prune` as no-ops."""
+    """A key source an offline rotation can move to a new current generation."""
 
     def mint(self) -> KeyGeneration:
-        """The generation rotation seals into: a freshly minted one, not yet current."""
+        """The generation rotation seals into: a freshly minted one, not yet current — or the current one, when the
+        source's generations are fixed outside the hub, whose :meth:`promote` and :meth:`prune` then change nothing."""
         ...
 
     def promote(self, key_id: str) -> None:

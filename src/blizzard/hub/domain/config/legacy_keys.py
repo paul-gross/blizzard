@@ -1,4 +1,4 @@
-"""The legacy keys a hub still carries, as values — read and parsed by the config edge, judged by carry-over."""
+"""The legacy keys a hub still carries, as values."""
 
 from __future__ import annotations
 

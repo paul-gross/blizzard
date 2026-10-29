@@ -507,10 +507,9 @@ class RunnerLiveness:
 @domain_model
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageWindow:
-    """One rate-limit window's utilization, read back off ``runner_external_usage``. A
-    hub-domain-owned copy rather than a shared import: the hub domain depends on nothing under
-    ``blizzard.runner`` (``bzh:domain-core``), so the shape is duplicated at the wire boundary the fact
-    already crossed, not shared across it."""
+    """One rate-limit window's utilization, read back off ``runner_external_usage``,
+    kept import-free of the runner's shape (``bzh:domain-core``;
+    ``tests/test_layering.py::test_hub_does_not_import_runner``)."""
 
     window: str
     utilization_pct: float
@@ -727,8 +726,8 @@ class IReadRunnerRegistry(Protocol):
         ...
 
     def is_retired(self, runner_id: str) -> bool:
-        """Whether ``runner_id``'s newest lifecycle fact reads retired — the one boolean the
-        id-keyed guard needs, read without reconstituting the registration. A runner with no
+        """Whether ``runner_id``'s newest lifecycle fact reads retired, read without
+        reconstituting the registration. A runner with no
         facts (or never added) is not retired."""
         ...
 
@@ -748,9 +747,8 @@ class IReadRunnerRegistry(Protocol):
         """Every fact off the fleet's two pause-family fact tables at or after ``since``, narrowed to
         ``runners`` when given — inside the capped read, so other runners' newer facts never crowd a
         narrowed read out of its ``limit``; an empty set reads nothing. On this seam,
-        not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table is
-        read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit``, never a full scan, so this
-        returns up to ``2 * limit`` rows unsorted across the two; the caller merges and re-caps."""
+        not the chunk one (``bzh:repository-split``): a runner-pause fact names no chunk. Each table
+        contributes its newest ``limit`` facts, so this returns up to ``2 * limit`` rows, unsorted across the two."""
         ...
 
 
@@ -807,8 +805,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
         """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest.
 
-        Returns the freshly-written ``runner_pause_facts.id`` (the activity-feed's
-        key) — always writes, never a no-op."""
+        Returns the freshly-written ``runner_pause_facts.id`` — always writes, never a no-op."""
         ...
 
     def record_local_pause(
@@ -818,7 +815,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
         ``reason`` is the fact's own composed cause — ``None`` for a manual
         pause/start, and always ``None`` on a start (a resume carries no reason). Returns
-        the freshly-written ``runner_local_pause_facts.id`` (the activity-feed's key)."""
+        the freshly-written ``runner_local_pause_facts.id``."""
         ...
 
     def record_lifecycle(self, runner_id: str, *, retired: bool, at: datetime, by: str) -> int:

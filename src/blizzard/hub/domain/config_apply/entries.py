@@ -1,7 +1,4 @@
-"""What a declared document asks of an apply, before any id is minted or any stored record is read.
-
-The edge decodes the wire document into these entries; ``ConfigApplication`` (``config_apply.service``) turns them
-into the declarations the per-kind plans take."""
+"""What a declared document asks of an apply, before any id is minted or any stored record is read."""
 
 from __future__ import annotations
 

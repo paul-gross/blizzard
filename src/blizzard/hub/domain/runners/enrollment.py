@@ -80,8 +80,7 @@ class RunnerEnrollmentService:
         """Mint a fresh token for an added runner, connected or not, and return it once.
 
         Takes the loaded :class:`~blizzard.hub.domain.runners.registration.RunnerRegistration`
-        rather than a bare id (``bzh:domain-takes-objects``) — the enroll endpoint
-        resolves ``runner_id`` to its row (404 if unknown); a retired runner raises ``RunnerRetired``."""
+        rather than a bare id (``bzh:domain-takes-objects``); a retired runner raises ``RunnerRetired``."""
         token = secrets.token_urlsafe(_TOKEN_BYTES)
         rotation = runner.enroll(TokenHash(token).hex, by=ROTATION_ACTOR, at=self._clock.now())
         revocation_id = self._registry.rotate_token(rotation)

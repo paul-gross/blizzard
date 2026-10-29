@@ -1,7 +1,6 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-A repository has the shape a project has: an immutable id every stored reference holds, a tenant-unique renameable slug
-whose former values keep resolving until another record claims them, and a free display name. Every field is required,
+A repository has the slugged configured-record shape (``bzh:configured-record``). Every field is required,
 so an edit carrying ``None`` on any field is refused naming it."""
 
 from __future__ import annotations

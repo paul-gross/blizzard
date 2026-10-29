@@ -147,6 +147,7 @@ def test_the_peek_offers_nothing_through_a_flagged_binding_until_the_host_report
 
 
 def test_the_peek_withholds_a_binding_the_moment_its_workspace_leaves_the_report(tmp_path: Path) -> None:
+    """Flags are read off the latest report, never stored: a stored one goes stale between registrations."""
     world = _World(tmp_path)
     world.report(["ws-a", "ws-x"])
     world.register(bindings=_bindings(("second", "ws-x")), subscription="max")
