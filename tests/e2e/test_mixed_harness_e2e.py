@@ -116,8 +116,7 @@ _CHUNK_DEFAULT_EFFORT = "medium"
 _CHUNK_DEFAULT_MODEL = ["claude-mixed-build"]
 _SESSION_MODEL = ["mock-provider/opencode-mixed-review"]
 
-#: Proven-dialect tool calls (mirrors `tests/service/test_mixed_harness_dispatch_service.py`'s
-#: `_CLAUDE_SKILL_BUILD_SCRIPT`/`_OPENCODE_TASK_BUILD_SCRIPT`): the
+#: Proven-dialect tool calls (as in `tests/service/runner/mixed-harness-dispatch.spec.ts`): the
 #: OpenCode analytics dialect's own tool names (`task`, `subagent_type`) — so
 #: `opencode-review`'s own tool call is a `task`, never a `Skill`.
 _BUILD_SKILL_NAME = "wf-mixed-review"

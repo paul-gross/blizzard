@@ -20,6 +20,8 @@ import type {
   HostSubscriptionListResponse,
   LeaseListResponse,
   LeaseUsageResponse,
+  InvocationUsagePage,
+  TranscriptSegmentContentView,
   RunnerControlView,
   RunnerStatusView,
   TickPassResponse,
@@ -45,6 +47,8 @@ export interface RunnerClient {
   dashboard(): Promise<ApiResponse<DashboardView>>;
   /** `POST …/api/heartbeat`: a heartbeat for a lease, as its worker's hook posts it. */
   heartbeat(leaseId: string): Promise<ApiResponse<HeartbeatResponse>>;
+  chunkUsage(chunkId: string, options?: { limit?: number; offset?: number }): Promise<ApiResponse<InvocationUsagePage>>;
+  transcript(chunkId: string, segmentId: string): Promise<ApiResponse<TranscriptSegmentContentView>>;
   /** The runner's facts as `FactView`s, unmapped: `seq`, `kind`, `chunk_id` and `acked_at` survive as the runner sent them. */
   facts(options?: { limit?: number }): Promise<ApiResponse<FactListResponse>>;
   /** `GET …/api/asks?open=true`: the questions workers have asked and no one has answered. */
@@ -182,6 +186,8 @@ export function runnerHostApi(options: {
         transcriptSegments: (chunkId) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/transcripts`),
         dashboard: () => raw.get('/api/dashboard'),
         heartbeat: (leaseId) => raw.post('/api/heartbeat', { data: { lease_id: leaseId } }),
+        chunkUsage: (chunkId, page = {}) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/usage`, { params: page }),
+        transcript: (chunkId, segmentId) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/transcripts/${encodeURIComponent(segmentId)}`),
         facts: (factOptions = {}) => raw.get('/api/facts', factOptions.limit === undefined ? {} : { params: { limit: factOptions.limit } }),
         asks: () => raw.get('/api/asks', { params: { open: 'true' } }),
         ask: (leaseId, question, askOptions, headers) => raw.post(`/api/leases/${encodeURIComponent(leaseId)}/asks`, { data: { question, options: askOptions }, headers }),

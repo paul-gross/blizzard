@@ -193,7 +193,7 @@ Either way, the same four-tier proof plus this page's own live diagnostic is owe
      diagnostic above.
    - `blizzard:service-test` — service integration: the candidate is exercised through the runner's own HTTP API
      (`tests/service/runner/opencode.spec.ts`, `tests/service/test_opencode_compatibility_service.py`,
-     `tests/service/test_mixed_harness_dispatch_service.py`).
+     `tests/service/runner/mixed-harness-dispatch.spec.ts`).
    - `blizzard:crash-sweep` — crash verification: the candidate survives an unattended kill-9 at every registered
      OpenCode crash point (the `_OPENCODE_GENERIC_SWEEP` and `_OPENCODE_RESUME_SWEEP` points in
      `tests/crash/test_kill9_sweep.py`).

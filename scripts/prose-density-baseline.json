@@ -11358,12 +11358,6 @@
    "over_cap": 0,
    "total": 330
   },
-  "service/test_mixed_harness_dispatch_service.py": {
-   "comments": 39,
-   "docstrings": 30,
-   "over_cap": 0,
-   "total": 557
-  },
   "service/test_mock_chunk_findings_service.py": {
    "comments": 1,
    "docstrings": 6,

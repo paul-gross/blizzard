@@ -69,6 +69,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.invocation_usage import router as invocation_usage_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
 from blizzard.runner.api.readiness import router as readiness_router
@@ -189,6 +190,7 @@ _RUNNER_UNGATED = (
 _RUNNER_HUMAN = (
     chunk_detail_router,
     leases_router,
+    invocation_usage_router,
     transcripts_router,
     usage_router,
     transcript_segments_router,

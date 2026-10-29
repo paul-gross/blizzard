@@ -29,6 +29,7 @@ from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.usage.repository import (
     ContextSampleState,
     InvocationCost,
+    InvocationUsage,
     IWriteUsageRepository,
     UsageFactRecord,
     UsageTotals,
@@ -42,6 +43,29 @@ class UsageStore:
 
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
+
+    def invocations_for_chunk(self, chunk_id: str, *, limit: int, offset: int) -> list[InvocationUsage]:
+        stmt = (
+            self._store.select(usage_facts, usage_facts)
+            .where(usage_facts.c.chunk_id == chunk_id)
+            .order_by(usage_facts.c.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [
+            InvocationUsage(
+                lease_id=row.lease_id,
+                chunk_id=row.chunk_id,
+                node_id=row.node_id,
+                epoch=row.epoch,
+                generation=row.generation,
+                kind=row.kind,
+                harness_id=row.harness_id,
+                model=row.model,
+                recorded_at=as_utc(row.recorded_at),
+            )
+            for row in self._store.all(stmt)
+        ]
 
     def usage_since(self, at: datetime) -> UsageTotals:
         stmt = self._store.select(

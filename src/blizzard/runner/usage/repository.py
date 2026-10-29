@@ -41,6 +41,7 @@ __all__ = [
     "IWriteHostLaneRepository",
     "IWriteUsageRepository",
     "InvocationCost",
+    "InvocationUsage",
     "UsageFactRecord",
     "UsageTotals",
     "charge_range",
@@ -232,6 +233,22 @@ class UsageTotals:
 
 @domain_model
 @dataclass(frozen=True)
+class InvocationUsage:
+    """Recorded provenance of one invocation of a chunk held by this runner."""
+
+    lease_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    generation: int
+    kind: str
+    harness_id: str
+    model: str | None
+    recorded_at: datetime
+
+
+@domain_model
+@dataclass(frozen=True)
 class ExternalUsageAttempt:
     """One declared subscription's sampling attempt to record: a miss with its reason, or a
     sampled snapshot whose windows the stored payload carries."""
@@ -337,6 +354,10 @@ class IReadUsageRepository(Protocol):
     def lease_usage_facts(self, lease_id: str) -> list[UsageFactRecord]:
         """Every usage fact recorded for ``lease_id``, oldest first — bounded by the lease's
         own invocations. An unknown lease and a lease with none read alike: empty."""
+        ...
+
+    def invocations_for_chunk(self, chunk_id: str, *, limit: int, offset: int) -> list[InvocationUsage]:
+        """A bounded page of this runner's recorded invocations, oldest first."""
         ...
 
     def context_sample_state(self, lease_id: str) -> ContextSampleState | None:

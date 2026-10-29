@@ -44,6 +44,13 @@ were recorded, so that one session's lifetime total can read high until it ends.
 
 ## Usage models
 
+The runner's local API exposes recorded invocation provenance at `GET /runners/{runner_id}/api/chunks/{chunk_id}/usage`.
+The response is scoped to that runner's store and filtered to the named chunk; `items` are oldest first, with
+`lease_id`, `kind` (`spawn`, `resume`, or `judge`), `harness_id`, `model`, node, epoch, generation, and recording time.
+`limit` defaults to 50 and accepts 1–200; `offset` defaults to zero. An empty page means this runner has no recorded
+invocations at that offset. The read does not expose transcript content or cost; use the chunk's spend view for
+aggregate dollars and its transcript segment routes for individual turns.
+
 Each runner usage fact names the model attributed to that invocation, including a separate fact for the judgement
 resume; node and chunk totals include its cost. For Claude Code, the runner reads the actual model from the invocation's
 assistant transcript records, the result envelope when it names a model, or an unambiguous single-model cost breakdown.
