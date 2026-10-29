@@ -40,6 +40,7 @@ function twoNodes(checkpoint: WorkerCheckpoint): MockChunkSpec {
 }
 
 async function passes(host: RunnerHost): Promise<void> {
+  expect((await host.stepHost()).outcome).toBe('completed');
   for (const name of NAMES) expect((await host.step(name)).outcome).toBe('completed');
 }
 
@@ -75,12 +76,11 @@ async function declining(mockHub: MockHub, host: RunnerHost, name: string): Prom
 }
 
 async function sampled(host: RunnerHost, slug: string, pct: number): Promise<void> {
-  for (let count = 0; count < MAX_PASSES; count++) {
+  await expect.poll(async () => {
     expect((await host.stepHost()).outcome).toBe('completed');
     const subscription = (await host.api.subscriptions()).body.items.find((item) => item.slug === slug);
-    if (subscription?.ok && subscription.windows.length === 2 && subscription.windows.every((window) => window.utilization_pct === pct)) return;
-  }
-  throw new Error(`no ${slug} sample at ${pct}%\n${host.logTail()}`);
+    return subscription?.ok && subscription.windows.length === 2 && subscription.windows.every((window) => window.utilization_pct === pct);
+  }, { message: `${slug} sampled at ${pct}%`, timeout: 15_000 }).toBe(true);
 }
 
 async function setup(runnerHosts: { create: (options: { runnerConfig: Record<string, unknown> }) => Promise<RunnerHost> },

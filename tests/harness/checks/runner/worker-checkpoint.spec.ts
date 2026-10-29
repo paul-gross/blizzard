@@ -23,6 +23,8 @@ function checkpointed(prompt: string): MockChunkSpec {
 
 test('a worker held at a checkpoint keeps its lease open until released, then completes', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
+  const environments = async () => (await runnerHost.api.environments()).body.workspaces.flatMap((workspace) => workspace.items);
+  expect((await environments()).filter((environment) => environment.held)).toEqual([]);
   const chunkId = (await mockHub.seed.chunk(checkpointed(workerCheckpoint.snippet('gate')))).body.chunk_id;
   const lease = async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId);
 
@@ -32,6 +34,9 @@ test('a worker held at a checkpoint keeps its lease open until released, then co
   await stepUntil(runnerHost, async () => arrived, (here) => here);
   await workerCheckpoint.reached('gate');
   expect((await lease())?.closed_at ?? null).toBeNull();
+  const held = (await environments()).filter((environment) => environment.chunk_id === chunkId);
+  expect(held).toHaveLength(1);
+  expect(held[0]).toMatchObject({ held: true, chunk_id: chunkId, runner_id: runner.id });
 
   // Further passes leave it open: the worker is held, not slow.
   for (let pass = 0; pass < 3; pass++) expect((await runnerHost.step()).outcome).toBe('completed');
@@ -40,6 +45,8 @@ test('a worker held at a checkpoint keeps its lease open until released, then co
   workerCheckpoint.release('gate');
   const closed = await stepUntil(runnerHost, lease, (found) => found?.closed_at != null);
   expect(closed?.state).toBe('closed');
+  const released = await environments();
+  expect(released.filter((environment) => environment.held || environment.chunk_id === chunkId)).toEqual([]);
 });
 
 test('a checkpoint released before the worker arrives lets it straight through', async ({ mockHub, runnerHost, workerCheckpoint }) => {
