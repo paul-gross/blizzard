@@ -6,6 +6,7 @@ import { type MockHubClient, mockHubApi } from './client/mock-hub';
 import { startMockHub } from './daemons/mock-hub';
 import { isAlive, killLive, type LiveDaemon, logTail, stopDaemon, stopLive } from './daemons/process';
 import { runDir } from './env';
+import { type HubRelay, startHubRelay } from './hub-relay';
 import { scanLog } from './logs';
 import type { RunnerHost } from './runner-host';
 import { type RunnerBinding, runnerWorld } from './runner-world';
@@ -24,6 +25,8 @@ export interface MockHub extends MockHubClient {
   readonly logPath: string;
   /** The tail of the mock hub's log, as a failing test has it attached. */
   logTail(): string;
+  /** With `mockHubRelay` on: the relay every runner host reaches this hub through, to hold an outage open under an in-flight call. */
+  readonly relay: HubRelay | undefined;
   /** The `/api/fleet` plane as `host`'s runner named `runner`, or as the host itself when none is named, by the token its `.env` holds now. */
   fleetOf(host: RunnerHost, runner?: string): ReturnType<MockHubClient['fleet']>;
 }
@@ -31,6 +34,8 @@ export interface MockHub extends MockHubClient {
 interface MockWorldFixtures {
   /** Starts the mock hub offering an IdP (`--offer-idp`), held across its restarts, so a host's first boot finds one. */
   mockHubOfferIdp: boolean;
+  /** Puts a test-owned relay between the runner hosts and the mock hub (`mockHub.relay`); the mock's own clients still call it directly. */
+  mockHubRelay: boolean;
   mockHub: MockHub;
   /** A loopback hub-auth stub with the key set the test gives it, closed when the test ends. */
   authStub: (keys?: unknown[]) => Promise<AuthStub>;
@@ -45,17 +50,19 @@ interface MockWorldFixtures {
  */
 export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
   runnerBinding: async ({ mockHub }, use) => {
-    await use({ hub: { url: mockHub.url } });
+    await use({ hub: { url: mockHub.relay?.url ?? mockHub.url } });
   },
 
   mockHubOfferIdp: [false, { option: true }],
+  mockHubRelay: [false, { option: true }],
 
-  mockHub: async ({ worldContext, ledger, mockHubOfferIdp }, use, testInfo) => {
+  mockHub: async ({ worldContext, ledger, mockHubOfferIdp, mockHubRelay }, use, testInfo) => {
     const dir = path.join(runDir(), 'mock-hubs', uniqueName(testInfo));
     fs.mkdirSync(dir, { recursive: true });
     let daemon: LiveDaemon = await startMockHub(dir, { offerIdp: mockHubOfferIdp });
     const { url, logPath } = daemon;
     const tail = (): string => logTail(logPath);
+    const relay = mockHubRelay ? await startHubRelay(Number(new URL(url).port)) : undefined;
     const clients = mockHubApi({ context: worldContext, testInfo, url, ledger, logContext: tail });
     try {
       await use({
@@ -71,6 +78,7 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
           if (isAlive(daemon.pid)) throw new Error('the mock hub is running; stop() or kill() it before start()');
           daemon = await startMockHub(dir, { port: Number(new URL(url).port), offerIdp: mockHubOfferIdp });
         },
+        relay,
         logPath,
         logTail: tail,
         fleetOf(host, runner) {
@@ -82,6 +90,7 @@ export const mockWorld = runnerWorld.extend<MockWorldFixtures>({
       });
     } finally {
       // The process now, not the one the fixture started: a `start()` replaced it.
+      await relay?.close();
       await stopDaemon(daemon);
       if (testInfo.status !== testInfo.expectedStatus) await testInfo.attach('mock hub log', { body: tail(), contentType: 'text/plain' });
     }
