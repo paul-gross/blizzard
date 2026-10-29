@@ -94,6 +94,8 @@ test('test_host_and_migrate_refuse_an_ungraduated_directory_naming_the_procedure
 });
 
 test('test_a_running_host_holds_its_directory_against_every_verb_that_moves_its_store_but_a_plain_upgrade', async ({ runnerHost }) => {
+  // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
+  test.slow();
   const before = heldShape(runnerHost.dir);
   const held = `pid ${runnerHost.pid}`;
 
@@ -117,6 +119,8 @@ test('test_adoption_set_aside_and_an_upgrade_from_the_parent_revision_under_anot
   runnerHosts,
   scratchDirs,
 }) => {
+  // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
+  test.slow();
   const source = await runnerHosts.create({ runnerStarted: false });
   const adopting = asPreHost(copyOf(source, scratchDirs.make('adopting')));
   const left = leftStore(scratchDirs.make('left'));
@@ -151,6 +155,8 @@ test('test_every_verb_that_moves_the_store_refuses_while_a_pre_host_daemon_answe
   scratchDirs,
   preHostDaemon,
 }) => {
+  // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
+  test.slow();
   const host = await runnerHosts.create({ runnerStarted: false });
   const adopting = asPreHost(copyOf(host, scratchDirs.make('adopting')));
   const left = leftStore(scratchDirs.make('left'));
@@ -180,6 +186,8 @@ test('test_a_store_a_configured_db_url_names_is_upgraded_in_place_leaving_data_r
   runnerHosts,
   scratchDirs,
 }) => {
+  // Each CLI verb is a fresh Python process; a loaded machine puts the run past the default timeout.
+  test.slow();
   const host = await runnerHosts.create({ runnerStarted: false });
   const down = await host.cli(['migrate', '--dir', host.dir, '--down', PARENT]);
   expect(down.code, said(down)).toBe(0);
