@@ -92,6 +92,10 @@ export interface MockChunkSpec {
   /** Graph-scoped artifacts baked into the chunk's mint; `asset` is the one kind the hub synthesizes. */
   graph_artifacts?: { name: string; kind?: 'asset'; content: string }[];
   status?: 'ready' | 'not_ready' | 'paused' | 'needs_human' | 'delivering' | 'done' | 'stopped';
+  /** Makes the chunk a routine run; without it the analytics reads refuse for want of a run context. */
+  garden_run?: { routine_name: string; scope_slug: string };
+  /** The canned rows the chunk's analytics reads serve, as the mock's `AnalyticsSpec` names them. */
+  analytics?: Record<string, Record<string, unknown>[]>;
 }
 
 export interface MockChunkSeeded {

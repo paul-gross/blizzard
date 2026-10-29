@@ -45,6 +45,8 @@ export interface RunnerClient {
   leaseArtifacts(leaseId: string, options?: { scope?: ArtifactScope; headers?: Record<string, string> }): Promise<ApiResponse<WorkerArtifact[]>>;
   /** `GET …/api/leases/{id}/transcript`: the lease's resolved transcript. */
   leaseTranscript(leaseId: string, options?: { headers?: Record<string, string> }): Promise<ApiResponse<TranscriptResponse>>;
+  /** `GET …/api/leases/{id}/analytics/{kind}/{dimension}`, proxied to the hub; `headers` act as the lease's worker (`workerHeaders`). */
+  leaseAnalytics(leaseId: string, kind: 'counts' | 'spend', dimension: string, options?: { since?: string; params?: Record<string, string>; headers?: Record<string, string> }): Promise<ApiResponse<Record<string, unknown>>>;
   /** `PATCH …/api/runner`: the runner's local pause, or its release. */
   setPaused(paused: boolean, by?: string): Promise<ApiResponse<RunnerControlView>>;
   pauseChunk(chunkId: string): Promise<ApiResponse>;
@@ -135,6 +137,11 @@ export function runnerHostApi(options: {
           }),
         leaseTranscript: (leaseId, transcriptOptions = {}) =>
           raw.get(`/api/leases/${encodeURIComponent(leaseId)}/transcript`, { headers: transcriptOptions.headers }),
+        leaseAnalytics: (leaseId, kind, dimension, analyticsOptions = {}) =>
+          raw.get(`/api/leases/${encodeURIComponent(leaseId)}/analytics/${kind}/${encodeURIComponent(dimension)}`, {
+            params: { since: analyticsOptions.since ?? '2020-01-01T00:00:00Z', ...analyticsOptions.params },
+            headers: analyticsOptions.headers,
+          }),
         setPaused: (paused, by) => raw.patch('/api/runner', { data: by === undefined ? { paused } : { paused, by } }),
         pauseChunk: (chunkId) => chunk(chunkId, 'pause'),
         resumeChunk: (chunkId) => chunk(chunkId, 'resume'),
