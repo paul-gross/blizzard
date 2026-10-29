@@ -1,8 +1,7 @@
 """The ``chunks`` terminal-fact predicates (package-private, ``bzh:facts-not-status``).
 
 :func:`chunk_is_terminal` is the one SQL form of "the chunk is stopped or done", mirroring
-:meth:`ChunkFacts.status`; the live prefilter :func:`maybe_live` is its negation, the open-question and
-open-decision lists and the write fence call it directly, and :func:`settled_stopped` /
+:meth:`ChunkFacts.status`; the live prefilter :func:`maybe_live` is its negation, and :func:`settled_stopped` /
 :func:`settled_done` split it into its two outcomes; :func:`done_completed_at` is the instant a chunk
 :func:`settled_done` settles finished, mirroring :meth:`ChunkFacts.completed_at`. Its one residue: a terminal and a
 non-terminal transition at an identical ``(recorded_at, epoch)`` leave the chunk live, since the derivation orders

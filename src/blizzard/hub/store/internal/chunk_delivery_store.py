@@ -4,9 +4,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Facts 
 (``bzh:facts-not-status``): every write appends a row; nothing here derives status.
 Timestamps arrive already stamped (``bzh:injected-clock``).
 
-``finalize_delivery`` stays one transaction on one connection, unchanged by the seam
-carve — the shared row helpers below are plain function calls inside that same
-``with self._store.write(...)`` block, never a second connection."""
+``finalize_delivery`` is one transaction on one connection — the shared row helpers
+below are plain function calls inside its ``with self._store.write(...)`` block,
+never a second connection."""
 
 from __future__ import annotations
 
@@ -131,10 +131,10 @@ class ChunkDeliveryStore:
         transition_id: str,
         at: datetime,
     ) -> bool:
-        """Land the terminal delivery **atomically and idempotently** (crash recovery).
+        """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s `IWriteChunkDeliveryRepository.finalize_delivery`.
 
         The hub lease, ``delivery.landed``, the terminal transition and the route release
-        are one transaction; guarded by ``delivery.landed``, True only when it wrote."""
+        share one write; an existing ``delivery_landed`` row is the replay guard."""
         with self._store.write("finalize_delivery") as conn:
             lock_chunk_row(conn, chunk_id)
             already = conn.execute(
@@ -171,15 +171,8 @@ class ChunkDeliveryStore:
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
     ) -> bool:
-        """Idempotent per ``(chunk_id, source, ref, outcome)`` — mirrors
-        ``ChunkArtifactsStore.record_hub_artifact``'s own already-existed-row contract. A
-        ``closed``/``gone`` outcome also retires the matching pending ``close_intents``
-        row, same transaction, whether or not this call wrote a fresh outcome row — a
-        replay finishes an interrupted retirement. A ``failed`` outcome instead appends a
-        ``close_intent_attempts`` row for its matching intent, same transaction, on
-        *every* call — never gated by ``wrote``, since the backoff ledger is its own
-        append-only fact, not idempotency-guarded like the outcome row above.
-        See ``blizzard-context/architecture/crash-correctness/hub.md``."""
+        """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s
+        `IWriteChunkDeliveryRepository.record_work_item_closure`."""
         with self._store.write("record_work_item_closure") as conn:
             already = conn.execute(
                 self._store.select(s.work_item_closures, s.work_item_closures.c.id).where(

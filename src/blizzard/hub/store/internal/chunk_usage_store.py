@@ -79,8 +79,6 @@ class ChunkUsageStore:
         estimated_cost_usd: float | None = None,
         at: datetime,
     ) -> None:
-        # Append-only, no epoch fence, no second dedup key — the caller's per-runner seq
-        # high-water mark already guarantees at most one call per landed fact.
         with self._store.write("record_usage") as conn:
             conn.execute(
                 self._store.insert(s.usage_facts).values(

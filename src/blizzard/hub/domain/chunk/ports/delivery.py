@@ -62,10 +62,11 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
         pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
         detail; ``None`` for ``closed``. A ``closed``/``gone`` outcome also retires the
-        matching pending ``close_intents`` row, in the same transaction — never a
-        ``failed`` one's. A ``failed`` outcome instead appends a ``close_intent_attempts``
-        row for its matching intent, in the same transaction — the
-        backoff clock's own tick; a pointer with no matching pending intent (never
+        matching pending ``close_intents`` row, in the same transaction, whether or not
+        this call wrote a fresh outcome row — a replay finishes an interrupted retirement;
+        never a ``failed`` one's. A ``failed`` outcome instead appends a
+        ``close_intent_attempts`` row for its matching intent, in the same transaction, on
+        every call (replays included) — the backoff clock's own tick; a pointer with no matching pending intent (never
         enqueued) records none. Returns True iff it wrote a fresh outcome row."""
         ...
 
