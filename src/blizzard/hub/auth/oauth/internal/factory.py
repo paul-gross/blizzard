@@ -45,8 +45,8 @@ class ProviderEntry:
         """One provider conformer per configured entry, sharing one ``httpx2.Client``.
 
         A misconfigured entry fails here, at boot, naming the offending provider — never
-        silently at first login. ``http_client`` is injectable for tests; the ``host``
-        composition root leaves it unset for the real client."""
+        silently at first login. ``http_client`` is the client to share; unset, a fresh one is
+        made."""
         client = http_client or httpx2.Client(timeout=15.0)
         return OAuthProviderRegistry({e.name: cls.of(e).provider(client) for e in providers})
 

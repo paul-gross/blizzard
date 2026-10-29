@@ -300,8 +300,7 @@ def require_runner_principal(request: Request, services: Hub) -> RunnerPrincipal
 
 
 def require_runner_principal_even_if_retired(request: Request, services: Hub) -> RunnerPrincipal:
-    """The principal without the retirement refusal — the claim route's, whose retired refusal is the
-    paused-denial body a runner parses (``ClaimService`` raises it in-domain)."""
+    """The runner principal without the retirement refusal: a retired runner's token still resolves."""
     return RunnerAuth.of(request, services).demand(allow_retired=True)
 
 

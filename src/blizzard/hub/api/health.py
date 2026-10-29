@@ -1,8 +1,6 @@
 """The hub liveness probe — ``GET /api/health``.
 
-A dependency-free readiness signal the service tier, the board, and ``winter
-service … --wait`` can poll. Deeper status (chunks, questions, runners) is derived
-from facts and served by the fleet routers the backend builder fills in.
+A dependency-free readiness signal: it answers whenever the hub is serving.
 """
 
 from __future__ import annotations

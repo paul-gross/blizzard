@@ -360,9 +360,6 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     )
 
 
-# Moved wholesale — no anonymous caller ever reached these.
-
-
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
 def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     """The chunk's current node envelope, idempotent — the lost-apply re-read."""
@@ -739,8 +736,6 @@ def claim_route(
     except ClaimConflict as exc:
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    # Hardcoded literal, not a derivation — a fresh claim always lands the chunk at
-    # `running` (see `chunk_events.ChunkChanged.publish`'s docstring).
     change.publish(cause="claimed", status="running", key=f"route_created:{result.route_id}")
     services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(

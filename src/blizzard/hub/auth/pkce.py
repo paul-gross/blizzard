@@ -38,6 +38,5 @@ class Pkce:
         return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
     def matches(self, code_challenge: str) -> bool:
-        """The exchange route's own check. Comparing digests rather than raw secrets, a
-        constant-time compare carries no extra weight — but is used regardless."""
+        """Whether ``code_challenge`` is this verifier's challenge."""
         return hmac.compare_digest(self.challenge, code_challenge)

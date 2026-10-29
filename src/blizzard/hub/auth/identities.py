@@ -25,9 +25,7 @@ class IReadIdentityRepository(Protocol):
         ...
 
     def distinct_provider_names(self) -> set[str]:
-        """Every ``provider_name`` any stored identity references — the boot-time
-        immutability check's read: a name here absent from ``[[auth.oauth.provider]]``
-        means a rename would silently orphan those identities."""
+        """Every ``provider_name`` any stored identity references."""
         ...
 
 
@@ -38,6 +36,5 @@ class IWriteIdentityRepository(IReadIdentityRepository, Protocol):
 
     def update_handle(self, provider_name: str, subject: str, *, handle: str) -> None:
         """Refresh a linked identity's stored ``handle`` in place — a
-        provider-side handle rename never re-mints a user; "subject mapping wins on
-        every later login" (the epic's own phrasing) applies to the handle too."""
+        provider-side handle rename never re-mints a user."""
         ...

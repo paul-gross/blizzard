@@ -7,8 +7,7 @@ aliases acting in the call's project — the tenant's only one, else ``422 proje
 
 The controller resolves a slug into an object before delegating to the domain
 (``bzh:controller-read-only``, ``bzh:domain-takes-objects``). Every write carries the
-request's :class:`ChangeContext` and an optional ``If-Match`` (``bzh:configured-record``).
-``reject_runner_principal`` confines a runner's bearer token to the fleet router."""
+request's :class:`ChangeContext` and an optional ``If-Match`` (``bzh:configured-record``)."""
 
 from __future__ import annotations
 
@@ -39,8 +38,7 @@ _VIEW = Depends(require(Permission.FLEET_VIEW))
 
 
 def scope_view(scope: Scope, labels: ProjectLabelFields | None = None) -> ScopeView:
-    """The one `Scope` -> `ScopeView` projection, labelled with its project when ``labels`` is given — reused
-    as-is by the runner-facing fleet route (`blizzard.hub.api.fleet`) rather than restated there."""
+    """The one `Scope` -> `ScopeView` projection, labelled with its project when ``labels`` is given."""
     view = ScopeView(
         slug=scope.slug,
         description=scope.description,

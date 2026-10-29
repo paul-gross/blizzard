@@ -32,14 +32,9 @@ def _issuer_verified(claim: object) -> bool:
 
 
 class OidcProvider:
-    """A generic OIDC provider — discovery + authorization-code flow + ``id_token``
-    signature verification against the issuer's published JWKS.
-
-    An issuer's ``email_verified`` claim is only as trustworthy as the issuer's own
-    directory, so its addresses are authoritative only when the hub administrator
-    configures them so (``emails_authoritative``). Until then no address it reports
-    accepts an invitation, links to an existing user or claims ``auth.superuser``: it
-    signs in only identities already linked to a user."""
+    """A generic OIDC provider — discovery + authorization-code flow + ``id_token`` signature verification against the
+    issuer's published JWKS. An issuer's ``email_verified`` claim is only as trustworthy as the issuer's own directory,
+    so its addresses are authoritative only when the hub administrator configures them so (``emails_authoritative``)."""
 
     type = "oidc"
 
@@ -140,8 +135,8 @@ class OidcProvider:
         raise OAuthExchangeError(f"no JWKS key matches id_token kid {kid!r} for provider {self.name!r}")
 
     def _trusted_algorithms(self, jwk: dict[str, object]) -> list[str]:
-        # SAFETY: algorithms come from the issuer, never the attacker-supplied token header
-        # (RS256-to-HS256 confusion; pinned by test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg).
+        # SAFETY: algorithms come from the issuer, never the attacker-supplied token header (RS256-to-HS256 confusion);
+        # tests/test_auth_oauth_providers.py::test_oidc_exchange_rejects_an_alg_confusion_token_when_jwk_omits_alg
         jwk_alg = jwk.get("alg")
         if jwk_alg:
             return [str(jwk_alg)]

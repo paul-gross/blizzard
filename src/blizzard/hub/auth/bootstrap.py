@@ -1,13 +1,9 @@
 """``auth.superuser`` bootstrap — record and report the configured target at hub boot.
 
-Boot promotes nobody: the configured email is recorded in the singleton
-``superuser_bootstrap`` row as an intent, claimed at the next sign-in whose provider vouches
-for it (:meth:`AuthService.link_or_mint`) by the user it signs in, who becomes a hub
-administrator; an account's stored email alone never claims. A target already
-claimed is never claimed again. Pointing ``auth.superuser`` at a different email records a
-new, unclaimed intent — whoever claimed the old one stays a hub administrator. Unsetting it
-cancels an intent nobody has claimed and leaves a claimed one alone: configuration never
-revokes anyone. An unclaimed intent is surfaced at every boot until claimed."""
+Boot promotes nobody: the configured email is recorded in the singleton ``superuser_bootstrap`` row as an intent,
+which a sign-in claims under the rules ``src/blizzard/hub/auth/service.py`` owns (:meth:`AuthService.link_or_mint`).
+Pointing ``auth.superuser`` at a different email records a new, unclaimed intent. Unsetting it cancels an intent nobody
+has claimed and leaves a claimed one alone. An unclaimed intent is surfaced at every boot until claimed."""
 
 from __future__ import annotations
 
@@ -28,8 +24,7 @@ class Superuser:
 
     def ensure(self) -> None:
         """Record ``email`` as the claim target when it is new, and report it while unclaimed;
-        with no email configured, cancel an unclaimed target — the one entry point
-        ``build_hosted_app`` calls."""
+        with no email configured, cancel an unclaimed target."""
         if self.email is None:
             self.auth.cancel_unclaimed_superuser_bootstrap()
             return

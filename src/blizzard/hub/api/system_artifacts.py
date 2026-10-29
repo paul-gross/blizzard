@@ -1,9 +1,8 @@
 """The system-artifact set's own read logic (``ArtifactScope.SYSTEM``) — resolved at call
-time straight off the packaged set, never a chunk, a lease, or a store row. Mounted only
-under ``blizzard.hub.api.fleet`` (``bzh:system-scope-reads-live``): a worker is the set's
-only consumer today (``bzh:app-agnostic-graphs``). The packaged set is injected
-(``HubServices.system_artifacts``, ``bzh:dependency-injection``) rather than imported as a
-module-level singleton, so a test substitutes a throwaway root instead of monkeypatching."""
+time straight off the packaged set, never a chunk, a lease, or a store row. See
+``bzh:system-scope-reads-live`` and ``bzh:app-agnostic-graphs``. The packaged set is injected
+(``HubServices.system_artifacts``, ``bzh:dependency-injection``); pinned by
+``tests/test_hub_system_artifacts_route.py::test_list_serves_the_full_published_set``."""
 
 from __future__ import annotations
 

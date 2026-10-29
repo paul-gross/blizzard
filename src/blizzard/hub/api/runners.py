@@ -2,8 +2,7 @@
 resume, enroll, retire, reinstate, and token revocation. Every verb addresses a runner by its
 hub-minted id and never resolves a name. The runner-authenticated half is :mod:`blizzard.hub.api.fleet`.
 
-Controllers stay read-only over the store (``bzh:controller-read-only``);
-``reject_runner_principal`` confines a runner's bearer token to the fleet router."""
+Controllers stay read-only over the store (``bzh:controller-read-only``)."""
 
 from __future__ import annotations
 

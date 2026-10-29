@@ -80,10 +80,7 @@ def _finding_view_fields(finding: Finding, labels: ProjectLabelFields | None = N
 
 
 def finding_view(finding: Finding, labels: ProjectLabelFields | None = None) -> FindingView:
-    """The one ``Finding`` -> ``FindingView`` projection, labelled with its project when ``labels`` is given —
-    reused as-is by the runner-facing fleet route (``blizzard.hub.api.fleet``) rather than restated there."""
-    # `class_`'s alias is the Python keyword `class` — constructed by alias via
-    # `model_validate`, the `garden_proposal_view` shape.
+    """The one ``Finding`` -> ``FindingView`` projection, labelled with its project when ``labels`` is given."""
     return FindingView.model_validate(_finding_view_fields(finding, labels))
 
 

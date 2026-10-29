@@ -12,9 +12,8 @@ import structlog
 
 class RepoError(Exception):
     """Raised by an identity-repository write that hit an unexpected store fault —
-    never for an *expected* collision a caller already checks for up front (e.g. the
-    username-collision-suffix minting loop), only for a fault a caller could not have
-    anticipated (a raced insert, a disconnected store)."""
+    never for an *expected* collision a caller can check for up front, only for a fault
+    a caller could not have anticipated (a raced insert, a disconnected store)."""
 
     def __init__(self, message: str, *, operation: str = "", detail: str = "") -> None:
         super().__init__(message)

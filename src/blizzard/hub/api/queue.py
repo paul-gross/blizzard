@@ -194,9 +194,7 @@ class ReadyQueue:
 
 
 def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[RunnerCapability, ...]:
-    """The wire->domain conversion :func:`~blizzard.hub.api.fleet.register_runner`
-    already applies to a runner's registration snapshot — the matched peek's own request
-    carries the same shape, so it is converted the same way."""
+    """The matched peek's wire runner capabilities, converted field for field to the domain's."""
     return tuple(
         RunnerCapability(
             harness_id=c.harness_id,

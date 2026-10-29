@@ -1,6 +1,6 @@
 """Work-source routes — the configured-record verbs (create, list, show, patch, retire,
-enable) and the operator-plane editor surface over a work source's browsable items,
-human-plane throughout (``reject_runner_principal``). The record verbs write only through
+enable) and the operator-plane editor surface over a work source's browsable items.
+The record verbs write only through
 ``ConfigAuthoring``; the actor and door come from the request's :class:`ChangeContext`.
 
 Every source-addressed route is gated on the source's editor (reads included): an

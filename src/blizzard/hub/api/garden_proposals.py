@@ -84,8 +84,6 @@ def garden_proposal_view(
 ) -> GardenProposalView:
     """The one ``GardenProposal`` -> ``GardenProposalView`` projection, labelled with its project when ``labels``
     is given — the ``finding_view`` shape."""
-    # `class_`'s alias is the Python keyword `class` — constructed by alias via
-    # `model_validate`, the `finding_view` shape.
     return GardenProposalView.model_validate(
         {
             "proposal_id": proposal.proposal_id,

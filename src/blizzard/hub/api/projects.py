@@ -1,7 +1,6 @@
-"""Project routes — the configured-record verbs a project takes (create, list, show, patch; a project is never
-retired), and a project's source and repository links (list, link, retire to unlink). Human-plane throughout
-(``reject_runner_principal``). Writes go only through ``ProjectAuthoring``; the actor and door come from the request's
-:class:`ChangeContext`.
+"""Project routes — the configured-record verbs a project takes (create, list, show, patch; a project is never retired),
+and a project's source and repository links (list, link, retire to unlink). Writes go only through ``ProjectAuthoring``;
+the actor and door come from the request's :class:`ChangeContext`.
 
 ``{project}`` is the project's id or slug, a slug it left among them (:func:`path_project`). The built-in ``hub``
 source is linked to every project without a stored link: a listing reports it, linking it changes nothing, and

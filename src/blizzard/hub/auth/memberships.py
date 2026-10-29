@@ -96,8 +96,7 @@ class IReadMembershipRepository(Protocol):
         ...
 
     def only_tenant(self) -> TenantId | None:
-        """The hub's tenant while it holds exactly one, else ``None`` — the one tenant the superuser
-        claim may let its claimer into."""
+        """The hub's tenant while it holds exactly one, else ``None``."""
         ...
 
 

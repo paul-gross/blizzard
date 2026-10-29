@@ -44,8 +44,8 @@ router = APIRouter(
 
 
 def to_domain_record(record: TranscriptSegmentRecord, *, runner_id: str) -> TranscriptSlice:
-    """The wire ingest record, store-shaped — turns serialized once here (the byte
-    count recorded elsewhere is measured off this same JSON text) rather than re-serialized per read."""
+    """The wire ingest record, store-shaped, its turns serialized once here — the text
+    :attr:`~blizzard.hub.domain.observability.transcripts.TranscriptSlice.byte_count` measures."""
     turns_json = json.dumps([turn.model_dump(mode="json") for turn in record.turns])
     return TranscriptSlice(
         segment_id=record.segment_id,
@@ -119,8 +119,7 @@ def _content_view(segment_id: str, records: list[SegmentRecordContent]) -> Trans
 def lease_content_view(
     chunk_id: str, node_id: str, epoch: int, records: list[SegmentRecordContent]
 ) -> LeaseTranscriptView:
-    """The fleet router's lease-transcript route renders through this — :func:`_rendered_turns`
-    over a lease's full record set rather than one segment's. ``index`` is
+    """:func:`_rendered_turns` over a lease's full record set. ``index`` is
     renumbered across the whole read: a segment's own is producer-minted and generation-local,
     so concatenating a lease's generations would otherwise restart it at zero mid-list."""
     turns, _final, truncated = _rendered_turns(records)

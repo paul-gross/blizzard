@@ -39,12 +39,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _THROTTLE_DETAIL = "too many login attempts — try again shortly"
 
-#: The board route a sign-in that accepted an invitation lands on, its ``tenant`` naming the invited tenant: the board
-#: selects that tenant and moves on.
+#: The board route a sign-in that accepted an invitation lands on, its ``tenant`` naming the invited tenant.
 INVITATION_LANDING = "/invite/accepted"
 
-#: The board route a sign-in that admitted nobody lands on, its ``refusal`` naming why: the board shows the text for
-#: the code.
+#: The board route a sign-in that admitted nobody lands on, its ``refusal`` naming why.
 SIGN_IN_REFUSED = "/login"
 
 

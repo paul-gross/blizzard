@@ -24,8 +24,7 @@ class IWriteSessionRepository(IReadSessionRepository, Protocol):
     def create(self, session: Session) -> None: ...
 
     def touch(self, id_hash: str, *, last_seen_at: datetime, expires_at: datetime) -> None:
-        """Slide a session's expiry — the write ``AuthService.touch_session`` delegates to
-        on every resolve."""
+        """Slide a session's expiry, recording when it was last seen."""
         ...
 
     def delete(self, id_hash: str) -> None:
