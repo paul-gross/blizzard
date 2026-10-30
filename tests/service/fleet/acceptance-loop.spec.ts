@@ -102,9 +102,9 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole-chunk', wait: 
         const spans = collector.received.spans().filter((span) => span.traceId === traceId);
         return [spans.filter(isFleet).filter((span) => roleOf(span) === 'step').length, spans.filter(isFleet).filter((span) => roleOf(span) === 'runner/invocation').length];
       }, { timeout: 30000 }).toEqual([3, 4]);
-      const input = collector.received.spans().filter((span) => span.traceId === traceId);
       await expect.poll(() => {
-        try { assertPlatformNesting(input.filter(isFleet), collector.received.spans().filter((span) => span.traceId === traceId && !isFleet(span))); return true; }
+        const input = collector.received.spans().filter((span) => span.traceId === traceId);
+        try { assertPlatformNesting(input.filter(isFleet), input.filter((span) => !isFleet(span))); return true; }
         catch { return false; }
       }, { timeout: 30000 }).toBe(true);
       if (setting.name === 'short') {
@@ -123,7 +123,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole-chunk', wait: 
   });
 }
 
-traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, repository, runnerHosts, traceSink }) => {
+traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, repository, runnerHosts, traceSink, freshHub }) => {
   test.setTimeout(120000);
   const harness = harnesses[0]!;
   const repo = await repository();
@@ -148,6 +148,7 @@ traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, r
   ] satisfies StepExpect[]);
   const roots = assertChunkTrace(fleet, chunk.chunk_id, { outcome: 'done', steps: 3 });
   expect(roots.work.attributes['blizzard.chunk.bounces']).toBe(0);
+  expect(roots.lifetime.attributes['blizzard.chunk.bounces']).toBe(0);
   const runners = assertRunnerNesting(fleet, 2);
   assertInvocations(runners, { build: { harnessId: harness.id, responseModel: harness.responseModel }, review: { harnessId: harness.id, responseModel: harness.responseModel } });
   let platformError: unknown;
@@ -162,5 +163,8 @@ traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, r
     const credential = session.spawn_credential as { lease_token?: string } | undefined;
     return credential?.lease_token ? [credential.lease_token] : [];
   });
+  await runnerHost.stop();
+  await freshHub.stop();
+  expect(traceSink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
   assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [runnerHost.hubTokens().runners['runner-local']!], 'artifact body': [artifactBody] });
 });

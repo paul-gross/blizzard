@@ -76,7 +76,7 @@ for (const harness of harnesses) {
   });
 }
 
-traced('test_ask_parks_then_answer_resumes_session_to_done', async ({ api, cli, forge, issue, repository, runnerHosts, traceSink }) => {
+traced('test_ask_parks_then_answer_resumes_session_to_done', async ({ api, cli, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
   test.setTimeout(150000);
   const state = await scenario({ api, cli, forge, issue, repository, runnerHosts }, harnesses[0]!);
   const sink = traceSink;
@@ -103,5 +103,8 @@ traced('test_ask_parks_then_answer_resumes_session_to_done', async ({ api, cli, 
     const credential = session.spawn_credential as { lease_token?: string } | undefined;
     return credential?.lease_token ? [credential.lease_token] : [];
   });
+  await state.host.stop();
+  await freshHub.stop();
+  expect(sink.spans().some((span) => span.scope.name === 'blizzard.cli' && span.attributes['blizzard.cli.command'] === 'runner artifact create')).toBe(true);
   assertNoLeaks(sink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!], 'ask text': [questionText] });
 });

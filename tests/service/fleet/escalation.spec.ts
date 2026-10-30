@@ -1,4 +1,4 @@
-import { assertInvocations, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
+import { assertInvocations, assertRunnerNesting, assertSkeleton, expect, isFleet, roleOf, stepUntil, test, traced, tracesOf, type StepExpect } from '../../harness/fixtures';
 
 const harnesses = [
   { name: 'claude-code', id: 'claude_code', model: 'claude-opus-4-8', sessionFlag: '--resume' },
@@ -71,5 +71,5 @@ traced('test_retries_exhausted_escalates_and_takeover_resumes_session', async ({
     { name: 'step build', outcome: 'superseded', children: ['queue wait', 'claim'] },
     { name: 'step build', outcome: 'escalated', status: 2, link: 'retry' },
   ] satisfies StepExpect[]);
-  assertInvocations(spans, { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
+  assertInvocations(assertRunnerNesting(spans, 2), { build: { harnessId: 'claude_code', responseModel: harnesses[0]!.model } });
 });

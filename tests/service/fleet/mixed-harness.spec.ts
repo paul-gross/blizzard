@@ -1,4 +1,4 @@
-import { assertInvocations, expect, isFleet, roleOf, stepUntil, test, traced, type RunnerHost, type WorkerCheckpoint } from '../../harness/fixtures';
+import { assertInvocations, assertRunnerNesting, expect, isFleet, roleOf, stepUntil, test, traced, type RunnerHost, type WorkerCheckpoint } from '../../harness/fixtures';
 
 const branch = 'feature/mixed-lineage';
 const buildFile = 'LANDED-MIXED-BUILD.md';
@@ -107,7 +107,7 @@ traced('test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_
     return [spans.filter((span) => roleOf(span) === 'step').length, spans.filter((span) => roleOf(span) === 'runner/invocation').length];
   }, { timeout: 30000 }).toEqual([3, 5]);
   const spans = traceSink.spans().filter((span) => span.attributes['blizzard.chunk.id'] === state.chunk.chunk_id && isFleet(span));
-  assertInvocations(spans, {
+  assertInvocations(assertRunnerNesting(spans, 2), {
     build: { harnessId: 'claude_code', responseModel: 'claude-opus-4-8', requestModel: buildModel },
     'opencode-review': { harnessId: 'opencode', responseModel: reviewModel, requestModel: reviewModel },
   });

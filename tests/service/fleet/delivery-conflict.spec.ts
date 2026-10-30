@@ -44,7 +44,7 @@ test.describe('conflicted delivery', () => {
   });
 });
 
-traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build', async ({ api, forge, issue, repository, runnerHosts, traceSink }) => {
+traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_build', async ({ api, forge, issue, repository, runnerHosts, traceSink, freshHub }) => {
   test.setTimeout(150000);
   const state = await firstBounce({ api, forge, issue, repository, runnerHosts });
   await stepUntil(state.host, async () => (await api.get(`/api/chunks/${state.chunk.chunk_id}`)).body.history as { choice_name: string }[], (history) => history.filter((item) => item.choice_name === 'pass').length >= 2);
@@ -72,5 +72,7 @@ traced('test_conflict_lands_zero_repos_and_routes_the_bounce_envelope_back_to_bu
     const credential = session.spawn_credential as { lease_token?: string } | undefined;
     return credential?.lease_token ? [credential.lease_token] : [];
   });
+  await state.host.stop();
+  await freshHub.stop();
   assertNoLeaks(traceSink.spans(), { 'lease token': tokens, 'runner bearer': [state.host.hubTokens().runners['runner-local']!] });
 });
