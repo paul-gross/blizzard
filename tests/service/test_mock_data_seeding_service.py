@@ -18,7 +18,7 @@ import httpx2
 import pytest
 
 from tests.fleet_launchers import await_http, terminate
-from tests.service.support import require_mock_fleet, service_gate
+from tests.mock_fleet_support import require_mock_fleet, service_gate
 from tests.support import daemon_log_sink, free_port
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -31,7 +31,7 @@ def _require_mock_data_binary() -> Path:
     """The provisioned sibling ``blizzard-mock`` venv bin with ``blizzard-mock-data``,
     or skip.
 
-    Distinct from :func:`~tests.service.support.require_mock_fleet`'s hub/runner probe:
+    Distinct from :func:`~tests.mock_fleet_support.require_mock_fleet`'s hub/runner probe:
     this module drives the mock-data seeder specifically."""
     bin_dir = require_mock_fleet()
     if not (bin_dir / "blizzard-mock-data").is_file():

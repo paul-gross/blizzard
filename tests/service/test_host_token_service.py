@@ -7,7 +7,7 @@ from __future__ import annotations
 import httpx2
 import pytest
 
-from tests.service.support import mock_hub, require_mock_fleet, service_gate
+from tests.mock_fleet_support import mock_hub, require_mock_fleet, service_gate
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]

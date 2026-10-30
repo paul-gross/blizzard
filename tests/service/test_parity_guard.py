@@ -12,7 +12,7 @@ import re
 import pytest
 
 from blizzard.runner.hub.client import IHostHubClient, IHubClient, IHubRunnerAdmin, ITokenIdentityReader
-from tests.service.support import mock_hub, mock_runner, require_mock_fleet, service_gate
+from tests.mock_fleet_support import mock_hub, mock_runner, require_mock_fleet, service_gate
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]

@@ -52,7 +52,7 @@ from blizzard.runner.harness.opencode.compatibility.scratch_git import (
     SubprocessOpenCodeScratchGit,
 )
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
-from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
+from tests.mock_fleet_support import require_mock_fleet, require_opencode_cli_surface, service_gate
 from tests.support_child_launch import CHILDREN, tool_env
 
 pytestmark = [pytest.mark.service, service_gate]

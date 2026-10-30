@@ -22,7 +22,7 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.service.support import require_mock_fleet, require_opencode_cli_surface, service_gate
+from tests.mock_fleet_support import require_mock_fleet, require_opencode_cli_surface, service_gate
 from tests.support_child_launch import CHILDREN, version_probe
 
 pytestmark = [pytest.mark.service, service_gate]

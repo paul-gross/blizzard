@@ -21,7 +21,7 @@ from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
-from tests.service.support import require_mock_fleet, service_gate
+from tests.mock_fleet_support import require_mock_fleet, service_gate
 from tests.support_child_launch import CHILDREN, tool_env, version_probe
 
 pytestmark = [pytest.mark.service, service_gate]
