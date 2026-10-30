@@ -163,10 +163,17 @@ class _FakeApp:
         self.state = _FakeState(services, config)
 
 
+@pytest.fixture
+def no_early_second_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin each lifespan sweep's jitter to its whole interval. The jitter is drawn from ``[0, interval)`` and offsets
+    the second pass, so a draw inside a test's window would add a pass to a count that expects only the first."""
+    monkeypatch.setattr("blizzard.hub.app.random.uniform", lambda low, high: high)
+
+
+@pytest.mark.usefixtures("no_early_second_pass")
 async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_path: Path) -> None:
     """No work source opts a chunk's transcript events into anything —
-    the sweep is yielded and started regardless. Its jitter never delays this first pass,
-    so no jitter override is needed here."""
+    the sweep is yielded and started regardless."""
     event_derivation = _CountingReconciler()
     services = _FakeServices(work_sources=_FakeWorkSources())
     services.event_derivation = event_derivation
@@ -178,6 +185,7 @@ async def test_lifespan_starts_the_event_derivation_loop_unconditionally(tmp_pat
     assert event_derivation.calls == 1
 
 
+@pytest.mark.usefixtures("no_early_second_pass")
 async def test_lifespan_starts_the_close_drain_loop_unconditionally(tmp_path: Path) -> None:
     """The enqueue is source-agnostic, so the drain runs whether or not
     any source is close-capable today — the sweep is yielded and started regardless,
@@ -341,6 +349,7 @@ async def test_the_sweep_set_has_no_sweep_for_a_stepped_one(tmp_path: Path) -> N
     assert names == [SweepName.EVENT_DERIVATION, SweepName.TENANT_TEARDOWN]
 
 
+@pytest.mark.usefixtures("no_early_second_pass")
 async def test_a_stepped_sweep_runs_no_pass_at_boot_and_a_timed_one_runs_as_today(tmp_path: Path) -> None:
     close_drain, event_derivation = _CountingReconciler(), _CountingReconciler()
     services = _FakeServices(
