@@ -11,7 +11,6 @@ const artifactBody = 'SENTINEL-REVIEW-FINDINGS: never exported in a trace';
 function graph(host: RunnerHost, harness: Harness, repoName: string, options: { passthrough?: boolean; probed?: boolean; checkpoint?: string } = {}): string {
   const cli = JSON.stringify(host.cliBinary);
   const build = `import os, pathlib, subprocess, json\nrepo = pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / ${JSON.stringify(repoName)}\nsubprocess.run(['git', '-C', str(repo), 'switch', '-C', '${branch}'], check=True)\n` +
-    (options.probed ? `pathlib.Path(os.environ['BLIZZARD_TMPDIR'], 'lease-probe').write_text(os.environ['BLIZZARD_LEASE_TOKEN'])\n` : '') +
     (options.passthrough ? `item = json.loads(subprocess.run([${cli}, 'runner', 'work-items', os.environ['BLIZZARD_CHUNK_ID']], capture_output=True, text=True, check=True).stdout)['items'][0]\ntext = item['body'] + '\\n' + '\\n'.join(item['comments']) + '\\n'\n` : options.probed ? `subprocess.run([${cli}, 'runner', 'work-items', os.environ['BLIZZARD_CHUNK_ID']], check=True, capture_output=True)\ntext = 'landed by the mock harness\\n'\n` : `text = 'landed by the mock harness\\n'\n`) +
     (options.checkpoint ?? '') +
     ` (repo / 'LANDED.md').write_text(text)\n`.trimStart() +
