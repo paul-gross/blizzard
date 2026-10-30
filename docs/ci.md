@@ -185,6 +185,7 @@ local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time re
 | `tests/ui/board-cost-live.spec.ts`              | UI default | not itemized | 6.3s     |
 | `tests/ui/glance-board.spec.ts`                 | UI default | not itemized | 12.8s    |
 | `tests/ui/graphs-diagram.spec.ts`               | UI default | not itemized | 4.0s     |
+| `tests/ui/runner-panel-live.spec.ts`            | UI default | not itemized | 8.1s     |
 
 ## The upgrade rehearsal
 

@@ -11022,12 +11022,6 @@
    "over_cap": 0,
    "total": 313
   },
-  "e2e/test_runner_panel_live_e2e.py": {
-   "comments": 15,
-   "docstrings": 9,
-   "over_cap": 2,
-   "total": 135
-  },
   "e2e/test_runner_serves_default_e2e.py": {
    "comments": 1,
    "docstrings": 7,
