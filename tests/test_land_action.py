@@ -233,6 +233,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
         repo="widget",
         token="tok",
         write_lock=asyncio.Lock,
+        learn=lambda _headers: None,
     )
     forge = GitHubLanding(
         binding, clock=FixedClock(datetime(2026, 10, 23, tzinfo=UTC)), transport=httpx2.MockTransport(answer)
