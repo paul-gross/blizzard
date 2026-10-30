@@ -59,4 +59,4 @@ export {
   transcriptSegmentIndexEntry,
   transcriptSegmentContentView,
 } from './builders/transcript';
-export { chunkCountsView, fleetSpendView } from './builders/board';
+export { chunkCountsView, chunkSummary, fleetSpendView } from './builders/board';

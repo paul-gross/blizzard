@@ -79,6 +79,13 @@
         <span class="blocked" [title]="card().blockedOn">blocked · {{ blocker }}</span>
       }
     </span>
+    @if (card().flowPlaces?.length) {
+      <span class="places">
+        @for (place of card().flowPlaces ?? []; track place.flowId) {
+          <span class="flow-place" data-testid="list-row-flow-place" [style.color]="toneColor(place.tone)" [title]="place.flowId">{{ place.text }}</span>
+        }
+      </span>
+    }
     @if (card().awaitingExternalMerge || card().openPrs?.length || card().landedRepos?.length) {
       <span class="prs">
         @if (card().awaitingExternalMerge) {

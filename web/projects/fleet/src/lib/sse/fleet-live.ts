@@ -10,6 +10,7 @@ import {
   type DecisionOpenedPayload,
   type DecisionResolvedPayload,
   type EventLoggedPayload,
+  type FlowChangedPayload,
   type HostChangedPayload,
   HubEventType,
   type QuestionAnsweredPayload,
@@ -25,6 +26,7 @@ import {
   hubChunksKey,
   hubEventsKey,
   hubFleetSpendKey,
+  hubFlowsKey,
   hubQuestionsKey,
   hubDecisionsKey,
   hubQueueKey,
@@ -73,6 +75,7 @@ export interface HubEventPayloads {
   [HubEventType.QUEUE_CHANGED]: QueueChangedPayload;
   [HubEventType.RUNNER_CHANGED]: RunnerChangedPayload;
   [HubEventType.HOST_CHANGED]: HostChangedPayload;
+  [HubEventType.FLOW_CHANGED]: FlowChangedPayload;
   [HubEventType.EVENT_LOGGED]: EventLoggedPayload;
 }
 
@@ -89,6 +92,8 @@ export type DecisionEvent = DecisionOpenedPayload | DecisionResolvedPayload;
 export type RunnerEvent = RunnerChangedPayload;
 /** A `host-changed` frame's payload. */
 export type HostEvent = HostChangedPayload;
+/** A `flow-changed` frame's payload. */
+export type FlowEvent = FlowChangedPayload;
 /** An `event-logged` frame's payload. */
 export type EventLoggedEvent = EventLoggedPayload;
 /** The fact-identity stamp every keyed frame carries ({@link HubEventPayloads}). */
@@ -214,6 +219,8 @@ const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayl
     [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey],
     // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
     [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
+    // A flow fact moves the line every flow read and every card's place shows, and the named chunk's record.
+    [HubEventType.FLOW_CHANGED]: (data) => [hubFlowsKey, hubChunksKey, ...chunkDetailKeys(data)],
     [HubEventType.EVENT_LOGGED]: (data) => [hubEventsKey, ...chunkDetailKeys(data)],
   },
   () => () => [],

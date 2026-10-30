@@ -1360,6 +1360,14 @@ export type ChunkDetail = {
     delete_refusal: ChunkDeleteRefusal | null;
     escalation: ChunkEscalationView | null;
     /**
+     * Flow Places
+     */
+    flow_places: Array<ChunkFlowPlaceView>;
+    /**
+     * Flow Record
+     */
+    flow_record: Array<FlowFactView>;
+    /**
      * Graph Created At
      */
     graph_created_at: string | null;
@@ -1484,6 +1492,43 @@ export type ChunkEscalationView = {
      * Wrapped Takeover Command
      */
     wrapped_takeover_command: string;
+};
+
+/**
+ * ChunkFlowPlaceView
+ *
+ * A chunk's place on one flow its open submission holds.
+ */
+export type ChunkFlowPlaceView = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    /**
+     * Next Poll At
+     */
+    next_poll_at: string | null;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Repository Name
+     */
+    repository_name: string | null;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string | null;
+    /**
+     * Resource
+     */
+    resource: string;
+    state: FlowPlaceState;
 };
 
 /**
@@ -1887,6 +1932,10 @@ export type ChunkSummary = {
      * Environment Count
      */
     environment_count: number;
+    /**
+     * Flow Places
+     */
+    flow_places: Array<ChunkFlowPlaceView>;
     /**
      * Graph Id
      */
@@ -3692,6 +3741,169 @@ export type FleetSummaryView = {
 };
 
 /**
+ * FlowChangedPayload
+ *
+ * One fact written to a flow's record. A flow is tenant-wide, so the frame names no project.
+ */
+export type FlowChangedPayload = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    /**
+     * Kind
+     */
+    kind: 'submitted' | 'turn-started' | 'turn-ended' | 'landed' | 'withdrawn';
+    /**
+     * Outcome
+     */
+    outcome?: string | null;
+    /**
+     * Submission Id
+     */
+    submission_id: string;
+};
+
+/**
+ * FlowFactKind
+ *
+ * What one entry of a flow's record says happened.
+ */
+export const FlowFactKind = {
+    SUBMITTED: 'submitted',
+    TURN_STARTED: 'turn-started',
+    TURN_ENDED: 'turn-ended',
+    LANDED: 'landed',
+    WITHDRAWN: 'withdrawn'
+} as const;
+
+/**
+ * FlowFactKind
+ *
+ * What one entry of a flow's record says happened.
+ */
+export type FlowFactKind = typeof FlowFactKind[keyof typeof FlowFactKind];
+
+/**
+ * FlowFactView
+ *
+ * One entry of a flow's record.
+ */
+export type FlowFactView = {
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    /**
+     * Id
+     */
+    id: number;
+    kind: FlowFactKind;
+    /**
+     * Outcome
+     */
+    outcome: string | null;
+    /**
+     * Revision
+     */
+    revision: string | null;
+    /**
+     * Submission Id
+     */
+    submission_id: string;
+};
+
+/**
+ * FlowListView
+ *
+ * The tenant's flows, in resource order.
+ */
+export type FlowListView = {
+    /**
+     * Flows
+     */
+    flows: Array<FlowView>;
+};
+
+/**
+ * FlowPlaceState
+ *
+ * Where an open submission stands on a flow it holds.
+ */
+export const FlowPlaceState = {
+    LANDING: 'landing',
+    NEXT: 'next',
+    WAITING: 'waiting',
+    POLLING: 'polling',
+    PASSED_OVER: 'passed-over'
+} as const;
+
+/**
+ * FlowPlaceState
+ *
+ * Where an open submission stands on a flow it holds.
+ */
+export type FlowPlaceState = typeof FlowPlaceState[keyof typeof FlowPlaceState];
+
+/**
+ * FlowPlaceView
+ *
+ * One open submission's place in a flow's line.
+ */
+export type FlowPlaceView = {
+    /**
+     * Arrival
+     */
+    arrival: number;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Next Poll At
+     */
+    next_poll_at: string | null;
+    /**
+     * Position
+     */
+    position: number;
+    state: FlowPlaceState;
+    /**
+     * Submission Id
+     */
+    submission_id: string;
+};
+
+/**
+ * FlowRecordPage
+ *
+ * A newest-first page of a flow's record; ``next_before`` is the ``before`` that fetches the next, ``None`` at
+ * the end.
+ */
+export type FlowRecordPage = {
+    /**
+     * Facts
+     */
+    facts: Array<FlowFactView>;
+    /**
+     * Next Before
+     */
+    next_before: number | null;
+};
+
+/**
  * FlowSubmissionClosureView
  *
  * How a submission left its flows. ``outcome`` is a verdict's choice or a closure word.
@@ -3738,6 +3950,62 @@ export type FlowSubmissionView = {
      * Submitted At
      */
     submitted_at: string;
+};
+
+/**
+ * FlowTurnView
+ *
+ * The turn a flow has open now.
+ */
+export type FlowTurnView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Started At
+     */
+    started_at: string;
+};
+
+/**
+ * FlowView
+ *
+ * One flow: the branch it lands on, the turn open on it, its line in arrival order, and the newest of its
+ * record.
+ */
+export type FlowView = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Flow Id
+     */
+    flow_id: string;
+    last_landing: FlowFactView | null;
+    last_verdict: FlowFactView | null;
+    /**
+     * Line
+     */
+    line: Array<FlowPlaceView>;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Name
+     */
+    repository_name: string | null;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string | null;
+    /**
+     * Resource
+     */
+    resource: string;
+    turn: FlowTurnView | null;
 };
 
 /**
@@ -5397,6 +5665,7 @@ export const HubEventType = {
     QUEUE_CHANGED: 'queue-changed',
     RUNNER_CHANGED: 'runner-changed',
     HOST_CHANGED: 'host-changed',
+    FLOW_CHANGED: 'flow-changed',
     EVENT_LOGGED: 'event-logged'
 } as const;
 
@@ -15440,6 +15709,105 @@ export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponses = {
 };
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostResponse = IngestTranscriptSegmentsApiFleetTranscriptsPostResponses[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostResponses];
+
+export type ListFlowsApiFlowsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Active
+         */
+        active?: boolean;
+    };
+    url: '/api/flows';
+};
+
+export type ListFlowsApiFlowsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFlowsApiFlowsGetError = ListFlowsApiFlowsGetErrors[keyof ListFlowsApiFlowsGetErrors];
+
+export type ListFlowsApiFlowsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FlowListView;
+};
+
+export type ListFlowsApiFlowsGetResponse = ListFlowsApiFlowsGetResponses[keyof ListFlowsApiFlowsGetResponses];
+
+export type GetFlowApiFlowsFlowIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Flow Id
+         */
+        flow_id: string;
+    };
+    query?: never;
+    url: '/api/flows/{flow_id}';
+};
+
+export type GetFlowApiFlowsFlowIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFlowApiFlowsFlowIdGetError = GetFlowApiFlowsFlowIdGetErrors[keyof GetFlowApiFlowsFlowIdGetErrors];
+
+export type GetFlowApiFlowsFlowIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FlowView;
+};
+
+export type GetFlowApiFlowsFlowIdGetResponse = GetFlowApiFlowsFlowIdGetResponses[keyof GetFlowApiFlowsFlowIdGetResponses];
+
+export type GetFlowRecordApiFlowsFlowIdRecordGetData = {
+    body?: never;
+    path: {
+        /**
+         * Flow Id
+         */
+        flow_id: string;
+    };
+    query?: {
+        /**
+         * Before
+         */
+        before?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/flows/{flow_id}/record';
+};
+
+export type GetFlowRecordApiFlowsFlowIdRecordGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetFlowRecordApiFlowsFlowIdRecordGetError = GetFlowRecordApiFlowsFlowIdRecordGetErrors[keyof GetFlowRecordApiFlowsFlowIdRecordGetErrors];
+
+export type GetFlowRecordApiFlowsFlowIdRecordGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FlowRecordPage;
+};
+
+export type GetFlowRecordApiFlowsFlowIdRecordGetResponse = GetFlowRecordApiFlowsFlowIdRecordGetResponses[keyof GetFlowRecordApiFlowsFlowIdRecordGetResponses];
 
 export type ListForgesApiForgesGetData = {
     body?: never;

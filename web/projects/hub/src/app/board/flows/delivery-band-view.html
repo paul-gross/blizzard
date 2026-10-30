@@ -1,0 +1,46 @@
+<section class="band" data-testid="delivery-band" aria-labelledby="delivery-band-heading">
+  <span class="tag" id="delivery-band-heading">Delivery</span>
+  <ol class="lanes">
+    @for (lane of lanes(); track lane.flowId) {
+      <li class="lane" data-testid="delivery-lane" [attr.data-flow]="lane.flowId" [class.collapsed]="lane.collapsed">
+        <!-- eslint-disable-next-line no-restricted-syntax -- A lane's title is a text link into the flow's record, not an action: the kit button's bordered chrome would outweigh the chunks it heads. -->
+        <button type="button" class="lane-title" data-testid="delivery-lane-title" [title]="lane.flowId" (click)="selectFlow.emit(lane.flowId)">
+          {{ lane.title }}
+        </button>
+        @if (lane.landing; as chunk) {
+          <ng-container *ngTemplateOutlet="chunkTpl; context: { $implicit: chunk, testid: 'delivery-landing' }" />
+        }
+        @for (chunk of lane.line; track chunk.chunkId) {
+          <ng-container *ngTemplateOutlet="chunkTpl; context: { $implicit: chunk, testid: 'delivery-in-line' }" />
+        }
+        @if (lane.verdict; as verdict) {
+          <span class="verdict" data-testid="delivery-verdict" [title]="verdict.agoTitle">
+            <span class="verdict-outcome">{{ verdict.outcome }}</span> <span class="verdict-ago">{{ verdict.ago }}</span>
+          </span>
+        }
+      </li>
+    }
+  </ol>
+</section>
+
+<ng-template #chunkTpl let-chunk let-testid="testid">
+  <!-- eslint-disable-next-line no-restricted-syntax -- A chunk chip opens the chunk in the dock as a card does; the kit button's bordered chrome would crowd the lane. -->
+  <button
+    type="button"
+    class="chunk"
+    [attr.data-testid]="testid"
+    [attr.data-chunk]="chunk.chunkId"
+    [attr.data-state]="chunk.state"
+    [title]="chunk.title ?? chunk.chunkId"
+    (click)="selectChunk.emit(chunk.chunkId)"
+  >
+    <span class="chunk-id">{{ chunk.shortId }}</span>
+    @if (chunk.title; as title) {
+      <span class="chunk-title">{{ title }}</span>
+    }
+    <fleet-kit-badge variant="pill" data-testid="delivery-state" [tone]="chunk.tone">{{ chunk.stateLabel }}</fleet-kit-badge>
+    @if (chunk.pollAt; as pollAt) {
+      <span class="poll-at" data-testid="delivery-poll-at" [title]="chunk.pollAtTitle">{{ pollAt }}</span>
+    }
+  </button>
+</ng-template>

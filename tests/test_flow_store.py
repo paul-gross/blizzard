@@ -96,8 +96,8 @@ def test_a_submission_is_closed_once_with_one_withdrawn_fact_per_flow(world: _Wo
     submission = flows.submit("ch_1", node_id="nd_deliver", epoch=1, generation=0, resources=[_MAIN, _OTHER], at=_AT)
     assert submission is not None
 
-    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is True
-    assert flows.close(submission.submission_id, outcome="stopped", at=_AT + timedelta(seconds=1)) is False
+    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is not None
+    assert flows.close(submission.submission_id, outcome="stopped", at=_AT + timedelta(seconds=1)) is None
 
     withdrawn = [f for f in flows.facts_of(submission.submission_id) if f.kind == "withdrawn"]
     assert sorted((f.flow_id, f.outcome) for f in withdrawn) == sorted(
@@ -113,7 +113,7 @@ def test_a_submission_with_an_open_turn_is_not_closed(world: _World, flows: Flow
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
-    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is False
+    assert flows.close(submission.submission_id, outcome="superseded", at=_AT) is None
     assert _count(world.engine, s.flow_submission_closures) == 0
 
 
@@ -150,8 +150,8 @@ def test_ending_a_turn_interrupted_writes_its_facts_and_closure_once(world: _Wor
     _plant_turn(world.engine, submission.submission_id)
     assert [t.turn_id for t in flows.open_turns()] == ["htn_1"]
 
-    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is True
-    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is False
+    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is not None
+    assert flows.end_turn_interrupted("htn_1", withdrawal="stopped", event=_INTERRUPTED, at=_AT) is None
 
     assert _count(world.engine, s.event_log) == 1
     assert flows.open_turns() == []
@@ -168,6 +168,6 @@ def test_ending_a_turn_without_a_withdrawal_leaves_the_submission_open(world: _W
     assert submission is not None
     _plant_turn(world.engine, submission.submission_id)
 
-    assert flows.end_turn_interrupted("htn_1", withdrawal=None, event=_INTERRUPTED, at=_AT) is True
+    assert flows.end_turn_interrupted("htn_1", withdrawal=None, event=_INTERRUPTED, at=_AT) is not None
 
     assert [sub.submission_id for sub in flows.open_submissions_from(0)] == [submission.submission_id]

@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
@@ -29,15 +30,15 @@ from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
     TURN_SUPERSEDED,
     AdmittedTurn,
-    FlowLine,
-    PollPolicy,
     Submission,
     Turn,
     TurnEvent,
     Withdrawal,
     held_resources,
     withdrawal_for,
+    written_on,
 )
+from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
@@ -60,6 +61,17 @@ class LineReconciliation:
     submitted: int
     closed: int
     floor: int
+    #: Every flow fact the reconcile wrote, in write order, each in its own committed transaction.
+    written: tuple[FlowFactWritten, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class InterruptedTurns:
+    """What ending unanswered turns did: how many it ended, and every flow fact those ends wrote, in write order."""
+
+    ended: int = 0
+    written: tuple[FlowFactWritten, ...] = ()
 
 
 @domain_model
@@ -93,6 +105,7 @@ class FlowLineReconciler:
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
         exclusive: IChunkExclusiveWrites,
+        lines: FlowLineFactory,
         clock: IClock,
     ) -> None:
         self._flows = flows
@@ -108,6 +121,7 @@ class FlowLineReconciler:
         self._links = links
         self._catalogue = catalogue
         self._clock = clock
+        self._lines = lines
 
     def reconcile(self, floor: int) -> LineReconciliation:
         """Submit every chunk standing at a hub step with no open submission for its visit, then close every open
@@ -127,49 +141,56 @@ class FlowLineReconciler:
             if (standing.chunk.chunk_id, standing.node.node_id, standing.epoch) not in in_line
             and (sub := self._submit_isolated(standing, facts_by_id[standing.chunk.chunk_id])) is not None
         ]
-        closed, still_open = self._close_departed(open_subs, facts_by_id)
+        withdrawn, still_open = self._close_departed(open_subs, facts_by_id)
         arrivals = [sub.arrival for sub in (*still_open, *submitted)]
         return LineReconciliation(
             submitted=len(submitted),
-            closed=closed,
+            closed=len(withdrawn),
             floor=min(arrivals) if arrivals else max((sub.arrival + 1 for sub in open_subs), default=floor),
+            written=(
+                *(fact for sub in submitted for fact in written_on(sub, kind="submitted")),
+                *(fact for closure in withdrawn for fact in closure),
+            ),
         )
 
     def recover_turns(self) -> int:
         """End every open turn ``interrupted`` — it ended with the process that ran it, crashed or shut down. Answers
         how many it ended; a turn already ended writes nothing."""
-        return self.end_unanswered(started_before=None, running=frozenset())
+        return self.end_unanswered(started_before=None, running=frozenset()).ended
 
-    def end_unanswered(self, *, started_before: datetime | None, running: frozenset[str]) -> int:
+    def end_unanswered(self, *, started_before: datetime | None, running: frozenset[str]) -> InterruptedTurns:
         """End ``interrupted`` every open turn not in ``running`` that started before ``started_before`` (every one,
         with ``None``) — each in one transaction with its ``turn-ended`` facts, its ``turn-interrupted`` event, and
-        the closure ``withdrawal_for`` answers under its chunk's lock. Answers how many it ended."""
+        the closure ``withdrawal_for`` answers under its chunk's lock. Answers how many it ended and the flow facts it
+        wrote, for the caller to announce: each end commits as its lock is let go."""
         turns = [
             turn
             for turn in self._flows.open_turns()
             if turn.turn_id not in running and (started_before is None or turn.started_at < started_before)
         ]
         if not turns:
-            return 0
+            return InterruptedTurns()
         subs = {sub.submission_id: sub for sub in self._flows.open_submissions_from(0)}
         node_names = self._node_names(sorted({sub.chunk_id for sub in subs.values()}))
         now = self._clock.now()
-        ended = 0
+        ends: list[tuple[FlowFactWritten, ...]] = []
         for turn in turns:
             sub = subs.get(turn.submission_id)
             if sub is None:
                 event = self._interrupted(turn, None, node_name=None, withdrawal=None)
-                ended += self._flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=event, at=now)
-                continue
-            with self._exclusive.locked([sub.chunk_id]) as handle:
-                withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
-                event = self._interrupted(
-                    turn, sub, node_name=node_names.get((sub.chunk_id, sub.node_id)), withdrawal=withdrawal
-                )
-                ended += self._flows.end_turn_locked(
-                    handle, turn.turn_id, outcome=TURN_INTERRUPTED, closure=withdrawal, event=event, at=now
-                )
-        return ended
+                written = self._flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=event, at=now)
+            else:
+                with self._exclusive.locked([sub.chunk_id]) as handle:
+                    withdrawal = withdrawal_for(ChunkFacts.or_default(handle.facts(sub.chunk_id)), sub)
+                    event = self._interrupted(
+                        turn, sub, node_name=node_names.get((sub.chunk_id, sub.node_id)), withdrawal=withdrawal
+                    )
+                    written = self._flows.end_turn_locked(
+                        handle, turn.turn_id, outcome=TURN_INTERRUPTED, closure=withdrawal, event=event, at=now
+                    )
+            if written is not None:
+                ends.append(written)
+        return InterruptedTurns(ended=len(ends), written=tuple(fact for end in ends for fact in end))
 
     @staticmethod
     def _interrupted(
@@ -195,21 +216,7 @@ class FlowLineReconciler:
         subs = self._flows.open_submissions_from(floor)
         if not subs:
             return []
-        turning = frozenset(turn.submission_id for turn in self._flows.open_turns())
-        chunk_ids = sorted({sub.chunk_id for sub in subs})
-        loaded = self._facts.load_facts_for(chunk_ids)
-        nodes = self._nodes(chunk_ids)
-        line = FlowLine(
-            submissions=tuple(subs),
-            facts={chunk_id: ChunkFacts.or_default(loaded.get(chunk_id)) for chunk_id in chunk_ids},
-            policies={
-                sub.submission_id: PollPolicy.of(node)
-                if (node := nodes.get((sub.chunk_id, sub.node_id)))
-                else PollPolicy()
-                for sub in subs
-            },
-            turning=turning,
-        )
+        line = self._lines.line(subs, turning=frozenset(turn.submission_id for turn in self._flows.open_turns()))
         passed_over = frozenset(sub.submission_id for sub in subs if not line.eligible(sub, now=now))
         admitted: list[AdmittedTurn] = []
         for sub in subs:
@@ -319,37 +326,26 @@ class FlowLineReconciler:
 
     def _close_departed(
         self, open_subs: Sequence[Submission], facts_by_id: Mapping[str, ChunkFacts]
-    ) -> tuple[int, list[Submission]]:
-        """Close each open submission with no open turn whose chunk has left its visit; how many it closed, and
-        the submissions it left open."""
+    ) -> tuple[list[tuple[FlowFactWritten, ...]], list[Submission]]:
+        """Close each open submission with no open turn whose chunk has left its visit; the ``withdrawn`` facts of
+        each closure it wrote, and the submissions it left open."""
         turning = {turn.submission_id for turn in self._flows.open_turns()}
         outside = sorted({sub.chunk_id for sub in open_subs} - facts_by_id.keys())
         facts = {**facts_by_id, **(self._facts.load_facts_for(outside) if outside else {})}
         now = self._clock.now()
-        closed = 0
+        closed: list[tuple[FlowFactWritten, ...]] = []
         still_open: list[Submission] = []
         for sub in open_subs:
             withdrawal = withdrawal_for(ChunkFacts.or_default(facts.get(sub.chunk_id)), sub)
             if sub.submission_id in turning or withdrawal is None:
                 still_open.append(sub)
-            elif self._flows.close(sub.submission_id, outcome=withdrawal, at=now):
-                closed += 1
+            elif (written := self._flows.close(sub.submission_id, outcome=withdrawal, at=now)) is not None:
+                closed.append(written)
         return closed, still_open
 
     def _node_names(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], str]:
         """Each named chunk's graph's node names, by ``(chunk_id, node_id)``."""
-        return {key: node.name for key, node in self._nodes(chunk_ids).items()}
-
-    def _nodes(self, chunk_ids: Sequence[str]) -> dict[tuple[str, str], Node]:
-        """Each named chunk's graph's nodes, by ``(chunk_id, node_id)``."""
-        chunks = self._record.get_many(list(chunk_ids))
-        graphs = self._graphs.get_many(sorted({chunk.graph_id for chunk in chunks.values()}))
-        return {
-            (chunk.chunk_id, node.node_id): node
-            for chunk in chunks.values()
-            if (graph := graphs.get(chunk.graph_id)) is not None
-            for node in graph.nodes
-        }
+        return {key: node.name for key, node in self._lines.nodes(chunk_ids).items()}
 
 
 def _hub_node_of(facts: ChunkFacts, graph: Graph | None) -> Node | None:

@@ -86,7 +86,8 @@ from blizzard.hub.domain.config.repositories import IReadRepositoryRecordReposit
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
-from blizzard.hub.domain.delivery.ports.flows import IReadFlows
+from blizzard.hub.domain.delivery.lines import FlowLineFactory
+from blizzard.hub.domain.delivery.ports.flows import IReadFlows, IReadFlowViews
 from blizzard.hub.domain.delivery.reconcile import FlowLineReconciler
 from blizzard.hub.domain.execution.apply import ApplyService
 from blizzard.hub.domain.execution.claim import ClaimService
@@ -365,6 +366,10 @@ class TenantServices:
     forge_records: IReadForgeRepository
     #: Each branch's delivery line and the visits submitted to it (the read half).
     flows: IReadFlows
+    #: What the surfaces read of the tenant's flows and the newest of their records.
+    flow_views: IReadFlowViews
+    #: Builds a flow line from its submissions, so a surface judges a place as the driver judges a turn.
+    flow_line_factory: FlowLineFactory
     #: Converges the tenant's flow lines on where its chunks stand — driven by the hosted hub's flow driver alone.
     flow_lines: FlowLineReconciler
     #: Answers for each turn the flow driver starts in this tenant.
@@ -1099,6 +1104,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         work_sources=work_sources,
     )
     work_ref_label = _work_ref_label(work_sources)
+    flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
@@ -1263,6 +1269,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
         flows=stores.flows,
+        flow_views=stores.flows,
+        flow_line_factory=flow_line_factory,
         flow_lines=FlowLineReconciler(
             flows=stores.flows,
             facts=chunk_facts,
@@ -1276,6 +1284,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             catalogue=parts.actions.catalogue,
             refusals=hub_router,
             exclusive=chunk_exclusive,
+            lines=flow_line_factory,
             clock=clock,
         ),
         turns=turns,
@@ -1721,6 +1730,7 @@ def build_flow_driver(
             lines=lambda tenant: services.tenants.open_services(StoreScope(tenant)).flow_lines,
             turns=lambda tenant: _announced(services.tenants.open_services(StoreScope(tenant)), announce),
             notices=lambda tenant: _notices(services.tenants.open_services(StoreScope(tenant))),
+            publishers=lambda tenant: services.tenants.open_services(StoreScope(tenant)).events,
         ),
         services.clock,
     )

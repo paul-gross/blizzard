@@ -16,6 +16,7 @@ from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
+from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
 from blizzard.wire.work_source import WorkItemAuthorView
@@ -199,6 +200,8 @@ class ChunkSummary(WireModel):
     awaiting_external_merge: bool = False
     landed_repos: list[LandedRepoView] = []
     landed: bool = False
+    #: The chunk's place on each flow its open submission holds; empty while it holds none.
+    flow_places: list[ChunkFlowPlaceView] = []
     #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
     #: The project's current slug; ``None`` where the hub reports none.
@@ -667,6 +670,10 @@ class ChunkDetail(WireModel):
     # a bounce is contention, not failure.
     bounces: list[BounceView] = []
     escalation: ChunkEscalationView | None = None
+    #: The chunk's place on each flow its open submission holds; empty while it holds none.
+    flow_places: list[ChunkFlowPlaceView] = []
+    #: Every fact the chunk's submissions wrote, on every flow, oldest first.
+    flow_record: list[FlowFactView] = []
     #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
     #: The project's current slug; ``None`` where the hub reports none.

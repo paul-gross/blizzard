@@ -13,6 +13,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.hub.cli.flow import flow_label, place_label
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
 
@@ -42,6 +43,8 @@ class ChunkDetail:
     def lines(self) -> Iterator[str]:
         body = self.body
         yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
+        for place in cast(list[dict[str, Any]], body.get("flow_places") or []):
+            yield f"  on {flow_label(place)} ({place['flow_id']}): {place_label(place)}"
         yield f"  node: {ChunkLine(cast(ChunkRow, body)).node}"
         # Both defaults on their own line: `chunk set` can write either, so a text-mode
         # read-back exists for both. `-` is "express no preference", not unknown.

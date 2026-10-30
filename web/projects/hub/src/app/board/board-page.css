@@ -41,6 +41,10 @@
 app-unserved-banner:empty {
   display: none;
 }
+/* The Delivery band renders nothing while no flow is active; it then takes no gap above the board either. */
+app-delivery-band:empty {
+  display: none;
+}
 /* The centre column stacks the board over the chunk detail, so the detail sits
    to the left of the rail rather than spanning the window beneath it. The dock
    stays mounted but takes no room until a chunk is selected, so an unselected

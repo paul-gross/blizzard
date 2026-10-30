@@ -8,13 +8,16 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryResolution
 from blizzard.hub.domain.delivery.flows import (
     FlowFact,
+    FlowFactKind,
     FlowLanding,
+    FlowOverview,
     FlowResource,
     LandingWrite,
     Submission,
@@ -64,6 +67,51 @@ class IReadFlows(Protocol):
         ...
 
 
+class IReadFlowViews(Protocol):
+    """What the surfaces read of the tenant's flows: each flow and the newest of its record, a flow's record paged,
+    and the open submissions a line is judged over."""
+
+    def flow_overviews(self) -> list[FlowOverview]:
+        """Every flow of the tenant, in resource order, each with the newest of its record."""
+        ...
+
+    def flow_overview(self, flow_id: str) -> FlowOverview | None:
+        """One flow with the newest of its record, or ``None`` when the tenant holds no such flow."""
+        ...
+
+    def record_page(self, flow_id: str, *, before: int | None, limit: int) -> list[FlowFact]:
+        """At most ``limit`` of the flow's facts, newest first, each with an ``id`` below ``before`` when given."""
+        ...
+
+    def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
+        """Every open submission holding any of ``flow_ids``, in arrival order, each with every flow it holds."""
+        ...
+
+    def open_submissions_of(self, chunk_ids: Sequence[str]) -> list[Submission]:
+        """Every open submission of the named chunks, in arrival order, each with every flow it holds."""
+        ...
+
+    def chunk_records(self, chunk_ids: Sequence[str]) -> dict[str, list[FlowFact]]:
+        """Every fact each named chunk's submissions wrote, on every flow, in write order, by chunk id; a chunk that
+        never submitted has no entry."""
+        ...
+
+
+class IFlowChangePublisher(Protocol):
+    """The live-broadcast half of a flow fact: one ``flow-changed`` frame, published once the fact's write has
+    committed."""
+
+    def publish_flow_changed(
+        self,
+        flow_id: str,
+        *,
+        kind: FlowFactKind,
+        submission_id: str,
+        chunk_id: str,
+        outcome: str | None = None,
+    ) -> int: ...
+
+
 class IWriteFlows(IReadFlows, Protocol):
     """Read-write flows access. Every write runs under the tenant row lock, so arrivals and closures serialize."""
 
@@ -82,9 +130,10 @@ class IWriteFlows(IReadFlows, Protocol):
         when that generation of the visit is already submitted."""
         ...
 
-    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> bool:
-        """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds. Returns False, writing
-        nothing, when a closure already exists or the submission has an open turn, whose end writes the closure."""
+    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
+        """Close the submission ``outcome``, with a ``withdrawn`` fact per flow it holds, answering those facts.
+        Returns ``None``, writing nothing, when a closure already exists or the submission has an open turn, whose end
+        writes the closure."""
         ...
 
     def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
@@ -103,11 +152,12 @@ class IWriteFlows(IReadFlows, Protocol):
         closure: str | None,
         event: TurnEvent | None,
         at: datetime,
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         """End the open turn ``outcome`` on ``handle``'s locked connection (``bzh:store-exclusive-write``), with a
         ``turn-ended`` fact per held flow, ``event`` in the event log, and the submission closed ``closure`` — a
         verdict, or what ``withdrawal_for`` answers under the same lock — unless already closed. The writes routing
-        the answer take this handle, so all commit together or not at all. False, writing nothing, if it has ended."""
+        the answer take this handle, so all commit together or not at all. Answers every flow fact it wrote, for the
+        caller to announce once the handle's transaction commits — ``None``, writing nothing, if it has ended."""
         ...
 
     def record_landing(
@@ -130,10 +180,10 @@ class IWriteFlows(IReadFlows, Protocol):
 
     def end_turn_interrupted(
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         """End the open turn ``interrupted``, with a ``turn-ended`` fact per flow its submission holds, ``event`` in
         the tenant's event log, and the submission closed ``withdrawal`` when one is given and no closure exists — one
-        transaction. Returns False, writing nothing, when the turn has already ended."""
+        transaction. Answers every flow fact it wrote; ``None``, writing nothing, when the turn has already ended."""
         ...
 
 

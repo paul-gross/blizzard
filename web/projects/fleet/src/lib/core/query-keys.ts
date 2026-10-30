@@ -22,6 +22,9 @@ export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
 /** The host registry read (`GET /api/hosts`) — the hosts the runners view groups its runners under. */
 export const hubHostsKey = ['hub', 'hosts'] as const;
+/** The tenant's flows read (`GET /api/flows`) and every flow's record read nested under it. Tenant-wide, never
+ * lensed: a branch's line is shared by every project landing on it. */
+export const hubFlowsKey = ['hub', 'flows'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
 /** The fleet-wide open-decision read (`GET /api/decisions`) — every gate awaiting a person. */
 export const hubDecisionsKey = ['hub', 'decisions'] as const;

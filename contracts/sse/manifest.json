@@ -8,6 +8,7 @@
     "queue-changed",
     "runner-changed",
     "host-changed",
+    "flow-changed",
     "event-logged"
   ],
   "reserved_comment": ": blizzard hub event stream\n\n",

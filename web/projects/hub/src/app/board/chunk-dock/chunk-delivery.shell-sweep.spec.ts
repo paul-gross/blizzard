@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
 
 import { type ChunkDetail, type ChunkSummary, ChunkGeneralTab } from 'fleet';
-import { chunkDetail, chunkUsageTotalView } from 'fleet/testing';
+import { chunkDetail, chunkSummary, chunkUsageTotalView } from 'fleet/testing';
 import { BoardShell } from '../board-shell/board-shell';
 import { ChunkDetailPanel } from './chunk-detail-panel';
 
@@ -16,14 +16,10 @@ const detail: ChunkDetail = chunkDetail({
   current_node_name: null, latest_epoch: null, work_refs: [], history: [], artifacts: [],
   open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
 });
-const summary: ChunkSummary = {
+const summary: ChunkSummary = chunkSummary({
   chunk_id: detail.chunk_id, graph_id: detail.graph_id, status: detail.status,
-  current_node_id: null, work_refs: [], open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true,
-  blocked: null, closed_prs: [], completed_at: null, cost: chunkUsageTotalView(), current_node_name: null,
-  default_effort: null, default_harnesses: [], default_model: [], environment_count: 0, landed: false,
-  project_id: null, project_name: null, project_slug: null, promotable: false, runner_id: null, runner_name: null, workspace_id: null,
-  terminal: false,
-};
+  open_prs: [pr], landed_repos: [landed], awaiting_external_merge: true, cost: chunkUsageTotalView(),
+});
 
 describe('delivery links real Chromium shell sweep', () => {
   for (const width of [1280, 390]) {

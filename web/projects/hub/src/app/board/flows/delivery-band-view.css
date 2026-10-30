@@ -1,0 +1,100 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.band {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--bezel);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A lane reads left to right — title, the chunk landing, the line, the verdict — and wraps rather than overflowing a
+   narrow centre column. */
+.lane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.lane-title,
+.chunk {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.lane-title {
+  color: var(--cyan);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.lane-title:hover,
+.lane-title:focus-visible {
+  text-decoration: underline;
+}
+.chunk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-resting);
+}
+.chunk:hover {
+  background: var(--surface-hover);
+  border-color: var(--cyan-dim);
+}
+.chunk:focus-visible {
+  outline: 1px solid var(--cyan);
+}
+.chunk[data-testid='delivery-landing'] {
+  border-left: 2px solid var(--cyan);
+}
+.chunk-id {
+  color: var(--label);
+  flex: none;
+}
+.chunk-title {
+  min-width: 0;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.poll-at,
+.verdict-ago {
+  color: var(--label-dim);
+  font-size: var(--fs-xs);
+}
+.verdict {
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.collapsed .verdict-outcome {
+  color: var(--text);
+}

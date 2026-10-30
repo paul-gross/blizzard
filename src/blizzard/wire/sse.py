@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.hub_event_types import (
     ChunkChangeCause,
+    FlowChangeKind,
     HostChangeKind,
     HubEventType,
     RunnerChangeKind,
@@ -111,6 +112,17 @@ class HostChangedPayload(SseFramePayload):
     key: str | None = None
 
 
+class FlowChangedPayload(SseFramePayload):
+    """One fact written to a flow's record. A flow is tenant-wide, so the frame names no project."""
+
+    flow_id: str
+    kind: FlowChangeKind
+    submission_id: str
+    chunk_id: str
+    #: A ``turn-ended`` fact's outcome, or why a ``withdrawn`` one left; omitted on every other kind.
+    outcome: str | None = None
+
+
 class EventLoggedPayload(SseFramePayload):
     severity: EventLogSeverity
     kind: str
@@ -136,5 +148,6 @@ SSE_FRAME_MODELS: dict[str, type[SseFramePayload]] = {
     HubEventType.QUEUE_CHANGED: QueueChangedPayload,
     HubEventType.RUNNER_CHANGED: RunnerChangedPayload,
     HubEventType.HOST_CHANGED: HostChangedPayload,
+    HubEventType.FLOW_CHANGED: FlowChangedPayload,
     HubEventType.EVENT_LOGGED: EventLoggedPayload,
 }

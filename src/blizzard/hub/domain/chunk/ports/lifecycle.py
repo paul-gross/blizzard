@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 
 
@@ -37,7 +38,7 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         between the check and this write. Returns the fresh ``chunk_pause_facts.id``."""
         ...
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment —
         and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and close ``stopped`` each of
@@ -46,10 +47,10 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         claim that wins the row lock first can never mint a route sorting newer than this
         release. Returns the freshly-written
         ``chunk_stopped.id``, not the ``route_released.id`` this same transaction may also
-        write."""
+        write, with the ``withdrawn`` flow facts it wrote."""
         ...
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and close ``completed`` each of
@@ -57,5 +58,5 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         the chunk's close intents. The caller has already
         checked the chunk is not already ``done``. ``at`` is passed in, stamped by the
         caller after the row lock — see :meth:`record_stop_locked`. Returns the freshly-written
-        ``chunk_completed.id``."""
+        ``chunk_completed.id``, with the ``withdrawn`` flow facts it wrote."""
         ...

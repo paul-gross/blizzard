@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import { projectTint, type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
+import { projectTint, type ChunkStatus, type LandedRepoView, type PrView, STATUS_LANE, formatCost, hasCostFigure, toneColor, FleetWhen, KitBadge, KitButton, KitSelectRow, KitSkeleton } from 'fleet';
+import type { FlowPlaceLine } from '../flows/flow-place.model';
 import { blockedLabel, cardShowsStatus, foldTitles, stepLabel, type WorkLine } from './board-card.model';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -45,6 +46,9 @@ export interface BoardCard {
   readonly openPrs?: readonly PrView[];
   readonly landedRepos?: readonly LandedRepoView[];
   readonly awaitingExternalMerge?: boolean;
+  /** The chunk's place on each flow its open submission holds, from `ChunkSummary.flow_places` — one line per flow,
+   * `landing on blizzard/master` or `3rd on blizzard/master`. */
+  readonly flowPlaces?: readonly FlowPlaceLine[];
   /** The chunk's project's display name, from `ChunkSummary.project_name`. */
   readonly projectName?: string | null;
   /** The chunk's project's palette color, joined from the projects list by `ChunkSummary.project_id` — `null` until
@@ -81,6 +85,7 @@ export interface BoardCard {
 export class BoardCardComponent {
   protected readonly formatCost = formatCost;
   protected readonly hasCostFigure = hasCostFigure;
+  protected readonly toneColor = toneColor;
 
   /** The card's derived-status view of one chunk. */
   readonly card = input.required<BoardCard>();
@@ -143,14 +148,15 @@ export class BoardCardComponent {
   }
 
   /** Whether the card renders its delivery block: only in the lanes where a chunk's delivery is
-   * in flight (RUNNING, WAIT/HUMAN, NEEDS HUMAN), and only when there is an open PR to link or a
-   * merge to await. Landed commits never show here — the chunk detail owns the full history. */
+   * in flight (RUNNING, WAIT/HUMAN, NEEDS HUMAN), and only when there is an open PR to link, a
+   * merge to await, or a place on a flow. Landed commits never show here — the chunk detail owns
+   * the full history. */
   protected showsDelivery(card: BoardCard): boolean {
     const lane = STATUS_LANE(card.status);
     return (
       !card.terminal &&
       (lane === 'running' || lane === 'waiting' || lane === 'needs') &&
-      !!(card.openPrs?.length || card.awaitingExternalMerge)
+      !!(card.openPrs?.length || card.awaitingExternalMerge || card.flowPlaces?.length)
     );
   }
 

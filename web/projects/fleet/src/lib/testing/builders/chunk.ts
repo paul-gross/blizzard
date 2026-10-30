@@ -139,6 +139,8 @@ export function chunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
     deletable: false,
     delete_refusal: null,
     escalation: null,
+    flow_places: [],
+    flow_record: [],
     graph_created_at: null,
     graph_editable: false,
     intended_migration: null,

@@ -326,6 +326,10 @@
  *     garden page: a bare gardening path lands on Proposals, the gardening strip wears
  *     the kit's sub-strip, the Proposals count is amber while any wait, and the strip
  *     scrolls inside itself at a phone width.
+ *   - projects/hub/src/app/board/flows/delivery-band.shell-sweep.spec.ts — the board's
+ *     Delivery band: a lane's landing chunk, its line, and its verdict stay inside the band,
+ *     a collapsed lane folds to one line, and an unknown state reads raw inside its chunk,
+ *     at 1440px and at the narrowest centre column.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -402,6 +406,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/shell/nav/project-lens-control.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/doorway/gardening-doorway.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/gardening-page.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/flows/delivery-band.shell-sweep.spec.ts' },
 ];
 
 /** Every `*.shell-sweep.spec.ts` under `projects/`, repo-relative and POSIX-separated.

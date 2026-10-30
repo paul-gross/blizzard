@@ -24,6 +24,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -51,10 +52,10 @@ class _FakeChunkRepo:
     stopped: list[tuple[str, str]] = field(default_factory=list)
     stamps: list[datetime] = field(default_factory=list)
 
-    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
+    def record_stop_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
         self.stopped.append((chunk_id, by))
         self.stamps.append(at)
-        return len(self.stopped)
+        return LeverWrite(len(self.stopped))
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"StopService should not touch {name!r}")

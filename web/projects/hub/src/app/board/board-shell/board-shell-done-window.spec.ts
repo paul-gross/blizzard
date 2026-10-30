@@ -2,39 +2,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary, KitAsyncStateValue } from 'fleet';
-import { chunkCountsView, chunkUsageTotalView } from 'fleet/testing';
+import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 
 /** The DONE column holds only the hub's recent window, so it counts and names that window rather than all time. */
 describe('BoardShell DONE window', () => {
-  const done = (suffix: string): ChunkSummary => ({
-    awaiting_external_merge: false,
-    blocked: null,
-    closed_prs: [],
-    completed_at: '2026-07-01T00:00:00+00:00',
-    cost: chunkUsageTotalView({ input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 0 }),
-    current_node_name: null,
-    default_effort: null,
-    default_harnesses: [],
-    default_model: [],
-    environment_count: 0,
-    landed: false,
-    landed_repos: [],
-    open_prs: [],
-    project_id: null,
-    project_name: null,
-    project_slug: null,
-    promotable: false,
-    runner_id: null,
-    runner_name: null,
-    workspace_id: null,
-    terminal: true,
-    chunk_id: `ch_01done${suffix}`,
-    graph_id: 'gr_1',
-    status: 'done',
-    current_node_id: 'done',
-    work_refs: [],
-  });
+  const done = (suffix: string): ChunkSummary =>
+    chunkSummary({
+      completed_at: '2026-07-01T00:00:00+00:00',
+      terminal: true,
+      chunk_id: `ch_01done${suffix}`,
+      graph_id: 'gr_1',
+      status: 'done',
+      current_node_id: 'done',
+    });
+
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({

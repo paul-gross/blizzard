@@ -54,6 +54,9 @@
   }
   @if (showsDelivery(card())) {
     <div class="delivery-links" data-testid="card-delivery">
+      @for (place of card().flowPlaces ?? []; track place.flowId) {
+        <span class="flow-place" data-testid="card-flow-place" [style.color]="toneColor(place.tone)" [title]="place.flowId">{{ place.text }}</span>
+      }
       @if (card().awaitingExternalMerge) {
         <span class="merge-wait" data-testid="card-merge-wait">Awaiting your merge</span>
       }

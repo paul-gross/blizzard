@@ -2141,6 +2141,22 @@
               }
             ]
           },
+          "flow_places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkFlowPlaceView"
+            },
+            "title": "Flow Places",
+            "type": "array"
+          },
+          "flow_record": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FlowFactView"
+            },
+            "title": "Flow Record",
+            "type": "array"
+          },
           "graph_created_at": {
             "anyOf": [
               {
@@ -2420,6 +2436,8 @@
           "landed",
           "bounces",
           "escalation",
+          "flow_places",
+          "flow_record",
           "project_id",
           "project_slug",
           "project_name"
@@ -2474,6 +2492,76 @@
           "detail"
         ],
         "title": "ChunkEscalationView",
+        "type": "object"
+      },
+      "ChunkFlowPlaceView": {
+        "description": "A chunk's place on one flow its open submission holds.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "repository_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Name"
+          },
+          "repository_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Slug"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FlowPlaceState",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "flow_id",
+          "resource",
+          "repository_slug",
+          "repository_name",
+          "branch",
+          "state",
+          "position",
+          "next_poll_at"
+        ],
+        "title": "ChunkFlowPlaceView",
         "type": "object"
       },
       "ChunkFlowSubmissionsView": {
@@ -3182,6 +3270,14 @@
             "title": "Environment Count",
             "type": "integer"
           },
+          "flow_places": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkFlowPlaceView"
+            },
+            "title": "Flow Places",
+            "type": "array"
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
@@ -3320,6 +3416,7 @@
           "awaiting_external_merge",
           "landed_repos",
           "landed",
+          "flow_places",
           "project_id",
           "project_slug",
           "project_name"
@@ -6251,6 +6348,236 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "FlowChangedPayload": {
+        "additionalProperties": false,
+        "description": "One fact written to a flow's record. A flow is tenant-wide, so the frame names no project.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "submitted",
+              "turn-started",
+              "turn-ended",
+              "landed",
+              "withdrawn"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outcome"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flow_id",
+          "kind",
+          "submission_id",
+          "chunk_id"
+        ],
+        "title": "FlowChangedPayload",
+        "type": "object"
+      },
+      "FlowFactKind": {
+        "description": "What one entry of a flow's record says happened.",
+        "enum": [
+          "submitted",
+          "turn-started",
+          "turn-ended",
+          "landed",
+          "withdrawn"
+        ],
+        "title": "FlowFactKind",
+        "type": "string"
+      },
+      "FlowFactView": {
+        "description": "One entry of a flow's record.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FlowFactKind",
+            "x-blizzard-open": true
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "flow_id",
+          "submission_id",
+          "chunk_id",
+          "kind",
+          "at",
+          "outcome",
+          "revision"
+        ],
+        "title": "FlowFactView",
+        "type": "object"
+      },
+      "FlowListView": {
+        "description": "The tenant's flows, in resource order.",
+        "properties": {
+          "flows": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FlowView"
+            },
+            "title": "Flows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "flows"
+        ],
+        "title": "FlowListView",
+        "type": "object"
+      },
+      "FlowPlaceState": {
+        "description": "Where an open submission stands on a flow it holds.",
+        "enum": [
+          "landing",
+          "next",
+          "waiting",
+          "polling",
+          "passed-over"
+        ],
+        "title": "FlowPlaceState",
+        "type": "string"
+      },
+      "FlowPlaceView": {
+        "description": "One open submission's place in a flow's line.",
+        "properties": {
+          "arrival": {
+            "title": "Arrival",
+            "type": "integer"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FlowPlaceState",
+            "x-blizzard-open": true
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "submission_id",
+          "arrival",
+          "state",
+          "position",
+          "next_poll_at"
+        ],
+        "title": "FlowPlaceView",
+        "type": "object"
+      },
+      "FlowRecordPage": {
+        "description": "A newest-first page of a flow's record; ``next_before`` is the ``before`` that fetches the next, ``None`` at\nthe end.",
+        "properties": {
+          "facts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FlowFactView"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "facts",
+          "next_before"
+        ],
+        "title": "FlowRecordPage",
+        "type": "object"
+      },
       "FlowSubmissionClosureView": {
         "description": "How a submission left its flows. ``outcome`` is a verdict's choice or a closure word.",
         "properties": {
@@ -6318,6 +6645,120 @@
           "closure"
         ],
         "title": "FlowSubmissionView",
+        "type": "object"
+      },
+      "FlowTurnView": {
+        "description": "The turn a flow has open now.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "started_at"
+        ],
+        "title": "FlowTurnView",
+        "type": "object"
+      },
+      "FlowView": {
+        "description": "One flow: the branch it lands on, the turn open on it, its line in arrival order, and the newest of its\nrecord.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "last_landing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowFactView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowFactView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FlowPlaceView"
+            },
+            "title": "Line",
+            "type": "array"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "repository_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Name"
+          },
+          "repository_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Slug"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowTurnView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "flow_id",
+          "resource",
+          "repository_id",
+          "repository_slug",
+          "repository_name",
+          "branch",
+          "turn",
+          "line",
+          "last_verdict",
+          "last_landing"
+        ],
+        "title": "FlowView",
         "type": "object"
       },
       "ForgeBudgetView": {
@@ -9050,6 +9491,7 @@
           "queue-changed",
           "runner-changed",
           "host-changed",
+          "flow-changed",
           "event-logged"
         ],
         "title": "HubEventType",
@@ -26863,6 +27305,165 @@
         "summary": "Ingest Transcript Segments",
         "tags": [
           "fleet"
+        ]
+      }
+    },
+    "/api/flows": {
+      "get": {
+        "description": "The tenant's flows in resource order, each with its open turn, its line, and the newest of its record. With\n``active``, only those with an open submission or a fact in the last 48 hours.",
+        "operationId": "list_flows_api_flows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Flows",
+        "tags": [
+          "flows"
+        ]
+      }
+    },
+    "/api/flows/{flow_id}": {
+      "get": {
+        "description": "One flow with its open turn, its line, and the newest of its record: 200, or 404 for one the tenant does not\nhold.",
+        "operationId": "get_flow_api_flows__flow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow_id",
+            "required": true,
+            "schema": {
+              "title": "Flow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flow",
+        "tags": [
+          "flows"
+        ]
+      }
+    },
+    "/api/flows/{flow_id}/record": {
+      "get": {
+        "description": "The flow's record newest first, keyset-paged on ``id``: pass the page's ``next_before`` as ``before`` for the\nnext. 404 for a flow the tenant does not hold.",
+        "operationId": "get_flow_record_api_flows__flow_id__record_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow_id",
+            "required": true,
+            "schema": {
+              "title": "Flow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRecordPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flow Record",
+        "tags": [
+          "flows"
         ]
       }
     },

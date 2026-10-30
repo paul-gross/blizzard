@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,14 +23,17 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
@@ -115,9 +118,6 @@ from blizzard.wire.chunk import (
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.project import ProjectRequiredBody, SourceNotLinkedBody
 from blizzard.wire.work_source import WorkItemAuthorView
-
-#: How long a finished ``done`` chunk stays on ``GET /api/chunks?board_window=true``.
-BOARD_DONE_WINDOW = timedelta(hours=48)
 
 #: How many of the most recently finished ``done`` chunks stay on it however old, per tenant (per project
 #: under ``?project=``) — the board's Done lane is never emptier than this while that many exist.
@@ -308,6 +308,9 @@ def list_chunks(
         name: services.work_sources.get(name)
         for name in sorted({pointer.source for chunk in page_chunks for pointer in chunk.work_refs})
     }
+    # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
+    # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
+    flow_places = chunk_flow_places(services, page_ids)
     return ChunksPageView(
         chunks=[
             ChunkView.injected(
@@ -325,6 +328,7 @@ def list_chunks(
                 runner_names=runner_names,
                 projects=projects,
                 sources=sources,
+                flow_places=flow_places,
             ).summary()
             for chunk in page_chunks
         ],
@@ -613,7 +617,7 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        restart_id = services.restart.restart(
+        restarted = services.restart.restart(
             chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
         )
     except ChunkNotFound as exc:
@@ -627,7 +631,8 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
         MigrationTargetIsCurrentPin,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    facts = change.publish(cause="restarted", key=f"chunk_restarts:{restart_id}")
+    facts = change.publish(cause="restarted", key=f"chunk_restarts:{restarted.fact_id}")
+    publish_flow_facts(services.events, restarted.withdrawn)
     services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
     # Re-read: a cross-graph move re-pinned the chunk, and the row's node name resolves off that pin.
     return ChunkView.of(services, services.chunks.record.get(chunk_id) or chunk, facts=facts).summary()
@@ -712,12 +717,13 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        stopped_id = services.stop.stop(chunk, by=request.by)
+        stopped = services.stop.stop(chunk, by=request.by)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped_id}")
+    facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped.fact_id}")
+    publish_flow_facts(services.events, stopped.withdrawn)
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
     return ChunkView.of(services, chunk, facts=facts).summary()
 
@@ -739,11 +745,13 @@ def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Servi
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        completed_id = services.complete.complete(chunk, by=request.by)
+        completed = services.complete.complete(chunk, by=request.by)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    key = f"chunk_completed:{completed_id}" if completed_id is not None else None
+    key = f"chunk_completed:{completed.fact_id}" if completed is not None else None
     facts = change.publish(cause="completed", key=key)
+    if completed is not None:
+        publish_flow_facts(services.events, completed.withdrawn)
     services.events.publish_queue_changed()  # a completed chunk is never offered for claim again
     return ChunkView.of(services, chunk, facts=facts).summary()
 

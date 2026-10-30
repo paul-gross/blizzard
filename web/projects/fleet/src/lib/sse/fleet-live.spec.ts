@@ -476,6 +476,25 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toHaveLength(2);
   });
 
+  it('re-reads the flows, the chunk list, and the named chunk on a flow-changed frame, keeping it out of the ring', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed(
+      'flow-changed',
+      JSON.stringify({ flow_id: 'flw_a', kind: 'turn-ended', submission_id: 'fsub_a', chunk_id: 'ch_a', outcome: 'landed' }),
+    );
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+
+    expect(live.log()).toHaveLength(0);
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toEqual(expect.arrayContaining([['hub', 'flows'], ['hub', 'chunks'], ['hub', 'chunk', 'ch_a']]));
+    expect(keys).toHaveLength(3);
+  });
+
   it('re-reads the hosts on a runner-changed frame, since host usage samples arrive as spender frames', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());

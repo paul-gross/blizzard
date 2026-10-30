@@ -20,6 +20,7 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryEdit
 from blizzard.hub.domain.delivery.flows import Submission
@@ -304,7 +305,7 @@ def test_an_effect_write_in_flight_at_the_deadline_commits_before_the_turns_end(
 
     end = FlowStore.end_turn_locked
 
-    def observed(self: FlowStore, handle: Any, turn_id: str, **kwargs: Any) -> bool:
+    def observed(self: FlowStore, handle: Any, turn_id: str, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
         seen.append(
             world.hub.services.chunks.artifacts.has_hub_artifact(
                 chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1, name="in-flight"
@@ -391,7 +392,7 @@ def test_a_turn_whose_end_fails_to_write_is_swept_and_its_chunk_lands_on_its_nex
     end = FlowStore.end_turn_locked
     failures = [RuntimeError("connection dropped")]
 
-    def failing(self: FlowStore, *args: Any, **kwargs: Any) -> bool:
+    def failing(self: FlowStore, *args: Any, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
         if failures:
             raise failures.pop()
         return end(self, *args, **kwargs)
@@ -453,7 +454,7 @@ def test_a_chunk_stopped_mid_turn_whose_end_fails_closes_stopped_by_the_sweep(
     end = FlowStore.end_turn_locked
     failures = [RuntimeError("lock timeout")]
 
-    def failing(self: FlowStore, *args: Any, **kwargs: Any) -> bool:
+    def failing(self: FlowStore, *args: Any, **kwargs: Any) -> tuple[FlowFactWritten, ...] | None:
         if failures:
             raise failures.pop()
         return end(self, *args, **kwargs)

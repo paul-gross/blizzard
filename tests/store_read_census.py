@@ -87,7 +87,7 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlug,
 )
 from blizzard.hub.domain.delivery.flows import FlowResource
-from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows, IReadFlowViews
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryPlan,
     DeltaMaterialization,
@@ -1226,6 +1226,8 @@ class HubWorld:
     #: A visit submitted to two flows, with an open turn; a second visit beside it is closed.
     flow_chunk: str
     flow_submission_id: str
+    #: The first flow that visit holds.
+    flow_id: str
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -2211,6 +2213,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         forge_id=census_forge.forge_id,
         flow_chunk=flow_chunk,
         flow_submission_id=flow_submission.submission_id,
+        flow_id=flow_submission.flows[0].flow_id,
     )
 
 
@@ -2431,6 +2434,12 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlows, "visit_standing"): lambda w: w.hub.services.flows.visit_standing(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
+    (IReadFlowViews, "flow_overviews"): lambda w: w.hub.services.flow_views.flow_overviews(),
+    (IReadFlowViews, "flow_overview"): lambda w: w.hub.services.flow_views.flow_overview(w.flow_id),
+    (IReadFlowViews, "record_page"): lambda w: w.hub.services.flow_views.record_page(w.flow_id, before=1000, limit=50),
+    (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
+    (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
+    (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2

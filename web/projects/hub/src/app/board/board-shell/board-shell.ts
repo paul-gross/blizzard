@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card';
 import { workLines } from '../board-card/board-card.model';
+import { placeLines } from '../flows/flow-place.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
 
@@ -182,6 +183,7 @@ export class BoardShell {
         openPrs: chunk.open_prs ?? [],
         landedRepos: chunk.landed_repos ?? [],
         awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
+        flowPlaces: placeLines(chunk.flow_places),
         projectName: chunk.project_name ?? null,
         projectColor: this.projectColors().get(chunk.project_id ?? '') ?? null,
         runnerId: chunk.runner_id ?? null,

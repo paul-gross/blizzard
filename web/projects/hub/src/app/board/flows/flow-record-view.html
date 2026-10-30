@@ -1,0 +1,41 @@
+<section class="dock" data-testid="flow-record" aria-labelledby="flow-record-heading">
+  <header class="head">
+    <span class="tag">Flow record</span>
+    <span class="title" id="flow-record-heading" data-testid="flow-record-title">{{ title() }}</span>
+    <fleet-kit-button class="close" testid="flow-record-close" ariaLabel="Close the flow record" (click)="dismiss.emit()">CLOSE</fleet-kit-button>
+  </header>
+  <div class="body">
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="LOADING…"
+      loadingTestid="flow-record-loading"
+      errorText="FAILED TO LOAD THE FLOW RECORD"
+      errorTestid="flow-record-error"
+      emptyText="Nothing recorded on this flow yet."
+      emptyTestid="flow-record-empty"
+    >
+      <ol class="facts">
+        @for (row of rows(); track row.id) {
+          <li class="fact" data-testid="flow-record-fact" [attr.data-kind]="row.kind">
+            <span class="kind">{{ row.kindLabel }}</span>
+            <!-- eslint-disable-next-line no-restricted-syntax -- A chunk reference opens the chunk in the dock; the kit button's bordered chrome would outweigh the row. -->
+            <button type="button" class="chunk" data-testid="flow-record-chunk" [attr.data-chunk]="row.chunkId" [title]="row.chunkId" (click)="selectChunk.emit(row.chunkId)">
+              <span class="chunk-id">{{ row.shortId }}</span>
+              @if (row.title; as title) {
+                <span class="chunk-title">{{ title }}</span>
+              }
+            </button>
+            @if (row.outcome; as outcome) {
+              <span class="outcome" data-testid="flow-record-outcome">{{ outcome }}</span>
+            }
+            <span class="ts" [title]="row.whenTitle">{{ row.when }}</span>
+          </li>
+        }
+      </ol>
+      @if (hasOlder()) {
+        <fleet-kit-button class="older" testid="flow-record-older" [disabled]="olderPending()" (click)="older.emit()">OLDER</fleet-kit-button>
+      }
+    </fleet-kit-async-state>
+  </div>
+</section>

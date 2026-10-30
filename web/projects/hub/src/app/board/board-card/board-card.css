@@ -99,6 +99,8 @@
 }
 .delivery-links a { color: var(--cyan); cursor: pointer; }
 .delivery-links .merge-wait { color: var(--amber-hi); }
+/* One place per flow, on a line of its own, in its state's tone. */
+.delivery-links .flow-place { flex-basis: 100%; overflow-wrap: anywhere; }
 /* The step and cost rows.
 
    Every line here holds to one line and ellipsises instead of wrapping. A board

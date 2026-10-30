@@ -53,6 +53,10 @@ export class ChunkTimelineSelection {
    * establish. `null` (the default) renders plain text. */
   readonly graphLinkBase = input<readonly string[] | null>(null);
 
+  /** The path segments a flow row links its flow's record through, as `?flow=<id>` — the board, on the hub. `null`
+   * (the default) withholds the link, for a host with no flow record to open. */
+  readonly flowLinkBase = input<readonly string[] | null>(null);
+
   /** Emitted with an activated row's join key, or `null` when the already-selected row
    * is re-activated — the only way to clear a step selection from this component, since
    * re-navigating to an identical URL is a no-op the router drops. Never emitted for a

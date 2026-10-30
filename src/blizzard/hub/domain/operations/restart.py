@@ -13,6 +13,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
@@ -193,12 +194,13 @@ class RestartService:
         by: str,
         to_graph: Graph | None = None,
         note: str | None = None,
-    ) -> int:
+    ) -> LeverWrite:
         """Move ``chunk`` onto ``node_name`` — its current node when unnamed — at a fresh epoch, with ``by``'s ``note``.
 
         ``to_graph`` makes it the eager cross-graph move: a migration fact and a restart fact in one
         write. :func:`plan_restart` decides against the facts and the record re-read under the row
-        lock; every refusal writes nothing. Returns the ``chunk_restarts.id``."""
+        lock; every refusal writes nothing. Returns the ``chunk_restarts.id`` and the ``withdrawn`` flow facts, for the
+        caller to announce once committed."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
@@ -217,7 +219,7 @@ class RestartService:
                 to_graph=to_graph,
                 to_graph_retired=to_graph is not None and self._graphs.is_retired(to_graph.graph_id),
             )
-            restart_id = self._movement.record_restart_locked(
+            written = self._movement.record_restart_locked(
                 handle,
                 chunk.chunk_id,
                 from_node_id=plan.from_node_id,
@@ -241,4 +243,4 @@ class RestartService:
                 node_id=plan.to_node_id,
                 epoch=landed.epoch_floor(),
             )
-            return restart_id
+            return written

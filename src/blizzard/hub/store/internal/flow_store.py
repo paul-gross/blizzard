@@ -11,17 +11,21 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Connection, Row, func
+from sqlalchemy import ColumnElement, Connection, FromClause, Row, and_, func
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.delivery.flows import (
+    NOT_VERDICTS,
     TURN_INTERRUPTED,
     Flow,
     FlowFact,
     FlowLanding,
+    FlowOverview,
     FlowResource,
     LandingWrite,
     Submission,
@@ -32,12 +36,13 @@ from blizzard.hub.domain.delivery.flows import (
     VisitStanding,
     Withdrawal,
 )
-from blizzard.hub.domain.delivery.ports.flows import IWriteFlows
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys, write_landing_rows
 from blizzard.hub.store.internal.flow_rows import (
     close_submission,
     end_turn,
+    fact_of,
     flow_of,
     flows_held,
     has_open_turn,
@@ -45,12 +50,14 @@ from blizzard.hub.store.internal.flow_rows import (
     write_facts,
     write_landing,
 )
+from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
 
 _sub = s.flow_submissions
 _held = s.flow_submission_flows
 _closures = s.flow_submission_closures
 _turns = s.hub_turns
+_facts = s.flow_facts
 #: The ``keyed_locks`` namespace a turn takes its flows' resources under.
 _FLOW_LOCK_NAMESPACE = "flow"
 
@@ -140,18 +147,7 @@ class FlowStore:
                 .where(s.flow_facts.c.submission_id == submission_id)
                 .order_by(s.flow_facts.c.id)
             ).all()
-            return [
-                FlowFact(
-                    flow_id=r.flow_id,
-                    submission_id=r.submission_id,
-                    chunk_id=r.chunk_id,
-                    kind=r.kind,
-                    at=r.at,
-                    outcome=r.outcome,
-                    revision=r.revision,
-                )
-                for r in rows
-            ]
+            return [fact_of(r) for r in rows]
 
     def turn_outcomes(self, chunk_id: str, *, node_id: str, epoch: int) -> list[str]:
         with self._store.read("turn_outcomes") as conn:
@@ -191,6 +187,63 @@ class FlowStore:
             return VisitStanding(
                 submission=submission, turning=has_open_turn(conn, submission.submission_id), ahead=ahead
             )
+
+    def flow_overviews(self) -> list[FlowOverview]:
+        with self._store.read("flow_overviews") as conn:
+            rows = conn.execute(self._store.select(s.flows).order_by(s.flows.c.resource)).all()
+            return self._overviews(conn, rows)
+
+    def flow_overview(self, flow_id: str) -> FlowOverview | None:
+        with self._store.read("flow_overview") as conn:
+            rows = conn.execute(self._store.select(s.flows).where(s.flows.c.flow_id == flow_id)).all()
+            overviews = self._overviews(conn, rows)
+            return overviews[0] if overviews else None
+
+    def record_page(self, flow_id: str, *, before: int | None, limit: int) -> list[FlowFact]:
+        with self._store.read("flow_record_page") as conn:
+            query = self._store.select(_facts).where(_facts.c.flow_id == flow_id)
+            if before is not None:
+                query = query.where(_facts.c.id < before)
+            return [fact_of(r) for r in conn.execute(query.order_by(_facts.c.id.desc()).limit(limit)).all()]
+
+    def open_submissions_on(self, flow_ids: Sequence[str]) -> list[Submission]:
+        with self._store.read("open_submissions_on") as conn:
+            joined = self._store.scope_join(_sub, _held, _held.c.submission_id == _sub.c.submission_id)
+            rows: dict[str, Row[Any]] = {}
+            for batch in id_batches(sorted(set(flow_ids))):
+                for row in conn.execute(
+                    self._store.select(joined, *_sub.c).where(_held.c.flow_id.in_(batch), self._open())
+                ).all():
+                    rows.setdefault(row.submission_id, row)
+            return self._submissions(conn, sorted(rows.values(), key=lambda r: r.arrival), closed={})
+
+    def open_submissions_of(self, chunk_ids: Sequence[str]) -> list[Submission]:
+        with self._store.read("open_submissions_of") as conn:
+            rows = [
+                row
+                for batch in id_batches(sorted(set(chunk_ids)))
+                for row in conn.execute(self._store.select(_sub).where(_sub.c.chunk_id.in_(batch), self._open())).all()
+            ]
+            return self._submissions(conn, sorted(rows, key=lambda r: r.arrival), closed={})
+
+    def chunk_records(self, chunk_ids: Sequence[str]) -> dict[str, list[FlowFact]]:
+        with self._store.read("chunk_flow_records") as conn:
+            submission_ids = [
+                submission_id
+                for batch in id_batches(sorted(set(chunk_ids)))
+                for submission_id in conn.execute(
+                    self._store.select(_sub, _sub.c.submission_id).where(_sub.c.chunk_id.in_(batch))
+                ).scalars()
+            ]
+            facts = [
+                fact_of(row)
+                for batch in id_batches(submission_ids)
+                for row in conn.execute(self._store.select(_facts).where(_facts.c.submission_id.in_(batch))).all()
+            ]
+            records: dict[str, list[FlowFact]] = {}
+            for fact in sorted(facts, key=lambda f: f.id):
+                records.setdefault(fact.chunk_id, []).append(fact)
+            return records
 
     def submit(
         self,
@@ -242,10 +295,10 @@ class FlowStore:
                 flows=flows,
             )
 
-    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> bool:
+    def close(self, submission_id: str, *, outcome: Withdrawal, at: datetime) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("close_flow_submission") as conn:
             if has_open_turn(conn, submission_id):
-                return False
+                return None
             return close_submission(conn, submission_id, outcome=outcome, at=at)
 
     def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
@@ -284,16 +337,17 @@ class FlowStore:
         closure: str | None,
         event: TurnEvent | None,
         at: datetime,
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         conn = conn_of(handle)
-        submission_id = end_turn(conn, turn_id, outcome=outcome, at=at)
-        if submission_id is None:
-            return False
+        ended = end_turn(conn, turn_id, outcome=outcome, at=at)
+        if ended is None:
+            return None
+        submission_id, written = ended
         if event is not None:
             write_event(conn, event, at=at)
         if closure is not None:
-            close_submission(conn, submission_id, outcome=closure, at=at)
-        return True
+            written += close_submission(conn, submission_id, outcome=closure, at=at) or ()
+        return written
 
     def record_landing(
         self,
@@ -321,20 +375,76 @@ class FlowStore:
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )
-            event_id = write_landing(conn, landing, revision=revision, at=at) if wrote else None
-            return LandingWrite(refused=refused, event_id=event_id)
+            if not wrote:
+                return LandingWrite(refused=refused, event_id=None)
+            event_id, written = write_landing(conn, landing, revision=revision, at=at)
+            return LandingWrite(refused=refused, event_id=event_id, written=written)
 
     def end_turn_interrupted(
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime
-    ) -> bool:
+    ) -> tuple[FlowFactWritten, ...] | None:
         with self._store.write("end_turn_interrupted") as conn:
-            submission_id = end_turn(conn, turn_id, outcome=TURN_INTERRUPTED, at=at)
-            if submission_id is None:
-                return False
+            ended = end_turn(conn, turn_id, outcome=TURN_INTERRUPTED, at=at)
+            if ended is None:
+                return None
+            submission_id, written = ended
             write_event(conn, event, at=at)
             if withdrawal is not None:
-                close_submission(conn, submission_id, outcome=withdrawal, at=at)
-            return True
+                written += close_submission(conn, submission_id, outcome=withdrawal, at=at) or ()
+            return written
+
+    def _open(self) -> ColumnElement[bool]:
+        """The submission row has no closure."""
+        return ~self._store.exists(_closures, _closures.c.submission_id == _sub.c.submission_id)
+
+    def _overviews(self, conn: Connection, rows: Sequence[Row[Any]]) -> list[FlowOverview]:
+        """Each flow row with the newest of its record — three batched reads over the flows' ids."""
+        flow_ids = [r.flow_id for r in rows]
+        newest: dict[str, FlowFact] = {}
+        landed: dict[str, FlowFact] = {}
+        verdicts: dict[str, FlowFact] = {}
+        verdict_from = self._store.scope_join(
+            _facts,
+            _closures,
+            and_(_closures.c.submission_id == _facts.c.submission_id, _closures.c.outcome == _facts.c.outcome),
+        )
+        for batch in id_batches(flow_ids):
+            newest.update(
+                (r.flow_id, fact_of(r))
+                for r in conn.execute(newest_fact_select(self._store, _facts, _facts.c.flow_id, batch)).all()
+            )
+            landed.update((f.flow_id, f) for f in self._newest_per_flow(conn, _facts, batch, _facts.c.kind == "landed"))
+            verdicts.update(
+                (f.flow_id, f)
+                for f in self._newest_per_flow(
+                    conn,
+                    verdict_from,
+                    batch,
+                    _facts.c.kind == "turn-ended",
+                    _facts.c.outcome.not_in(sorted(NOT_VERDICTS)),
+                )
+            )
+        return [
+            FlowOverview(
+                flow=flow_of(r),
+                newest_at=fact.at if (fact := newest.get(r.flow_id)) is not None else None,
+                last_verdict=verdicts.get(r.flow_id),
+                last_landing=landed.get(r.flow_id),
+            )
+            for r in rows
+        ]
+
+    def _newest_per_flow(
+        self, conn: Connection, from_: FromClause, flow_ids: Sequence[str], *criteria: ColumnElement[bool]
+    ) -> list[FlowFact]:
+        """The newest fact per flow among ``flow_ids`` that ``from_`` and ``criteria`` keep."""
+        newest = (
+            self._store.select(from_, func.max(_facts.c.id).label("id"))
+            .where(_facts.c.flow_id.in_(flow_ids), *criteria)
+            .group_by(_facts.c.flow_id)
+            .subquery()
+        )
+        return [fact_of(r) for r in conn.execute(self._store.select(_facts).join(newest, _facts.c.id == newest.c.id))]
 
     def _busy(self, conn: Connection, flows: Sequence[Flow]) -> bool:
         """Whether any of ``flows`` has an open turn — of any submission holding it, open or closed."""
@@ -404,3 +514,4 @@ class FlowStore:
 
 
 _flows_conforms: type[IWriteFlows] = FlowStore
+_flow_views_conforms: type[IReadFlowViews] = FlowStore

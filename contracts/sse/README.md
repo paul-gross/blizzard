@@ -1,7 +1,7 @@
 # SSE frame contract
 
 The golden corpus for both daemons' `GET /api/events/stream` frame shapes. Two scopes, each self-contained: the **hub**
-scope at this directory's top level — `manifest.json` lists the eight frame kinds the hub emits
+scope at this directory's top level — `manifest.json` lists the ten frame kinds the hub emits
 (`blizzard.hub.events.broker`) plus the framing constants — and the **runner** scope at `runner/`, structured
 identically: its own `manifest.json` lists the six frame kinds the runner emits (`blizzard.runner.events.broker`) plus
 its own framing constants, `reserved_comment` included — each daemon's stream opens with its own name. In both scopes,
