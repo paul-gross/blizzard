@@ -139,9 +139,13 @@ def chunk_flow_places(services: TenantServices, chunk_ids: Sequence[str]) -> dic
     """Each named chunk's places, by chunk id; a chunk with no open submission holding a flow has no entry.
 
     A place depends on the submissions ahead of it, whose chunks may sit on no page that names them, so the line is
-    read whole over the flows the chunks hold — a fixed number of batched reads bounded by the line, not the fleet."""
+    read whole over the flows the chunks hold — a fixed number of batched reads bounded by the line, not the fleet.
+    The places are those of the chunks' submissions in that line, not in the first read: one that closed in between
+    is in neither the line nor its facts."""
     own = services.flow_views.open_submissions_of(chunk_ids) if chunk_ids else []
     flow_ids = sorted({flow.flow_id for sub in own for flow in sub.flows})
     if not flow_ids:
         return {}
-    return FlowLineRead.of(services, services.flow_views.open_submissions_on(flow_ids)).chunk_places(own)
+    read = FlowLineRead.of(services, services.flow_views.open_submissions_on(flow_ids))
+    named = set(chunk_ids)
+    return read.chunk_places([sub for sub in read.line.submissions if sub.chunk_id in named])

@@ -4,6 +4,7 @@ action holding each visit ``pending``: every place the routes and the chunk read
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 
@@ -133,6 +134,26 @@ def test_active_keeps_exactly_the_flows_in_line_or_moved_within_the_board_window
 
     assert active() == []
     assert [flow["flow_id"] for flow in line.client.get("/api/flows").json()["flows"]] == [line.flow_id]
+
+
+def test_a_submission_closed_between_the_chunk_reads_holds_no_place(
+    line: _Line, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The chunk reads find the chunks' open submissions, then read the line over their flows. A submission that
+    closes in between — its chunk bounced off the node — holds no place in either read, never a failed one."""
+    closing = line.submission(line.first)
+    store = FlowStore(hub_store_connections(line.world.hub.engine), line.world.hub.clock)
+    found_open = FlowStore.open_submissions_of
+
+    def then_closed(self: FlowStore, chunk_ids: Sequence[str]) -> list[Submission]:
+        found = found_open(self, chunk_ids)
+        store.close(closing.submission_id, outcome="superseded", at=line.world.hub.clock.now())
+        return found
+
+    monkeypatch.setattr(FlowStore, "open_submissions_of", then_closed)
+
+    assert line.chunk_places(line.first) == []
+    assert line.chunk_places(line.second) == [(line.flow_id, "polling", 1)]
 
 
 def test_a_withdrawal_is_no_verdict(line: _Line) -> None:
