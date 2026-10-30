@@ -716,6 +716,10 @@
       "short_help": "Read analytics derived from worker transcripts."
     },
     "chunk": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "delete": {
           "help": "Delete CHUNK, withdrawing every open hub item it holds.\n\nIrreversible, so confirms first unless ``--yes``. Refused when CHUNK is claimed, done or\nstopped, or a prerequisite of another chunk, which the refusal names.",
@@ -1057,6 +1061,60 @@
           ],
           "path": "hub chunk done",
           "short_help": "Mark CHUNK done from any status, including ``stopped``."
+        },
+        "get": {
+          "help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub chunk get",
+          "short_help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."
         },
         "group": {
           "help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items\nand dependencies.\n\nRefused when any named chunk is claimed or finished, belongs to another project than\nCHUNK_ID, or the merged dependencies would close a cycle.",
@@ -1933,60 +1991,6 @@
           "path": "hub chunk set",
           "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call."
         },
-        "show": {
-          "help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "chunk_id",
-              "opts": [
-                "chunk_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub chunk show",
-          "short_help": "Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."
-        },
         "stop": {
           "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nCHUNK becomes ``stopped`` and is never offered to a runner again; its runner is\nreleased and any open escalation closed. Refused when CHUNK is already done or\nstopped. There is no ``un-stop``.",
           "params": [
@@ -2848,6 +2852,10 @@
       "short_help": "Read the operational event feed \u2014 the event log unified with open escalations, newest first."
     },
     "finding": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "confirm-gone": {
           "help": "Confirm by hand that FINDING_IDS no longer reproduce.",
@@ -2914,6 +2922,60 @@
           ],
           "path": "hub finding confirm-gone",
           "short_help": "Confirm by hand that FINDING_IDS no longer reproduce."
+        },
+        "get": {
+          "help": "One finding's whole record.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "finding_id",
+              "opts": [
+                "finding_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub finding get",
+          "short_help": "One finding's whole record."
         },
         "list": {
           "help": "List findings under SCOPE \u2014 live only, unless --include-gone, which also\nsurfaces every exited finding, not just a merely `gone` one. --routine is required\nunless --source review, since a review-sourced finding carries no routine.",
@@ -3216,60 +3278,6 @@
           "path": "hub finding resolve",
           "short_help": "Resolve FINDING_IDS: the work that answers them has landed."
         },
-        "show": {
-          "help": "One finding's whole record.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "finding_id",
-              "opts": [
-                "finding_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub finding show",
-          "short_help": "One finding's whole record."
-        },
         "supersede": {
           "help": "Withdraw FINDING_IDS as superseded by --by.",
           "params": [
@@ -3421,63 +3429,12 @@
       "short_help": "Read findings, and close or reopen them."
     },
     "flow": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
-        "list": {
-          "help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict\nand landing.\n\nShows only flows with a chunk in line or a change in the last 48 hours unless --all.",
-          "params": [
-            {
-              "help": "Every flow, not only those with a chunk in line or a change in the last 48 hours.",
-              "hidden": false,
-              "kind": "option",
-              "name": "everything",
-              "opts": [
-                "--all"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub flow list",
-          "short_help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict and landing."
-        },
-        "show": {
+        "get": {
           "help": "Show one flow: its open turn, the chunks in line with their place, and its last verdict and landing.\n\nWith --record, the flow's record instead \u2014 every submission, turn, landing and withdrawal, newest first, up to\n--limit entries.",
           "params": [
             {
@@ -3552,8 +3509,63 @@
               "type": "text"
             }
           ],
-          "path": "hub flow show",
+          "path": "hub flow get",
           "short_help": "Show one flow: its open turn, the chunks in line with their place, and its last verdict and landing."
+        },
+        "list": {
+          "help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict\nand landing.\n\nShows only flows with a chunk in line or a change in the last 48 hours unless --all.",
+          "params": [
+            {
+              "help": "Every flow, not only those with a chunk in line or a change in the last 48 hours.",
+              "hidden": false,
+              "kind": "option",
+              "name": "everything",
+              "opts": [
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub flow list",
+          "short_help": "List the tenant's flows: each branch's open turn, the chunks in line with their place, and its last verdict and landing."
         }
       },
       "help": "Inspect each branch's delivery line and its record.",
@@ -3562,6 +3574,10 @@
       "short_help": "Inspect each branch's delivery line and its record."
     },
     "forge": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Add forge SLUG at revision 1.",
@@ -3857,6 +3873,60 @@
           "path": "hub forge enable",
           "short_help": "Re-enable FORGE."
         },
+        "get": {
+          "help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "forge",
+              "opts": [
+                "forge"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub forge get",
+          "short_help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."
+        },
         "list": {
           "help": "List forges by slug with their id, revision, state and API origin.",
           "params": [
@@ -3977,68 +4047,18 @@
           ],
           "path": "hub forge retire",
           "short_help": "Retire FORGE, refusing while an enabled record names it."
-        },
-        "show": {
-          "help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "forge",
-              "opts": [
-                "forge"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub forge show",
-          "short_help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."
         }
       },
-      "help": "Create, list, show, edit, retire and enable forges.",
+      "help": "Create, list, get, edit, retire and enable forges.",
       "params": [],
       "path": "hub forge",
-      "short_help": "Create, list, show, edit, retire and enable forges."
+      "short_help": "Create, list, get, edit, retire and enable forges."
     },
     "garden-proposal": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "accept": {
           "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file, a body only a minted item\ncarries.",
@@ -4465,6 +4485,60 @@
           "path": "hub garden-proposal edit",
           "short_help": "Edit PROPOSAL_ID in place \u2014 only the given fields change."
         },
+        "get": {
+          "help": "One garden proposal's whole record.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "proposal_id",
+              "opts": [
+                "proposal_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub garden-proposal get",
+          "short_help": "One garden proposal's whole record."
+        },
         "list": {
           "help": "List every garden proposal, newest first.",
           "params": [
@@ -4597,60 +4671,6 @@
           ],
           "path": "hub garden-proposal pass",
           "short_help": "Pass PROPOSAL_ID, recording REASON."
-        },
-        "show": {
-          "help": "One garden proposal's whole record.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "proposal_id",
-              "opts": [
-                "proposal_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub garden-proposal show",
-          "short_help": "One garden proposal's whole record."
         }
       },
       "help": "Author, review, and decide garden proposals.",
@@ -4659,6 +4679,10 @@
       "short_help": "Author, review, and decide garden proposals."
     },
     "graph": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "enable": {
           "help": "Re-enable a retired GRAPH_ID: its name resolves to it again when it is that name's newest mint.",
@@ -4778,6 +4802,60 @@
           ],
           "path": "hub graph follow-latest",
           "short_help": "Set GRAPH_ID's follow-latest policy: true, false, or inherit."
+        },
+        "get": {
+          "help": "One graph's full reified definition \u2014 session pools, nodes, and edges.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "graph_id",
+              "opts": [
+                "graph_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub graph get",
+          "short_help": "One graph's full reified definition \u2014 session pools, nodes, and edges."
         },
         "list": {
           "help": "List every minted graph, newest first \u2014 name, graph_id, effective, retired.",
@@ -4929,60 +5007,6 @@
           ],
           "path": "hub graph retire",
           "short_help": "Retire GRAPH_ID: its name no longer resolves to it; chunks already on it run on."
-        },
-        "show": {
-          "help": "One graph's full reified definition \u2014 session pools, nodes, and edges.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "graph_id",
-              "opts": [
-                "graph_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub graph show",
-          "short_help": "One graph's full reified definition \u2014 session pools, nodes, and edges."
         },
         "sync": {
           "help": "Reconcile the hub's packaged graphs into every open tenant, minting only what changed, and report per tenant.\n\nIdempotent. The **hub's own** packaged set is what is reconciled, not this CLI's.\nExits non-zero only if a packaged graph failed to load in some tenant. When to run it:\nhttps://github.com/paul-gross/blizzard/blob/master/docs/deployment/install.md#graph-sync-after-a-deploy",
@@ -5868,6 +5892,10 @@
       "short_help": "Apply or reverse migrations, or inspect this build's migration tree."
     },
     "project": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Create project SLUG at revision 1, named NAME (default: SLUG). It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
@@ -6073,6 +6101,60 @@
           "path": "hub project edit",
           "short_help": "Change only the fields given on PROJECT; every other field keeps its value."
         },
+        "get": {
+          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project get",
+          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories linked to it."
+        },
         "link": {
           "help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source\ncan belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link\nalready standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again.",
           "params": [
@@ -6205,60 +6287,6 @@
           ],
           "path": "hub project list",
           "short_help": "List the tenant's projects \u2014 slug, name, color, id, revision."
-        },
-        "show": {
-          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "project",
-              "opts": [
-                "project"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub project show",
-          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories linked to it."
         },
         "unlink": {
           "help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source\nno longer goes to PROJECT, and PROJECT's work no longer lands in that repository. Unlinking an unlinked link\nchanges nothing; link it again to restore it. Refused for the built-in hub source, which every project draws\nfrom.",
@@ -6497,7 +6525,66 @@
       "short_help": "Read and answer the questions workers raise."
     },
     "queue": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
+        "get": {
+          "help": "Show the whole ready queue, front first.",
+          "params": [
+            {
+              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub queue get",
+          "short_help": "Show the whole ready queue, front first."
+        },
         "move": {
           "help": "Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).\n\nNo other chunk changes place. Refused when CHUNK_ID is not ready, a backlog chunk included.",
           "params": [
@@ -6616,61 +6703,6 @@
           ],
           "path": "hub queue set",
           "short_help": "Replace the whole ready-queue order with CHUNK_IDS, front to back."
-        },
-        "show": {
-          "help": "Show the whole ready queue, front first.",
-          "params": [
-            {
-              "help": "Show only this project's records, by id or slug. Without it, every project of the tenant is shown.",
-              "hidden": false,
-              "kind": "option",
-              "name": "project",
-              "opts": [
-                "--project"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub queue show",
-          "short_help": "Show the whole ready queue, front first."
         }
       },
       "help": "Read and reorder the queue of ready chunks runners claim from.",
@@ -6708,6 +6740,10 @@
       "short_help": "Deprecated, and refuses: a hub step no longer runs commands, so no marker can be recorded this way."
     },
     "repo": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 or when the secret is missing or retired. The hub resolves a chunk's\ncommits against the record on its next deliver.",
@@ -7075,6 +7111,60 @@
           "path": "hub repo enable",
           "short_help": "Re-enable a retired REPOSITORY."
         },
+        "get": {
+          "help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created\nit and when.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "repository",
+              "opts": [
+                "repository"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub repo get",
+          "short_help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
+        },
         "list": {
           "help": "List every repository \u2014 slug, name, id, revision, state, owner/repo, base branch.",
           "params": [
@@ -7195,60 +7285,6 @@
           ],
           "path": "hub repo retire",
           "short_help": "Retire REPOSITORY: it leaves the default list and keeps its coordinate, so no other repository takes it."
-        },
-        "show": {
-          "help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created\nit and when.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "repository",
-              "opts": [
-                "repository"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub repo show",
-          "short_help": "Show REPOSITORY \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
       "help": "Manage the tenant's repository records.",
@@ -7276,6 +7312,10 @@
       "short_help": "Rotate the hub's signing key: a new key signs from now on, tokens already issued still verify, and the hub needs no restart."
     },
     "routine": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Mint a routine named NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.\n\nDEFAULT_SCOPE_SLUG mints a fresh scope if unseen. GRAPH_NAME must resolve to\nan enabled graph.",
@@ -7604,6 +7644,60 @@
           ],
           "path": "hub routine enable",
           "short_help": "Re-enable a retired routine NAME."
+        },
+        "get": {
+          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "routine_id",
+              "opts": [
+                "routine_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub routine get",
+          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes."
         },
         "list": {
           "help": "List every routine, newest first \u2014 routine_id, name, graph, default scope.\n\nExcludes a retired routine unless --include-retired.",
@@ -8092,60 +8186,6 @@
           "path": "hub routine scope",
           "short_help": "Manage which scopes a routine may run over."
         },
-        "show": {
-          "help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults,\nand its linked scopes.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "routine_id",
-              "opts": [
-                "routine_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub routine show",
-          "short_help": "One routine's whole record \u2014 name, graph, default scope, model/effort defaults, and its linked scopes."
-        },
         "sweeps": {
           "help": "Show when routine NAME last swept each of its scopes, and its measurements over\n--since/--until.",
           "params": [
@@ -8357,7 +8397,65 @@
       "short_help": "Manage routines, run them, and read their gardening reports."
     },
     "run": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
+        "get": {
+          "help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it\ndelivered, the added/observed/gone entries its own artifact published.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "chunk_id",
+              "opts": [
+                "chunk_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub run get",
+          "short_help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it delivered, the added/observed/gone entries its own artifact published."
+        },
         "list": {
           "help": "List every run minted in --since/--until, newest first \u2014 both default to the\nlast 24 hours ending now.",
           "params": [
@@ -8436,60 +8534,6 @@
           ],
           "path": "hub run list",
           "short_help": "List every run minted in --since/--until, newest first \u2014 both default to the last 24 hours ending now."
-        },
-        "show": {
-          "help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it\ndelivered, the added/observed/gone entries its own artifact published.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "chunk_id",
-              "opts": [
-                "chunk_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub run show",
-          "short_help": "One run's full detail \u2014 identity, derived outcome, and, per finding set it delivered, the added/observed/gone entries its own artifact published."
         }
       },
       "help": "Read routine runs and what each one changed.",
@@ -8498,6 +8542,10 @@
       "short_help": "Read routine runs and what each one changed."
     },
     "runner": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "add": {
           "help": "Add a runner under NAME; prints its hub-minted id and bearer token exactly once.\n\nThe runner stays never connected until it first registers with that token; from then on its\nown configured name replaces NAME. Names need not be unique. `blizzard runner init` adds a\nrunner and installs its token in one step.",
@@ -8630,6 +8678,60 @@
           ],
           "path": "hub runner enroll",
           "short_help": "Rotate RUNNER_ID's bearer token; prints the new plaintext exactly once."
+        },
+        "get": {
+          "help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_id",
+              "opts": [
+                "runner_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner get",
+          "short_help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``."
         },
         "list": {
           "help": "The fleet registry \u2014 every added runner, oldest first: its id, name, connection and paused state.\n\nA runner added but never registered shows as never-connected. Excludes a retired runner\nunless --all.",
@@ -9027,60 +9129,6 @@
           ],
           "path": "hub runner revoke-token",
           "short_help": "Revoke runner RUNNER_ID's token \u2014 it stays added, and is refused until re-enrolled."
-        },
-        "show": {
-          "help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "runner_id",
-              "opts": [
-                "runner_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub runner show",
-          "short_help": "One runner's connection and paused state, by RUNNER_ID \u2014 symmetric with ``runner list``."
         }
       },
       "help": "Register, pause, credential, and retire runners.\n\nEvery verb but `add` and `list` takes a runner's hub-minted id, which `list` shows beside each\nname. A name is display-only and never resolves to a runner.",
@@ -9089,6 +9137,10 @@
       "short_help": "Register, pause, credential, and retire runners."
     },
     "runner-host": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "add": {
           "help": "Add a host under NAME; prints its hub-minted id and bearer token exactly once.\n\nThe host stays never connected until it first reports with that token. A name a live host already holds is\nrefused.",
@@ -9286,6 +9338,60 @@
           ],
           "path": "hub runner-host enroll",
           "short_help": "Issue host HOST_ID a new bearer token; prints the plaintext exactly once."
+        },
+        "get": {
+          "help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "host_id",
+              "opts": [
+                "host_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner-host get",
+          "short_help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``."
         },
         "list": {
           "help": "The host registry \u2014 every added host, oldest first: its id, name, connection and runner count.\n\nA host added but never reported shows as never-connected. Excludes a retired host unless --all.",
@@ -9562,60 +9668,6 @@
           ],
           "path": "hub runner-host revoke-token",
           "short_help": "Revoke host HOST_ID's token and issue none \u2014 it stays added, and is refused until `enroll` issues a new one."
-        },
-        "show": {
-          "help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "host_id",
-              "opts": [
-                "host_id"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub runner-host show",
-          "short_help": "One host's connection, reported facts and runners, by HOST_ID \u2014 symmetric with ``runner-host list``."
         }
       },
       "help": "Register hosts, place runners under them, credential, and retire them.\n\nEvery verb but `add` and `list` takes a host's hub-minted id, which `list` shows beside each name. A name is\ndisplay-only and never resolves to a host. (`blizzard hub host` is the hub daemon's launcher.)",
@@ -9624,6 +9676,10 @@
       "short_help": "Register hosts, place runners under them, credential, and retire them."
     },
     "scope": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Mint SLUG, or no-op onto the existing scope of the same slug.\n\nA re-create never overwrites a stored description \u2014 ``scope edit`` is the verb that\nchanges it.",
@@ -9859,6 +9915,72 @@
           "path": "hub scope enable",
           "short_help": "Re-enable a retired SLUG."
         },
+        "get": {
+          "help": "Show SLUG's record \u2014 state, description, revision, and when it was created.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub scope get",
+          "short_help": "Show SLUG's record \u2014 state, description, revision, and when it was created."
+        },
         "list": {
           "help": "List every scope, newest first \u2014 slug, retired, description.",
           "params": [
@@ -9991,72 +10113,6 @@
           ],
           "path": "hub scope retire",
           "short_help": "Retire SLUG \u2014 a reversible brake; in-flight users of it are untouched."
-        },
-        "show": {
-          "help": "Show SLUG's record \u2014 state, description, revision, and when it was created.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "slug",
-              "opts": [
-                "slug"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
-              "hidden": false,
-              "kind": "option",
-              "name": "project",
-              "opts": [
-                "--project"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub scope show",
-          "short_help": "Show SLUG's record \u2014 state, description, revision, and when it was created."
         }
       },
       "help": "Manage scopes, the named buckets findings are grouped into.",
@@ -10065,6 +10121,10 @@
       "short_help": "Manage scopes, the named buckets findings are grouped into."
     },
     "secret": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Store a new secret NAME, its value read from stdin \u2014 never an argument.\n\nRefused for a name that already exists \u2014 replace it with `secret set`. Trailing CR/LF is\nstripped; an empty value is refused.",
@@ -10173,6 +10233,60 @@
           ],
           "path": "hub secret enable",
           "short_help": "Re-enable a retired NAME."
+        },
+        "get": {
+          "help": "Show NAME's metadata \u2014 revision, who replaced it and when. Never its value.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub secret get",
+          "short_help": "Show NAME's metadata \u2014 revision, who replaced it and when."
         },
         "list": {
           "help": "List secrets \u2014 name, revision, retired. Never a value.",
@@ -10355,60 +10469,6 @@
           ],
           "path": "hub secret set",
           "short_help": "Replace NAME's value, read from stdin \u2014 never an argument."
-        },
-        "show": {
-          "help": "Show NAME's metadata \u2014 revision, who replaced it and when. Never its value.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "name",
-              "opts": [
-                "name"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub secret show",
-          "short_help": "Show NAME's metadata \u2014 revision, who replaced it and when."
         }
       },
       "help": "Manage the write-only secret store.",
@@ -10417,6 +10477,10 @@
       "short_help": "Manage the write-only secret store."
     },
     "source": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "create": {
           "help": "Add work source SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nWithout --forge the source names its forge the old way \u2014 --api-base, or GitHub's API when it is left out \u2014 resolved\nto the forge holding that origin, made when none does, and warned about.\n\nRefused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and\nlocator are already taken \u2014 a retired source keeps its claim \u2014 or when the secret is missing or retired. The hub\nreads the record on its next use of the source.",
@@ -10824,6 +10888,60 @@
           "path": "hub source enable",
           "short_help": "Re-enable a retired SOURCE."
         },
+        "get": {
+          "help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it\nand when.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "source",
+              "opts": [
+                "source"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub source get",
+          "short_help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
+        },
         "list": {
           "help": "List the built-in hub source and every work source \u2014 slug, name, id, revision, state, provider, locator.",
           "params": [
@@ -10944,60 +11062,6 @@
           ],
           "path": "hub source retire",
           "short_help": "Retire SOURCE: it leaves the default list and keeps its provider and locator, so no other source takes them."
-        },
-        "show": {
-          "help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it\nand when.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "source",
-              "opts": [
-                "source"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Print the raw response body as JSON.",
-              "hidden": false,
-              "kind": "option",
-              "name": "as_json",
-              "opts": [
-                "--json"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "boolean"
-            },
-            {
-              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
-              "hidden": false,
-              "kind": "option",
-              "name": "tenant",
-              "opts": [
-                "--tenant"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
-              "hidden": false,
-              "kind": "option",
-              "name": "hub_url",
-              "opts": [
-                "--hub-url"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "hub source show",
-          "short_help": "Show SOURCE \u2014 named by its id, its slug, or a slug it has left \u2014 with its fields, revision, and who created it and when."
         }
       },
       "help": "Manage the tenant's work sources, where work items come from.",

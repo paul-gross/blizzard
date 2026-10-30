@@ -115,7 +115,7 @@ def test_a_record_create_lands_in_the_project_named_by_slug_or_by_id(tenant: Ten
 
     assert (by_slug["project_id"], by_id["project_id"]) == (tenant.gears, tenant.default)
     assert proposal["project_id"] == tenant.gears
-    assert _json(_cli("scope", "show", "billing", "--project", tenant.gears, "--json"))["slug"] == "billing"
+    assert _json(_cli("scope", "get", "billing", "--project", tenant.gears, "--json"))["slug"] == "billing"
     edited = _cli("scope", "edit", "billing", "--description", "bills", "--project", "gears")
     assert edited.exit_code == 0, edited.output
     retired = _cli("scope", "retire", "billing", "--project", "gears")
@@ -128,7 +128,7 @@ def test_a_record_create_lands_in_the_project_named_by_slug_or_by_id(tenant: Ten
     ("argv", "stdin"),
     [
         (("scope", "create", "billing"), None),
-        (("scope", "show", "billing"), None),
+        (("scope", "get", "billing"), None),
         (("routine", "create", "nightly", "alpha", "billing"), None),
         (("routine", "retire", "nightly"), None),
         (("garden-proposal", "create", "--title", "tidy", "--class", "chore", "--body-file", "-"), "body"),
@@ -160,9 +160,9 @@ def test_a_listing_without_project_reads_the_whole_tenant_and_with_it_only_that_
     assert chunk_ids("chunk", "list") == {in_default, in_gears}
     assert chunk_ids("chunk", "list", "--project", "gears") == {in_gears}
     assert chunk_ids("chunk", "list", "--project", tenant.default) == {in_default}
-    queued = _json(_cli("queue", "show", "--json"))["entries"]
+    queued = _json(_cli("queue", "get", "--json"))["entries"]
     assert {entry["chunk_id"] for entry in queued} == {in_default, in_gears}
-    narrowed = _json(_cli("queue", "show", "--project", "gears", "--json"))["entries"]
+    narrowed = _json(_cli("queue", "get", "--project", "gears", "--json"))["entries"]
     assert [entry["chunk_id"] for entry in narrowed] == [in_gears]
     assert {chunk["chunk_id"] for chunk in _json(_cli("status", "--project", "gears", "--json"))["chunks"]} == {
         in_gears
@@ -186,7 +186,7 @@ _SINCE = ("--since", "2026-01-01T00:00:00", "--until", "2030-01-01T00:00:00")
         ("analytics", "events"),
         ("config", "changes"),
         ("chunk", "list"),
-        ("queue", "show"),
+        ("queue", "get"),
         ("question", "list"),
         ("decision", "list"),
     ],

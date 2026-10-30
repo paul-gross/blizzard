@@ -1,4 +1,4 @@
-"""``blizzard hub chunk show`` prints an open escalation's cause, detail, and takeover command."""
+"""``blizzard hub chunk get`` prints an open escalation's cause, detail, and takeover command."""
 
 from __future__ import annotations
 

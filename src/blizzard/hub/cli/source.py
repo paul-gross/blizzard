@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.forge_warnings import echo_warnings
@@ -47,7 +48,7 @@ def _refusals(source: str) -> dict[int, str]:
     }
 
 
-@click.group("source")
+@click.group("source", cls=GetGroup)
 def source_group() -> None:
     """Manage the tenant's work sources, where work items come from."""
 
@@ -118,7 +119,7 @@ def source_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(rows, SourceListing(rows))
 
 
-@source_group.command("show", cls=FleetCommand)
+@source_group.command("get", cls=FleetCommand)
 @click.argument("source")
 def source_show(cli: CliContext, source: str) -> None:
     """Show SOURCE — named by its id, its slug, or a slug it has left — with its fields, revision, and who created it

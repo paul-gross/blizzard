@@ -249,7 +249,7 @@ all of that, the hub accepts and stores a reported `estimated_cost_usd` for a ro
 total, never folded into `cost_usd`. A chunk's or the fleet's billed cost is never inflated by an estimate, and an
 estimate is never presented as billed spend.
 
-Every surface — the CLI's `hub status`, `hub chunk list`, `hub chunk show`, and `hub analytics summary`, and every board
+Every surface — the CLI's `hub status`, `hub chunk list`, `hub chunk get`, and `hub analytics summary`, and every board
 figure — renders a total as **one** amount, `cost_usd + estimated_cost_usd`, to the cent, carrying two independent
 markers: a leading `~` whenever the total carries an estimate, meaning some part of the amount is estimated rather than
 billed, and a trailing `+` whenever it is PARTIAL, meaning some row carried neither amount and the figure is a lower

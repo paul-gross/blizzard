@@ -1,4 +1,4 @@
-"""``blizzard hub finding list|show`` (unit tier) and the human-driven exit
+"""``blizzard hub finding list|get`` (unit tier) and the human-driven exit
 verbs — pure clients of the finding routes, driven here with
 ``httpx2`` stubbed, the ``tests/test_hub_cli_scope.py`` / ``tests/test_hub_cli_garden_proposal.py``
 shape."""
@@ -196,7 +196,7 @@ def test_finding_show_renders_the_detail() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_1"])
+    result = bound.runner.invoke(hub_group, ["finding", "get", "fin_1"])
 
     assert result.exit_code == 0, result.output
     assert "fin_1" in result.output
@@ -205,7 +205,7 @@ def test_finding_show_renders_the_detail() -> None:
 
 @pytest.mark.unit
 def test_finding_show_renders_a_review_sourced_finding() -> None:
-    """`show` must surface `source`/`severity`/`raised_by_chunk_id` for a
+    """`get` must surface `source`/`severity`/`raised_by_chunk_id` for a
     review-sourced finding rather than a bare, unhelpful `routine=None`."""
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
@@ -231,7 +231,7 @@ def test_finding_show_renders_a_review_sourced_finding() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_1"])
+    result = bound.runner.invoke(hub_group, ["finding", "get", "fin_1"])
 
     assert result.exit_code == 0, result.output
     assert "source=review" in result.output
@@ -246,7 +246,7 @@ def test_finding_show_unknown_id_reports_404() -> None:
         return _FakeResponse(404, {"detail": "unknown finding fin_ghost"})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["finding", "show", "fin_ghost"])
+    result = bound.runner.invoke(hub_group, ["finding", "get", "fin_ghost"])
 
     assert result.exit_code != 0
     assert "unknown finding fin_ghost" in result.output

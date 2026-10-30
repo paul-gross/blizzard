@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.run_mode import RunMode
@@ -57,7 +58,7 @@ class RoutineDetail:
         yield f"  scopes: {', '.join(self.scopes)}"
 
 
-@click.group("routine")
+@click.group("routine", cls=GetGroup)
 def routine_group() -> None:
     """Manage routines, run them, and read their gardening reports."""
 
@@ -116,7 +117,7 @@ def routine_list(cli: CliContext, include_retired: bool, project: str | None) ->
     cli.show(rows, RoutineListing(rows))
 
 
-@routine_group.command("show", cls=FleetCommand)
+@routine_group.command("get", cls=FleetCommand)
 @click.argument("routine_id")
 def routine_show(cli: CliContext, routine_id: str) -> None:
     """One routine's whole record — name, graph, default scope, model/effort defaults,

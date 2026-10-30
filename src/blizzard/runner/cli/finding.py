@@ -7,10 +7,11 @@ from urllib.parse import quote
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.runner.cli.worker_call import WorkerCall
 
 
-@click.group("finding")
+@click.group("finding", cls=GetGroup)
 def finding_group() -> None:
     """Worker: read the findings the accepted, minted garden proposals behind
     this chunk's work items answer."""

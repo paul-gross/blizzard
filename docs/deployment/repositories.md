@@ -10,7 +10,7 @@ blizzard hub forge create github --kind github --api-base https://api.github.com
 blizzard hub repo create blizzard --forge github --owner paul-gross --repo blizzard \
   --base-branch master --secret gh-token
 blizzard hub repo list
-blizzard hub repo show blizzard
+blizzard hub repo get blizzard
 ```
 
 [forges.md](./forges.md) owns the forge record: its kind, its API and web origins, and the doors it is managed through.
@@ -88,7 +88,7 @@ revision by one:
   holder; `enable` the holder instead.
 - `enable <repository>` lifts the retirement, and is refused while the repository's secret is retired.
 
-`show`, `edit`, `retire` and `enable` take the repository's id or its slug.
+`get`, `edit`, `retire` and `enable` take the repository's id or its slug.
 
 `edit`, `retire`, and `enable` take `--if-match <revision>` and are refused, naming the current revision, when the
 repository has moved on. An active repository keeps its secret from being retired. Every write is recorded in the

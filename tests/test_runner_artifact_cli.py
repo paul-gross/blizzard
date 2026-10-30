@@ -827,3 +827,18 @@ def test_attach_alias_is_hidden_but_the_artifact_group_is_listed() -> None:
     assert "artifact" in help_text
     # The alias stays working but is hidden from the help listing.
     assert "attach" not in help_text
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("alias", ["show", "read"])
+def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str) -> None:
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float, **_: object) -> _FakeResponse:
+        return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
+
+    bound = bind_stubs(get=fake_get)
+    canonical = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
+    aliased = bound.runner.invoke(runner_group, ["artifact", alias, "plan"], env=_ENV)
+
+    assert canonical.exit_code == 0, canonical.output
+    assert aliased.exit_code == 0, aliased.output
+    assert aliased.output == canonical.output

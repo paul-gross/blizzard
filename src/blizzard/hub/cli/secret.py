@@ -13,6 +13,7 @@ from typing import Any
 import click
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -26,7 +27,7 @@ class SecretListing(Listing):
         return f"{row['name']}  r{row['revision']}  {marker}"
 
 
-@click.group("secret")
+@click.group("secret", cls=GetGroup)
 def secret_group() -> None:
     """Manage the write-only secret store."""
 
@@ -108,7 +109,7 @@ def secret_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(rows, SecretListing(rows))
 
 
-@secret_group.command("show", cls=FleetCommand)
+@secret_group.command("get", cls=FleetCommand)
 @click.argument("name")
 def secret_show(cli: CliContext, name: str) -> None:
     """Show NAME's metadata — revision, who replaced it and when. Never its value."""

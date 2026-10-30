@@ -9,12 +9,13 @@ from urllib.parse import quote
 import click
 
 from blizzard.cli.collaborators import HTTPStatusError
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
 from blizzard.runner.cli.worker_call import WorkerCall
 
 
-@click.group("artifact")
+@click.group("artifact", cls=GetGroup)
 def artifact_group() -> None:
     """Worker: read node-step, graph, and system artifacts; write this node-step's own.
     Every verb acts on this worker's own chunk — none names another. ``--scope`` picks node

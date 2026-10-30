@@ -1,4 +1,4 @@
-"""``blizzard hub routine create|list|show|edit|trend|proposal-counts`` (unit tier) — pure
+"""``blizzard hub routine create|list|get|edit|trend|proposal-counts`` (unit tier) — pure
 clients of the routine routes, driven here with the client factory stubbed, the
 ``tests/test_hub_cli_graph.py`` shape."""
 
@@ -307,7 +307,7 @@ def test_routine_show_prints_the_whole_record() -> None:
         )
 
     bound = bind_stubs(get=_in_one_project(fake_get))
-    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
+    result = bound.runner.invoke(hub_group, ["routine", "get", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "nightly" in result.output
@@ -334,7 +334,7 @@ def test_routine_show_prints_the_harnesses_default() -> None:
         )
 
     bound = bind_stubs(get=_in_one_project(fake_get))
-    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
+    result = bound.runner.invoke(hub_group, ["routine", "get", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "default harnesses: claude_code, codex" in result.output
@@ -342,7 +342,7 @@ def test_routine_show_prints_the_harnesses_default() -> None:
 
 @pytest.mark.unit
 def test_routine_show_lists_the_routines_scopes() -> None:
-    """``routine show`` also reads ``GET /routines/{id}/scopes``
+    """``routine get`` also reads ``GET /routines/{id}/scopes``
     and appends a ``scopes:`` line naming every linked scope."""
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
@@ -361,7 +361,7 @@ def test_routine_show_lists_the_routines_scopes() -> None:
         )
 
     bound = bind_stubs(get=_in_one_project(fake_get))
-    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_1"])
+    result = bound.runner.invoke(hub_group, ["routine", "get", "rtn_1"])
 
     assert result.exit_code == 0, result.output
     assert "scopes: blizzard, cold" in result.output
@@ -373,7 +373,7 @@ def test_routine_show_maps_an_unknown_routine() -> None:
         return _FakeResponse(404)
 
     bound = bind_stubs(get=_in_one_project(fake_get))
-    result = bound.runner.invoke(hub_group, ["routine", "show", "rtn_ghost"])
+    result = bound.runner.invoke(hub_group, ["routine", "get", "rtn_ghost"])
 
     assert result.exit_code != 0
     assert "rtn_ghost" in result.output

@@ -115,7 +115,7 @@ def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient) -> No
     duplicate = _cli(["create", "gh-test"], stdin="v1b\n")
     assert duplicate.exit_code != 0
     assert "secret set" in duplicate.output
-    assert "revision 1" in _cli(["show", "gh-test"]).output
+    assert "revision 1" in _cli(["get", "gh-test"]).output
     again = _cli(["set", "gh-test"], stdin="v2\n")
     assert again.exit_code == 0
     assert "revision 2" in again.output
@@ -133,7 +133,7 @@ def test_secret_set_reads_stdin_only_and_refuses_empty(client: TestClient) -> No
     refused = _cli(["set", "gh-test"], stdin="v3\n")
     assert refused.exit_code != 0
     assert _cli(["enable", "gh-test"]).exit_code == 0
-    assert "revision 2" in _cli(["show", "gh-test"]).output
+    assert "revision 2" in _cli(["get", "gh-test"]).output
 
 
 def test_secret_set_refuses_an_unknown_name_and_creates_nothing(client: TestClient) -> None:
@@ -165,10 +165,10 @@ def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_b
     refused = _cli(["retire", "gh-test"])
     assert refused.exit_code != 0
     assert "repository blizzard" in refused.output
-    assert "repository blizzard" in _cli(["show", "gh-test"]).output
+    assert "repository blizzard" in _cli(["get", "gh-test"]).output
 
     assert client.post("/api/repositories/blizzard/retire").status_code == 200
-    assert "repository blizzard" not in _cli(["show", "gh-test"]).output
+    assert "repository blizzard" not in _cli(["get", "gh-test"]).output
     assert client.get("/api/secrets/gh-test").json()["retirable"] is True
     assert _cli(["retire", "gh-test"]).exit_code == 0
     assert client.get("/api/secrets/gh-test").json()["retirable"] is True
@@ -205,7 +205,7 @@ def test_a_planted_value_appears_on_no_surface(config: HubConfig, tmp_path: Path
             seen.append(resp.text)
         for args in (
             ["list"],
-            ["show", "gh-test"],
+            ["get", "gh-test"],
             ["list", "--json"],
             ["retire", "gh-test"],
             ["enable", "gh-test"],

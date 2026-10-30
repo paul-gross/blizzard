@@ -1,4 +1,4 @@
-"""``blizzard hub project create|list|show|edit|link|unlink`` against a real hub: a project is named by its id, its
+"""``blizzard hub project create|list|get|edit|link|unlink`` against a real hub: a project is named by its id, its
 slug or a slug it left; its work-source and repository links are linked, shown and unlinked, each change carrying the
 CLI's door; a call that needs a project and names none, on a tenant holding several, prints the tenant's projects and
 asks for ``--project``; ``--tenant`` names the tenant a project verb acts in; and ``--project`` is offered optional
@@ -104,14 +104,14 @@ def test_create_names_the_project_by_its_slug_unless_given_a_name_and_list_and_s
 
     assert created.exit_code == 0, created.output
     assert _said(created)[0].startswith("project widgets created at revision 1 — id ")
-    widgets = _json(_cli("show", "widgets", "--json"))
+    widgets = _json(_cli("get", "widgets", "--json"))
     assert (widgets["slug"], widgets["name"], widgets["description"]) == ("widgets", "widgets", "the widget line")
     assert (named["slug"], named["name"]) == ("gears", "Gear works")
     listed = _said(_cli("list"))
     assert f"gears  Gear works  {named['color']}  {named['project_id']}  r1" in listed
     assert f"widgets  widgets  {widgets['color']}  {widgets['project_id']}  r1" in listed
     assert {row["slug"] for row in _json(_cli("list", "--json"))} == {"default", "gears", "widgets"}
-    by_id = _said(_cli("show", named["project_id"]))
+    by_id = _said(_cli("get", named["project_id"]))
     assert by_id[:4] == [
         "gears  Gear works  revision 1",
         f"id {named['project_id']}  created {named['created_at']}",
@@ -129,7 +129,7 @@ def test_create_and_show_refusals_name_what_was_refused() -> None:
 
     taken = _cli("create", "widgets")
     malformed = _cli("create", "Not A Slug")
-    unknown = _cli("show", "nowhere")
+    unknown = _cli("get", "nowhere")
 
     assert taken.exit_code != 0
     assert "widgets" in taken.output
@@ -143,7 +143,7 @@ def test_edit_changes_only_the_fields_given_and_the_slug_left_still_names_the_pr
     project_id = _json(_cli("create", "widgets", "--json"))["project_id"]
 
     edited = _cli("edit", "widgets", "--slug", "gadgets", "--name", "Gadgets")
-    by_former_slug = _json(_cli("show", "widgets", "--json"))
+    by_former_slug = _json(_cli("get", "widgets", "--json"))
     stale = _cli("edit", project_id, "--description", "late", "--if-match", "1")
     nothing = _cli("edit", "gadgets")
 
@@ -166,10 +166,10 @@ def test_link_and_unlink_a_work_source_and_a_repository_by_slug_and_by_id(hub: H
 
     source = _cli("link", "widgets", "--source", "acme")
     repository = _cli("link", project_id, "--repository", "acme-repo")
-    shown = _said(_cli("show", "widgets"))
+    shown = _said(_cli("get", "widgets"))
     unlinked_source = _cli("unlink", project_id, "--source", "acme")
     unlinked_repository = _json(_cli("unlink", "widgets", "--repository", "acme-repo", "--json"))
-    after = _json(_cli("show", "widgets", "--json"))
+    after = _json(_cli("get", "widgets", "--json"))
 
     assert _said(source) == ["project widgets is linked to work source acme"]
     assert _said(repository) == [f"project {project_id} is linked to repository acme-repo"]
@@ -239,7 +239,7 @@ def test_tenant_names_the_tenant_a_project_verb_acts_in(hub: HubHarness, sent: l
     [
         ("create", "Create project SLUG at revision 1"),
         ("list", "List the tenant's projects"),
-        ("show", "with the work sources and repositories"),
+        ("get", "with the work sources and repositories"),
         ("edit", "Change only the fields given on PROJECT"),
         ("link", "work ingested from that source can belong to"),
         ("unlink", "no longer goes to PROJECT"),

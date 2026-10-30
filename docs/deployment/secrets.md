@@ -5,7 +5,7 @@ outside the store, and no API response, CLI output, log line, trace attribute, o
 
 ## The verbs
 
-`blizzard hub secret create <name>`, `set <name>`, `list [--include-retired]`, `show <name>`, `retire <name>`,
+`blizzard hub secret create <name>`, `set <name>`, `list [--include-retired]`, `get <name>`, `retire <name>`,
 `enable <name>`, and `rotate-key` are the verbs. A name is lowercase letters, digits, and hyphens.
 
 `create` and `set` read the value from stdin and takes no value argument or option, so the value never lands in shell
@@ -16,14 +16,14 @@ printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 ```
 
 Trailing CR/LF is stripped and an empty value is refused. `create` stores a new secret at revision 1 and refuses a name
-that already exists. `set` replaces an existing secret at the next revision and refuses an unknown name. `show` and
+that already exists. `set` replaces an existing secret at the next revision and refuses an unknown name. `get` and
 `list` report the name, revision, who replaced the value and when, and whether the secret is retired.
 
 `retire` is a reversible brake: a retired secret is hidden from `list` unless `--include-retired` is given, and cannot
 be replaced until `enable` lifts it. Retirement never deletes the stored value.
 
-A work source names the secret it reads with, and a [repository](./repositories.md) names the one it lands with. `show`
-and `list` report the active records that do, as `used by` in `show` and `references` in `--json`. `retire` is refused
+A work source names the secret it reads with, and a [repository](./repositories.md) names the one it lands with. `get`
+and `list` report the active records that do, as `used by` in `get` and `references` in `--json`. `retire` is refused
 while any active record still uses the secret, and the refusal names them; retire or repoint those records first. A
 record that is itself retired no longer counts.
 

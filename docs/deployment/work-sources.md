@@ -21,7 +21,7 @@ and [install.md](./install.md#work-sources-and-forge-settings-are-records) owns 
 printf '%s' "$TOKEN" | blizzard hub secret create gh-token
 blizzard hub source create blizzard --provider github --locator paul-gross/blizzard --secret gh-token --annotate
 blizzard hub source list
-blizzard hub source show blizzard
+blizzard hub source get blizzard
 ```
 
 - `slug` is the handle ingest tokens (`slug:ref`, `slug#ref`) and board pointer labels (`{slug}#{ref}`) use; `hub` is
@@ -53,7 +53,7 @@ Every later change moves the revision by one:
   holder; `enable` the holder instead.
 - `enable <source>` lifts the retirement, and is refused while the source's secret is retired.
 
-`show`, `edit`, `retire` and `enable` take the source's id or its slug.
+`get`, `edit`, `retire` and `enable` take the source's id or its slug.
 
 `edit`, `retire`, and `enable` take `--if-match <revision>` and are refused, naming the current revision, when the
 source has moved on. `hub` is the built-in source: `list` shows it as built-in, and every attempt to change it is

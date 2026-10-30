@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -65,7 +66,7 @@ def _target(source: str | None, repository: str | None) -> tuple[str, str, str]:
     return "repository-links", repository, "repository"
 
 
-@click.group("project")
+@click.group("project", cls=GetGroup)
 def project_group() -> None:
     """Manage the tenant's projects and the work sources and repositories linked to them."""
 
@@ -93,7 +94,7 @@ def project_list(cli: CliContext) -> None:
     cli.show(rows, ProjectListing(rows))
 
 
-@project_group.command("show", cls=FleetCommand)
+@project_group.command("get", cls=FleetCommand)
 @click.argument("project")
 def project_show(cli: CliContext, project: str) -> None:
     """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources and repositories

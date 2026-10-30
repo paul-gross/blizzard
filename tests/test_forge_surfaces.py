@@ -201,7 +201,7 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
         return hub.client.request(method.upper(), urlsplit(url).path, **kwargs)
 
     result = bind_stubs(request=forward).runner.invoke(
-        hub_group, ["forge", "show", "ghe"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["forge", "get", "ghe"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output

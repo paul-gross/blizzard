@@ -1,4 +1,4 @@
-"""``blizzard hub runner add|list|show`` — the rendering half with the client stubbed (unit
+"""``blizzard hub runner add|list|get`` — the rendering half with the client stubbed (unit
 tier), and the CLI driven against a real hub app (component tier), every by-id verb included."""
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ def test_list_widens_the_name_column_to_the_longest_name_so_the_state_column_lin
 def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none() -> None:
     bound, _ = _stub("get", _respond(200, _row("rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B", "r-claude", **_NEVER_CONNECTED)))
 
-    result = bound.runner.invoke(hub_group, ["runner", "show", "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner", "get", "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6B"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[:2] == [
@@ -236,7 +236,7 @@ def test_add_is_refused_to_a_signed_in_contributor_and_adds_nothing(tmp_path: Pa
 
 #: Each by-id runner verb, and a verb both twins take first so a hit has something to change.
 _BY_ID_VERBS = (
-    pytest.param("show", None, id="show"),
+    pytest.param("get", None, id="get"),
     pytest.param("enroll", None, id="enroll"),
     pytest.param("pause", None, id="pause"),
     pytest.param("resume", "pause", id="resume"),
@@ -279,4 +279,4 @@ def test_a_by_id_verb_given_a_shared_name_exits_unknown_and_given_an_id_acts_on_
         assert target in hit.output and other not in hit.output
         after = _states(hub, twins)
         assert after[other] == prior[other]
-        assert (after[target] != prior[target]) == (verb != "show")
+        assert (after[target] != prior[target]) == (verb != "get")

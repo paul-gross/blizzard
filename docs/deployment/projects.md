@@ -60,7 +60,7 @@ projects and their links takes `fleet:view`.
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | `blizzard hub project create <slug> [--name <name>] [--description <text>] [--color <name\|#rrggbb>]`    | `POST /api/projects`                                                |
 | `blizzard hub project list`                                                                              | `GET /api/projects`                                                 |
-| `blizzard hub project show <project>`                                                                    | `GET /api/projects/{project}`, with its links                       |
+| `blizzard hub project get <project>`                                                                     | `GET /api/projects/{project}`, with its links                       |
 | `blizzard hub project edit <project> [--slug …] [--name …] [--description …] [--color …] [--if-match N]` | `PATCH /api/projects/{project}`                                     |
 | `blizzard hub project link <project> --source <source>`                                                  | `PUT /api/projects/{project}/source-links/{source}`                 |
 | `blizzard hub project link <project> --repository <repository>`                                          | `PUT /api/projects/{project}/repository-links/{repository}`         |

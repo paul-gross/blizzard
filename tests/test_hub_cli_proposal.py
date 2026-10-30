@@ -1,4 +1,4 @@
-"""``blizzard hub garden-proposal list|show`` (unit tier) — pure clients of the
+"""``blizzard hub garden-proposal list|get`` (unit tier) — pure clients of the
 garden-proposal routes, driven here with the client stubbed, the
 ``tests/test_hub_cli_scope.py`` shape."""
 
@@ -120,7 +120,7 @@ def test_garden_proposal_show_renders_the_detail() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["garden-proposal", "show", "gprop_1"])
+    result = bound.runner.invoke(hub_group, ["garden-proposal", "get", "gprop_1"])
 
     assert result.exit_code == 0, result.output
     assert "gprop_1" in result.output
@@ -145,7 +145,7 @@ def test_garden_proposal_show_omits_the_findings_line_when_there_are_none() -> N
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["garden-proposal", "show", "gprop_1"])
+    result = bound.runner.invoke(hub_group, ["garden-proposal", "get", "gprop_1"])
 
     assert result.exit_code == 0, result.output
     assert "gprop_1" in result.output
@@ -158,7 +158,7 @@ def test_garden_proposal_show_unknown_id_reports_404() -> None:
         return _FakeResponse(404, {"detail": "unknown garden proposal gprop_ghost"})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["garden-proposal", "show", "gprop_ghost"])
+    result = bound.runner.invoke(hub_group, ["garden-proposal", "get", "gprop_ghost"])
 
     assert result.exit_code != 0
     assert "unknown garden proposal gprop_ghost" in result.output
@@ -187,7 +187,7 @@ def _render(row: dict[str, object], verb: list[str]) -> str:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+@pytest.mark.parametrize("verb", [["list"], ["get", "gprop_1"]])
 def test_an_operator_row_with_a_routine_renders_routine_and_created_by(verb: list[str]) -> None:
     output = _render(_row("operator", "nightly", "paul"), verb)
 
@@ -195,7 +195,7 @@ def test_an_operator_row_with_a_routine_renders_routine_and_created_by(verb: lis
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+@pytest.mark.parametrize("verb", [["list"], ["get", "gprop_1"]])
 def test_an_operator_row_without_a_routine_renders_no_routine_and_no_none(verb: list[str]) -> None:
     output = _render(_row("operator", None, "paul"), verb)
 
@@ -205,7 +205,7 @@ def test_an_operator_row_without_a_routine_renders_no_routine_and_no_none(verb: 
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("verb", [["list"], ["show", "gprop_1"]])
+@pytest.mark.parametrize("verb", [["list"], ["get", "gprop_1"]])
 def test_a_routine_run_row_renders_routine_and_no_created_by(monkeypatch: pytest.MonkeyPatch, verb: list[str]) -> None:
     output = _render(_row("routine-run", "nightly", None), verb)
 

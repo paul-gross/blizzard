@@ -1,4 +1,4 @@
-"""``blizzard hub chunk migrate`` / ``restart`` / ``set`` / ``show`` (unit tier) — pure
+"""``blizzard hub chunk migrate`` / ``restart`` / ``set`` / ``get`` (unit tier) — pure
 clients of ``PATCH``/``GET /api/chunks/{id}``, driven here with the client stubbed.
 """
 
@@ -396,7 +396,7 @@ def test_show_reads_both_defaults_back_in_text_mode() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default model: blizzard:advanced, blizzard:basic" in result.output
@@ -423,7 +423,7 @@ def test_show_dashes_a_chunk_expressing_no_preference() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default model: -   default effort: -" in result.output
@@ -447,13 +447,13 @@ def test_show_reads_default_harnesses_back_in_text_mode() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "default harnesses: claude_code, codex" in result.output
 
 
-# `chunk show` — blocked marking and neighborhood.
+# `chunk get` — blocked marking and neighborhood.
 # --------------------------------------------------------------------------- #
 
 
@@ -479,7 +479,7 @@ def test_show_renders_blocked_naming_the_prerequisite() -> None:
         return _detail("ch_1", blocked={"prerequisite_chunk_id": "ch_prereq"})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "blocked: waiting on ch_prereq" in result.output
@@ -500,7 +500,7 @@ def test_show_renders_neighborhood_marking_satisfied_and_unsatisfied() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "prerequisites: ch_a (satisfied), ch_b (unsatisfied)" in result.output
@@ -513,7 +513,7 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
         return _detail("ch_1", blocked=None, neighborhood={"prerequisites": [], "dependents": []})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "blocked" not in result.output
@@ -526,7 +526,7 @@ def test_show_gains_no_lines_when_no_blocked_marking_or_edges() -> None:
 def test_show_prints_the_runner_only_while_the_chunk_holds_its_claim(status: str, shown: bool) -> None:
     route = {"runner_id": "rn_1", "environment_ids": ["env_1"]}
     bound = bind_stubs(get=lambda *a, **k: _detail("ch_1", status=status, route=route))
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert ("runner: rn_1  environments: 1" in result.output) is shown
@@ -538,7 +538,7 @@ def test_show_folds_an_estimate_into_the_cost_line_with_a_tilde() -> None:
         return _detail("ch_1", cost={"cost_usd": 0.0, "cost_partial": False, "estimated_cost_usd": 0.03})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "cost: ~$0.03" in result.output
@@ -550,7 +550,7 @@ def test_show_marks_no_estimate_when_none_was_reported() -> None:
         return _detail("ch_1", cost={"cost_usd": 0.10, "cost_partial": False})
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["chunk", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "cost: $0.10" in result.output

@@ -262,7 +262,7 @@ describe('GardeningRoutineDetail', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.textContent).not.toContain('hub routine run');
-    expect(el.textContent).not.toContain('hub routine show');
+    expect(el.textContent).not.toContain('hub routine get');
     expect(el.textContent).not.toContain('hub routine trend');
     expect(el.textContent).not.toContain('hub routine sweeps');
   });

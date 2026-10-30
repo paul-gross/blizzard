@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
@@ -21,12 +22,12 @@ class QueueListing(Listing):
         return f"{row['position']}  {row['chunk_id']}  graph={row.get('graph_id')}{marking}"
 
 
-@click.group("queue")
+@click.group("queue", cls=GetGroup)
 def queue_group() -> None:
     """Read and reorder the queue of ready chunks runners claim from."""
 
 
-@queue_group.command("show", cls=FleetCommand)
+@queue_group.command("get", cls=FleetCommand)
 @project_option(required_by_hub=False)
 def queue_show(cli: CliContext, project: str | None) -> None:
     """Show the whole ready queue, front first."""

@@ -248,7 +248,7 @@ describe('FleetFindingPanel', () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.textContent).not.toContain('hub finding show');
+    expect(el.textContent).not.toContain('hub finding get');
     expect(el.querySelector('.fp-cli')).toBeNull();
   });
 
