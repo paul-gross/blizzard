@@ -362,6 +362,7 @@ export { packagedSystemArtifact } from './system-artifacts';
 export { chunkTraceId, chunkSpanId, lifetimeTraceId, lifetimeSpanId, spanId, stepKeyText } from './trace-ids';
 export type { StepKey } from './trace-ids';
 export { assertChunkTrace, assertConforms, assertIdentity, assertInvocations, assertNoLeaks, assertPlatformNesting, assertRunnerNesting, assertSkeleton, isFleet, roleOf, tracesOf } from './fleet-traces';
+export { migratedChunk } from './migration-world';
 export type { InvocationExpect, StepExpect, StepTrace } from './fleet-traces';
 export { claudeCodeExports } from './telemetry-bodies';
 /** The wire shape of one reported decline reason, for a spec to type its literals against. */
