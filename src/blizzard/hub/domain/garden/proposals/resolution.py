@@ -1,7 +1,7 @@
 """Garden-proposal-closure-triggered finding resolutions: delivery-triggered closure,
 when the item an accepted proposal minted is delivered, and
-the worker-facing read, the findings a chunk's own accepted, minted
-proposal answers. Delivery closure is gated on
+the worker-facing read, the findings the accepted, minted
+proposals behind a chunk's work items answer. Delivery closure is gated on
 :meth:`IReadFindingRepository.has_delivery_for_proposal`
 (`blizzard-context:/architecture/crash-correctness/hub.md`)."""
 
@@ -119,7 +119,7 @@ class GardenProposalDeliveryResolution:
 
 
 class AnsweredFindingsReader:
-    """Reads the findings `chunk`'s own accepted, minted garden proposal answers — the
+    """Reads the findings the accepted, minted garden proposals behind `chunk`'s work items answer — the
     worker-facing read a leased chunk can reach its own findings through, sibling to
     :class:`GardenProposalDeliveryResolution`'s write-side walk but read-only and keyed
     off the chunk itself rather than a delivered pointer. Named apart from the module's
@@ -137,18 +137,22 @@ class AnsweredFindingsReader:
         self._findings = findings
 
     def resolve_for_chunk(self, chunk: Chunk) -> list[Finding] | None:
-        """The findings `chunk`'s own proposal answers, in the proposal's own order —
-        `None` when `chunk` carries no work ref, its item names no closure, that closure
-        is a pass or a declined accept, or the closure names a proposal that no longer
-        resolves. Reads only :meth:`Chunk.originating_ref`, so a chunk that absorbed a
-        garden-minted item's ref via a later fold resolves `None`, not the folded-in proposal."""
-        pointer = chunk.originating_ref()
-        if pointer is None:
+        """The findings the proposals behind `chunk`'s work items answer — the union over
+        every item, each proposal's findings in its own order, an item first in the chunk
+        ahead of one folded in later, a finding cited twice listed once. `None` when no
+        item resolves: the chunk carries no work ref, or none of its items names a
+        minted accepted closure whose proposal still resolves."""
+        ids: list[str] = []
+        answered = False
+        for pointer in chunk.work_refs:
+            closure = self._closures.find_by_item(pointer.source, pointer.ref)
+            if closure is None or not closure.mints_delivery:
+                continue
+            proposal = self._proposals.get(closure.proposal_id)
+            if proposal is None:
+                continue
+            answered = True
+            ids.extend(fid for fid in proposal.findings if fid not in ids)
+        if not answered:
             return None
-        closure = self._closures.find_by_item(pointer.source, pointer.ref)
-        if closure is None or not closure.mints_delivery:
-            return None
-        proposal = self._proposals.get(closure.proposal_id)
-        if proposal is None:
-            return None
-        return resolve_proposal_findings(self._findings, proposal.findings)
+        return resolve_proposal_findings(self._findings, ids)

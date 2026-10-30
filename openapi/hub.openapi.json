@@ -25879,7 +25879,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/findings": {
       "get": {
-        "description": "The findings the chunk's own accepted, minted garden proposal answers \u2014 a worker's\nper-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both\nfor an unknown chunk and for one answering no such proposal.",
+        "description": "The findings the accepted, minted garden proposals behind the chunk's work items answer \u2014 a worker's\nper-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both\nfor an unknown chunk and for one answering no such proposal.",
         "operationId": "get_chunk_findings_api_fleet_chunks__chunk_id__findings_get",
         "parameters": [
           {
@@ -25926,7 +25926,7 @@
     },
     "/api/fleet/chunks/{chunk_id}/findings/{finding_id}": {
       "get": {
-        "description": "One finding within the chunk's own answered set \u2014 ``get_chunk_findings`` narrowed\nto a single id. An id outside that set is structurally unreachable rather than\nfiltered after the fact, so it 404s the same as an id belonging to no proposal at\nall.",
+        "description": "One finding within the set the chunk's work items answer \u2014 ``get_chunk_findings`` narrowed\nto a single id. An id outside that set is structurally unreachable rather than\nfiltered after the fact, so it 404s the same as an id belonging to no proposal at\nall.",
         "operationId": "get_chunk_finding_api_fleet_chunks__chunk_id__findings__finding_id__get",
         "parameters": [
           {

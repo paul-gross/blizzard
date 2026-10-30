@@ -1093,7 +1093,7 @@ export const getEnvelopeApiFleetChunksChunkIdEnvelopeGet = <ThrowOnError extends
 /**
  * Get Chunk Findings
  *
- * The findings the chunk's own accepted, minted garden proposal answers — a worker's
+ * The findings the accepted, minted garden proposals behind the chunk's work items answer — a worker's
  * per-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both
  * for an unknown chunk and for one answering no such proposal.
  */
@@ -1102,7 +1102,7 @@ export const getChunkFindingsApiFleetChunksChunkIdFindingsGet = <ThrowOnError ex
 /**
  * Get Chunk Finding
  *
- * One finding within the chunk's own answered set — ``get_chunk_findings`` narrowed
+ * One finding within the set the chunk's work items answer — ``get_chunk_findings`` narrowed
  * to a single id. An id outside that set is structurally unreachable rather than
  * filtered after the fact, so it 404s the same as an id belonging to no proposal at
  * all.

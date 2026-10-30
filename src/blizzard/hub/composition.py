@@ -419,7 +419,7 @@ class TenantServices:
     routine_garden_proposals: RoutineGardenProposalReader
     #: A run's identity — routine, scope, and mode; read-only (``bzh:controller-read-only``).
     run_context: IReadRunContextRepository
-    #: The findings a chunk's own accepted, minted garden proposal answers, read per chunk.
+    #: The findings the accepted, minted garden proposals behind a chunk's work items answer, read per chunk.
     answered_findings: AnsweredFindingsReader
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader

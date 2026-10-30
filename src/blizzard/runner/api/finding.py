@@ -1,5 +1,5 @@
 """``GET /api/leases/{lease_id}/findings`` and its ``/{finding_id}`` sibling — the
-findings a worker's own chunk's accepted, minted garden proposal answers.
+findings the accepted, minted garden proposals behind a worker's chunk's work items answer.
 Lease-scoped and token-authorized, then forwarded to the hub as the runner
 principal (``bzh:pluggable-seams``)."""
 
