@@ -36,8 +36,10 @@ test.describe('with runnerWinterTrap', () => {
 });
 
 test('a host without the option has the ambient PATH and no trap', async ({ runnerHost }) => {
+  // The installed `blizzard`'s directory leads the ambient PATH, so a worker's ask resolves it from anywhere.
   const entries = processPath(runnerHost).split(path.delimiter);
-  expect(entries.join(path.delimiter)).toBe(process.env.PATH);
+  expect(entries[0]).toBe(path.dirname(runnerHost.cliBinary));
+  expect(entries.slice(1).join(path.delimiter)).toBe(process.env.PATH);
   expect(entries.some((entry) => fs.existsSync(path.join(entry, 'winter-invoked')))).toBe(false);
   expect(runnerHost.winterInvoked()).toBe(false);
 });

@@ -720,6 +720,10 @@ export function isolatedEnv(home: string, configHome: string, runnerEnv: Record<
     // The mock's own knobs never reach the host; only the fence set below does.
     if (name.startsWith('BLIZZARD_MOCK_')) delete env[name];
   }
+  // The directory of the installed `blizzard` goes first on the host's `PATH`: the command a worker's ask runs by name
+  // must resolve wherever the suite is launched from, as under `npx playwright test`.
+  const cliDir = path.dirname(requireBinary(binDir(), 'blizzard'));
+  env.PATH = [cliDir, env.PATH].filter((entry) => entry !== undefined && entry !== '').join(path.delimiter);
   Object.assign(env, runnerEnv);
   return { ...env, [FENCE_VAR]: '1' };
 }
