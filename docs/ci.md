@@ -172,6 +172,14 @@ Measured port times, from the build's own Playwright run until the `ui (blizzard
 UI auth totals 73s against its 70s estimate and the UI default project 52s against 273s, so no project nears the
 30-minute step.
 
+Each landed board port records its spec's time below. The nine board files took 192s serially in e2e, and the e2e roster
+itemizes no per-file time, so a row's estimate reads "not itemized" unless one is known. The measured time is the spec's
+local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time replaces it.
+
+| Ported spec                     | Project    | Estimated    | Measured |
+| ------------------------------- | ---------- | ------------ | -------- |
+| `tests/ui/project-lens.spec.ts` | UI default | not itemized | 1.5s     |
+
 ## The upgrade rehearsal
 
 [`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the

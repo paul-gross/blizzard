@@ -11022,12 +11022,6 @@
    "over_cap": 1,
    "total": 146
   },
-  "e2e/test_project_lens_browser_e2e.py": {
-   "comments": 4,
-   "docstrings": 8,
-   "over_cap": 1,
-   "total": 75
-  },
   "e2e/test_resume_preamble_e2e.py": {
    "comments": 18,
    "docstrings": 35,
