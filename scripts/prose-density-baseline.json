@@ -10902,12 +10902,6 @@
    "over_cap": 4,
    "total": 546
   },
-  "e2e/test_board_cost_live_e2e.py": {
-   "comments": 23,
-   "docstrings": 15,
-   "over_cap": 0,
-   "total": 209
-  },
   "e2e/test_checks_gate_e2e.py": {
    "comments": 9,
    "docstrings": 12,
