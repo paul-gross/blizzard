@@ -160,10 +160,11 @@ tier the slowest gate job. Actual timings and shard balance decide whether this 
 
 Measured port times, from the build's own Playwright run until the `ui (blizzard:ui)` job has run the change:
 
-| Port                         | Project | Measured serial time |
-| ---------------------------- | ------- | -------------------- |
-| `tests/ui/event-log.spec.ts` | UI      | 49s                  |
-| `tests/ui/migration.spec.ts` | UI      | 3s                   |
+| Port                                  | Project | Measured serial time |
+| ------------------------------------- | ------- | -------------------- |
+| `tests/ui/event-log.spec.ts`          | UI      | 49s                  |
+| `tests/ui/migration.spec.ts`          | UI      | 3s                   |
+| `tests/ui/auth/login-session.spec.ts` | UI auth | 13s                  |
 
 ## The upgrade rehearsal
 

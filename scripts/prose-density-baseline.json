@@ -11028,12 +11028,6 @@
    "over_cap": 0,
    "total": 566
   },
-  "e2e/test_login_session_e2e.py": {
-   "comments": 16,
-   "docstrings": 21,
-   "over_cap": 3,
-   "total": 229
-  },
   "e2e/test_migration_e2e.py": {
    "comments": 14,
    "docstrings": 9,
