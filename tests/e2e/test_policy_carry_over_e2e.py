@@ -20,7 +20,7 @@ import httpx2
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.e2e.test_flow_turns_e2e import (
     _await_landed,
     _config,
@@ -99,7 +99,7 @@ def _assert_landing_record_holds(hub_dir: Path) -> None:
     """The landing position, the submission terms, and the tenant's repository references are all sound."""
     engine = create_engine_from_url(f"sqlite:///{hub_dir / 'data' / 'hub.db'}")
     try:
-        violations = [v for v in HubInvariants(engine).run() if v.invariant in _LANDING_INVARIANTS]
+        violations = [v for v in hub_invariants(engine).run() if v.invariant in _LANDING_INVARIANTS]
     finally:
         engine.dispose()
     assert violations == []
