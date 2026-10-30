@@ -52,6 +52,8 @@ export interface HubCoordinates {
   auth?: HubAuth;
   /** The directory `${egress}` expands to in the hub's profile. */
   egressPath: string;
+  /** The directory the hub's forge keeps its bare repositories in, `<owner>/<name>.git` below it. */
+  originsPath: string;
   logPath: string;
   forgeLogPath: string;
   daemons: DaemonRecord[];
@@ -118,6 +120,7 @@ export async function startStack(dir: string, index: number, profile: TomlTable,
       idpUrl: idp.url,
       auth: authOf(expanded),
       egressPath: egressDirectory(dir),
+      originsPath: path.join(dir, 'origins'),
       logPath: hub.logPath,
       forgeLogPath: forge.logPath,
       // Plain records: the coordinates are serialized to the run's hubs file.

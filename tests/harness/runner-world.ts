@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { base } from './base';
+import { Ledger } from './client/ledger';
 import { type RunnerHostClient, runnerHostApi } from './client/runner';
 import { type Barrier, type BarrierSubscription, openRunnerStream, type Subscription } from './events';
 import { DEFAULT_RUNNER_OPTIONS, type HubBinding, type RunnerHost, type RunnerHostOptions, runnerHostBuilder } from './runner-host';
@@ -32,6 +33,8 @@ export interface RunnerBinding {
   hub: HubBinding;
   /** Throws when the test may not make a host; asked before each. */
   admit?(): void;
+  /** Readies the world for a host, once before each is built: whatever the host's configuration names that must exist first. */
+  prepare?(): Promise<void>;
 }
 
 interface RunnerWorldFixtures extends RunnerHostFixtureOptions {
@@ -123,13 +126,51 @@ export const runnerWorld = base.extend<RunnerWorldFixtures>({
     await use({
       create: async (options = {}) => {
         runnerBinding.admit?.();
+        await runnerBinding.prepare?.();
         return builder.create({ ...defaults, ...options });
       },
     });
   },
 
-  runnerHost: async ({ runnerHosts }, use) => {
-    await use(await runnerHosts.create());
+  runnerHost: async (
+    { runnerHosts, runnerBinding, held, heldStacks, playwright, runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap },
+    use,
+    testInfo,
+  ) => {
+    if (held === undefined) {
+      await use(await runnerHosts.create());
+      return;
+    }
+    // A held block's host is the worker's: built by the first test, with a context, usage stand-in and ledger that outlive it.
+    const options = { runnerConfig, runnerEnv, runnerLoop, runnerStarted, runnerSampling, runnerSubscribed, runnerOtlp, runnerTraceEndpoint, runnerBundle, runnerStubs, runnerWinterTrap };
+    await use(
+      await heldStacks.acquire(`host:${held}`, async () => {
+        runnerBinding.admit?.();
+        await runnerBinding.prepare?.();
+        const context = await playwright.request.newContext();
+        const vendor = await startVendorUsage();
+        const builder = runnerHostBuilder({ hub: runnerBinding.hub, context, ledger: new Ledger(), testInfo, vendor });
+        try {
+          const host = await builder.create(options);
+          return {
+            value: host,
+            dispose: async () => {
+              try {
+                await builder.disposeAll();
+              } finally {
+                await vendor.close();
+                await context.dispose();
+              }
+            },
+          };
+        } catch (error) {
+          await builder.disposeAll();
+          await vendor.close();
+          await context.dispose();
+          throw error;
+        }
+      }),
+    );
   },
 
   scratchDirs: async ({}, use) => {

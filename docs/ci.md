@@ -152,11 +152,13 @@ Nine trace companions repeat one case's per-file average on fresh hubs, adding a
 projects; tail-sampling remains in the acceptance row. As a cross-check, 60 retained fleet cases at about 6.6s host
 initialization plus 13s per whole test suggest 1176s before companions, below the adjusted 1656s serial-row allowance.
 Plan four service shards, distributing the companions across them; run `service-fleet-actions` on a separate
-single-worker hub and egress in its own single-worker fresh-hub profile. The hub-actions refusal stays in default
-fresh-hub, and UI auth stays in its own profile. The pessimistic ordinary-shard estimate is 613 + (1263 + 243) / 8 + 170
-≈ 971s against the roughly 1000s merge-gate baseline. Every Playwright step must fit within 30 minutes. Measure each
-port's project time in CI against these estimates; reshape the jobs before landing a port that would make the service
-tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape holds.
+single-worker hub. The egress files are `fresh-hub` tests in `service-fleet`, not a profile of their own: the events
+file under its 70s allocation and the night, which runs once on one held stack, under its 100s. The hub-actions refusal
+stays in default fresh-hub, and UI auth stays in its own profile. The pessimistic ordinary-shard estimate is 613 +
+(1263 + 243) / 8 + 170 ≈ 971s against the roughly 1000s merge-gate baseline. Every Playwright step must fit within 30
+minutes. Measure each port's project time in CI against these estimates; reshape the jobs before landing a port that
+would make the service tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape
+holds.
 
 ## The upgrade rehearsal
 

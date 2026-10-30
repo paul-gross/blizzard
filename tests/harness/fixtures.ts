@@ -40,6 +40,8 @@ interface Fixtures {
   api: HubApi;
   /** Internal: the runner fixtures' hub, the test's own tenant on the test's hub; a host needs isolation `fresh-tenant` or above. */
   runnerBinding: RunnerBinding;
+  /** Repositories of the hub's forge, by name, that a host's `${forgeOrigins}` paths name; each is made before the host is built. */
+  runnerOnForge: string[];
   /** The role `user` is invited as; `test.use({ userRole })`. */
   userRole: Role;
   /** One signed-in person in `tenant` with the role `userRole` names. Needs a hub with authentication on. */
@@ -96,6 +98,8 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
 
   userRole: ['contributor', { option: true }],
 
+  runnerOnForge: [[], { option: true }],
+
   people: async ({ testHub, tenantOf, ledger, level, playwright }, use, testInfo) => {
     const { people, disposeAll } = peopleFactory({
       testHub,
@@ -133,7 +137,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await use(await people.create({ role: userRole }));
   },
 
-  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright }, use, testInfo) => {
+  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright, repository, runnerOnForge }, use, testInfo) => {
     const hub = testHub.coordinates;
     // On a hub offering an IdP, `init` runs under a logged-in operator's config home; the host's own stays empty.
     // Built only then, since the `people` fixture itself refuses a hub with authentication off.
@@ -163,8 +167,12 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
         url: hub.url,
         tenantId: tenant.id,
         operatorHome: hub.auth === undefined ? undefined : () => (operator ??= operatorHome()),
+        forgeOrigins: hub.originsPath,
       },
       admit: () => requireOwnTenant(level.served, 'runnerHost()'),
+      prepare: async () => {
+        for (const name of runnerOnForge) await repository(name);
+      },
     });
     await disposePeople?.();
   },
@@ -335,7 +343,7 @@ export const runnerTest = mockWorld;
 export type * as RunnerWire from './client/wire/runner/types.gen';
 export type { TranscriptSegmentRecord } from './client/wire/hub/types.gen';
 export type { OtlpSink, ReceivedItem, ReceivedSpan } from './otlp-sink';
-export type { EgressReader, EgressRow } from './egress';
+export type { EgressCopy, EgressReader, EgressRow } from './egress';
 export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
 export type { Bounce, Delivered, Federation } from './federation';

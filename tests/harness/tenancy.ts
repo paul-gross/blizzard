@@ -1,19 +1,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, PlaywrightWorkerArgs, TestInfo } from '@playwright/test';
 import { WORKERS_PER_HUB } from '../playwright.config';
 import { signInSuperuser, type Superuser } from './auth';
 import { base, uniqueName } from './base';
 import { HubInternal } from './client/internal';
 import { type CallRecorder, recorderFor } from './client/latency';
 import { hostHub, initHub } from './daemons/hub';
-import { type EgressReader, egressReader } from './egress';
+import { configuredFormat, type EgressReader, egressReader } from './egress';
 import { isAlive, killLive, type LiveDaemon, stopDaemon, stopLive } from './daemons/process';
 import { readContract, runDir } from './env';
 import { type HubCoordinates, readProjectHubs, startStack } from './hubs';
 import { hubLog, scanLog } from './logs';
 import { profileProject } from './projects';
-import { checkProfile, discoverProfiles, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
+import { parse, stringify } from 'smol-toml';
+import { checkProfile, discoverProfiles, expandProfile, mergeProfile, profileEnv, profileEnvNames, readProfile, type TomlTable } from './profiles';
 
 export { profileProject };
 
@@ -94,8 +95,13 @@ export interface FreshHub {
   stop(): Promise<number | string>;
   /** `SIGKILL`; resolves once the process is gone. */
   kill(): Promise<void>;
-  /** Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. */
-  start(): Promise<HubCoordinates>;
+  /**
+   * Hosts the stopped hub again from its directory, with the same config and `hubEnv`, on the same URL. With an
+   * `overlay`, the hub's file first takes it, merged over what the file holds and checked as `hubConfig` is: the same
+   * record under a changed configuration. Throws naming every problem, changing nothing, when the overlay is unsound.
+   * An `egress.directory` the overlay names is made if it is not there.
+   */
+  start(overlay?: TomlTable): Promise<HubCoordinates>;
   /**
    * Replaces the stopped hub's data with a freshly initialized hub's, under the same profile, `hubConfig` and `hubEnv`,
    * and hosts it on the same URL: every tenant, runner and token the old data held is gone, and the one seeded tenant
@@ -167,6 +173,83 @@ export interface TestFixtures {
   attachLogs: void;
 }
 
+/** Merges `overlay` over a stopped hub's file, expanded as `hubConfig` is; throws before writing when it is unsound. */
+function applyOverlay(dir: string, coordinates: HubCoordinates, overlay: TomlTable): void {
+  const problems = checkProfile(overlay, { placeholders: [...HUB_CONFIG_PLACEHOLDERS] }).map((problem) => `overlay ${problem}`);
+  if (problems.length > 0) throw new Error(`the hub overlay is unsound:\n${problems.join('\n')}`);
+  const expanded = expandProfile(overlay, { idp: coordinates.idpUrl, forge: coordinates.forgeUrl, egress: coordinates.egressPath });
+  const configPath = path.join(dir, 'hub', 'blizzard-hub.toml');
+  const merged = mergeProfile(parse(fs.readFileSync(configPath, 'utf8')) as TomlTable, expanded);
+  const directory = (merged.egress as TomlTable | undefined)?.directory;
+  if (typeof directory === 'string') fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(configPath, stringify(merged));
+}
+
+/**
+ * A hub for one test alone, or for a held block, under the profile of the folder the test lives in, the test's
+ * `hubConfig` over it. `dispose` stops it and reads its whole log for the refusals a statement guard left.
+ */
+async function startFreshTestHub(options: {
+  playwright: PlaywrightWorkerArgs['playwright'];
+  hubConfig: TomlTable;
+  hubEnv: Record<string, string>;
+  testInfo: TestInfo;
+}): Promise<{ value: TestHub; dispose: () => Promise<void> }> {
+  const { playwright, hubConfig, hubEnv, testInfo } = options;
+  const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
+  const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
+  const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
+  // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
+  const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
+  const stack = await startStack(dir, 0, profile, env);
+  const { coordinates } = stack;
+  let hubProcess = stack.hub;
+  const control: FreshHubControl = {
+    current: () => hubProcess,
+    get pid() {
+      return hubProcess.pid;
+    },
+    stop: () => stopLive(hubProcess),
+    kill: async () => {
+      await killLive(hubProcess);
+    },
+    start: async (overlay) => {
+      if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
+      if (overlay !== undefined) applyOverlay(dir, coordinates, overlay);
+      hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
+      return coordinates;
+    },
+    reset: async () => {
+      if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before reset()');
+      fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
+      await initHub(dir, stack.profile);
+      hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
+      return coordinates;
+    },
+  };
+  const context = await playwright.request.newContext({ baseURL: coordinates.url });
+  let superuser: Promise<Superuser | undefined> | undefined;
+  return {
+    value: {
+      coordinates,
+      context,
+      superuser: () => (superuser ??= coordinates.auth === undefined ? Promise.resolve(undefined) : signInSuperuser(coordinates, context)),
+      fresh: true,
+      lifecycle: control,
+      logTail: () => hubLog({ logPath: coordinates.logPath, tenantId: '', fresh: true }).tail(),
+    },
+    dispose: async () => {
+      await context.dispose();
+      // The hub's process now, not the one the stack started: a `start()` replaced it.
+      await stopDaemon(control.current());
+      await Promise.all(coordinates.daemons.slice(1).map(stopDaemon));
+      // A fresh hub's whole log is read for refusals the moment its test stops it.
+      const refusals = scanLog(coordinates.logPath).map((line) => line.raw);
+      if (refusals.length > 0) throw new Error(`a statement guard refused outside any request:\n${refusals.join('\n')}`);
+    },
+  };
+}
+
 export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
   hub: [
     async ({ playwright }, use, workerInfo) => {
@@ -216,8 +299,9 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     await use(level);
   },
 
-  testHub: async ({ level, hub, playwright, hubConfig, hubEnv }, use, testInfo) => {
+  testHub: async ({ level, hub, playwright, hubConfig, hubEnv, held, heldStacks }, use, testInfo) => {
     if (level.served !== 'fresh-hub') {
+      if (held !== undefined) throw new Error(`held names a stack of the block's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
       const coordinates = hub.coordinates();
       await use({
         coordinates,
@@ -234,57 +318,17 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
       });
       return;
     }
-    // A hub for this test alone, under the profile of the folder the test lives in, the test's `hubConfig` over it.
-    const folder = discoverProfiles().find((candidate) => candidate.project === profileProject(testInfo.project.name));
-    const dir = path.join(runDir(), 'fresh', uniqueName(testInfo));
-    const profile = mergeProfile(folder === undefined ? {} : readProfile(folder.file), hubConfig);
-    // The profile's own environment over the test's, at every start of this hub: the fence is the profile's alone.
-    const env = { ...hubEnv, ...profileEnv(folder?.name ?? '') };
-    const stack = await startStack(dir, 0, profile, env);
-    const { coordinates } = stack;
-    let hubProcess = stack.hub;
-    const control: FreshHubControl = {
-      current: () => hubProcess,
-      get pid() {
-        return hubProcess.pid;
-      },
-      stop: () => stopLive(hubProcess),
-      kill: async () => {
-        await killLive(hubProcess);
-      },
-      start: async () => {
-        if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before start()');
-        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
-        return coordinates;
-      },
-      reset: async () => {
-        if (isAlive(hubProcess.pid)) throw new Error('the fresh hub is running; stop() or kill() it before reset()');
-        fs.rmSync(path.join(dir, 'hub'), { recursive: true, force: true });
-        await initHub(dir, stack.profile);
-        hubProcess = await hostHub(dir, { env, port: Number(new URL(coordinates.url).port) });
-        return coordinates;
-      },
-    };
-    const context = await playwright.request.newContext({ baseURL: coordinates.url });
-    let superuser: Promise<Superuser | undefined> | undefined;
-    try {
-      await use({
-        coordinates,
-        context,
-        superuser: () => (superuser ??= coordinates.auth === undefined ? Promise.resolve(undefined) : signInSuperuser(coordinates, context)),
-        fresh: true,
-        lifecycle: control,
-        logTail: () => hubLog({ logPath: coordinates.logPath, tenantId: '', fresh: true }).tail(),
-      });
-    } finally {
-      await context.dispose();
-      // The hub's process now, not the one the stack started: a `start()` replaced it.
-      await stopDaemon(control.current());
-      await Promise.all(coordinates.daemons.slice(1).map(stopDaemon));
+    const open = (): Promise<{ value: TestHub; dispose: () => Promise<void> }> => startFreshTestHub({ playwright, hubConfig, hubEnv, testInfo });
+    if (held !== undefined) {
+      await use(await heldStacks.acquire(`hub:${held}`, open));
+      return;
     }
-    // A fresh hub's whole log is read for refusals the moment its test stops it.
-    const refusals = scanLog(coordinates.logPath).map((line) => line.raw);
-    if (refusals.length > 0) throw new Error(`a statement guard refused outside any request:\n${refusals.join('\n')}`);
+    const own = await open();
+    try {
+      await use(own.value);
+    } finally {
+      await own.dispose();
+    }
   },
 
   freshHub: async ({ level, testHub }, use) => {
@@ -294,9 +338,9 @@ export const tenancy = base.extend<TestFixtures, WorkerFixtures>({
     await use(testHub.lifecycle);
   },
 
-  egress: async ({ level, testHub }, use) => {
+  egress: async ({ level, testHub, hubConfig }, use) => {
     if (!testHub.fresh) throw new Error(`egress reads the export directory of a hub of the test's own, and this test is served "${level.served}". Declare isolation "fresh-hub".`);
-    await use(egressReader(testHub.coordinates.egressPath));
+    await use(egressReader(testHub.coordinates.egressPath, configuredFormat(hubConfig)));
   },
 
   tenantOf: async ({ level, testHub, adminClient, touched }, use, testInfo) => {
