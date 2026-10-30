@@ -58,17 +58,15 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
 def test_adv_dwf_declares_the_seven_pools_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert set(doc.sessions) == {"planning", "code", "integration", "verification", "measurement", "gate", "retro"}
+    assert set(doc.sessions) == {"planning", "code", "integration", "verification", "gate", "retro"}
     assert doc.sessions["planning"].model == ["blizzard:advanced"]
     assert doc.sessions["planning"].effort == "high"
     assert doc.sessions["code"].model == ["blizzard:basic"]
     assert doc.sessions["integration"].model == ["blizzard:basic"]
     assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
-    assert doc.sessions["measurement"].model == ["blizzard:basic"]
     assert doc.sessions["retro"].model == ["blizzard:advanced"]
-    # `gate`, `measurement`, and `retro` are only ever reached fresh, so a bound would never apply to them.
-    assert doc.sessions["measurement"].rotate is None
+    # `gate` and `retro` are only ever reached fresh, so a bound would never apply to them.
     assert doc.sessions["retro"].rotate is None
     assert doc.sessions["code"].rotate is not None
     assert doc.sessions["integration"].rotate == doc.sessions["code"].rotate
@@ -115,18 +113,11 @@ def _choice(doc, node: str, choice: str):  # type: ignore[no-untyped-def]
     return next(c for c in found.judgement.choices if c.name == choice)
 
 
-def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None:
+def test_adv_dwf_routes_verify_pass_straight_to_review() -> None:
     doc = _doc("advanced-development-workflow")
 
-    assert _choice(doc, "verify", "pass").to == "mutation"
-    reported = _choice(doc, "mutation", "reported")
-    assert reported.to == "review"
-    assert reported.prompt_addendum
-    mutation = doc.node("mutation")
-    assert mutation is not None and mutation.judgement is not None
-    # One verdict is what makes the node advisory: no outcome of it can block.
-    assert [c.name for c in mutation.judgement.choices] == ["reported"]
-    assert {p.name for p in mutation.produces} == {"mutation-report", "retrospective"}
+    assert _choice(doc, "verify", "pass").to == "review"
+    assert doc.node("mutation") is None
 
 
 @pytest.mark.parametrize(
@@ -142,8 +133,6 @@ def test_adv_dwf_routes_verify_pass_through_the_advisory_mutation_node() -> None
                 "build": (SessionMode.RESUME, "code"),
                 # Its own lineage — never the one `build` resumes next.
                 "verify": (SessionMode.RESUME, "verification"),
-                # Advisory and cold, in a pool of its own: it reads declared tips, not a conversation.
-                "mutation": (SessionMode.FRESH, "measurement"),
                 "review": (SessionMode.FRESH, "gate"),
                 # Its own lineage, so integration does not re-read the build conversation.
                 "pre-push": (SessionMode.RESUME, "integration"),
