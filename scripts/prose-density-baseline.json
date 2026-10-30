@@ -10896,12 +10896,6 @@
    "over_cap": 0,
    "total": 107
   },
-  "e2e/test_board_browser_e2e.py": {
-   "comments": 86,
-   "docstrings": 31,
-   "over_cap": 4,
-   "total": 546
-  },
   "e2e/test_checks_gate_e2e.py": {
    "comments": 9,
    "docstrings": 12,

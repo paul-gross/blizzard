@@ -97,6 +97,10 @@
  *     layout one — jsdom parses a `:hover` rule without ever evaluating it,
  *     so only a real pointer (Playwright's `userEvent.hover`) proves a
  *     hovered row differs from both its resting and its selected state.
+ *   - projects/hub/src/app/board/board-dock.shell-sweep.spec.ts — the board
+ *     page's chunk dock: closed, it takes no box and the board runs the centre
+ *     column's height; opened, it sits beneath the board, which keeps its left,
+ *     top and width and shortens; dismissed, the board's at-rest box returns.
  *   - projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts —
  *     the work item panel's two fact tables (`ChunkFacts` + `ChunkTokenBreakdown`,
  *     `--kv-label-col`/`--chunk-facts-pad`): their value columns genuinely land
@@ -346,6 +350,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/board/chunk/chunk-page-runner-layout.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/board-dock.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts' },
