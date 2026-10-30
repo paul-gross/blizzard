@@ -4715,12 +4715,10 @@ def test_the_exemplars_cross_no_internal_package() -> None:
 
 def test_the_exemplars_keep_every_block_within_its_cap() -> None:
     """Every exemplar comment and docstring fits its ``bzh:prose-budget`` cap outright, with no baseline."""
-    spec = importlib.util.spec_from_file_location("prose_density", _REPO_ROOT / "scripts" / "prose_density.py")
+    spec = importlib.util.spec_from_file_location("prose_caps", _REPO_ROOT / "scripts" / "prose_caps.py")
     assert spec is not None and spec.loader is not None
-    prose_density = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(prose_density)
+    prose_caps = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prose_caps)
     trees = (_EXEMPLAR_DIR, _EXEMPLAR_DIR.parent / "tests")
-    violations = [
-        v for tree in trees for path in sorted(tree.rglob("*.py")) for v in prose_density._over_cap_blocks(path)
-    ]
+    violations = [v for tree in trees for path in sorted(tree.rglob("*.py")) for v in prose_caps.over_cap_blocks(path)]
     assert not violations, f"exemplar prose over cap: {violations}"

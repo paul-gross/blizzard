@@ -250,7 +250,7 @@ also_copy = [
     "tests/fixtures/canonical_origin_cases.json",
     # These test-loaded Python scripts live outside mutmut's src/ and tests/ copies.
     "scripts/prose_spans.py",
-    "scripts/prose_density.py",
+    "scripts/prose_caps.py",
     "exemplars/python",
     "scripts/restated_invariants.py",
     "scripts/repo_pointers.py",
