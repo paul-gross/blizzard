@@ -12,12 +12,13 @@ from pathlib import Path
 
 from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
+from blizzard.runner.process.child_env import DEFAULT_WORKER_SHELL
 
 # A headless worker has no one to answer `question`; `blizzard runner ask` replaces it, so deny rather than hang.
 _UNATTENDED_DENIALS: dict[str, str] = {"question": "deny"}
 
 
-def render_worker_config(*, plugins: tuple[str, ...] = ()) -> JsonObject:
+def render_worker_config(*, shell: str = DEFAULT_WORKER_SHELL, plugins: tuple[str, ...] = ()) -> JsonObject:
     """The runner-owned permission/plugin document, validated against the exact shape
     :func:`opencode.shapes.parse_worker_config` accepts before anything writes it to disk —
     a malformed document must fail here, never as an unexplained provider result."""
@@ -25,14 +26,15 @@ def render_worker_config(*, plugins: tuple[str, ...] = ()) -> JsonObject:
         "$schema": "https://opencode.ai/config.json",
         "permission": dict(_UNATTENDED_DENIALS),
         "plugin": list(plugins),
+        "shell": shell,
     }
     parse_worker_config(document)
     return document
 
 
-def write_worker_config(path: Path, *, plugins: tuple[str, ...] = ()) -> JsonObject:
+def write_worker_config(path: Path, *, shell: str = DEFAULT_WORKER_SHELL, plugins: tuple[str, ...] = ()) -> JsonObject:
     """Render and persist the document at ``path``, overwriting any existing file."""
-    document = render_worker_config(plugins=plugins)
+    document = render_worker_config(shell=shell, plugins=plugins)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return document
 

@@ -242,7 +242,7 @@ class Runtime:
             for entry in config.runners:
                 if entry.own is not None:
                     for declaration, section in declared(entry.own.harness_sections):
-                        declaration.scaffold_runtime(section, root)
+                        declaration.scaffold_runtime(section, root, worker_shell=entry.own.worker_shell)
         except OSError as exc:
             raise ConfigError(f"cannot write the host directory at {root}: {exc}") from exc
         self._upgrade(config)

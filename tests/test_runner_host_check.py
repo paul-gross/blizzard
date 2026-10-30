@@ -237,3 +237,21 @@ def test_a_loop_the_file_names_wrongly_fails_the_check_naming_the_key_and_the_fl
     assert refused.exit_code != 0 and "host: loop: loop must be one of" in refused.output
     assert overridden.exit_code == 0, overridden.output
     _nothing_started(root)
+
+
+def test_a_host_start_refuses_a_missing_worker_shell_naming_the_runner(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    import click
+
+    from blizzard.runner.cli.runtime import _start  # pyright: ignore[reportPrivateUsage]
+
+    built = SimpleNamespace(
+        id="rn_1", config=SimpleNamespace(name="alpha", worker_shell=str(tmp_path / "no-such-shell"))
+    )
+    with pytest.raises(click.ClickException) as refused:
+        _start(cast(Any, None), cast(Any, [built]), [], cast(Any, None))
+    assert "runner alpha" in refused.value.message
+    assert "no-such-shell" in refused.value.message
+    assert "does not exist" in refused.value.message

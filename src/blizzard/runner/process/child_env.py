@@ -18,6 +18,10 @@ BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", 
 # ``LC_*`` locale vars are a family, not a fixed set of names, so they are matched by
 # prefix rather than enumerated in ``BASE_ALLOWLIST_VARS``.
 LOCALE_PREFIX = "LC_"
+#: The shell a worker's Bash tool runs under when ``[worker] shell`` is unset — workers are written assuming bash.
+DEFAULT_WORKER_SHELL = "/bin/bash"
+#: Claude Code's supported shell override; preferred over ``SHELL``, which may be the daemon's own zsh.
+CLAUDE_CODE_SHELL_VARIABLE = "CLAUDE_CODE_SHELL"
 
 
 @domain_model
@@ -53,10 +57,14 @@ class AllowlistedEnv:
     passthrough: tuple[str, ...]
     #: Absolute directories, already validated, led onto every child's ``PATH`` ahead of the daemon's own.
     path_prepend: tuple[str, ...] = ()
+    #: The absolute shell a worker's Bash tool runs under (``[worker] shell``).
+    shell: str = DEFAULT_WORKER_SHELL
 
     @classmethod
-    def of(cls, passthrough: Sequence[str], *, path_prepend: Sequence[str] = ()) -> AllowlistedEnv:
-        return cls(tuple(passthrough), tuple(path_prepend))
+    def of(
+        cls, passthrough: Sequence[str], *, path_prepend: Sequence[str] = (), shell: str = DEFAULT_WORKER_SHELL
+    ) -> AllowlistedEnv:
+        return cls(tuple(passthrough), tuple(path_prepend), shell)
 
     @property
     def variables(self) -> dict[str, str]:  # ast-grep-ignore: bzh:property-delegates
@@ -72,8 +80,9 @@ class AllowlistedEnv:
         return ChildEnv(tuple(self.variables.items()))
 
     def worker(self, identity: Mapping[str, str]) -> ChildEnv:
-        """The worker profile: the tool profile plus the per-spawn ``identity`` a worker reads to reach its runner."""
-        return self.tool().adding(identity)
+        """The worker profile: the tool profile plus the configured shell and the per-spawn ``identity`` a
+        worker reads to reach its runner."""
+        return self.tool().adding({CLAUDE_CODE_SHELL_VARIABLE: self.shell, **identity})
 
     def _composed_path(self) -> str:
         """Configured entries first, in listed order, each once; a daemon ``PATH`` element

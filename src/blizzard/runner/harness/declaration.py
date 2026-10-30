@@ -163,8 +163,9 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         """The bundle layout with this binding's runner wiring composed in at publish."""
         ...
 
-    def scaffold_runtime(self, section: SectionT_contra, root: Path) -> None:
-        """Write the runner-owned files ``runner init`` keeps current under ``root``; idempotent."""
+    def scaffold_runtime(self, section: SectionT_contra, root: Path, *, worker_shell: str) -> None:
+        """Write the runner-owned files ``runner init`` keeps current under ``root``; idempotent. ``worker_shell`` is
+        the runner's ``[worker] shell``, for a harness that carries it in a file."""
         ...
 
     def diagnostics(self, section: SectionT_contra, shared: SharedHarnessInputs, *, spawn_root: str) -> tuple[str, ...]:

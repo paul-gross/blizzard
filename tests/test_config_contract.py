@@ -74,7 +74,7 @@ def test_every_writer_is_a_runner_command() -> None:
 
 def test_init_scaffolds_exactly_the_harness_files_the_contract_names_with_writer_init(tmp_path: Path) -> None:
     for declaration, section in declared(HarnessSections.defaults()):
-        declaration.scaffold_runtime(section, tmp_path)
+        declaration.scaffold_runtime(section, tmp_path, worker_shell="/bin/bash")
     written = {str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*") if p.is_file()}
     named = {row["path"] for row in _host()["paths"] if row["written_by"] == ["init"]}
     assert written == named

@@ -39,3 +39,18 @@ def test_several_prepend_entries_stay_in_listed_order_deduped(monkeypatch: pytes
     monkeypatch.setenv("PATH", "/usr/bin")
     env = AllowlistedEnv.of((), path_prepend=("/a", "/b", "/a")).variables
     assert env["PATH"] == "/a:/b:/usr/bin"
+
+
+def test_a_worker_env_defaults_claude_code_shell_to_bash() -> None:
+    assert AllowlistedEnv.of(()).worker({}).variables["CLAUDE_CODE_SHELL"] == "/bin/bash"
+
+
+def test_a_worker_env_carries_the_configured_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SHELL", "/usr/bin/zsh")
+    variables = AllowlistedEnv.of((), shell="/usr/bin/fish").worker({"BLIZZARD_X": "1"}).variables
+    assert variables["CLAUDE_CODE_SHELL"] == "/usr/bin/fish"
+    assert "SHELL" not in variables
+
+
+def test_the_tool_profile_carries_no_worker_shell() -> None:
+    assert "CLAUDE_CODE_SHELL" not in AllowlistedEnv.of(()).tool().variables
