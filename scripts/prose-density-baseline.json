@@ -14730,6 +14730,12 @@
    "over_cap": 0,
    "total": 74
   },
+  "test_release_service.py": {
+   "comments": 0,
+   "docstrings": 5,
+   "over_cap": 0,
+   "total": 171
+  },
   "test_release_workflow.py": {
    "comments": 2,
    "docstrings": 23,
