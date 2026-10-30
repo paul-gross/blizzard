@@ -52,21 +52,14 @@ test('a worker’s transcript lands under the host’s transcripts root, the lea
   expect(fs.existsSync(runnerHost.transcriptsRoot)).toBe(false);
 });
 
-test('a recorded worker credential authorizes a lease call, and none is refused', async ({ mockHub, runnerHost }) => {
+test('a recorded worker credential authorizes a lease call, and none is refused', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners['runner-local']!;
-  // The mock records a session when its turn ends, so the spawn ends and the judgement holds the lease open long enough
-  // to be called as; the host's teardown ends it sooner.
-  const chunkId = (await mockHub.seed.chunk({ ...workerChunk("print('worked')\n", 'import time\ntime.sleep(120)\n'), graph_artifacts: [{ name: 'brief', content: 'hello' }] } as never)).body.chunk_id;
+  // The spawn turn is held at a checkpoint, so the lease stays running; the mock records its spawn credential before it
+  // runs its prompt, so the record is current once the worker is at the checkpoint.
+  const chunkId = (await mockHub.seed.chunk({ ...workerChunk(workerCheckpoint.snippet('spawn')), graph_artifacts: [{ name: 'brief', content: 'hello' }] } as never)).body.chunk_id;
   const lease = await stepUntil(runnerHost, async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'));
-  // The runner re-mints a lease's token for each resume, so the record is read until the credential it holds answers.
-  const headers = await stepUntil(runnerHost, async () => {
-    try {
-      const candidate = runnerHost.workerHeaders(lease.lease_id);
-      return (await runner.leaseArtifacts(lease.lease_id, { scope: 'graph', headers: candidate })).status === 200 ? candidate : undefined;
-    } catch {
-      return undefined;
-    }
-  });
+  await workerCheckpoint.reached('spawn');
+  const headers = runnerHost.workerHeaders(lease.lease_id);
 
   expect(headers.Authorization).toMatch(/^Bearer .+/);
   const artifacts = await runner.leaseArtifacts(lease.lease_id, { scope: 'graph', headers });

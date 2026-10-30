@@ -2,14 +2,14 @@ import { expect } from '@playwright/test';
 import type { MockChunkSpec } from './client/mock';
 import type { MockHub } from './mock-world';
 import type { RunnerHost } from './runner-host';
+import type { WorkerCheckpoint } from './worker-checkpoint';
 
 // Waits on a stepped runner host: every wait is a pass of the host, never a clock.
 
 const MAX_STEPS = 40;
 const RUNNER = 'runner-local';
-
-/** Holds the worker's judgement turn, and so its lease, open: the spawn turn has ended and recorded its session. */
-export const HOLD_OPEN = 'import time\ntime.sleep(120)\n';
+/** The checkpoint a `holdingChunk` worker's spawn turn waits at. */
+export const SPAWN_HOLD = 'spawn';
 
 /** Steps the host's sole runner until `reached` holds, failing after `maxSteps` passes (default `MAX_STEPS`) with the last state it saw. */
 export async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, reached: (state: T) => boolean, maxSteps = MAX_STEPS): Promise<T> {
@@ -22,32 +22,38 @@ export async function stepUntil<T>(host: RunnerHost, read: () => Promise<T>, rea
   return state;
 }
 
-/** Steps until the chunk's sole lease is running and the mock harness has recorded its spawn credential, current as the runner last issued it. */
-export async function runningLeaseWithWorker(host: RunnerHost, chunkId: string) {
+/**
+ * Steps until the chunk's lease is running, then waits for its worker to reach `checkpoint`'s `point`, held in its
+ * spawn turn; returns the lease. Passes claim and spawn the worker, but no pass moves it from there to the checkpoint:
+ * it gets there in its own process, at its own speed, so its arrival is awaited, never counted in passes. A lease reads
+ * `running` only while its spawn process lives, so the hold is what keeps it readable as running.
+ */
+export async function stepUntilHeld(host: RunnerHost, chunkId: string, checkpoint: WorkerCheckpoint, point: string) {
   const runner = host.runners[RUNNER]!;
   const lease = await stepUntil(
     host,
     async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'),
     (found) => found !== undefined,
   );
-  const headers = await stepUntil(
-    host,
-    async () => {
-      try {
-        // The runner re-mints a lease's token for each resume, so the record is read until the credential it holds answers.
-        const candidate = host.workerHeaders(lease!.lease_id);
-        return (await runner.leaseArtifacts(lease!.lease_id, { scope: 'graph', headers: candidate })).status === 200 ? candidate : undefined;
-      } catch {
-        return undefined;
-      }
-    },
-    (found) => found !== undefined,
-  );
-  return { lease: lease!, headers: headers! };
+  await checkpoint.reached(point);
+  return lease!;
 }
 
-/** A one-node chunk whose worker judgement turn is held open, so its lease stays running for the spec to read through. */
-export function holdingChunk(): MockChunkSpec {
+/**
+ * Steps until the chunk's lease is running and its worker held at `checkpoint`'s `point`, with the worker credential
+ * the mock harness recorded for it. The mock records the credential before it runs its prompt, so a worker at the
+ * checkpoint has recorded it, and a held spawn takes no resume to re-mint it.
+ */
+export async function runningLeaseWithWorker(host: RunnerHost, chunkId: string, checkpoint: WorkerCheckpoint, point = SPAWN_HOLD) {
+  const lease = await stepUntilHeld(host, chunkId, checkpoint, point);
+  return { lease, headers: host.workerHeaders(lease.lease_id) };
+}
+
+/**
+ * A one-node chunk whose spawn turn waits at `checkpoint`'s `point`, so its lease stays running until the test releases
+ * it, or the checkpoint's teardown does.
+ */
+export function holdingChunk(checkpoint: WorkerCheckpoint, point = SPAWN_HOLD): MockChunkSpec {
   return {
     entry: 'build',
     nodes: {
@@ -55,8 +61,8 @@ export function holdingChunk(): MockChunkSpec {
         executor: 'runner',
         session: 'resume',
         judged_by: 'worker',
-        prompt: 'pass\n',
-        judgement_prompt: HOLD_OPEN,
+        prompt: checkpoint.snippet(point),
+        judgement_prompt: "verdict('pass', 'committed and green')\n",
         choices: [{ name: 'pass', description: 'committed and green', to: 'done' }],
         retries_max: 1,
       },
@@ -65,10 +71,10 @@ export function holdingChunk(): MockChunkSpec {
   };
 }
 
-/** Seeds `spec` and steps until its sole lease is running with a worker credential that answers. */
-export async function seededLeaseWithWorker(mockHub: MockHub, host: RunnerHost, spec: MockChunkSpec) {
+/** Seeds `spec`, whose spawn turn is held at `checkpoint`'s `SPAWN_HOLD`, and steps until its lease is running and its worker held, with its worker credential. */
+export async function seededLeaseWithWorker(mockHub: MockHub, host: RunnerHost, checkpoint: WorkerCheckpoint, spec: MockChunkSpec = holdingChunk(checkpoint)) {
   const seeded = await mockHub.seed.chunk(spec);
   expect(seeded.status).toBe(201);
-  const { lease, headers } = await runningLeaseWithWorker(host, seeded.body.chunk_id);
+  const { lease, headers } = await runningLeaseWithWorker(host, seeded.body.chunk_id, checkpoint);
   return { leaseId: lease.lease_id, headers };
 }

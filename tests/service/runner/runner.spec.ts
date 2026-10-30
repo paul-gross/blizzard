@@ -1,4 +1,4 @@
-import { expect, HOLD_OPEN, runningLeaseWithWorker, stepUntil, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
+import { expect, runningLeaseWithWorker, SPAWN_HOLD, stepUntil, type MockChunkSpec, type MockHub, type RunnerHost, runnerTest as test } from '../../harness/fixtures';
 
 // A real runner host stepped against the test's own mock hub, whose levers manufacture the rare states a runner must
 // survive: an unreachable hub, a dropped ack, a stale envelope, a denied claim, a failing or slow transcript route, a
@@ -337,24 +337,6 @@ const TRANSCRIPT_BUILD = [
 ].join('\n');
 const VERDICT_TEXT = 'the mock harness committed the change; checks are green';
 
-/** The chunk a release lever names: none by that id exists, so the lever changes nothing the runner does. */
-const RELEASE_CHUNK = 'ch_release_judgement';
-
-/**
- * A judgement that holds its lease open until the test arms a lever on `RELEASE_CHUNK`, read from the mock hub's control
- * plane, then passes.
- */
-function judgementReleasedBy(mockHub: MockHub): string {
-  return [
-    'import json, time, urllib.request',
-    'opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))',
-    `while not any(lever.get('chunk_id') == '${RELEASE_CHUNK}' for lever in json.load(opener.open('${mockHub.url}/_levers'))['active']):`,
-    '    time.sleep(0.1)',
-    `verdict('pass', '${VERDICT_TEXT}')`,
-    '',
-  ].join('\n');
-}
-
 /** One transcript turn as the wire carries it, at its defaults. */
 function segmentTurn(index: number, kind: string, text: string) {
   return { index, kind, timestamp: null, text, tool: null, thinking_redacted: false, sidechain: null, truncated: false };
@@ -394,17 +376,17 @@ test('test_transcript_is_read_back_through_the_runner_http_api', async ({ mockHu
   expect(verdict.text).toContain(VERDICT_TEXT);
 });
 
-test('test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unreachable', async ({ mockHub, runnerHost }) => {
+test('test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unreachable', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   // The node read below outwaits the runner's bounded hub retry before its 503 surfaces.
   test.slow();
   const runner = runnerHost.runners[RUNNER]!;
   const chunkId = await seed(mockHub, {
-    ...buildThenDeliver({ judgement_prompt: HOLD_OPEN }),
+    ...buildThenDeliver({ prompt: workerCheckpoint.snippet(SPAWN_HOLD) }),
     graph_artifacts: [{ name: 'docket', kind: 'asset', content: 'the docket text' }],
   });
-  const { lease, headers } = await runningLeaseWithWorker(runnerHost, chunkId);
+  const { lease, headers } = await runningLeaseWithWorker(runnerHost, chunkId, workerCheckpoint);
 
-  // No step runs past here, so the lease stays open for every read below.
+  // The spawn turn is held, so the lease stays open for every read below.
   await mockHub.levers.arm('unreachable', { remaining: 10_000 });
 
   const listed = await runner.leaseArtifacts(lease.lease_id, { scope: 'graph', headers });
@@ -422,12 +404,15 @@ test('test_graph_scoped_artifact_reads_from_the_runners_own_pin_with_the_hub_unr
   expect((nodeRead.body as unknown as { detail: string }).detail).toContain('unreachable');
 });
 
-test('test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api', async ({ mockHub, runnerHost }) => {
+test('test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   test.slow();
   const runner = runnerHost.runners[RUNNER]!;
-  const chunkId = await seed(mockHub, buildThenDeliver({ prompt: TRANSCRIPT_BUILD, judgement_prompt: judgementReleasedBy(mockHub) }));
+  const chunkId = await seed(
+    mockHub,
+    buildThenDeliver({ prompt: TRANSCRIPT_BUILD + workerCheckpoint.snippet(SPAWN_HOLD), judgement_prompt: `verdict('pass', '${VERDICT_TEXT}')\n` }),
+  );
 
-  // Open: the lease's own transcript, read locally.
+  // Open, its spawn turn held: the lease's own transcript, read locally.
   const running = await stepUntil(
     runnerHost,
     async () => (await runner.leases()).body.items.find((item) => item.chunk_id === chunkId && item.state === 'running'),
@@ -437,7 +422,7 @@ test('test_a_closed_leases_transcript_resolves_to_the_hub_through_the_runner_api
   const openRead = (await runner.leaseTranscript(running!.lease_id)).body;
   expect(openRead).toMatchObject({ provenance: 'local', available: true, hub_unreachable: false });
 
-  await mockHub.levers.arm('stale_envelope', { chunk_id: RELEASE_CHUNK });
+  workerCheckpoint.release(SPAWN_HOLD);
   await stepUntil(runnerHost, () => chunkStatus(mockHub, runnerHost, chunkId), (status) => status === 'done');
   const lease = await soleLease(runnerHost, chunkId);
   const read = async () => {

@@ -1,4 +1,4 @@
-import { expect, holdingChunk, type MockChunkSpec, seededLeaseWithWorker, stepUntil, runnerTest as test } from '../../harness/fixtures';
+import { expect, type MockChunkSpec, seededLeaseWithWorker, stepUntil, runnerTest as test } from '../../harness/fixtures';
 
 // A real runner host stepped against the test's own mock hub: the dashboard the runner composes equals each read it
 // composes from, with every section populated by a real flow. The host is paused once the state is built, so the
@@ -6,13 +6,24 @@ import { expect, holdingChunk, type MockChunkSpec, seededLeaseWithWorker, stepUn
 
 const RUNNER = 'runner-local';
 
-/** A chunk whose judgement crashes with no retry: the runner escalates on its first attempt. */
+/** A chunk whose spawn turn ends and whose judgement crashes with no retry: the runner escalates on its first attempt. */
 const ESCALATING: MockChunkSpec = {
-  ...holdingChunk(),
-  nodes: { build: { ...holdingChunk().nodes.build!, judgement_prompt: 'crash()\n', retries_max: 0 } },
+  entry: 'build',
+  nodes: {
+    build: {
+      executor: 'runner',
+      session: 'resume',
+      judged_by: 'worker',
+      prompt: 'pass\n',
+      judgement_prompt: 'crash()\n',
+      choices: [{ name: 'pass', description: 'committed and green', to: 'done' }],
+      retries_max: 0,
+    },
+  },
+  work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }],
 };
 
-test('test_dashboard_matches_the_individual_reads_over_a_real_running_daemon', async ({ mockHub, runnerHost }) => {
+test('test_dashboard_matches_the_individual_reads_over_a_real_running_daemon', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
 
   // An escalation first, while the runner has a free slot. Its closed lease keeps its session, so a person takes it over without force.
@@ -26,7 +37,7 @@ test('test_dashboard_matches_the_individual_reads_over_a_real_running_daemon', a
   expect((await runner.openTakeover(escalated.body.chunk_id)).status).toBe(201);
 
   // Then an open ask, put as the worker of a live lease.
-  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, holdingChunk());
+  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint);
   expect((await runner.ask(leaseId, 'which branch?', ['main', 'dev'], headers)).status).toBe(201);
 
   // Paused, so no pass changes state between the reads below.

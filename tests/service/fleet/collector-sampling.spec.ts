@@ -1,4 +1,4 @@
-import { collectorTest as test, expect, isFleet, roleOf, stepUntil } from '../../harness/fixtures';
+import { collectorTest as test, expect, isFleet, roleOf, stepUntil, stepUntilHeld } from '../../harness/fixtures';
 
 for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }]) {
   test.describe(setting.name, () => {
@@ -13,9 +13,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }])
       const repo = await repository('toy-api');
       const { chunk } = await issue('collector sampling', { repository: repo });
       await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
-      let arrived = false;
-      void workerCheckpoint.reached('hold').then(() => { arrived = true; });
-      await stepUntil(runnerHost, async () => arrived, Boolean);
+      await stepUntilHeld(runnerHost, chunk.chunk_id, workerCheckpoint, 'hold');
       await expect.poll(() => collector.received.spans().some((s) => s.traceId && !isFleet(s)), { timeout: 30000 }).toBe(true);
       if (setting.name === 'short') await expect.poll(() => Date.now(), { timeout: 5000 }).toBeGreaterThan(Date.now() + 2000);
       workerCheckpoint.release('hold');
