@@ -577,7 +577,12 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         {
             "seq": 4,
             "kind": "event.recorded",
-            "payload": {"severity": "warning", "kind": "attempt-failed", "message": f"{label}-event", "chunk_id": chunk},
+            "payload": {
+                "severity": "warning",
+                "kind": "attempt-failed",
+                "message": f"{label}-event",
+                "chunk_id": chunk,
+            },
         }
     )
     ack = _ok(c.post("/api/fleet/events", json={"runner_id": t.runner(), "facts": facts}), 200)
