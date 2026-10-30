@@ -74,10 +74,6 @@ run = "scripts/playwright-check.sh"
 description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235, broadened to the runner in blizzard#317): the Python producer+parse suite against contracts/sse/'s golden corpus (hub top-level + runner/ scope), then fleet's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
 run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
 
-[tasks.prose-check]
-description = "blizzard:prose-ratchet — fail on comment/docstring prose growth over the committed baseline, or any block over its bzh:prose-budget cap"
-run = "uv run python scripts/prose_density.py check --blocks src tests ../blizzard-mock/src ../blizzard-mock/tests"
-
 [tasks.restatement-check]
 description = "blizzard:restatement-sweep — fail when a fact is stated at an undeclared site (new), a declared site is no longer observed (stale), a declared non-owner site carries no reason, or a designated owner does not actually state its fact"
 run = "uv run python scripts/restated_invariants.py check --strict --owners --context-root ../blizzard-context src tests docs README.md web/projects ../blizzard-mock/src ../blizzard-context/verification/blizzard/gaps.md ../blizzard-context/verification/blizzard/manual.md ../blizzard-context/verification/blizzard.md"

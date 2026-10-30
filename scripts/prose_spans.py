@@ -1,10 +1,7 @@
 """Prose-span extraction and site attribution for `.py`, `.ts`, `.md`.
 
 The one place that knows how to find prose in a file and what to call the site it
-found. Consumed by ``scripts/restated_invariants.py``; not refactored onto
-``scripts/prose_density.py`` — that module's own extractors back a committed
-baseline whose counts are load-bearing, and folding this one on top of it risks
-changing them for no benefit this issue asks for.
+found. Consumed by ``scripts/restated_invariants.py``.
 
 Site identity is ``file`` + ``symbol``, never a line number: line numbers churn on
 every edit and would make a registry keyed on them a maintenance tax.
