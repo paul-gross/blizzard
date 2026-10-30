@@ -36,6 +36,7 @@ test('test_spike_chunk_terminates_with_only_asset_artifacts', async ({ repositor
   expect(artifacts.find((artifact) => artifact.name === 'spike-notes')?.content).toBe(notes);
   expect(artifacts.filter((artifact) => artifact.kind === 'git_commit')).toEqual([]);
   expect(artifacts.filter((artifact) => artifact.name.startsWith('merged/'))).toEqual([]);
+  await api.sweep('close_drain');
   await expect.poll(async () => {
     const response = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/issues/${filedIssue.number}`);
     expect(response.status).toBe(200);
