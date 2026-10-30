@@ -4049,10 +4049,10 @@
           "short_help": "Retire FORGE, refusing while an enabled record names it."
         }
       },
-      "help": "Create, list, show, edit, retire and enable forges.",
+      "help": "Create, list, get, edit, retire and enable forges.",
       "params": [],
       "path": "hub forge",
-      "short_help": "Create, list, show, edit, retire and enable forges."
+      "short_help": "Create, list, get, edit, retire and enable forges."
     },
     "garden-proposal": {
       "aliases": [
