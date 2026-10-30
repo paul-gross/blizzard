@@ -77,8 +77,7 @@ def _seed_at_deliver_with_an_unlanded_commit(
     hub: HubHarness, chunk_id: str, nodes: dict[str, str], *, repos: tuple[str, ...] = ("acme/widget",)
 ) -> None:
     """Place the chunk's current node directly at ``deliver`` (standing in for the six
-    node-steps a real chunk would take to arrive here — same technique
-    ``tests/test_delivery_incomplete_routing.py`` uses for ``retrospective``), carrying
+    node-steps a real chunk would take to arrive here), carrying
     one ``git_commit`` artifact for a repo with no ``merged/<repo>`` marker, so this
     reads as a genuine, unlanded delivery attempt."""
     commit_artifacts = [
