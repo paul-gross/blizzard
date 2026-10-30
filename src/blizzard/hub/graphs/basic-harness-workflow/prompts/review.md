@@ -55,6 +55,17 @@ round's findings with its anchor. An `open` entry is accepted when its argument 
 work beyond this change's scale — recorded with anchor and reason, never raised again; else rejected, the finding
 re-raised and the argument answered. An accepted refutation resolves its finding like a fix.
 
+## The `review-finding-delta` asset
+
+Alongside `review-findings`, submit `review-finding-delta` with
+`blizzard runner artifact create --name
+review-finding-delta`: JSON, never prose — `{"entries": [...]}`, one entry per
+finding this round disposed of, each with a `ref` (the finding's id) and a `disposition` of `fixed`, `refuted`, or
+`deferred` (a still-open should-fix a passing review leaves unanswered; it also carries `severity`, `scope`, `class`,
+`locus`, and `summary`). Example: `{"entries":[{"ref":"F1","disposition":"fixed"}]}`. With nothing disposed of, submit
+`{"entries": []}` — not `none`. `artifact create` refuses a body that does not parse, naming the field; read the full
+shape with `blizzard runner artifact get --scope system review/finding-format --content`.
+
 ## Submit the findings
 
 Each finding is specific, actionable, anchored at file and line; on a `fail` the asset rides back to iterate. Before

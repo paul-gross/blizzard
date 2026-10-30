@@ -842,3 +842,62 @@ def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str
     assert canonical.exit_code == 0, canonical.output
     assert aliased.exit_code == 0, aliased.output
     assert aliased.output == canonical.output
+
+
+# create — submit-time format validation
+
+
+def _create_delta(body: str) -> tuple[object, list[object]]:
+    posted: list[object] = []
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        posted.append(args)
+        return _FakeResponse(payload={"recorded": True, "name": "review-finding-delta", "bytes": len(body)})
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        runner_group, ["artifact", "create", "--name", "review-finding-delta"], env=_ENV, input=body
+    )
+    return result, posted
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "body",
+    ['{"entries":[{"ref":"F1","disposition":"fixed"}]}', '{"entries": []}'],
+)
+def test_create_review_finding_delta_accepts_valid_json(body: str) -> None:
+    result, posted = _create_delta(body)
+
+    assert result.exit_code == 0, result.output
+    assert len(posted) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("body", ["none", "## Findings\n- F1 fixed"])
+def test_create_review_finding_delta_refuses_malformed_json(body: str) -> None:
+    result, posted = _create_delta(body)
+
+    assert result.exit_code != 0
+    assert "review-finding-delta" in result.output
+    assert "nothing was stored" in result.output
+    assert posted == []
+
+
+@pytest.mark.unit
+def test_create_review_finding_delta_refuses_schema_invalid_json_with_the_field() -> None:
+    result, posted = _create_delta('{"entries":[{"ref":"F1","disposition":"maybe"}]}')
+
+    assert result.exit_code != 0
+    assert "entries.0" in result.output
+    assert posted == []
+
+
+@pytest.mark.unit
+def test_create_without_a_registered_validator_stores_prose_as_given() -> None:
+    bound = bind_stubs(post=lambda *a, **k: _FakeResponse(payload={"name": "review-findings", "bytes": 4}))
+    result = bound.runner.invoke(
+        runner_group, ["artifact", "create", "--name", "review-findings"], env=_ENV, input="none"
+    )
+
+    assert result.exit_code == 0, result.output
