@@ -7,14 +7,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine, event
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.read_transaction import read_transaction
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import BorrowedWrite
+from blizzard.hub.store.internal.invariants import _hub_wide
 from blizzard.hub.store.scoped import UnscopedConnection, statements_of
 from blizzard.hub.store.tenant_guard import UnscopedTenantStatement
 from blizzard.hub.tenancy import StoreScope
@@ -125,3 +128,38 @@ def test_the_guard_refuses_an_unscoped_tenant_read_through_borrowed_connections(
             pytest.raises(UnscopedTenantStatement, match="chunks"),
         ):
             conn.execute(sa.select(hub.chunks.c.chunk_id))
+
+
+def test_the_hub_wide_mark_is_gone_from_the_shared_connection_once_the_hub_wide_checks_end(tmp_path: Path) -> None:
+    engine = create_engine_from_url(init_hub(tmp_path / "hub").db_url)
+    scope = StoreScope(default_tenant(engine))
+    with hub_level_connections(engine).read_transaction("read") as borrowed:
+        with _hub_wide(borrowed) as conn:
+            conn.execute(sa.select(hub.chunks.c.chunk_id))
+        with (
+            borrowed.scoped(scope).read("tenant") as conn,
+            pytest.raises(UnscopedTenantStatement, match="chunks"),
+        ):
+            conn.execute(sa.select(hub.chunks.c.chunk_id))
+
+
+def test_a_non_sqlite_engine_reads_repeatable_read_only_and_issues_no_begin() -> None:
+    engine = MagicMock()
+    engine.dialect.name = "postgresql"
+    conn = engine.connect.return_value.__enter__.return_value
+    with read_transaction(engine):
+        pass
+    conn.execution_options.assert_called_once_with(isolation_level="REPEATABLE READ", postgresql_readonly=True)
+    conn.exec_driver_sql.assert_not_called()
+    conn.rollback.assert_called_once_with()
+
+
+def test_a_sqlite_engine_holds_a_begin_and_sets_no_isolation_level() -> None:
+    engine = MagicMock()
+    engine.dialect.name = "sqlite"
+    conn = engine.connect.return_value.__enter__.return_value
+    with read_transaction(engine):
+        pass
+    conn.exec_driver_sql.assert_called_once_with("BEGIN")
+    conn.execution_options.assert_not_called()
+    conn.rollback.assert_called_once_with()
