@@ -4,6 +4,7 @@ import type {
   ConfigChangeView,
   FieldChangeView,
   ProjectView,
+  RepositoryLinkView,
   RepositorySummary,
   RunnerRegistryView,
   SourceLinkView,
@@ -239,6 +240,20 @@ describe('projects model', () => {
     ).toEqual([
       { key: 'repo_b', name: 'blizzard', detail: 'Blizzard · acme/blizzard · main', builtIn: false, revision: 3 },
     ]);
+  });
+
+  it('keeps the repository links in the landing order the hub lists them in', () => {
+    const link = (repository_id: string, slug: string, position: number | null): RepositoryLinkView => ({
+      project_id: 'proj_b',
+      repository_id,
+      slug,
+      name: slug,
+      linked: true,
+      revision: 1,
+      position,
+    });
+    const rows = repositoryLinkRows([link('repo_w', 'web', 1), link('repo_a', 'api', 2), link('repo_c', 'cli', null)], []);
+    expect(rows.map((row) => row.name)).toEqual(['web', 'api', 'cli']);
   });
 
   it('offers only the live records the project does not link yet', () => {
