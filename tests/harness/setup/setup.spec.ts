@@ -11,6 +11,13 @@ import { assertProfilesSound, discoverProfiles, profileEnv, readProfile } from '
 
 const FIRST_WAIT_MS = 120_000;
 
+/** Writes `body` to `file` whole: under a temporary name, then renamed into place, so a waiter that sees the file never reads it half-written. */
+function publish(file: string, body: string): void {
+  const partial = `${file}.${process.pid}.partial`;
+  fs.writeFileSync(partial, body);
+  fs.renameSync(partial, file);
+}
+
 /**
  * Checks every profile in the package, once per run: the setup project that creates `first.lock` runs the check and
  * writes `first.done`, and the others wait on that file, so a broken profile fails every setup before any hub starts.
@@ -35,9 +42,9 @@ async function checkProfilesOnce(): Promise<void> {
   }
   try {
     assertProfilesSound();
-    fs.writeFileSync(done, JSON.stringify({}));
+    publish(done, JSON.stringify({}));
   } catch (error) {
-    fs.writeFileSync(done, JSON.stringify({ error: (error as Error).message }));
+    publish(done, JSON.stringify({ error: (error as Error).message }));
     throw error;
   }
 }
