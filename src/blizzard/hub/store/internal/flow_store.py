@@ -246,6 +246,7 @@ class FlowStore:
             for fact in sorted(facts, key=lambda f: f.id):
                 records.setdefault(fact.chunk_id, []).append(fact)
             return records
+
     def terms_of(self, submission_id: str) -> dict[str, LandingTerms]:
         with self._store.read("terms_of") as conn:
             rows = conn.execute(
