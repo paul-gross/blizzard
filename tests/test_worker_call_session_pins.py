@@ -164,6 +164,19 @@ def test_the_sessions_own_environment_is_handed_to_the_send_for_its_debug_flag(
     assert sent[0]["environ"]["BLIZZARD_TRACE_DEBUG"] == "1"
 
 
+@pytest.mark.parametrize(
+    ("environ", "cap"), [(_ENV, cli_spans.SEND_CAP_SECONDS), ({**_ENV, "BLIZZARD_TRACE_SEND_CAP_MS": "5000"}, 5.0)]
+)
+def test_the_send_is_capped_by_the_sessions_own_environment(
+    monkeypatch: pytest.MonkeyPatch, environ: dict[str, str], cap: float
+) -> None:
+    sent = _record_sends(monkeypatch, released=True)
+
+    _traced(environ).finish(0)
+
+    assert sent[0]["cap"] == cap
+
+
 def test_finishing_the_span_records_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _record_sends(monkeypatch, released=True)
     session = _traced(_ENV)

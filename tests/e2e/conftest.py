@@ -13,12 +13,23 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from blizzard.foundation.cli_spans import ENV_TRACE_SEND_CAP_MS
 from tests.fleet_traces import FleetCollector, fleet_collector
 
 if TYPE_CHECKING:
     # Annotation-only: the module must stay importable on a machine that has never
     # installed Playwright (see the module docstring's clean-skip contract).
     from playwright.sync_api import ViewportSize
+
+
+@pytest.fixture(scope="session", autouse=True)
+def roomy_worker_span_sends() -> Iterator[None]:
+    """Give every worker's span send 5 s. The shipped 100 ms cap is a deadline for a healthy local runner; on a loaded
+    test machine the runner reads the body later than that, the worker abandons the send, and the scenario's command
+    span is never told — while every trace subtest asserts it was."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(ENV_TRACE_SEND_CAP_MS, "5000")
+        yield
 
 
 @pytest.fixture(scope="session")

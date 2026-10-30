@@ -443,8 +443,10 @@ there.
   `BLIZZARD_TRACEPARENT`. Its own context goes out as `traceparent` on every request the command makes. Just before the
   command exits, the span is posted here within 100 ms in total, whatever the outcome. Tracing adds at most 5 ms at p95
   to a command's own duration, which a service-tier test pins. A failed send is silent and never changes the command's
-  output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. The span records the command's names, never an
-  argument or option value.
+  output or exit code; set `BLIZZARD_TRACE_DEBUG` to see it on stderr. A host whose runner answers slower than that cap,
+  such as a loaded test machine, can raise it with `BLIZZARD_TRACE_SEND_CAP_MS`, a whole number of milliseconds that
+  reaches workers through `[worker] env_passthrough`. The span records the command's names, never an argument or option
+  value.
 - **What is kept.** A span is kept only if it belongs to the trace of the lease's own chunk and arrives under the scope
   `blizzard.cli`. It is dropped, and counted, if its span id is the work root's, a step root's or a step's `queue wait`
   or `claim` the hub derives for the lease's chunk at an epoch up to the lease's (its own step's included), or if its

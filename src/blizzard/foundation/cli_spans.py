@@ -30,6 +30,9 @@ ATTR_LEASE_ID = "blizzard.lease.id"
 SERVICE_NAME = "blizzard-cli"
 
 ENV_TRACE_DEBUG = "BLIZZARD_TRACE_DEBUG"
+# A worker's send cap in whole milliseconds, for a host whose runner answers slower than the shipped cap — a loaded
+# test machine. Unset, or anything but a positive integer, leaves the shipped cap.
+ENV_TRACE_SEND_CAP_MS = "BLIZZARD_TRACE_SEND_CAP_MS"
 # The whole send — connect, write, read — takes no longer: a worker's runner is local, an operator's collector is not.
 SEND_CAP_SECONDS = 0.1
 OPERATOR_SEND_CAP_SECONDS = 0.5
@@ -152,6 +155,13 @@ class CliSpan:
 
 def _string(key: str, value: str) -> dict[str, Any]:
     return {"key": key, "value": {"stringValue": value}}
+
+
+def worker_send_cap(environ: Mapping[str, str]) -> float:
+    """A worker send's cap in seconds: ``BLIZZARD_TRACE_SEND_CAP_MS`` when it names a positive integer, else the
+    shipped :data:`SEND_CAP_SECONDS`."""
+    raw = environ.get(ENV_TRACE_SEND_CAP_MS, "")
+    return int(raw) / 1000 if raw.isdigit() and int(raw) > 0 else SEND_CAP_SECONDS
 
 
 def send(

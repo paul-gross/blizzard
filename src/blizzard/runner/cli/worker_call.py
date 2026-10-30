@@ -144,6 +144,7 @@ class WorkerSession:
                 f"{self._environ.get(ENV_RUNNER_URL, '').rstrip('/')}{TRACES_PATH}",
                 span,
                 headers={LEASE_TOKEN_HEADER: token} if token else {},
+                cap=cli_spans.worker_send_cap(self._environ),
                 environ=self._environ,
             )
         if released:

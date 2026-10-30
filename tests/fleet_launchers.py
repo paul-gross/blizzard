@@ -21,6 +21,7 @@ from pathlib import Path
 import httpx2
 import uvicorn
 
+from blizzard.foundation.cli_spans import ENV_TRACE_SEND_CAP_MS
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.app import build_hosted_app
@@ -50,8 +51,9 @@ OWNER = "blizzard"
 REPO = f"{OWNER}/{REPO_NAME}"
 
 MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
-# The mock-only vars every scenario's worker child needs, via the allowlist's operator-extension knob.
-MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR)
+# The vars every scenario's worker child needs, via the allowlist's operator-extension knob: the mock's own, and the
+# worker send cap a loaded test machine raises.
+MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT, PLANT_DIR_VAR, ENV_TRACE_SEND_CAP_MS)
 
 
 # --------------------------------------------------------------------------- #

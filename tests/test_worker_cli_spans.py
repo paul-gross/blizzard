@@ -410,6 +410,25 @@ def test_a_post_that_outlasts_the_cap_is_abandoned_and_reported(capsys: pytest.C
     assert "no answer within 50 ms" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("raw", "cap"),
+    [
+        (None, cli_spans.SEND_CAP_SECONDS),
+        ("5000", 5.0),
+        ("250", 0.25),
+        ("0", cli_spans.SEND_CAP_SECONDS),
+        ("-5", cli_spans.SEND_CAP_SECONDS),
+        ("1.5", cli_spans.SEND_CAP_SECONDS),
+        ("soon", cli_spans.SEND_CAP_SECONDS),
+        ("", cli_spans.SEND_CAP_SECONDS),
+    ],
+)
+def test_a_worker_cap_is_a_positive_millisecond_override_or_the_shipped_cap(raw: str | None, cap: float) -> None:
+    environ = {} if raw is None else {cli_spans.ENV_TRACE_SEND_CAP_MS: raw}
+
+    assert cli_spans.worker_send_cap(environ) == cap
+
+
 def test_an_open_span_carries_its_chunk_lease_and_start_time_and_parent() -> None:
     wall, ticks = iter([7_000]), iter([100, 100, 130])
     clock = Clock(wall_ns=lambda: next(wall), monotonic_ns=lambda: next(ticks))
