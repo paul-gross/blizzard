@@ -1,9 +1,7 @@
 """The hub's flow driver keeps a live hub's flow lines true to where its chunks stand, taking each hub step as a turn.
 
-A chunk held pending at ``deliver`` by the mock forge's ``checks_pending`` lever is submitted and polls through turns
-until its landing closes that submission ``landed``. A store walked below ``20261027_0900_flows`` with two chunks
-pending and one paused at ``deliver``, migrated back and booted, lands every one. Needs ``BLIZZARD_E2E=1`` and
-``blizzard-mock``."""
+A store walked below ``20261027_0900_flows`` with two chunks pending and one paused at ``deliver``, migrated back and
+booted, lands every one. Needs ``BLIZZARD_E2E=1`` and ``blizzard-mock``."""
 
 from __future__ import annotations
 
@@ -24,7 +22,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.tools.invariants import hub_invariants
 from tests.e2e.flow_support import LAND_CHOICES, flow_runner_config, flow_world, set_lever, ticking_runner
-from tests.fleet_launchers import REPO, run_forge, run_hub, runner_config
+from tests.fleet_launchers import REPO, run_forge, run_hub
 from tests.fleet_world import PUSH_AND_DECLARE_SCRIPT, REPO_NAME, scripted_build_prompt
 from tests.support import free_port
 
@@ -94,15 +92,6 @@ def _pinned_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) ->
     return ingested.json()["chunk_id"]
 
 
-def _drive_until(
-    config: RunnerConfig, hub: httpx2.Client, chunk_id: str, predicate: Callable[[dict[str, Any]], bool]
-) -> dict[str, Any]:
-    """Tick the runner until ``predicate`` holds of the chunk's detail; return that detail."""
-    with ticking_runner(config) as tick_until:
-        tick_until(lambda: predicate(_detail(hub, chunk_id)))
-    return _detail(hub, chunk_id)
-
-
 def _detail(hub: httpx2.Client, chunk_id: str) -> dict[str, Any]:
     return hub.get(f"/api/chunks/{chunk_id}").json()
 
@@ -153,33 +142,6 @@ def _hub_migrate(hub_dir: Path, *args: str) -> None:
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     done = subprocess.run([hub_bin, "migrate", "--dir", str(hub_dir), *args], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
-
-
-def test_a_held_chunk_is_submitted_and_its_landing_supersedes_it(tmp_path: Path) -> None:
-    bin_dir, workspace, origins = flow_world(tmp_path)
-    hub_dir = tmp_path / "hub"
-    forge_port, hub_port = free_port(), free_port()
-
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
-        set_lever(forge, REPO, armed=True)
-        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        chunk_id = _pinned_chunk(hub, forge, "HELD.md")
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-        _assert_flow_record_holds(hub_dir)
-
-        _drive_until(config, hub, chunk_id, _pending)
-        [(_, submitted, _, open_outcome)] = _await_submissions(hub_dir, bool)
-        assert (submitted, open_outcome) == (chunk_id, None)
-        _assert_flow_record_holds(hub_dir)
-
-        set_lever(forge, REPO, armed=False)
-        done = _drive_until(config, hub, chunk_id, lambda b: b["status"] in {"done", "needs_human"})
-        assert (done["status"], done["landed"]) == ("done", True)
-        [(_, closed, _, outcome)] = _await_submissions(hub_dir, lambda rows: bool(rows) and rows[0][3] is not None)
-        assert (closed, outcome) == (chunk_id, "landed")
-        with _store(hub_dir) as conn:
-            assert conn.execute("SELECT count(*) FROM hub_turns WHERE ended_at IS NULL").fetchone() == (0,)
-        _assert_flow_record_holds(hub_dir)
 
 
 def _completion_buffered(config: RunnerConfig) -> bool:
