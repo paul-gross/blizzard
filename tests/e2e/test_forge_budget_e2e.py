@@ -179,7 +179,12 @@ def test_a_low_budget_turns_the_sweep_away_while_a_landing_proceeds(tmp_path: Pa
         reset = int(time.time()) + 900
         armed = forge.post("/_levers/rate_budget", json={"remaining": _LOW_REMAINING, "reset": reset})
         assert armed.status_code == 200, armed.text
-        low = _poll_until(lambda: (b := _budget(hub)) is not None and b["remaining"] <= _LOW_REMAINING and b)
+        _poll_until(lambda: (b := _budget(hub)) is not None and b["remaining"] <= _LOW_REMAINING)
+        # The pass that taught it may still be spending what it started healthy; a pass on request waits it out, and
+        # is itself turned away, so the reading after it is the one every later pass must leave alone.
+        _sweep(hub, "forge_status")
+        low = _budget(hub)
+        assert low is not None and low["remaining"] <= _LOW_REMAINING
         assert low["limit"] == _LIMIT
         assert _instant(low["reset"]).timestamp() == reset
 
