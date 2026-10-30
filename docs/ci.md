@@ -180,6 +180,7 @@ local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time re
 | ----------------------------------------------- | ---------- | ------------ | -------- |
 | `tests/ui/project-lens.spec.ts`                 | UI default | not itemized | 1.5s     |
 | `tests/ui/actions/gardening-run-dialog.spec.ts` | UI actions | not itemized | 1.2s     |
+| `tests/ui/transcript-tab.spec.ts`               | UI default | not itemized | 1.5s     |
 
 ## The upgrade rehearsal
 

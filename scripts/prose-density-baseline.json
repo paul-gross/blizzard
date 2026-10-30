@@ -11064,12 +11064,6 @@
    "over_cap": 2,
    "total": 134
   },
-  "e2e/test_transcript_tab_browser_e2e.py": {
-   "comments": 9,
-   "docstrings": 13,
-   "over_cap": 0,
-   "total": 234
-  },
   "e2e/test_triage_history_browser_e2e.py": {
    "comments": 0,
    "docstrings": 1,
