@@ -573,10 +573,18 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
         }
         for seq, question in ((2, _SHARED_QUESTION), (3, own_question))
     ]
+    facts.append(
+        {
+            "seq": 4,
+            "kind": "event.recorded",
+            "payload": {"severity": "warning", "kind": "attempt-failed", "message": f"{label}-event", "chunk_id": chunk},
+        }
+    )
     ack = _ok(c.post("/api/fleet/events", json={"runner_id": t.runner(), "facts": facts}), 200)
     assert not ack.get("rejected"), ack
     t.keep("question_id", own_question)
     t.markers.add(f"{label}-question")
+    t.markers.add(f"{label}-event")
     segment = {
         "seq": 1,
         "segment_id": _SHARED_SEGMENT,
@@ -836,6 +844,8 @@ def test_a_tenant_sees_its_own_records_in_its_listings(two: _Two) -> None:
             ("/api/findings/classes", t.ids["finding_class"]),
             (f"/api/projects/{t.ids['project']}/findings/classes", t.ids["finding_class"]),
             ("/api/garden-proposals", t.ids["proposal_id"]),
+            ("/api/events", f"{t.label}-event"),
+            ("/api/activity", t.ids["chunk_id"]),
             ("/api/invitations", t.ids["invitation_id"]),
             ("/api/runners", t.ids["runner_id"]),
             ("/api/hosts", t.ids["host_id"]),

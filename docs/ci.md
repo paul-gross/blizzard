@@ -158,6 +158,12 @@ fresh-hub, and UI auth stays in its own profile. The pessimistic ordinary-shard 
 port's project time in CI against these estimates; reshape the jobs before landing a port that would make the service
 tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape holds.
 
+Measured port times, from the build's own Playwright run until the `ui (blizzard:ui)` job has run the change:
+
+| Port                         | Project | Measured serial time |
+| ---------------------------- | ------- | -------------------- |
+| `tests/ui/event-log.spec.ts` | UI      | 49s                  |
+
 ## The upgrade rehearsal
 
 [`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the
