@@ -30,8 +30,8 @@ the spawn-injected lease identity, the same shape the `blizzard runner artifact`
 shape.
 
 A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
-`blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the chunk's own
-accepted, minted proposal answers, resolved server-side from the chunk itself, so neither verb can be pointed at another
+`blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the accepted, minted
+proposals behind each of the chunk's work items answer, resolved server-side from the chunk itself, so neither verb can be pointed at another
 chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at all. It needs no hub
 credential in its child environment either, and shares the same endpoint-shape home.
 

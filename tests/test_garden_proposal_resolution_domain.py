@@ -520,3 +520,51 @@ def test_a_proposal_finding_id_that_no_longer_resolves_is_skipped() -> None:
 
     assert resolved is not None
     assert [f.finding_id for f in resolved] == ["fin_1"]
+
+
+def test_a_chunk_folding_two_minted_items_resolves_the_union_of_their_findings() -> None:
+    folded = WorkRef(source="hub", ref="43")
+    closures = _FakeClosures(
+        by_item={
+            (_POINTER.source, _POINTER.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            ),
+            (folded.source, folded.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED,
+                item_outcome=GardenProposalItemOutcome.MINTED,
+                proposal_id="gprop_2",
+            ),
+        }
+    )
+    proposals = _FakeProposals(
+        by_id={
+            "gprop_1": _proposal(findings=["fin_1", "fin_shared"]),
+            "gprop_2": _proposal("gprop_2", findings=["fin_shared", "fin_2"]),
+        }
+    )
+    findings = _FakeFindings(by_id={fid: _finding(fid) for fid in ("fin_1", "fin_2", "fin_shared", "fin_other")})
+    resolution = _answered_findings_resolution(closures=closures, proposals=proposals, findings=findings)
+
+    resolved = resolution.resolve_for_chunk(_chunk(work_refs=[_POINTER, folded]))
+
+    assert resolved is not None
+    assert [f.finding_id for f in resolved] == ["fin_1", "fin_shared", "fin_2"]
+
+
+def test_a_chunk_whose_only_minted_item_is_a_later_fold_still_resolves_its_findings() -> None:
+    folded = WorkRef(source="hub", ref="43")
+    closures = _FakeClosures(
+        by_item={
+            (folded.source, folded.ref): _closure(
+                kind=GardenProposalClosureKind.ACCEPTED, item_outcome=GardenProposalItemOutcome.MINTED
+            )
+        }
+    )
+    proposals = _FakeProposals(by_id={"gprop_1": _proposal(findings=["fin_1"])})
+    findings = _FakeFindings(by_id={"fin_1": _finding("fin_1")})
+    resolution = _answered_findings_resolution(closures=closures, proposals=proposals, findings=findings)
+
+    resolved = resolution.resolve_for_chunk(_chunk(work_refs=[_POINTER, folded]))
+
+    assert resolved is not None
+    assert [f.finding_id for f in resolved] == ["fin_1"]
