@@ -1,7 +1,7 @@
 """The invariant checker's composition root (``bzh:invariant-checker``): wires the runner half
-(``runner/store/internal/invariants.py``) and the hub half (``hub/store/internal/invariants.py``) to
-their stores and runs both. After any crash → restart → recover cycle, the durable facts in both stores must still
-satisfy the correctness conditions the design rests on."""
+(``src/blizzard/runner/store/internal/invariants.py``) and the hub half
+(``src/blizzard/hub/store/internal/invariants.py``) to their stores and runs both. After any crash → restart →
+recover cycle, the durable facts in both stores must still satisfy the correctness conditions the design rests on."""
 
 from __future__ import annotations
 
