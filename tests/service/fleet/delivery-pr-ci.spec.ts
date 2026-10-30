@@ -50,8 +50,15 @@ async function pulls(forge: ForgeApi, repo: Repository): Promise<Pull[]> {
   return result.body as Pull[];
 }
 
+/**
+ * Steps the host until `reached` holds or the chunk waits at the hub's `deliver` node. No pass of the host moves a hub
+ * node: it polls on the hub's own cadence, so from there the hub is read, on a clock, until `reached` holds.
+ */
 async function drive(host: RunnerHost, api: HubApi, id: string, reached: (state: Wire.ChunkDetail) => boolean) {
-  return stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body, reached);
+  const read = async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${id}`)).body;
+  let state = await stepUntil(host, read, (s) => reached(s) || s.pending !== null);
+  await expect.poll(async () => reached((state = await read())), { timeout: 60000 }).toBe(true);
+  return state;
 }
 
 async function nextPoll(api: HubApi, id: string, previous: string) {
@@ -194,8 +201,8 @@ test('test_pr_ci_bounces_a_dirty_conflict_back_to_build', async ({ repository, i
   await createGraph(api, repo);
   const { chunk } = await issue('pr-ci', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-  const bounced = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.bounces?.length > 0);
-  expect(bounced.bounces[0].cause).toBe('conflict');
+  const bounced = await drive(host, api, chunk.chunk_id, (state) => state.bounces?.length > 0);
+  expect(bounced.bounces[0]!.cause).toBe('conflict');
   expect(bounced.landed).toBe(false);
   const pulls = await forge.call('GET', `/repos/${fullName}/pulls?state=all`);
   expect(pulls.status).toBe(200);
