@@ -10896,18 +10896,6 @@
    "over_cap": 0,
    "total": 107
   },
-  "e2e/test_board_browser_e2e.py": {
-   "comments": 86,
-   "docstrings": 31,
-   "over_cap": 4,
-   "total": 546
-  },
-  "e2e/test_board_cost_live_e2e.py": {
-   "comments": 23,
-   "docstrings": 15,
-   "over_cap": 0,
-   "total": 209
-  },
   "e2e/test_checks_gate_e2e.py": {
    "comments": 9,
    "docstrings": 12,
@@ -10968,29 +10956,11 @@
    "over_cap": 7,
    "total": 427
   },
-  "e2e/test_gardening_run_dialog_browser_e2e.py": {
-   "comments": 15,
-   "docstrings": 11,
-   "over_cap": 1,
-   "total": 151
-  },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 16,
    "docstrings": 18,
    "over_cap": 1,
    "total": 224
-  },
-  "e2e/test_glance_board_e2e.py": {
-   "comments": 12,
-   "docstrings": 11,
-   "over_cap": 1,
-   "total": 190
-  },
-  "e2e/test_graphs_diagram_browser_e2e.py": {
-   "comments": 39,
-   "docstrings": 32,
-   "over_cap": 5,
-   "total": 474
   },
   "e2e/test_hub_actions_e2e.py": {
    "comments": 1,
@@ -11022,12 +10992,6 @@
    "over_cap": 1,
    "total": 146
   },
-  "e2e/test_project_lens_browser_e2e.py": {
-   "comments": 4,
-   "docstrings": 8,
-   "over_cap": 1,
-   "total": 75
-  },
   "e2e/test_resume_preamble_e2e.py": {
    "comments": 18,
    "docstrings": 35,
@@ -11052,12 +11016,6 @@
    "over_cap": 0,
    "total": 313
   },
-  "e2e/test_runner_panel_live_e2e.py": {
-   "comments": 15,
-   "docstrings": 9,
-   "over_cap": 2,
-   "total": 135
-  },
   "e2e/test_runner_serves_default_e2e.py": {
    "comments": 1,
    "docstrings": 7,
@@ -11075,18 +11033,6 @@
    "docstrings": 12,
    "over_cap": 2,
    "total": 134
-  },
-  "e2e/test_transcript_tab_browser_e2e.py": {
-   "comments": 9,
-   "docstrings": 13,
-   "over_cap": 0,
-   "total": 234
-  },
-  "e2e/test_triage_history_browser_e2e.py": {
-   "comments": 0,
-   "docstrings": 1,
-   "over_cap": 0,
-   "total": 146
   },
   "egress_recipes.py": {
    "comments": 0,
