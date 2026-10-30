@@ -10980,12 +10980,6 @@
    "over_cap": 1,
    "total": 169
   },
-  "e2e/test_forge_status_e2e.py": {
-   "comments": 11,
-   "docstrings": 11,
-   "over_cap": 0,
-   "total": 173
-  },
   "e2e/test_garden_routine_e2e.py": {
    "comments": 33,
    "docstrings": 16,
