@@ -10968,12 +10968,6 @@
    "over_cap": 7,
    "total": 427
   },
-  "e2e/test_gardening_run_dialog_browser_e2e.py": {
-   "comments": 15,
-   "docstrings": 11,
-   "over_cap": 1,
-   "total": 151
-  },
   "e2e/test_gate_decision_e2e.py": {
    "comments": 16,
    "docstrings": 18,

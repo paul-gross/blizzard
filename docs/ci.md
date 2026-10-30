@@ -176,9 +176,10 @@ Each landed board port records its spec's time below. The nine board files took 
 itemizes no per-file time, so a row's estimate reads "not itemized" unless one is known. The measured time is the spec's
 local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time replaces it.
 
-| Ported spec                     | Project    | Estimated    | Measured |
-| ------------------------------- | ---------- | ------------ | -------- |
-| `tests/ui/project-lens.spec.ts` | UI default | not itemized | 1.5s     |
+| Ported spec                                     | Project    | Estimated    | Measured |
+| ----------------------------------------------- | ---------- | ------------ | -------- |
+| `tests/ui/project-lens.spec.ts`                 | UI default | not itemized | 1.5s     |
+| `tests/ui/actions/gardening-run-dialog.spec.ts` | UI actions | not itemized | 1.2s     |
 
 ## The upgrade rehearsal
 
