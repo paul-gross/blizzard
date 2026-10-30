@@ -52,6 +52,12 @@ test('init host file is captured before the fixture overlay', async ({ runnerHos
   expect(runnerHost.hostFile()).toBe(current);
   expect(runnerHost.initHostFile).not.toBe(current);
   expect(runnerHost.initHostFile).toContain('runner-local');
+test('a takeover command receives stdin under the host fence without interpreting its text', async ({ runnerHost }) => {
+  const marker = 'human takeover: $HOME ; quotation marks';
+  const command = `${JSON.stringify(process.execPath)} -e 'process.stdin.setEncoding("utf8"); let text = ""; process.stdin.on("data", chunk => text += chunk); process.stdin.on("end", () => { console.log(JSON.stringify({ text, fence: process.env.BLIZZARD_MOCK_HARNESS_FENCE, home: process.env.HOME })); });'`;
+  const result = await runnerHost.shell(command, `${marker}\n`);
+  expect(result.code, result.stderr).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ text: `${marker}\n`, fence: '1', home: runnerHost.home });
 });
 
 test.describe('a profile that cannot be a host is refused before any process starts', () => {

@@ -14,8 +14,9 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }])
       const { chunk } = await issue('collector sampling', { repository: repo });
       await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
       await stepUntilHeld(runnerHost, chunk.chunk_id, workerCheckpoint, 'hold');
-      await expect.poll(() => collector.received.spans().some((s) => s.traceId && !isFleet(s)), { timeout: 30000 }).toBe(true);
-      if (setting.name === 'short') await expect.poll(() => Date.now(), { timeout: 5000 }).toBeGreaterThan(Date.now() + 2000);
+      await expect.poll(() => collector.received.spans().some((s) => s.attributes['blizzard.chunk.id'] === chunk.chunk_id && !isFleet(s)), { timeout: 30000 }).toBe(true);
+      const early = collector.received.spans().find((s) => s.attributes['blizzard.chunk.id'] === chunk.chunk_id && !isFleet(s))!;
+      if (setting.name === 'short') await expect.poll(() => collector.decision(early.traceId), { timeout: 30000 }).toBe('dropped');
       workerCheckpoint.release('hold');
       await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body.status, (status) => status === 'done');
       await expect.poll(() => collector.received.spans().filter(isFleet).filter((s) => s.attributes['blizzard.chunk.id'] === chunk.chunk_id).some((s) => roleOf(s) === 'step'), { timeout: 30000 }).toBe(true);
@@ -29,8 +30,8 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole', wait: 40 }])
         await expect.poll(() => collector.forwarded.spans().some((s) => s.spanId === root.spanId), { timeout: 60000 }).toBe(true);
         await expect.poll(() => collector.forwarded.spans().filter(isFleet).some((s) => s.traceId === root.traceId && roleOf(s) === 'runner/invocation'), { timeout: 60000 }).toBe(true);
       } else {
-        await expect.poll(() => Date.now(), { timeout: 5000 }).toBeGreaterThan(Date.now() + 2000);
         expect(collector.forwarded.spans().some((s) => s.spanId === root.spanId)).toBe(false);
+        expect(collector.forwarded.spans().some((s) => s.traceId === root.traceId && s.scope.name === 'blizzard.cli')).toBe(false);
       }
     });
   });
