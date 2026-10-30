@@ -19,6 +19,9 @@ from blizzard.foundation.store.migrations import MigrationRunner, StoreBelowFloo
 
 # Bounds how long shutdown waits for open connections to drain.
 GRACEFUL_SHUTDOWN_SECONDS = 5
+# How long an idle connection stays open: longer than any client that pools connections reuses one — httpx's 5 s, a
+# reverse proxy's 2 min — so none sends a request on a connection the daemon is closing under it.
+KEEP_ALIVE_SECONDS = 150
 
 
 @contextmanager
@@ -75,5 +78,11 @@ def run_migrate(
 
 def build_early_shutdown_server(app: Any, *, host: str, port: int, shutdown_signal: Any) -> _EarlyShutdownServer:
     """Wire APP under uvicorn behind the shared early-shutdown wrapper."""
-    uvicorn_config = uvicorn.Config(app, host=host, port=port, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS)
+    uvicorn_config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        timeout_keep_alive=KEEP_ALIVE_SECONDS,
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
+    )
     return _EarlyShutdownServer(uvicorn_config, shutdown_signal=shutdown_signal)
