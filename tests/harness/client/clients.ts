@@ -3,6 +3,7 @@ import { type ApiResponse, type Engine, expecting, type Json, type LogContext, s
 import type { Ledger } from './ledger';
 import type { MockDriveAnswer, MockIssue, MockRepositoryCreated, MockRunnerLeverListing } from './mock';
 import type { SweepPassResponse } from './wire/hub/types.gen';
+import { identityFor } from '../auth';
 import { requireFreshHub } from '../factories';
 import type { Level } from '../tenancy';
 
@@ -101,8 +102,17 @@ export function mockRunnerApi(options: { context: APIRequestContext; testInfo: T
 /** Controls the test's own stub IdP; a lever would affect other tests on a shared hub. */
 export function idpApi(options: { context: APIRequestContext; testInfo: TestInfo; url: string; level: Level; ledger: Ledger }): {
   refuseCallback: (refuse: boolean) => Promise<ApiResponse>;
+  /** Makes the next dance that carries no `login_hint`, a browser's, resolve to the identity `identityFor` derives for `email`. */
+  profile: (email: string) => Promise<ApiResponse>;
 } {
+  const lever = (route: string, data: unknown): Promise<ApiResponse> =>
+    send({ context: options.context, testInfo: options.testInfo, headers: {}, ledger: options.ledger, logContext: () => '' },
+      'PUT', `${options.url}${route}`, { data }, false);
   return {
+    profile: (email) => {
+      requireFreshHub(options.level, 'idp.profile()');
+      return lever('/_levers/profile', identityFor(email));
+    },
     refuseCallback: (refuse) => {
       requireFreshHub(options.level, 'idp.refuseCallback()');
       return send({ context: options.context, testInfo: options.testInfo, headers: {}, ledger: options.ledger, logContext: () => '' },

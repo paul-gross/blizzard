@@ -10933,10 +10933,10 @@
    "total": 201
   },
   "e2e/test_event_log_e2e.py": {
-   "comments": 37,
-   "docstrings": 28,
-   "over_cap": 3,
-   "total": 538
+   "comments": 5,
+   "docstrings": 10,
+   "over_cap": 1,
+   "total": 119
   },
   "e2e/test_flow_record_e2e.py": {
    "comments": 4,
@@ -11004,17 +11004,11 @@
    "over_cap": 0,
    "total": 566
   },
-  "e2e/test_login_session_e2e.py": {
-   "comments": 16,
-   "docstrings": 21,
-   "over_cap": 3,
-   "total": 229
-  },
   "e2e/test_migration_e2e.py": {
-   "comments": 20,
+   "comments": 14,
    "docstrings": 9,
    "over_cap": 1,
-   "total": 236
+   "total": 201
   },
   "e2e/test_mixed_harness_e2e.py": {
    "comments": 89,
@@ -11057,12 +11051,6 @@
    "docstrings": 11,
    "over_cap": 0,
    "total": 313
-  },
-  "e2e/test_runner_federation_e2e.py": {
-   "comments": 29,
-   "docstrings": 23,
-   "over_cap": 1,
-   "total": 473
   },
   "e2e/test_runner_panel_live_e2e.py": {
    "comments": 15,

@@ -57,16 +57,6 @@ def require_mock_fleet() -> Path:
     return bin_dir
 
 
-def require_stub_idp() -> Path:
-    """The provisioned sibling ``blizzard-mock`` venv bin with the stub IdP,
-    or skip — a separate check from :func:`require_mock_fleet` since most service-tier
-    scenarios need no OAuth counterpart at all."""
-    bin_dir = mock_bin_dir()
-    if bin_dir is None or not (bin_dir / "blizzard-mock-idp").is_file():
-        pytest.skip("no provisioned sibling blizzard-mock worktree with the stub IdP (run `winter provision <env>`)")
-    return bin_dir
-
-
 def require_opencode_cli_surface(bin_dir: Path) -> Path:
     """``bin_dir``'s ``mock-opencode`` binary, with the ``emit`` verb live, or skip — an
     older-provisioned sibling ``blizzard-mock`` worktree may carry ``mock-opencode`` without it.
@@ -119,25 +109,6 @@ def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
     :func:`~tests.support.shared_daemon_log_dir`; named by daemon and port so several
     concurrent instances of the same mock never share a file."""
     return (log_dir or shared_daemon_log_dir()) / f"{name}-{port}.log"
-
-
-@contextlib.contextmanager
-def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx2.Client]:
-    """Run ``blizzard-mock-idp`` as a real subprocess and yield a client to it."""
-    log = _mock_daemon_log("mock-idp", port, log_dir)
-    proc = subprocess.Popen(
-        [str(bin_dir / "blizzard-mock-idp"), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    client = mock_daemon_client(port)
-    try:
-        await_http(proc, client, "/healthz", log=log)
-        yield client
-    finally:
-        client.close()
-        terminate(proc)
 
 
 # The scripted build node: commits a file, pushes the branch, and declares it via

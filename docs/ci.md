@@ -160,6 +160,18 @@ minutes. Measure each port's project time in CI against these estimates; reshape
 would make the service tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape
 holds.
 
+Measured port times, from the build's own Playwright run until the `ui (blizzard:ui)` job has run the change:
+
+| Port                                      | Project | Measured serial time |
+| ----------------------------------------- | ------- | -------------------- |
+| `tests/ui/event-log.spec.ts`              | UI      | 49s                  |
+| `tests/ui/migration.spec.ts`              | UI      | 3s                   |
+| `tests/ui/auth/login-session.spec.ts`     | UI auth | 13s                  |
+| `tests/ui/auth/runner-federation.spec.ts` | UI auth | 60s                  |
+
+UI auth totals 73s against its 70s estimate and the UI default project 52s against 273s, so no project nears the
+30-minute step.
+
 ## The upgrade rehearsal
 
 [`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the

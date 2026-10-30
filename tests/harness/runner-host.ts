@@ -67,6 +67,13 @@ export interface RunnerHostOptions {
    * that reaches for winter is caught; the handle's `winterInvoked()` reports it. A `runnerEnv.PATH` beside it is refused.
    */
   runnerWinterTrap: boolean;
+  /**
+   * Lays the host out as an adopted runner: the runner `name` the operator already minted at the hub (`runnerId` and
+   * its `token`) on a host scaffolded but never registered, so the hub lists no host for it. The ids and token go
+   * into the documented host files through `prepareStopped`. Needs `runnerStarted: false`: the host's first boot is
+   * the runner's own registration.
+   */
+  runnerAdopted: { name: string; runnerId: string; token: string } | undefined;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -82,6 +89,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerStubs: {},
   runnerModelPrices: {},
   runnerWinterTrap: false,
+  runnerAdopted: undefined,
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -336,9 +344,11 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
     const problems = checkHostOptions(profile, options.runnerEnv, options.runnerWinterTrap);
     if (problems.length > 0) throw new Error(`the runner host options are unsound:\n${problems.join('\n')}`);
 
+    const adopted = options.runnerAdopted;
+    if (adopted !== undefined && options.runnerStarted) throw new Error('runnerAdopted needs runnerStarted: false; the first boot is the adopted runner registering');
     const index = count++;
     // A hub holds one live host per name and a host is named for its first runner, so a test's later hosts each name theirs.
-    const defaultRunner = index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`;
+    const defaultRunner = adopted?.name ?? (index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`);
     const root = path.join(ctx.scratchRoot ?? os.tmpdir(), `bzh-${crypto.randomBytes(4).toString('hex')}`);
     const dir = path.join(root, 'h');
     const socket = path.join(dir, 'host.sock');
@@ -426,7 +436,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const runner = requireBinary(binDir(), RUNNER_BINARY);
       const operatorHome = ctx.hub.operatorHome === undefined ? path.join(home, '.config') : await ctx.hub.operatorHome();
       started = Date.now();
-      if (index > 0) {
+      if (index > 0 || adopted !== undefined) {
         // `init` scaffolds the file before it reaches the hub, so a first pass against nothing leaves the scaffold to
         // rename; the second pass registers the host under that name.
         await runCommand(runner, ['init', dir, '--hub', 'http://127.0.0.1:9'], { env: cliEnv(operatorHome), cwd: root });
@@ -438,10 +448,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         (scaffold.runner as TomlTable[])[0]!.name = defaultRunner;
         fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(scaffold));
       }
-      const init = await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
+      // An adopted runner's host is never registered: the scaffold above is the whole of `init`.
+      if (adopted === undefined) {
+        const init = await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
+        const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
+        if (hostId !== undefined) ctx.ledger.add('host', hostId);
+      }
       timings.initMs = Date.now() - started;
-      const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
-      if (hostId !== undefined) ctx.ledger.add('host', hostId);
 
       started = Date.now();
       for (const entry of (profile.runner ?? []) as TomlTable[]) {
@@ -500,7 +513,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
       const entries = runnerEntries(readHostFile(dir));
-      for (const entry of entries) ctx.ledger.add('runner', entry.id);
+      // An adopted runner is the test's own minting, already in its ledger.
+      if (adopted === undefined) for (const entry of entries) ctx.ledger.add('runner', entry.id);
 
       // The default runner's root, which the mock worker reads as `BZ_TRANSCRIPTS_ROOT`; a `runnerEnv` naming it wins.
       const transcriptsRoot = (): string => {
@@ -543,7 +557,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       for (const entry of entries) runners[entry.name] = { ...api.runner(entry.id), id: entry.id, name: entry.name };
 
       const reads = originReads(origins, env, root);
-      return {
+      const host: RunnerHost = {
         ...reads,
         dir,
         workspace,
@@ -643,7 +657,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           let envText: string | undefined;
           if (Object.keys(tokens).length > 0) {
             const envFile = path.join(dir, '.env');
-            envText = fs.readFileSync(envFile, 'utf8');
+            envText = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '';
             for (const [key, token] of Object.entries(tokens)) {
               envText = envText.split('\n').filter((line) => !line.startsWith(`${key}=`)).join('\n').trimEnd() + `\n${key}=${token}\n`;
             }
@@ -684,6 +698,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           await boot();
         },
       };
+      if (adopted !== undefined) host.prepareStopped({ runnerIds: { [adopted.name]: adopted.runnerId }, runnerTokens: { [adopted.name]: adopted.token } });
+      return host;
     } catch (error) {
       await dispose(true);
       throw error;

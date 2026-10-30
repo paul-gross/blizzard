@@ -106,7 +106,7 @@ def _target_yaml() -> str:
 
 
 def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
-    tmp_path: Path, chromium_available: bool, fleet_traces: FleetCollector, subtests: pytest.Subtests
+    tmp_path: Path, fleet_traces: FleetCollector, subtests: pytest.Subtests
 ) -> None:
     """A worker's cross-graph choice migrates the chunk, which then lands under the target graph."""
     bin_dir = mock_bin_dir()
@@ -193,41 +193,6 @@ def test_cross_graph_migration_repins_requeues_and_lands_under_the_new_graph(
                     StepExpect("step deliver", "transitioned", "done", children=("hub exec",), link="next"),
                 ],
             )
-
-        # The two-graph history renders on the served board (MUST-FIX-3), when a Chromium
-        # is present; when absent the git + fleet truth below still run.
-        if chromium_available:
-            from playwright.sync_api import expect, sync_playwright
-
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=True)
-                page = browser.new_page()
-                expect.set_options(timeout=20_000)
-                try:
-                    # The migrated chunk lands `done` — open its detail dock from that column.
-                    page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
-                    expect(page.get_by_test_id("board-shell")).to_be_visible()
-                    done_card = page.locator('[data-col="done"]').get_by_test_id("chunk-card")
-                    expect(done_card).to_have_count(1)
-                    done_card.click()
-                    expect(page.get_by_test_id("chunk-detail")).to_be_visible()
-                    expect(page.get_by_test_id("detail-id")).to_have_text(chunk_id)
-
-                    # The timeline weaves in the migration step and labels each row with
-                    # the graph it happened in (no raw-id degradation).
-                    expect(page.get_by_test_id("history-migration-step")).to_have_count(1)
-                    assert page.get_by_test_id("history-graph").count() >= 1, (
-                        "the two-graph timeline rendered no per-graph label — MigrationView hydration regressed"
-                    )
-
-                    # The standalone /graphs explorer still lists both graphs of the history.
-                    page.goto(f"http://127.0.0.1:{hub_port}/graphs", wait_until="load")
-                    expect(page.get_by_test_id("graph-explorer")).to_be_visible()
-                    for name in ("default-delivery", "triage-delivery"):
-                        group = page.locator(f'[data-testid="graph-explorer-group"][data-name="{name}"]')
-                        expect(group).to_have_count(1)
-                finally:
-                    browser.close()
 
     # Git truth: the change is reachable from bare main exactly once — only the target
     # graph's build branch lands it.

@@ -134,7 +134,7 @@ describe('EventsView', () => {
     // overflow-wrap: anywhere — wraps one character per line. jsdom has no layout engine
     // and does not evaluate @media against a viewport, so what is assertable here is that
     // the fallback rule EXISTS and targets the board's own breakpoint; the rendered result
-    // is proven in the browser (tests/e2e/test_event_log_e2e.py).
+    // is proven in the browser (tests/ui/event-log.spec.ts).
     const styles = [...document.querySelectorAll('style')].map((s) => s.textContent ?? '');
     const rowStyles = styles.find((s) => s.includes('grid-template-columns'));
     expect(rowStyles).toBeDefined();

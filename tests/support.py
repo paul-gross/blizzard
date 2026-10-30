@@ -151,7 +151,7 @@ from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkItem, WorkSourceError
 from blizzard.wire.work_source import WorkSourceDocument
-from tests.config_inputs import VERSION_WINDOW, create_hub_app, load_hub_config
+from tests.config_inputs import VERSION_WINDOW, create_hub_app
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -1884,17 +1884,6 @@ def seed_invitation(
             )
         )
     return invitation_id, token
-
-
-def invite(hub_dir: Path, email: str, *, role: Role = Role.CONTRIBUTOR) -> str:
-    """Invite ``email`` into the running hub's first tenant as ``role``, issued now — the way a person the hub has
-    not seen arrives — and return the link's token for ``authorize?invite=``."""
-    engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
-    try:
-        _invitation_id, token = seed_invitation(engine, default_tenant(engine), email, role, at=datetime.now(UTC))
-    finally:
-        engine.dispose()
-    return token
 
 
 def graph_yaml() -> str:
