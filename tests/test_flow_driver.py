@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, inspect, select, update
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickResult
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
@@ -28,6 +29,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.budget_notices import BudgetNoticeDrain
 from blizzard.hub.forge.landing import VisitForges
+from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -729,6 +731,45 @@ def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain
     recorded = drain.drain(clock.now())
 
     assert (recorded, log.kinds) == (2, ["forge-rate-limited", "forge-budget-low"])
+
+
+def test_a_store_carried_across_the_flows_revision_boots_pending_visits_in_entry_order(
+    world: _World, tmp_path: Path
+) -> None:
+    later, build_later = world.mint(ref="later")
+    world.hub.clock.advance(timedelta(seconds=1))
+    earlier, build_earlier = world.mint(ref="earlier")
+    world.complete(earlier, build_earlier)
+    world.hub.clock.advance(timedelta(seconds=1))
+    world.complete(later, build_later)
+    assert later < earlier
+    assert world.submissions(earlier) == world.submissions(later) == []
+
+    world.hub.engine.dispose()
+    migrations = Migrations(HubConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'hub.db'}"), world.hub.clock).runner
+    migrations.downgrade("20261025_0900_forges")
+    assert s.flow_submissions.name not in inspect(world.hub.engine).get_table_names()
+    migrations.upgrade("head")
+
+    action = _HeldLanding()
+    actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), action])  # type: ignore[list-item]
+    reopened = build_hub(tmp_path, actions=actions)
+    driver = reopened.flow_driver
+    driver.recover_turns(default_tenant(reopened.engine))
+    with reopened.engine.connect() as conn:
+        rows = conn.execute(
+            hub_scoped(
+                select(s.flow_submissions.c.chunk_id, s.flow_submissions.c.arrival).order_by(
+                    s.flow_submissions.c.arrival
+                )
+            )
+        ).all()
+    assert [row.chunk_id for row in rows] == [earlier, later]
+    assert rows[0].arrival < rows[1].arrival
+    assert [reopened.client.get(f"/api/chunks/{chunk}").json()["status"] for chunk in (earlier, later)] == [
+        "delivering",
+        "delivering",
+    ]
 
 
 # --- isolation ------------------------------------------------------------------------------------------------------
