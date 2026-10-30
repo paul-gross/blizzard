@@ -22,13 +22,17 @@ Continue from what you find.
 
 1. **One branch, the one the plan names.** Your work exists as commits on `feat/<slug>` in every repo you changed.
 
-2. **The branch is pushed** to each repo's origin.
+2. **The mechanical checks are green.** Before you push, run the project's linter-class checks — formatter, linters,
+   generated-output drift — and the unit tests covering what the change touched. Targeted, not the entire suite: CI owns
+   the full suite.
 
-3. **Every repo you touched is declared.** For each one, run
+3. **The branch is pushed** to each repo's origin.
+
+4. **Every repo you touched is declared.** For each one, run
    `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `--env <id>` is added if the chunk
    holds more than one environment.
 
-4. **The refutation channel is submitted, and it is cumulative.** Run
+5. **The refutation channel is submitted, and it is cumulative.** Run
    `blizzard runner artifact create --name review-finding-refutes` with the content on stdin. Your newest submission is
    the entire record, so restate every refutation still standing — not just this round's. The full docket this restates
    is retrievable directly: `blizzard runner artifact get docket --scope graph --content`. If that read fails or comes

@@ -28,6 +28,11 @@ the app's own signal, and drive every surface the change reaches through the man
 matrix declares for it. A change reaching no running surface — a docs-only or context-only edit — is exempt. Record what
 you exercised and its result in the commit message.
 
+## Run the mechanical checks
+
+Before pushing, run the project's linter-class checks — formatter, linters, generated-output drift — and the unit tests
+covering what the change touched. Targeted, not the entire suite: CI owns the full suite.
+
 ## Push and declare
 
 Push the branch to each changed repo's origin, then declare every touched repo with

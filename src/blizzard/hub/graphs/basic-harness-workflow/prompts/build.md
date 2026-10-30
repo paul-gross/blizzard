@@ -31,6 +31,9 @@ it started on.
 Harness work is validated by reading the change back as the agent who will receive it: does the rule say what it means,
 does the routing to it land, and does the instruction survive being followed literally?
 
+Before pushing, run the project's linter-class checks — formatter, linters, generated-output drift — and the unit tests
+covering what the change touched. Targeted, not the entire suite: CI owns the full suite.
+
 ## Push and declare the commits
 
 Push the branch to each repo's origin. For every repo you touched, you MUST then run
