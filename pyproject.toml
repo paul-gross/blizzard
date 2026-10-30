@@ -118,7 +118,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     # Parallelizes the default unit+component suite (`-n auto` in the gate and
-    # `mise run test`). The upper tiers (service, e2e, crash, journey, winter-binding) stay
+    # `mise run test`). The upper tiers (service, e2e, crash, winter-binding) stay
     # serial — they self-manage daemons, ports, and fixture workspaces.
     "pytest-xdist>=3.6.0",
     "ruff>=0.8.0",
@@ -177,7 +177,6 @@ markers = [
     "e2e: the full acceptance loop against the live stack; skipped when services are absent",
     "crash_sweep: the kill-9 crash sweep — real subprocesses SIGKILLed at each registry point; skipped without BLIZZARD_CRASH_SWEEP=1",
     "service: a running daemon's HTTP API exercised from outside with the counterpart mocked; skipped when the mock fleet is absent",
-    "journey: the capstone MVP acceptance-journey rehearsal — real host daemons, a mid-run reboot, and the human loop, end to end; skipped without BLIZZARD_JOURNEY=1",
     "store_baseline: the store-baseline proof — a folded baseline revision against the history it replaced, built by the floor release's own published wheel; skipped without BLIZZARD_STORE_BASELINE=1",
     "rehearsal: the upgrade rehearsal — a supported release's own hub and runner upgraded to the candidate and its stores walked back; skipped without BLIZZARD_REHEARSAL=1",
     "winter_binding: the winter workspace binding against the real winter CLI — local-only, never run in CI; skipped without BLIZZARD_WINTER_BINDING=1",
@@ -202,6 +201,7 @@ also_copy = [
     "pyproject.toml",
     # The winter-free guard scans the Playwright package's TypeScript.
     "tests/harness",
+    "tests/journey",
     "tests/service",
     # Registers the suite plugin, whose fixtures isolate tests from the host; without it the copied suite runs bare.
     "conftest.py",

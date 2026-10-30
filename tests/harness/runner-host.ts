@@ -156,6 +156,11 @@ export interface RunnerHost extends OriginReads {
    * the result, not an error.
    */
   cli(args: string[]): Promise<CliResult>;
+  /**
+   * Runs `command` verbatim in a shell, as a person pasting it would, under the host's isolated environment, with `input`
+   * on its stdin. A non-zero exit is the result, not an error.
+   */
+  shell(command: string, input?: string): Promise<CliResult>;
   /** Change documented host files only while stopped; tokens must have been minted by enrollment, not this seam. */
   prepareStopped(layout: { hostToken?: string; runnerTokens?: Record<string, string>; runnerSubscriptions?: Record<string, string>; runnerIds?: Record<string, string> }): void;
   /** Whether the winter trap has been run since the host was built; `false` on a host built without `runnerWinterTrap`. */
@@ -628,6 +633,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         },
         rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),
         cli: (args) => runCommand(runner, args, { env: { ...hostEnv(), BZ_RUNNER_DIR: dir }, cwd: root }),
+        shell: (command, input) => runCommand('sh', ['-c', command], { env: hostEnv(), cwd: root, input }),
         prepareStopped(layout) {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('stop the host before changing its documented files');
           const file = readHostFile(dir);

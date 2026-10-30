@@ -20,6 +20,7 @@
   },
   "include": [
     "harness/**/*.ts",
+    "journey/**/*.ts",
     "service/**/*.ts",
     "ui/**/*.ts",
     "playwright.config.ts",

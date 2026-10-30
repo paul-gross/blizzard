@@ -426,6 +426,14 @@ jobs:
           cache-dependency-glob: |
             uv.lock
             ../blizzard-mock/uv.lock
+      - name: Node from mise.toml
+        uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.2
+          install: true
+          working_directory: blizzard
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
       - name: git identity for fixture/forge git operations
         run: |
           git config --global user.email "ci@blizzard.local"
@@ -434,11 +442,35 @@ jobs:
         run: cd blizzard && uv sync
       - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
         run: cd blizzard-mock && uv sync
+      - name: Node version (the cache key's)
+        id: node
+        run: echo "version=$(node --version)" >> "$GITHUB_OUTPUT"
+      - name: cache the Playwright package's dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: blizzard/tests/node_modules
+          key: playwright-node-modules-${{ runner.os }}-${{ steps.node.outputs.version }}-${{ hashFiles('blizzard/tests/package-lock.json') }}
+      - name: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: cd blizzard/tests && npm ci
       - name: acceptance journey — `mise run journey`
         timeout-minutes: 30
         env:
-          BLIZZARD_JOURNEY: "1"
-        run: cd blizzard && uv run pytest -m journey tests/journey/ -v
+          CI: "1"
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+        run: cd blizzard && mise run journey
+      - name: keep the failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: journey
+          path: |
+            blizzard/tests/playwright-report/
+            blizzard/tests/test-results/
+            blizzard/tests/.run/
+          retention-days: 14
+          if-no-files-found: ignore
 
   image-smoke:
     if: ${{ inputs.full_suite }}

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
+import config from '../../playwright.config';
 import { assertProfilesSound, discoverProfiles } from '../profiles';
 import { fleetProfileFolders, profileProject, serviceProjects, strayProfiles, uiProfileFolders, uiProjects } from '../projects';
 
@@ -128,5 +129,15 @@ test('a profile.toml under the ui folder is refused', () => {
   const strays = strayProfiles([path.join(root, 'ui')]);
   expect(strays).toHaveLength(1);
   expect(() => assertProfilesSound([], strays)).toThrow(/ui\/auth\/profile\.toml/);
+  fs.rmSync(root, { recursive: true });
+});
+
+test('the journey project is declared by name, on no hub profile and no setup, and no service selection reaches it', () => {
+  const declared = config.projects ?? [];
+  expect(declared.filter((project) => project.name === 'journey')).toEqual([{ name: 'journey', testDir: 'journey' }]);
+  expect(declared.filter((project) => /^service-/.test(project.name ?? '')).map((project) => project.testDir)).not.toContain('journey');
+  expect(discoverProfiles().map((profile) => profile.project)).not.toContain(profileProject('journey'));
+  const root = tree(['auth']);
+  expect(table(root)('journey')).toBeUndefined();
   fs.rmSync(root, { recursive: true });
 });
