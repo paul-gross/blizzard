@@ -20,7 +20,7 @@
       [linkBase]="chunkLinkBase()"
       [status]="d.status"
       [tone]="tone()"
-      [pointers]="d.work_refs ?? []"
+      [pointers]="d.work_refs"
       [blockedBy]="blockedBy()"
       [blocking]="blocking()"
     />
@@ -59,7 +59,7 @@
       }
       @case ('artifacts') {
         <fleet-chunk-artifacts-panel
-          [artifacts]="d.artifacts ?? []"
+          [artifacts]="d.artifacts"
           [selectedKey]="selection.artifactKey()"
           [drilldown]="mobile()"
           testidPrefix="artifacts-tab"
@@ -71,11 +71,11 @@
         <fleet-chunk-transcripts-container
           [target]="daemon.target()"
           [chunkId]="chunkId()"
-          [history]="d.history ?? []"
+          [history]="d.history"
           [currentNodeId]="d.current_node_id"
           [currentNodeName]="d.current_node_name ?? null"
           [latestEpoch]="d.latest_epoch"
-          [currentNodeTerminal]="d.current_node_terminal ?? false"
+          [currentNodeTerminal]="d.current_node_terminal"
           [segmentId]="selection.transcriptSegment()"
           [sidechainPath]="selection.transcriptSidechain()"
           [drilldown]="mobile()"

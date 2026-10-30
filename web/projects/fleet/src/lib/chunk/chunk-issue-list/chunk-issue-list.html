@@ -75,8 +75,8 @@
             <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
           }
           <div class="i-messages">
-            <div class="s-head"><span class="tag">Messages · {{ (item.comments ?? []).length }}</span></div>
-            @if ((item.comments ?? []).length === 0) {
+            <div class="s-head"><span class="tag">Messages · {{ item.comments.length }}</span></div>
+            @if (item.comments.length === 0) {
               <fleet-kit-async-state
                 state="empty"
                 placement="inline"
@@ -85,7 +85,7 @@
               />
             } @else {
               <ul class="messages" data-testid="issue-messages">
-                @for (c of item.comments ?? []; track $index) {
+                @for (c of item.comments; track $index) {
                   <li class="message" data-testid="issue-message"><pre class="m-body">{{ c }}</pre></li>
                 }
               </ul>

@@ -33,6 +33,9 @@ const runner = (id: string, over: Record<string, unknown> = {}) => ({
   connection: 'online',
   hub_paused: false,
   locally_paused: false,
+  capabilities: [],
+  gates: [],
+  subscription_unrostered: false,
   ...over,
 });
 const RUNNERS = {

@@ -26,7 +26,7 @@
             <td data-testid="members-table-display-name">{{ member.display_name }}</td>
             <td data-testid="members-table-email">{{ member.email ?? '—' }}</td>
             <td data-testid="members-table-identities">
-              {{ member.identities?.length ? member.identities!.map((i) => i.provider_name).join(', ') : '—' }}
+              {{ member.identities.length ? member.identities.map((i) => i.provider_name).join(', ') : '—' }}
             </td>
             <td>
               @if (canChangeRole(member)) {

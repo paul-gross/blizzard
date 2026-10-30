@@ -72,7 +72,7 @@ const DETAIL = (chunkId: string) => ({
   history: [
     { node_id: 'nd_build', node_name: 'build', epoch: 1, at: '2026-07-16T11:00:00.000Z', outcome: 'transitioned' },
   ],
-  artifacts: [],
+  artifacts: [], open_prs: [], closed_prs: [], landed_repos: [],
 });
 
 /**

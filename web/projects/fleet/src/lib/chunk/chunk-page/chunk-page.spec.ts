@@ -33,6 +33,9 @@ const DETAIL = {
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 2,
+  open_prs: [],
+  closed_prs: [],
+  landed_repos: [],
   status: 'running',
   work_refs: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: 'https://forge.example/issues/318' }],
   history: [
@@ -484,6 +487,7 @@ describe('ChunkPage on a runner daemon', () => {
               { name: 'reject', description: 'Send it back.' },
             ],
             transitioned: false,
+            check_results: [],
           },
         };
       }

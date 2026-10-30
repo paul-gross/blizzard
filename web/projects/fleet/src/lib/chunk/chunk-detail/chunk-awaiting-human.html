@@ -47,7 +47,7 @@
           }
         </p>
         <!-- The checks the runner ran at the step's exit: the human decides with them in view. -->
-        @if ((d.check_results ?? []).length > 0) {
+        @if (d.check_results.length > 0) {
           <ul class="gate-checks" data-testid="decision-checks">
             @for (check of d.check_results; track check.command) {
               <li [class.red]="!check.passed" data-testid="decision-check">
