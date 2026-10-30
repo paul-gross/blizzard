@@ -5569,6 +5569,30 @@ export type IntendedMigrationView = {
 };
 
 /**
+ * InvariantViolation
+ */
+export type InvariantViolation = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Invariant
+     */
+    invariant: string;
+};
+
+/**
+ * InvariantsResponse
+ */
+export type InvariantsResponse = {
+    /**
+     * Violations
+     */
+    violations: Array<InvariantViolation>;
+};
+
+/**
  * InvitationCreateRequest
  *
  * Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.
@@ -11138,6 +11162,29 @@ export type GrantHubAdminApiAdminHubAdminsUserIdPutResponses = {
 };
 
 export type GrantHubAdminApiAdminHubAdminsUserIdPutResponse = GrantHubAdminApiAdminHubAdminsUserIdPutResponses[keyof GrantHubAdminApiAdminHubAdminsUserIdPutResponses];
+
+export type HubInvariantsApiAdminInvariantsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/invariants';
+};
+
+export type HubInvariantsApiAdminInvariantsGetErrors = {
+    /**
+     * Another invariant check is running on this hub: `{"code": "invariants_in_progress"}`.
+     */
+    409: unknown;
+};
+
+export type HubInvariantsApiAdminInvariantsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvariantsResponse;
+};
+
+export type HubInvariantsApiAdminInvariantsGetResponse = HubInvariantsApiAdminInvariantsGetResponses[keyof HubInvariantsApiAdminInvariantsGetResponses];
 
 export type RunEveryTenantPassApiAdminSweepsNamePassesPostData = {
     body?: never;

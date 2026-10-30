@@ -155,6 +155,7 @@ from blizzard.hub.domain.observability.forge_status import (
     TenantAnnotation,
 )
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
+from blizzard.hub.domain.observability.invariants import HubInvariantCheck
 from blizzard.hub.domain.observability.tracing.replay import TraceReplay
 from blizzard.hub.domain.observability.tracing.repository import StepHydration
 from blizzard.hub.domain.observability.tracing.status import TraceStatusReader
@@ -230,6 +231,7 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
 from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_hub_scoped_reads
+from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_store import ProjectStore
@@ -517,6 +519,8 @@ class HubServices:
     #: The reverse-proxy trust set — empty by default, so forwarded headers
     #: are ignored from every peer.
     trusted_proxies: TrustedProxies
+    #: The hub half of the invariant checker over every tenant, one run at a time — run by hub administrators alone.
+    invariants: HubInvariantCheck
     #: The transcript-event derivation sweep — one pass per hub, acting in each segment's tenant.
     event_derivation: EventDerivationReconciler
     #: The forge-status annotation sweep — one pass per hub, acting in each tenant over its own sources.
@@ -1644,6 +1648,7 @@ def build_services(
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,
         tenant_teardown_sweep=tenant_teardown_sweep,
+        invariants=HubInvariantCheck(build_hub_invariants(store_connections, clock)),
         clock=clock,
         system_artifacts=system_artifacts,
         close_drain=close_drain,
@@ -1689,6 +1694,17 @@ def build_services(
             clock=clock,
         ),
     )
+
+
+def build_hub_invariants(connections: HubStoreConnections, clock: IClock) -> HubInvariants:
+    """The hub half of the invariant checker over ``connections``; each tenant's reads are built over the scoped
+    connections the half hands them, which share its one read transaction."""
+
+    def tenant_reads(scoped: ScopedConnections) -> TenantReads:
+        stores = build_tenant_stores(scoped, clock=clock)
+        return TenantReads(stores.chunk_stores.facts, stores.chunk_stores.record, stores.flows)
+
+    return HubInvariants(connections, tenant_reads, clock)
 
 
 def build_flow_driver(

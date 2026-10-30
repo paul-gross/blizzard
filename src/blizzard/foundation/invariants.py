@@ -34,3 +34,10 @@ class QueryCheck(Check):
     """An invariant answerable by plain queries over one open read connection."""
 
     conn: Connection
+
+
+class InvariantsInProgress(Exception):
+    """A daemon runs one invariant check at a time; another is already running."""
+
+    def __init__(self) -> None:
+        super().__init__("an invariant check is in progress")
