@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.forge_warnings import echo_warnings
@@ -42,7 +43,7 @@ def _refusals(repository: str) -> dict[int, str]:
     }
 
 
-@click.group("repo")
+@click.group("repo", cls=GetGroup)
 def repo_group() -> None:
     """Manage the tenant's repository records."""
 
@@ -109,7 +110,7 @@ def repo_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(rows, RepoListing(rows))
 
 
-@repo_group.command("show", cls=FleetCommand)
+@repo_group.command("get", cls=FleetCommand)
 @click.argument("repository")
 def repo_show(cli: CliContext, repository: str) -> None:
     """Show REPOSITORY — named by its id, its slug, or a slug it has left — with its fields, revision, and who created

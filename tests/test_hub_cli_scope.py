@@ -157,7 +157,7 @@ def test_scope_show_prints_the_whole_record() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["scope", "show", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = bound.runner.invoke(hub_group, ["scope", "get", "blizzard"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert urls == ["http://hub.local:8421/api/scopes/blizzard"]
@@ -173,7 +173,7 @@ def test_scope_show_maps_an_unknown_scope() -> None:
         return _FakeResponse(404)
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["scope", "show", "no-such"])
+    result = bound.runner.invoke(hub_group, ["scope", "get", "no-such"])
 
     assert result.exit_code != 0
     assert "unknown scope no-such" in result.output

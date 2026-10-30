@@ -104,14 +104,14 @@ def test_the_payload_names_the_command_and_exit_code_and_carries_no_argument() -
     collector = _Collector()
     bound = _bind(collector, _HubCalls(status=500))
 
-    result = _hub(bound, ["chunk", "show", _PLANTED])
+    result = _hub(bound, ["chunk", "get", _PLANTED])
 
     assert result.exit_code == 1
     body = collector.requests[0].content.decode()
     assert _PLANTED not in body
     payload = json.loads(body)["resourceSpans"][0]
     span = payload["scopeSpans"][0]["spans"][0]
-    assert span["name"] == "hub chunk show"
+    assert span["name"] == "hub chunk get"
     assert {"key": "process.exit.code", "value": {"intValue": "1"}} in span["attributes"]
     assert span["status"] == {"code": 2}
     assert payload["scopeSpans"][0]["scope"] == {"name": "blizzard.cli", "version": "1"}

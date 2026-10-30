@@ -210,7 +210,7 @@ def test_queue_show_marks_a_blocked_entry() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["queue", "show"])
+    result = bound.runner.invoke(hub_group, ["queue", "get"])
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()

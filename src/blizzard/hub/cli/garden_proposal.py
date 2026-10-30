@@ -8,6 +8,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -55,7 +56,7 @@ class GardenProposalDetail:
             yield f"  → chunk {chunk_id}"
 
 
-@click.group("garden-proposal")
+@click.group("garden-proposal", cls=GetGroup)
 def garden_proposal_group() -> None:
     """Author, review, and decide garden proposals."""
 
@@ -70,7 +71,7 @@ def garden_proposal_list(cli: CliContext, origin: str | None, project: str | Non
     cli.show(rows, GardenProposalListing(rows))
 
 
-@garden_proposal_group.command("show", cls=FleetCommand)
+@garden_proposal_group.command("get", cls=FleetCommand)
 @click.argument("proposal_id")
 def garden_proposal_show(cli: CliContext, proposal_id: str) -> None:
     """One garden proposal's whole record."""

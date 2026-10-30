@@ -1,4 +1,4 @@
-"""``blizzard hub graph list|show|retire|enable|follow-latest|mint|sync`` (unit tier) — pure clients of
+"""``blizzard hub graph list|get|retire|enable|follow-latest|mint|sync`` (unit tier) — pure clients of
 the graph lifecycle, mint, and reconciliation endpoints, driven here with the client factory
 stubbed. ``mint`` inlines referenced
 prompt files and accepts stdin (``-``); ``sync`` is the deploy verb, reconciling the
@@ -149,7 +149,7 @@ def test_graph_show_prints_the_reified_graph() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert "gr_1" in result.output
@@ -178,7 +178,7 @@ def test_graph_show_renders_session_pools() -> None:
     }
 
     bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
-    result = bound.runner.invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert "session code" in result.output
@@ -208,7 +208,7 @@ def test_graph_show_renders_a_sessions_harnesses_set() -> None:
     }
 
     bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
-    result = bound.runner.invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert "harnesses=claude_code,codex" in result.output
@@ -231,8 +231,8 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json() -> None:
 
     bound = bind_stubs(get=lambda url, *, timeout: _FakeResponse(200, body))
     env = {"BZ_HUB_URL": "http://hub.local:8421"}
-    plain = bound.runner.invoke(hub_group, ["graph", "show", "gr_1"], env=env)
-    as_json = bound.runner.invoke(hub_group, ["graph", "show", "gr_1", "--json"], env=env)
+    plain = bound.runner.invoke(hub_group, ["graph", "get", "gr_1"], env=env)
+    as_json = bound.runner.invoke(hub_group, ["graph", "get", "gr_1", "--json"], env=env)
 
     assert plain.exit_code == 0, plain.output
     assert "zebra" not in plain.output
@@ -246,7 +246,7 @@ def test_graph_show_maps_an_unknown_graph() -> None:
         return _FakeResponse(404)
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["graph", "show", "gr_ghost"])
+    result = bound.runner.invoke(hub_group, ["graph", "get", "gr_ghost"])
 
     assert result.exit_code != 0
     assert "gr_ghost" in result.output

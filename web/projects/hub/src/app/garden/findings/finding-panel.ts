@@ -13,7 +13,7 @@ import { LensLink } from 'fleet/shell';
  * single-click panel button has nowhere to collect. */
 export type FindingPanelTriageVerb = Exclude<FindingTriageVerb, 'supersede'>;
 
-/** The selected finding's own panel view model (`hub finding show`'s own read) —
+/** The selected finding's own panel view model (`hub finding get`'s own read) —
  * plain data, no query or wire type, `RoutinePanelVm`'s own shape.
  *
  * `introducedRev` is a **git revision**, not a timestamp — `FindingView.introduced`

@@ -12,11 +12,11 @@ Both belong to a project. The listing verbs take `--project <id|slug>` to show o
 ## Findings
 
 `blizzard hub finding list --routine <name> --scope <slug> [--source routine|review] [--include-gone]` and
-`show <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential,
-naming any routine and any scope, live only unless `--include-gone`, which also surfaces every exited finding alongside
-a merely `gone` one. `--routine` is required unless `--source review`, since a review-sourced finding carries no
-routine. `state`, `live`, `last_seen_at`, and `observed_count` track each finding's own fact history, changing as later
-runs observe or lose it, or a person exits or reopens it.
+`get <finding_id>` are the operator's own finding reads — an operator or an integration holding a hub credential, naming
+any routine and any scope, live only unless `--include-gone`, which also surfaces every exited finding alongside a
+merely `gone` one. `--routine` is required unless `--source review`, since a review-sourced finding carries no routine.
+`state`, `live`, `last_seen_at`, and `observed_count` track each finding's own fact history, changing as later runs
+observe or lose it, or a person exits or reopens it.
 
 A running pass cross-references its own bucket a different way: `blizzard runner garden findings`, flagless — the
 routine and the scope are derived server-side from the lease's own chunk, so a worker cannot point this read at another
@@ -96,7 +96,7 @@ environment, the same shape the other `blizzard runner` reads on this page take.
 
 ## Garden proposals
 
-`blizzard hub garden-proposal list [--origin routine-run|operator]` and `show <proposal_id>` read every proposal, or one
+`blizzard hub garden-proposal list [--origin routine-run|operator]` and `get <proposal_id>` read every proposal, or one
 by id, each naming its `origin` — a **routine's run** or an **operator** — the findings it answers (whether it must name
 any is
 [`blizzard-context/domain/findings-and-proposals.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/findings-and-proposals.md#a-proposals-findings-are-optional)'s

@@ -18,7 +18,7 @@ Because content is baked at mint, editing the referenced file changes nothing fo
 mint until `graph sync` mints a new one. Authored order is fixed at the mint that first carried an entry: a pure reorder
 of `artifacts:` (or `sessions:`) entries is not a definitional difference, so `graph sync` reports up-to-date while
 workers keep the original order; to move an entry, pair the reorder with a substantive edit.
-`blizzard hub graph show <graph_id> --json` lists a mint's artifact names in their baked order; the default human
+`blizzard hub graph get <graph_id> --json` lists a mint's artifact names in their baked order; the default human
 rendering shows nodes and edges only.
 
 The graph scope is read-only to workers: `artifact get <name> --scope graph` reads an entry (`--content` for raw text)

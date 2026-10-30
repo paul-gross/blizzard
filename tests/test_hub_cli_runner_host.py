@@ -109,7 +109,7 @@ def test_show_renders_a_never_connected_host_without_none() -> None:
     body = _row("hs_a", "box", added_at="2026-10-12T00:00:00Z", enrolled=True, runner_ids=[])
     bound, _ = _stub("get", _respond(200, body))
 
-    result = bound.runner.invoke(hub_group, ["runner-host", "show", "hs_a"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner-host", "get", "hs_a"], env=_ENV)
 
     assert result.exit_code == 0, result.output
     assert "None" not in result.output
@@ -119,7 +119,7 @@ def test_show_renders_a_never_connected_host_without_none() -> None:
 def test_show_of_an_unknown_host_exits_unknown() -> None:
     bound, _ = _stub("get", _respond(404, {"detail": "unknown host hs_x"}))
 
-    result = bound.runner.invoke(hub_group, ["runner-host", "show", "hs_x"], env=_ENV)
+    result = bound.runner.invoke(hub_group, ["runner-host", "get", "hs_x"], env=_ENV)
 
     assert result.exit_code == 1
     assert "unknown host hs_x" in result.output
@@ -244,7 +244,7 @@ def test_a_host_is_added_adopted_released_rotated_and_retired_through_the_cli(tm
     again = bound.runner.invoke(hub_group, ["runner-host", "adopt", host_id, "rn_a"], env=_ENV)
     assert adopted.exit_code == 0, adopted.output
     assert again.exit_code != 0
-    shown = bound.runner.invoke(hub_group, ["runner-host", "show", host_id], env=_ENV)
+    shown = bound.runner.invoke(hub_group, ["runner-host", "get", host_id], env=_ENV)
     assert "rn_a" in shown.output and _json_of(runner.output)["runner_id"] in shown.output
 
     released = bound.runner.invoke(hub_group, ["runner-host", "release", host_id, "rn_a"], env=_ENV)

@@ -1,4 +1,4 @@
-"""``blizzard hub run list|show`` (unit tier) — pure clients of the two run-reading
+"""``blizzard hub run list|get`` (unit tier) — pure clients of the two run-reading
 routes, driven here with the client stubbed, the ``tests/test_hub_cli_routine.py`` shape.
 A component-tier case at the bottom proves the same two verbs against a real, wired app
 (``tests/test_cli_analytics_events_component.py``'s relay shape)."""
@@ -163,7 +163,7 @@ def test_run_list_maps_a_422_to_a_click_exception() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub run show`
+# `blizzard hub run get`
 
 
 @pytest.mark.unit
@@ -172,7 +172,7 @@ def test_run_show_renders_identity_and_outcome() -> None:
         return _FakeResponse(200, _run_delta())
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["run", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "ch_1" in result.output
@@ -196,7 +196,7 @@ def test_run_show_renders_the_escalation_when_present() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["run", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "escalated at: build" in result.output
@@ -234,7 +234,7 @@ def test_run_show_renders_added_observed_and_gone_per_set() -> None:
         )
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["run", "show", "ch_1"])
+    result = bound.runner.invoke(hub_group, ["run", "get", "ch_1"])
 
     assert result.exit_code == 0, result.output
     assert "fins_1" in result.output
@@ -250,7 +250,7 @@ def test_run_show_maps_a_404_to_a_click_exception() -> None:
         return _FakeResponse(404)
 
     bound = bind_stubs(get=fake_get)
-    result = bound.runner.invoke(hub_group, ["run", "show", "ch_ghost"])
+    result = bound.runner.invoke(hub_group, ["run", "get", "ch_ghost"])
 
     assert result.exit_code != 0
     assert "ch_ghost" in result.output
@@ -311,7 +311,7 @@ def test_run_list_and_show_work_end_to_end_against_a_real_app(tmp_path: Path) ->
     assert list_result.exit_code == 0, list_result.output
     assert result.chunk_id in list_result.output
 
-    show_result = bound.runner.invoke(hub_group, ["run", "show", result.chunk_id], env={"BZ_HUB_URL": _HUB_URL})
+    show_result = bound.runner.invoke(hub_group, ["run", "get", result.chunk_id], env={"BZ_HUB_URL": _HUB_URL})
 
     assert show_result.exit_code == 0, show_result.output
     assert result.chunk_id in show_result.output

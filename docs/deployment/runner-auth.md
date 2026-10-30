@@ -165,7 +165,7 @@ is no moment the host exists without them. `blizzard hub runner-host adopt <host
 runner under a host later; `release` takes it out again. A runner is held by at most one host, and
 `blizzard hub runner
 add --host <host_id>` adds a new runner already under one. `runner-host list` shows the tenant's
-live hosts, `--all` adds the retired, and `show <host_id>` prints one with its runners.
+live hosts, `--all` adds the retired, and `get <host_id>` prints one with its runners.
 
 A host's report is recorded as it arrives and never refused over its content; a name the report carries that another
 live host holds is not recorded. The hub publishes a `host-changed` event only when a report changes what it holds.

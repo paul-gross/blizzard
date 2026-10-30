@@ -8,6 +8,7 @@ from typing import Any, TypedDict, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
@@ -91,7 +92,7 @@ def _token_lines(token: str) -> tuple[str, str]:
     return "bearer token, shown only once — put this line in the host's .env:", f"{HOST_TOKEN_VARIABLE}={token}"
 
 
-@click.group("runner-host")
+@click.group("runner-host", cls=GetGroup)
 def runner_host_group() -> None:
     """Register hosts, place runners under them, credential, and retire them.
 
@@ -143,7 +144,7 @@ def host_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(body, HostListing(body.get("hosts", [])))
 
 
-@runner_host_group.command("show", cls=FleetCommand)
+@runner_host_group.command("get", cls=FleetCommand)
 @click.argument("host_id")
 def host_show(cli: CliContext, host_id: str) -> None:
     """One host's connection, reported facts and runners, by HOST_ID — symmetric with ``runner-host list``."""

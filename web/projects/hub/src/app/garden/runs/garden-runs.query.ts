@@ -41,7 +41,7 @@ export function injectHubRunsQuery(since: () => string) {
 }
 
 /**
- * One run's detail (`hub run show`) — `GET /api/projects/{project}/runs/{chunk_id}` under a lens, `GET
+ * One run's detail (`hub run get`) — `GET /api/projects/{project}/runs/{chunk_id}` under a lens, `GET
  * /api/runs/{chunk_id}` on All: its identity, derived outcome, and, per finding-set it
  * delivered, the added/observed/gone entries its own artifact published. Disabled
  * while `chunkId()` is `null` — `injectHubGraphQuery`'s own rest state for a route

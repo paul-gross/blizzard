@@ -359,7 +359,7 @@ describe('FleetProposalPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const evidence = el.querySelector('[data-testid="gardening-proposal-evidence"]');
-    expect(evidence?.textContent).not.toContain('hub finding show');
+    expect(evidence?.textContent).not.toContain('hub finding get');
   });
 
   it("renders each evidence row's summary through a prose block, formatting preserved", async () => {

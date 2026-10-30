@@ -10,7 +10,7 @@ it to show one project's records ([projects.md](./projects.md#a-call-that-names-
 
 ## Scopes
 
-`blizzard hub scope create <slug> [--description]`, `list`, `show <slug>`, `edit <slug> --description <text>`,
+`blizzard hub scope create <slug> [--description]`, `list`, `get <slug>`, `edit <slug> --description <text>`,
 `retire <slug>`, and `enable <slug>` are the scope verbs. `create` is a mint-or-no-op: naming an existing slug leaves
 its stored description untouched — `edit` is the only verb that changes it. `retire`/`enable` are a reversible brake:
 retiring a scope appends `scope.retired`, `enable` appends `scope.enabled`, and neither touches the stored slug or
@@ -28,7 +28,7 @@ list. The selected child route remains in the URL, so a detail can still be open
 ## Routines
 
 `blizzard hub routine create <name> <graph_name> <default_scope_slug> [--model] [--effort] [--harnesses]`, `list`,
-`show <routine_id>`, and
+`get <routine_id>`, and
 `edit <routine_id> [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]`
 are the routine verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a
 currently-enabled graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it.
@@ -49,12 +49,12 @@ registry declares the axis, the run sweeps; answered that the absence stands, th
 and only a new routine corrects the name. An `ideation` run also accepts `--mode delta` like any other but always sweeps
 its whole scope — that graph has no delta mode.
 
-`show` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
+`get` also reports the routine's full linked-scopes list, beside its default scope, graph, and model/effort fields. A
 routine sweeps a set of scopes, not only its default; `blizzard hub routine scope add <routine_id> <scope_slug>` and
-`scope remove <routine_id> <scope_slug>`, addressed by `routine_id` like `show`/`edit`, link and unlink a scope into
-that set. Both are idempotent and never mint or retire a scope — naming one `scope create` hasn't minted, or a
-`routine_id` no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's
-own default scope, which stays a member of its set for as long as it is the default.
+`scope remove <routine_id> <scope_slug>`, addressed by `routine_id` like `get`/`edit`, link and unlink a scope into that
+set. Both are idempotent and never mint or retire a scope — naming one `scope create` hasn't minted, or a `routine_id`
+no routine holds, refuses rather than creating either. `scope remove` also refuses removing the routine's own default
+scope, which stays a member of its set for as long as it is the default.
 
 `routine retire <name> [--by operator]` and `routine enable <name> [--by operator]` are a routine's own reversible
 brake, the scope lifecycle's own shape: retiring appends `routine.retired`, `enable` appends `routine.enabled`, and
@@ -126,7 +126,7 @@ is retired.
 
 ## Reading runs
 
-`blizzard hub run list [--since <time>] [--until <time>]` and `blizzard hub run show <chunk_id>` read routine runs —
+`blizzard hub run list [--since <time>] [--until <time>]` and `blizzard hub run get <chunk_id>` read routine runs —
 distinct from `blizzard hub routine run`, which starts one. A **run** is one chunk a routine's own run minted:
 `run
 list` reports every run minted in `--since`/`--until` (defaulting to the last 24 hours ending now), newest first,
@@ -136,13 +136,13 @@ merged into one. A run that escalated before delivering anything still appears, 
 own identity, not from what it delivered. A run whose chunk was later grouped away or deleted is the one exclusion: it
 is absent from both reads, since neither has a live chunk left to read outcome and identity from.
 
-`run show <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered,
-the delta that set actually published — added, observed, and gone, kept as three separate groups. Each entry is
-described from the finding row its id names: an added entry that predates the finding-id-linkage this read relies on
-renders with no matched finding id rather than a guessed one, and an observed entry whose id names no row renders by
-that id alone rather than with blank class, locus and summary fields. A run whose outcome is `needs_human` also carries
-the escalating node's name and its takeover command(s) — the run view carries no reason an escalated run stopped, only
-where it stopped and how to resume it; the reason is the cause and detail on the chunk's own escalation.
+`run get <chunk_id>` reads one run's full detail: the same identity and outcome, plus, per finding-set it delivered, the
+delta that set actually published — added, observed, and gone, kept as three separate groups. Each entry is described
+from the finding row its id names: an added entry that predates the finding-id-linkage this read relies on renders with
+no matched finding id rather than a guessed one, and an observed entry whose id names no row renders by that id alone
+rather than with blank class, locus and summary fields. A run whose outcome is `needs_human` also carries the escalating
+node's name and its takeover command(s) — the run view carries no reason an escalated run stopped, only where it stopped
+and how to resume it; the reason is the cause and detail on the chunk's own escalation.
 
 The hub board's Gardening tab renders both reads from its own Runs sub-tab: the run list beside the selected run's own
 delta, the selection riding the URL. Each row states its routine, scope, mode, outcome and the counts its sets summed

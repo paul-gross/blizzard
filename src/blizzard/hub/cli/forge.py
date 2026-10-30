@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -30,9 +31,9 @@ def _refusals(forge: str) -> dict[int, str]:
     return {404: f"unknown forge {forge}", 409: f"forge {forge} cannot be changed", 422: "invalid forge"}
 
 
-@click.group("forge")
+@click.group("forge", cls=GetGroup)
 def forge_group() -> None:
-    """Create, list, show, edit, retire and enable forges."""
+    """Create, list, get, edit, retire and enable forges."""
 
 
 @forge_group.command("create", cls=FleetCommand)
@@ -57,7 +58,7 @@ def forge_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(rows, ForgeListing(rows))
 
 
-@forge_group.command("show", cls=FleetCommand)
+@forge_group.command("get", cls=FleetCommand)
 @click.argument("forge")
 def forge_show(cli: CliContext, forge: str) -> None:
     """Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."""

@@ -9,6 +9,7 @@ from typing import Any, TypedDict, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
@@ -126,7 +127,7 @@ class WorkItemListing(Listing):
         return f"{label}: {row.get('title') or '(no title)'}"
 
 
-@click.group("chunk")
+@click.group("chunk", cls=GetGroup)
 def chunk_group() -> None:
     """Create, inspect, edit, and move chunks."""
 
@@ -139,7 +140,7 @@ def chunk_list(cli: CliContext, project: str | None) -> None:
     cli.show(rows, ChunkListing(rows))
 
 
-@chunk_group.command("show", cls=FleetCommand)
+@chunk_group.command("get", cls=FleetCommand)
 @click.argument("chunk_id")
 def chunk_show(cli: CliContext, chunk_id: str) -> None:
     """Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."""

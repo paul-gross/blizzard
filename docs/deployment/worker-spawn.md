@@ -218,7 +218,7 @@ workspace, defaulting to a per-chunk temp directory; name your swept scratch are
 safety gap, but a deployment with better answers that keeps them quiet leaves workers on the generic path.
 
 Blizzard ships a corpus of workspace prompts, one per deployment shape; `blizzard runner prompt list` names what the
-installed wheel carries and `prompt show` prints one — none is ever applied by default. `prompt_package = "<name>"` in
+installed wheel carries and `prompt get` prints one — none is ever applied by default. `prompt_package = "<name>"` in
 the `[[workspace]]` resolves the named sample out of the installed wheel at host startup, so nothing lands in the
 runtime root and a redeploy carrying a changed sample applies it on the next restart. The package knob is exclusive with
 `prompt` and `prompt_file` (which keep their file-wins-over-inline precedence): setting it alongside either fails

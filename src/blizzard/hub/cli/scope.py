@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
@@ -21,7 +22,7 @@ class ScopeListing(Listing):
         return f"{row['slug']}  {marker}{description}"
 
 
-@click.group("scope")
+@click.group("scope", cls=GetGroup)
 def scope_group() -> None:
     """Manage scopes, the named buckets findings are grouped into."""
 
@@ -53,7 +54,7 @@ def scope_list(cli: CliContext, project: str | None) -> None:
     cli.show(rows, ScopeListing(rows))
 
 
-@scope_group.command("show", cls=FleetCommand)
+@scope_group.command("get", cls=FleetCommand)
 @click.argument("slug")
 @project_option(required_by_hub=True)
 def scope_show(cli: CliContext, slug: str, project: str | None) -> None:

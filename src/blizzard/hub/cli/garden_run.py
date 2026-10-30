@@ -11,6 +11,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
@@ -30,7 +31,7 @@ class RunListing(Listing):
         )
 
 
-@click.group("run")
+@click.group("run", cls=GetGroup)
 def run_group() -> None:
     """Read routine runs and what each one changed."""
 
@@ -56,7 +57,7 @@ def run_list(cli: CliContext, since: datetime | None, until: datetime | None, pr
 @dto
 @dataclass(frozen=True)
 class RunDetail:
-    """``run show``'s own render — identity and outcome, the open escalation when the
+    """``run get``'s own render — identity and outcome, the open escalation when the
     run needs a human, then each delivered set's own added/observed/gone groups."""
 
     body: dict[str, Any]
@@ -90,7 +91,7 @@ class RunDetail:
                 yield f"    - {gone['finding_id']}: {gone['note']}"
 
 
-@run_group.command("show", cls=FleetCommand)
+@run_group.command("get", cls=FleetCommand)
 @click.argument("chunk_id")
 def run_show(cli: CliContext, chunk_id: str) -> None:
     """One run's full detail — identity, derived outcome, and, per finding set it

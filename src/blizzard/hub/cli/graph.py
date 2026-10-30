@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -85,7 +86,7 @@ def _session_summary(session: dict[str, Any]) -> str:
     return "  ".join(parts) if parts else "(no pinning)"
 
 
-@click.group("graph")
+@click.group("graph", cls=GetGroup)
 def graph_group() -> None:
     """Mint and manage the workflow graphs chunks run on."""
 
@@ -97,7 +98,7 @@ def graph_list(cli: CliContext) -> None:
     cli.show(rows, GraphListing(rows))
 
 
-@graph_group.command("show", cls=FleetCommand)
+@graph_group.command("get", cls=FleetCommand)
 @click.argument("graph_id")
 def graph_show(cli: CliContext, graph_id: str) -> None:
     """One graph's full reified definition — session pools, nodes, and edges."""

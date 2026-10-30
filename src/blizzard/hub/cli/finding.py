@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -52,7 +53,7 @@ def _blank_note_fallback(verb: str) -> str:
     return f"{verb!r} requires a non-empty note"
 
 
-@click.group("finding")
+@click.group("finding", cls=GetGroup)
 def finding_group() -> None:
     """Read findings, and close or reopen them."""
 
@@ -90,7 +91,7 @@ def finding_list(
     cli.show(rows, FindingListing(rows))
 
 
-@finding_group.command("show", cls=FleetCommand)
+@finding_group.command("get", cls=FleetCommand)
 @click.argument("finding_id")
 def finding_show(cli: CliContext, finding_id: str) -> None:
     """One finding's whole record."""

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
@@ -69,7 +70,7 @@ class FlowRecordListing(Listing):
         return _fact_line(row)
 
 
-@click.group("flow")
+@click.group("flow", cls=GetGroup)
 def flow_group() -> None:
     """Inspect each branch's delivery line and its record."""
 
@@ -92,7 +93,7 @@ def flow_list(cli: CliContext, everything: bool) -> None:
     cli.show(body, FlowListing(body["flows"]))
 
 
-@flow_group.command("show", cls=FleetCommand)
+@flow_group.command("get", cls=FleetCommand)
 @click.argument("flow_id")
 @click.option("--record", "record", is_flag=True, default=False, help="Print the flow's record, newest first, instead.")
 @click.option(

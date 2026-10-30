@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.cli.runtime import click_exception_on
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
@@ -28,7 +29,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.store.errors import RunnerStoreError
 
 
-@click.group("prompt")
+@click.group("prompt", cls=GetGroup)
 def prompt_group() -> None:
     """Operator: the packaged workspace-prompt samples, and which one this runtime uses."""
 
@@ -65,7 +66,7 @@ def prompt_list() -> None:
         click.echo(f"{name}\t{len(PACKAGED.text(name))} characters")
 
 
-@prompt_group.command("show")
+@prompt_group.command("get")
 @click.argument("name")
 def prompt_show(name: str) -> None:
     """Print packaged sample NAME's prose to stdout."""

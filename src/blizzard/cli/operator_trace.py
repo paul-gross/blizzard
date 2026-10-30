@@ -129,7 +129,7 @@ class OperatorTrace:
             command = current.get_command(ctx, arg)
             if command is None:
                 break
-            names.append(arg)
+            names.append(command.name or arg)
             current = command
         return names
 

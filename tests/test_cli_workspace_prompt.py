@@ -40,13 +40,13 @@ def test_list_and_show_read_the_packaged_corpus() -> None:
     assert listed.exit_code == 0, listed.output
     assert "winter" in listed.output
 
-    shown = _run("show", "winter")
+    shown = _run("get", "winter")
     assert shown.exit_code == 0, shown.output
     assert "Workspace policy" in shown.output
 
 
 def test_show_names_the_corpus_when_the_sample_is_unknown() -> None:
-    result = _run("show", "no-such-sample")
+    result = _run("get", "no-such-sample")
     assert result.exit_code != 0
     assert "no-such-sample" in result.output
     assert "winter" in result.output

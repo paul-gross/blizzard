@@ -63,13 +63,13 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
     assert {r["slug"] for r in rows} == {"hub", "demo"}
     source_id = next(r["work_source_id"] for r in rows if r["slug"] == "demo")
     assert f"demo  demo  {source_id}  r1  enabled  github  acme/demo" in listed.output
-    shown = _source(["show", "demo"])
+    shown = _source(["get", "demo"])
     assert "demo  demo  revision 1" in shown.output
     assert f"id {source_id}" in shown.output
     assert "secret gh-demo" in shown.output
-    assert json.loads(_source(["show", "demo", "--json"]).stdout)["revision"] == 1
-    assert json.loads(_source(["show", source_id, "--json"]).stdout)["slug"] == "demo"
-    assert _source(["show", "nope"]).exit_code != 0
+    assert json.loads(_source(["get", "demo", "--json"]).stdout)["revision"] == 1
+    assert json.loads(_source(["get", source_id, "--json"]).stdout)["slug"] == "demo"
+    assert _source(["get", "nope"]).exit_code != 0
 
 
 def test_create_takes_a_slug_and_a_name_and_edit_renames(client: TestClient) -> None:
@@ -82,7 +82,7 @@ def test_create_takes_a_slug_and_a_name_and_edit_renames(client: TestClient) -> 
     renamed = _source(["edit", "acme", "--slug", "acme-core", "--name", "Acme core"])
     assert renamed.exit_code == 0, renamed.output
     assert "work source acme-core is at revision 2" in renamed.output
-    assert "acme-core  Acme core  revision 2" in _source(["show", "acme"]).output
+    assert "acme-core  Acme core  revision 2" in _source(["get", "acme"]).output
     assert _source(["edit", "acme-core", "--slug", "hub"]).exit_code != 0
     refused = _source(["create", "hub", "--provider", "github", "--locator", "acme/h", "--secret", "gh-demo"])
     assert refused.exit_code != 0
@@ -93,7 +93,7 @@ def test_edit_sets_clears_and_refuses_a_stale_if_match(client: TestClient) -> No
 
     assert "revision 2" in _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"]).output
     assert "revision 3" in _source(["edit", "demo", "--clear", "api-base"]).output
-    assert json.loads(_source(["show", "demo", "--json"]).stdout)["api_base"] == "https://api.github.com"
+    assert json.loads(_source(["get", "demo", "--json"]).stdout)["api_base"] == "https://api.github.com"
     stale = _source(["edit", "demo", "--if-match", "1", "--no-annotate"])
     assert stale.exit_code != 0
     assert "revision 3" in stale.output
@@ -111,9 +111,9 @@ def test_retire_and_enable_and_the_secret_reference_guard(client: TestClient) ->
     refused = _cli("secret", ["retire", "gh-demo"])
     assert refused.exit_code != 0
     assert "work_source demo" in refused.output
-    assert "work_source demo" in _cli("secret", ["show", "gh-demo"]).output
-    source_id = json.loads(_source(["show", "demo", "--json"]).stdout)["work_source_id"]
-    assert json.loads(_cli("secret", ["show", "gh-demo", "--json"]).stdout)["references"] == [
+    assert "work_source demo" in _cli("secret", ["get", "gh-demo"]).output
+    source_id = json.loads(_source(["get", "demo", "--json"]).stdout)["work_source_id"]
+    assert json.loads(_cli("secret", ["get", "gh-demo", "--json"]).stdout)["references"] == [
         {"kind": "work_source", "key": source_id, "label": "demo"}
     ]
 
@@ -249,12 +249,12 @@ def test_forge_names_the_source_s_forge_and_the_old_flags_warn(client: TestClien
     moved = _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"])
     assert moved.exit_code == 0, moved.output
     assert "warning: api_base is deprecated; it resolved to forge ghe-example" in moved.stderr
-    assert "forge ghe-example" in _source(["show", "demo"]).output
+    assert "forge ghe-example" in _source(["get", "demo"]).output
 
     back = _source(["edit", "demo", "--forge", "github"])
     assert back.exit_code == 0, back.output
     assert "warning:" not in back.stderr
-    assert json.loads(_source(["show", "demo", "--json"]).stdout)["forge_slug"] == "github"
+    assert json.loads(_source(["get", "demo", "--json"]).stdout)["forge_slug"] == "github"
 
     created = _source(
         [
@@ -272,4 +272,4 @@ def test_forge_names_the_source_s_forge_and_the_old_flags_warn(client: TestClien
     )
     assert created.exit_code == 0, created.output
     assert "warning:" not in created.stderr
-    assert json.loads(_source(["show", "other", "--json"]).stdout)["api_base"] == "https://ghe.example/api/v3"
+    assert json.loads(_source(["get", "other", "--json"]).stdout)["api_base"] == "https://ghe.example/api/v3"

@@ -8,7 +8,7 @@ A hub holds each one as a stored record, managed with `blizzard hub forge`. A fo
 ```bash
 blizzard hub forge create github --kind github --api-base https://api.github.com
 blizzard hub forge list
-blizzard hub forge show github
+blizzard hub forge get github
 ```
 
 ## Fields
@@ -46,8 +46,8 @@ forge.
 - `enable <forge>` lifts the retirement. Enabling a repository or work source whose forge is retired is refused
   `422 forge_retired`, naming the forge, so enable the forge first.
 
-`show`, `edit`, `retire` and `enable` take the forge's id or its slug. `show` lists the repositories and work sources
-that name the forge. A renamed forge remains addressable by its former slug until another forge takes it, but a
+`get`, `edit`, `retire` and `enable` take the forge's id or its slug. `get` lists the repositories and work sources that
+name the forge. A renamed forge remains addressable by its former slug until another forge takes it, but a
 [configuration document](./config-documents.md) must use the current slug. `edit`, `retire`, and `enable` take
 `--if-match <revision>` and are refused, naming the current revision, when the forge has moved on. Every write is
 recorded in the [change log](./config-changes.md).
@@ -127,7 +127,7 @@ after a hub restart send every caller. A forge that refuses a call for its rate 
 `Retry-After`, or a secondary limit — holds every caller of that key until the refusal lifts, a secondary limit for at
 least a minute. A landing turned away answers `pending` and is polled again at the reset.
 
-`blizzard hub forge show <forge>` prints each budget's last reading as a `budget` line — the secret, or `(anonymous)`,
+`blizzard hub forge get <forge>` prints each budget's last reading as a `budget` line — the secret, or `(anonymous)`,
 the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`.
 Nothing is listed before the forge has answered.
 

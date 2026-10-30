@@ -313,6 +313,10 @@
       "short_help": "Worker: read fleet-wide usage-counts and spend summaries over a window."
     },
     "artifact": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "commit": {
           "help": "Worker: durably declare a git-commit artifact for REPO. Carries the ``git_commit``\nkind only \u2014 an asset is declared through ``artifact create``. Node scope only. Echoes a\nconfirmation naming REPO, BRANCH, and the sha on success.",
@@ -727,6 +731,10 @@
       "short_help": "Diagnostics for the host's external-subscription usage sampling."
     },
     "finding": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "get": {
           "help": "Worker: read one finding within this chunk's own answered set by FINDING_ID, as\nJSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key\nwithin its own node-step.",
@@ -1239,6 +1247,10 @@
       "short_help": "Deprecated alias for ``blizzard runner work-items``."
     },
     "prompt": {
+      "aliases": [
+        "show",
+        "read"
+      ],
       "commands": {
         "clear": {
           "help": "Drop the store override so the configured workspace prompt resolves again.\n\nThe one `prompt` verb that needs a running runner. Takes effect on subsequent spawns.",
@@ -1325,6 +1337,24 @@
           "path": "runner prompt diff",
           "short_help": "Diff this runtime's effective workspace prompt against packaged sample NAME."
         },
+        "get": {
+          "help": "Print packaged sample NAME's prose to stdout.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "name",
+              "opts": [
+                "name"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "runner prompt get",
+          "short_help": "Print packaged sample NAME's prose to stdout."
+        },
         "install": {
           "help": "Copy packaged sample NAME into the runtime root and point the workspace at the copy, which\n`prompt diff` then checks for drift. Takes effect on the next runner restart.",
           "params": [
@@ -1384,24 +1414,6 @@
           "params": [],
           "path": "runner prompt list",
           "short_help": "List the workspace-prompt samples shipped in this wheel."
-        },
-        "show": {
-          "help": "Print packaged sample NAME's prose to stdout.",
-          "params": [
-            {
-              "hidden": false,
-              "kind": "argument",
-              "name": "name",
-              "opts": [
-                "name"
-              ],
-              "required": true,
-              "secondary_opts": [],
-              "type": "text"
-            }
-          ],
-          "path": "runner prompt show",
-          "short_help": "Print packaged sample NAME's prose to stdout."
         },
         "status": {
           "help": "Report which source the effective workspace prompt comes from, and how large it is.\n\nExits 1 when a source is configured but resolves to nothing \u2014 the shape a rollback to a\nwheel that does not read the configured knob produces.",

@@ -62,12 +62,12 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
         f"blizzard  blizzard  {listed[0]['repository_id']}  r1  enabled  paul-gross/blizzard  master"
         in _repo(["list"]).output
     )
-    assert _repo(["show", listed[0]["repository_id"]]).exit_code == 0
-    shown = _repo(["show", "blizzard"])
+    assert _repo(["get", listed[0]["repository_id"]]).exit_code == 0
+    shown = _repo(["get", "blizzard"])
     assert "revision 1" in shown.output
     assert "secret gh-test" in shown.output
-    assert json.loads(_repo(["show", "blizzard", "--json"]).stdout) == client.get("/api/repositories/blizzard").json()
-    assert _repo(["show", "nope"]).exit_code != 0
+    assert json.loads(_repo(["get", "blizzard", "--json"]).stdout) == client.get("/api/repositories/blizzard").json()
+    assert _repo(["get", "nope"]).exit_code != 0
 
 
 def test_forge_cli_create_edit_show_and_lifecycle(client: TestClient) -> None:
@@ -75,7 +75,7 @@ def test_forge_cli_create_edit_show_and_lifecycle(client: TestClient) -> None:
     assert created.exit_code == 0, created.output
     listed = json.loads(_cli("forge", ["list", "--json"]).stdout)
     assert [(r["slug"], r["web_origin"]) for r in listed] == [("ghe", "https://ghe.example")]
-    assert json.loads(_cli("forge", ["show", "ghe", "--json"]).stdout) == client.get("/api/forges/ghe").json()
+    assert json.loads(_cli("forge", ["get", "ghe", "--json"]).stdout) == client.get("/api/forges/ghe").json()
     assert "revision 2" in _cli("forge", ["edit", "ghe", "--name", "Enterprise", "--if-match", "1"]).output
     assert _cli("forge", ["edit", "ghe", "--name", "Enterprise", "--if-match", "1"]).exit_code != 0
     assert "retired" in _cli("forge", ["retire", "ghe"]).output
@@ -138,7 +138,7 @@ def test_create_names_its_forge_by_exactly_one_flag_and_warns_on_the_old_one(cli
     assert by_forge.exit_code == 0, by_forge.output
     assert "warning:" not in by_forge.stderr
     assert client.get("/api/repositories/other").json()["forge_slug"] == "forge-invalid"
-    assert "forge forge-invalid" in _repo(["show", "other"]).output
+    assert "forge forge-invalid" in _repo(["get", "other"]).output
 
     both = _repo(
         ["create", "third", "--forge", "forge-invalid", "--forge-api-url", "https://forge.invalid/api", *named]

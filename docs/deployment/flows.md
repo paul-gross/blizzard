@@ -33,9 +33,9 @@ landing** is its newest `landed` entry.
 
 `blizzard hub flow list` prints each active flow: its branch, the turn open on it, its line with each chunk's state and
 position, and its last verdict and landing. A flow is active while a chunk is in its line or it changed in the last 48
-hours; `--all` prints every flow. `blizzard hub flow show <flow>` prints one flow the same way. With `--record` it
-prints the flow's record instead, newest first, up to `--limit` entries (50 by default). Both take `--json` for the raw
-response body. `blizzard hub chunk show <chunk>` prints a line under the chunk's status for each place it holds.
+hours; `--all` prints every flow. `blizzard hub flow get <flow>` prints one flow the same way. With `--record` it prints
+the flow's record instead, newest first, up to `--limit` entries (50 by default). Both take `--json` for the raw
+response body. `blizzard hub chunk get <chunk>` prints a line under the chunk's status for each place it holds.
 
 The same reads over HTTP:
 

@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
@@ -53,7 +54,7 @@ def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
     )
 
 
-@click.group("runner")
+@click.group("runner", cls=GetGroup)
 def runner_group() -> None:
     """Register, pause, credential, and retire runners.
 
@@ -122,7 +123,7 @@ def runner_list(cli: CliContext, include_retired: bool) -> None:
     cli.show(body, RunnerListing(body.get("runners", [])))
 
 
-@runner_group.command("show", cls=FleetCommand)
+@runner_group.command("get", cls=FleetCommand)
 @click.argument("runner_id")
 def runner_show(cli: CliContext, runner_id: str) -> None:
     """One runner's connection and paused state, by RUNNER_ID — symmetric with ``runner list``."""

@@ -14,6 +14,7 @@ from typing import Any
 
 import click
 
+from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli import hub
 from blizzard.runner.cli import runner
 
@@ -59,6 +60,8 @@ def _node_shape(command: click.Command, path: str) -> dict[str, Any]:
         "params": [_param_shape(p) for p in command.params],
     }
     if isinstance(command, click.Group):
+        if isinstance(command, GetGroup) and command.aliases():
+            node["aliases"] = list(command.aliases())
         ctx = click.Context(command)
         node["commands"] = {
             name: _node_shape(child, f"{path} {name}")

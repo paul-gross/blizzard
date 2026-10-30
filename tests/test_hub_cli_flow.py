@@ -1,4 +1,4 @@
-"""``blizzard hub flow list`` / ``show`` and ``chunk show``'s place lines against the real flow routes (component
+"""``blizzard hub flow list`` / ``show`` and ``chunk get``'s place lines against the real flow routes (component
 tier), over two chunks in one line at ``merge``: ``--json`` prints each route's body, the text names every place as the
 hub judged it, and ``--record`` pages the record to its ``--limit``."""
 
@@ -68,20 +68,20 @@ def test_flow_list_prints_each_place_the_line_holds(line: _Line) -> None:
 
 
 def test_flow_show_json_is_the_flows_body(line: _Line) -> None:
-    result = _invoke(line, "flow", "show", line.flow_id, "--json")
+    result = _invoke(line, "flow", "get", line.flow_id, "--json")
 
     assert _json(result) == line.client.get(f"/api/flows/{line.flow_id}").json()
 
 
 def test_flow_show_refuses_an_unknown_flow(line: _Line) -> None:
-    result = _relay(line, []).runner.invoke(hub_group, ["flow", "show", "flw_missing"], env={"BZ_HUB_URL": _HUB_URL})
+    result = _relay(line, []).runner.invoke(hub_group, ["flow", "get", "flw_missing"], env={"BZ_HUB_URL": _HUB_URL})
 
     assert result.exit_code != 0
     assert "unknown flow flw_missing" in result.output
 
 
 def test_flow_show_record_json_is_the_record_page(line: _Line) -> None:
-    result = _invoke(line, "flow", "show", line.flow_id, "--record", "--limit", "4", "--json")
+    result = _invoke(line, "flow", "get", line.flow_id, "--record", "--limit", "4", "--json")
 
     assert _json(result) == line.client.get(f"/api/flows/{line.flow_id}/record", params={"limit": 4}).json()
 
@@ -98,7 +98,7 @@ def test_flow_show_record_pages_on_next_before_until_the_limit_is_read() -> None
         return httpx2.Response(200, json=pages[params.get("before")], request=httpx2.Request("GET", url))
 
     result = bind_stubs(get=fake_get).runner.invoke(
-        hub_group, ["flow", "show", "flw_1", "--record", "--limit", "3", "--json"], env={"BZ_HUB_URL": _HUB_URL}
+        hub_group, ["flow", "get", "flw_1", "--record", "--limit", "3", "--json"], env={"BZ_HUB_URL": _HUB_URL}
     )
 
     assert result.exit_code == 0, result.output
@@ -113,16 +113,16 @@ def _fact(fact_id: int) -> dict[str, object]:
 def test_flow_show_record_prints_one_line_per_entry_newest_first(line: _Line) -> None:
     whole = line.client.get(f"/api/flows/{line.flow_id}/record").json()["facts"]
 
-    text = _invoke(line, "flow", "show", line.flow_id, "--record", "--limit", "1").output.splitlines()
+    text = _invoke(line, "flow", "get", line.flow_id, "--record", "--limit", "1").output.splitlines()
 
     newest = whole[0]
     assert text == [f"{newest['id']}  {newest['at']}  {newest['kind']}  {newest['chunk_id']}  outcome=pending"]
 
 
 def test_chunk_show_prints_one_place_line_per_flow_under_its_status(line: _Line) -> None:
-    lines = _invoke(line, "chunk", "show", line.second).output.splitlines()
+    lines = _invoke(line, "chunk", "get", line.second).output.splitlines()
 
     assert lines[0].startswith(f"{line.second}  status=delivering")
     assert lines[1].startswith("  on ")
     assert lines[1].endswith(f"({line.flow_id}): waiting  position 2")
-    assert _json(_invoke(line, "chunk", "show", line.second, "--json")) == line.world.detail(line.second)
+    assert _json(_invoke(line, "chunk", "get", line.second, "--json")) == line.world.detail(line.second)
