@@ -30,6 +30,13 @@ test('a default host boots stepped, and a step completes', async ({ runnerHost }
   expect((await runnerHost.stepHost()).outcome).toBe('completed');
 });
 
+test('init host file is captured before the fixture overlay', async ({ runnerHost }) => {
+  const current = fs.readFileSync(path.join(runnerHost.dir, 'blizzard-host.toml'), 'utf8');
+  expect(runnerHost.hostFile()).toBe(current);
+  expect(runnerHost.initHostFile).not.toBe(current);
+  expect(runnerHost.initHostFile).toContain('runner-local');
+});
+
 test.describe('a profile that cannot be a host is refused before any process starts', () => {
   const refused: [string, Record<string, unknown>, RegExp][] = [
     ['an unknown key', { nonsense_key: 'x' }, /nonsense_key: not a key the host declares/],

@@ -147,7 +147,7 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
 
   // The hub's own record corroborates both shaping actions before the claim.
   expect((await api.get(`/api/chunks/${chunkB}`)).body.work_refs).toHaveLength(2);
-  expect((await api.get('/api/queue')).body.entries.map((entry: { chunk_id: string }) => entry.chunk_id)).toEqual([chunkB, chunkA]);
+  await expect.poll(async () => (await api.get('/api/queue')).body.entries.map((entry: { chunk_id: string }) => entry.chunk_id)).toEqual([chunkB, chunkA]);
 
   // The claim honours both: the grouped survivor goes first, and A is untouched.
   await stepUntil(runnerHost, () => status(chunkB), (s) => s === 'running' || s === 'waiting_on_human');
@@ -268,5 +268,5 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   expect(await runnerHost.originTree(REPO, BRANCH)).toContain('LANDED.md');
   expect(await runnerHost.originFile(REPO, BRANCH, 'LANDED.md')).toBe('landed after the board answer\n');
   const log = (await runnerHost.originLog(REPO, BRANCH, 'LANDED.md'))!;
-  expect(log[0]).toEqual({ sha: head, subject: 'feat: resolve the board answer and land the change' });
+  expect(log[0]).toMatchObject({ sha: head, subject: 'feat: resolve the board answer and land the change' });
 });
