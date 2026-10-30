@@ -11064,12 +11064,6 @@
    "over_cap": 2,
    "total": 134
   },
-  "e2e/test_triage_history_browser_e2e.py": {
-   "comments": 0,
-   "docstrings": 1,
-   "over_cap": 0,
-   "total": 146
-  },
   "egress_recipes.py": {
    "comments": 0,
    "docstrings": 3,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 from typing import Any
 
 import httpx2
@@ -15,7 +14,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.fleet_launchers import REPO, runner_api
-from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.fleet_world import PUSH_AND_DECLARE_SCRIPT, REPO_NAME, scripted_build_prompt
 from tests.runner_fakes import daemon_store
 from tests.runner_join import fleet_headers
 
@@ -227,19 +226,6 @@ def _graph_yaml() -> str:
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
-
-
-def _mint(bin_dir: Path, scratch: Path) -> Path:
-    mint_world(bin_dir, scratch)
-    return scratch / FIXTURE_ENV / "origins"
-
-
-def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    return str(ingested.json()["chunk_id"])
 
 
 def _sessions_by_node(db_url: str, chunk_id: str) -> dict[str, list[str]]:
