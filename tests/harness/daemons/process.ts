@@ -98,6 +98,63 @@ async function answers(url: string): Promise<boolean> {
 
 class AddressInUse extends Error {}
 
+/** The socket inodes listening on loopback or any address at `port`, from the kernel's TCP tables. */
+function listeningInodes(port: number): Set<string> {
+  const inodes = new Set<string>();
+  for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    for (const line of fs.readFileSync(table, 'utf8').split('\n').slice(1)) {
+      // local_address is `<hex address>:<hex port>`; state `0A` is LISTEN.
+      const [, local, , state, , , , , , inode] = line.trim().split(/\s+/);
+      if (local === undefined || inode === undefined || state !== '0A') continue;
+      if (Number.parseInt(local.slice(local.lastIndexOf(':') + 1), 16) === port) inodes.add(inode);
+    }
+  }
+  return inodes;
+}
+
+/** The pids in process group `pgid`: a detached daemon leads its own group, and what it spawns stays in it. */
+function groupMembers(pgid: number): number[] {
+  const members: number[] = [];
+  for (const entry of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = fs.readFileSync(`/proc/${entry}/stat`, 'utf8');
+      // After the parenthesised command name: state, ppid, pgrp.
+      if (Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]) === pgid) members.push(Number(entry));
+    } catch {
+      // The process exited while the table was read.
+    }
+  }
+  return members;
+}
+
+/**
+ * Whether the process group the daemon `pid` leads holds the socket listening on `port`; `undefined` where the
+ * kernel's tables cannot be read, outside Linux. A free port is chosen before the daemon binds it, so another
+ * worker's daemon can take it first and answer the health route in this one's place.
+ */
+function holdsPort(pid: number, port: number): boolean | undefined {
+  try {
+    const inodes = listeningInodes(port);
+    return groupMembers(pid).some((member) => {
+      try {
+        return fs.readdirSync(`/proc/${member}/fd`).some((fd) => {
+          try {
+            const target = fs.readlinkSync(`/proc/${member}/fd/${fd}`);
+            return target.startsWith('socket:[') && inodes.has(target.slice(8, -1));
+          } catch {
+            return false;
+          }
+        });
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaemon> {
   const port = fixedPort ?? (await freePort());
   const launch = spec.launch(port);
@@ -132,7 +189,8 @@ async function startOnce(spec: DaemonSpec, fixedPort?: number): Promise<LiveDaem
       const message = `${spec.name} exited early (${exited}):\n${tail}`;
       throw /address already in use|Errno 98/i.test(tail) ? new AddressInUse(message) : new Error(message);
     }
-    if (await answers(`${url}${spec.healthPath}`)) {
+    // An answer from another holder of the port is not this daemon's: wait for it to answer, or to exit in use.
+    if ((await answers(`${url}${spec.healthPath}`)) && holdsPort(child.pid as number, port) !== false) {
       return { name: spec.name, pid: child.pid as number, url, logPath: spec.logPath, exited: ended, group: spec.group };
     }
     await sleep(POLL_MS);
