@@ -16,6 +16,8 @@ import structlog
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from blizzard.foundation.store.read_transaction import read_transaction
+
 if TYPE_CHECKING:
     from blizzard.hub.store.scoped import ScopedConnections
     from blizzard.hub.tenancy import StoreScope
@@ -31,6 +33,14 @@ class HubStoreError(Exception):
         super().__init__(message)
         self.operation = operation
         self.detail = detail
+
+
+class BorrowedWrite(Exception):
+    """Raised by a write opened through connections borrowed over a read transaction, which only ever read."""
+
+    def __init__(self, operation: str) -> None:
+        super().__init__(f"{operation}: connections borrowed over a read transaction cannot write")
+        self.operation = operation
 
 
 class HubStoreErrorFactory:
@@ -66,6 +76,19 @@ class HubStoreConnections:
         from blizzard.hub.store.scoped import ScopedConnections  # the scoped module builds on this one
 
         return ScopedConnections(self._engine, self._errors, scope)
+
+    @contextmanager
+    def read_transaction(self, operation: str) -> Generator[HubStoreConnections, None, None]:
+        """Connections borrowed over one read transaction: every ``read`` of them, and of each scoped form they
+        give, yields the transaction's one connection, so all of them see the store as of one moment. They refuse
+        to write; the transaction rolls back on leaving the ``with``."""
+        from blizzard.hub.store.borrowed import BorrowedConnections  # the borrowed module builds on this one
+
+        try:
+            with read_transaction(self._engine) as conn:
+                yield BorrowedConnections(conn, self._errors)
+        except SQLAlchemyError as exc:
+            raise self._errors.from_driver(exc, operation=operation) from exc
 
     @contextmanager
     def read(self, operation: str) -> Generator[Connection, None, None]:

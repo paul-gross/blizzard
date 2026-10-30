@@ -25,8 +25,8 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
-from blizzard.hub.store.scoped import TENANT_COLUMN, is_tenant_owned
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
+from blizzard.hub.store.scoped import TENANT_COLUMN, ScopedConnections, is_tenant_owned
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
 
 # The ``lease_facts.runner_id`` a hub mint records — its own lease row, never a runner's.
 _HUB_LEASE_RUNNER_ID = "hub"
@@ -1368,83 +1368,93 @@ class TenantReads:
     flows: IReadFlows
 
 
-#: Opens one tenant's :class:`TenantReads` through that tenant's own adapters.
-TenantReadsOpener = Callable[[TenantId], TenantReads]
+#: Builds one tenant's :class:`TenantReads` over the scoped connections it is handed.
+TenantReadsOpener = Callable[[ScopedConnections], TenantReads]
 
 
 @dataclass(frozen=True)
 class HubInvariants:
-    """The hub store's durable invariants (transitions, epochs, delivery). ``tenant_reads`` opens each open
-    tenant's own read adapters for the checks that load a chunk's facts."""
+    """The hub store's durable invariants (transitions, epochs, delivery). ``tenant_reads`` builds each open
+    tenant's own read adapters for the checks that load a chunk's facts. :meth:`run` reads everything inside one read
+    transaction, so every check sees the store as of one moment."""
 
     connections: HubStoreConnections
     tenant_reads: TenantReadsOpener
     clock: IClock
 
-    @contextmanager
-    def _hub_wide(self) -> Generator[Connection, None, None]:
-        """A read connection this audit marks hub-scoped itself: every check is a ``SELECT`` over all tenants' rows."""
-        with self.connections.read("check hub invariants") as conn:
-            yield conn.execution_options(**{HUB_SCOPED_OPTION: True})
-
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        # The query checks audit every open tenant's rows at once; NoRowOfADeletedTenant alone reads a closed one.
-        with self._hub_wide() as conn:
-            checks: tuple[QueryCheck, ...] = (
-                OneTransitionPerNodeEpoch(conn),
-                EpochConsistentTransitions(conn),
-                EpochsOwned(conn),
-                RouteSeqUnique(conn),
-                OneLiveRoutePerChunk(conn),
-                PerRepoLandIdempotent(conn),
-                PerRepoMarkerIdempotent(conn),
-                NoDoubleDelivery(conn),
-                OneTurnPerFlow(conn),
-                OneTurnPerVisit(conn),
-                HubNodeHasAction(conn),
-                NoDoubleTerminalClosure(conn),
-                NoPendingIntentAgainstATerminalRef(conn),
-                NoUnenqueuedClosableRef(conn),
-                SegmentChunkResolves(conn),
-                NoStandingDependencyCycle(conn),
-                NoDuplicateStandingDependency(conn),
-                NoStandingDependencyOntoEphemeralChunk(conn),
-                ChunkProjectInTenant(conn),
-                RoutineScopeSameProject(conn),
-                FindingScopeInProject(conn),
-                ReviewFindingProjectIsChunks(conn),
-                QuestionProjectIsChunks(conn),
-                DecisionProjectIsChunks(conn),
-                ProposalCitesOwnProject(conn),
-                WorkItemProjectInTenant(conn),
-                SlugNotCurrentAndFormer(conn),
-                RepositoryReferencesInTenant(conn),
-                WorkSourceReferencesInTenant(conn),
-                ForgeReferenceStanding(conn),
-                ForgeReferencesInTenant(conn),
-                ChunkSourcesLinked(conn),
-                LandedRepositoryLinked(conn),
-            )
-            for check in checks:
-                violations.extend(check.run())
-        with self._hub_wide() as conn:
-            violations.extend(MigrationsAtomic(conn).run())
-            violations.extend(NoRowOfADeletedTenant(conn).run())
-            open_tenants = _open_tenants(conn)
-        for tenant in open_tenants:
-            # The facts checks load chunks through the tenant's own adapters, one tenant at a time.
-            reads = self.tenant_reads(tenant)
-            for facts_check in (
-                DerivationAndDelivery(reads.facts, reads.record),
-                LiveRouteHasToken(reads.facts, reads.record),
-            ):
-                violations.extend(
-                    Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
+        with self.connections.read_transaction("check hub invariants") as borrowed:
+            # The query checks audit every open tenant's rows at once; NoRowOfADeletedTenant alone reads a closed one.
+            with _hub_wide(borrowed) as conn:
+                checks: tuple[QueryCheck, ...] = (
+                    OneTransitionPerNodeEpoch(conn),
+                    EpochConsistentTransitions(conn),
+                    EpochsOwned(conn),
+                    RouteSeqUnique(conn),
+                    OneLiveRoutePerChunk(conn),
+                    PerRepoLandIdempotent(conn),
+                    PerRepoMarkerIdempotent(conn),
+                    NoDoubleDelivery(conn),
+                    OneTurnPerFlow(conn),
+                    OneTurnPerVisit(conn),
+                    HubNodeHasAction(conn),
+                    NoDoubleTerminalClosure(conn),
+                    NoPendingIntentAgainstATerminalRef(conn),
+                    NoUnenqueuedClosableRef(conn),
+                    SegmentChunkResolves(conn),
+                    NoStandingDependencyCycle(conn),
+                    NoDuplicateStandingDependency(conn),
+                    NoStandingDependencyOntoEphemeralChunk(conn),
+                    ChunkProjectInTenant(conn),
+                    RoutineScopeSameProject(conn),
+                    FindingScopeInProject(conn),
+                    ReviewFindingProjectIsChunks(conn),
+                    QuestionProjectIsChunks(conn),
+                    DecisionProjectIsChunks(conn),
+                    ProposalCitesOwnProject(conn),
+                    WorkItemProjectInTenant(conn),
+                    SlugNotCurrentAndFormer(conn),
+                    RepositoryReferencesInTenant(conn),
+                    WorkSourceReferencesInTenant(conn),
+                    ForgeReferenceStanding(conn),
+                    ForgeReferencesInTenant(conn),
+                    ChunkSourcesLinked(conn),
+                    LandedRepositoryLinked(conn),
                 )
-            line = FlowLineStanding(reads.flows, reads.facts, self.clock)
-            violations.extend(Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in line.run())
+                for check in checks:
+                    violations.extend(check.run())
+                violations.extend(MigrationsAtomic(conn).run())
+                violations.extend(NoRowOfADeletedTenant(conn).run())
+                open_tenants = _open_tenants(conn)
+            for tenant in open_tenants:
+                # The facts checks load chunks through the tenant's own adapters, one tenant at a time.
+                reads = self.tenant_reads(borrowed.scoped(StoreScope(tenant)))
+                for facts_check in (
+                    DerivationAndDelivery(reads.facts, reads.record),
+                    LiveRouteHasToken(reads.facts, reads.record),
+                ):
+                    violations.extend(
+                        Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in facts_check.run()
+                    )
+                line = FlowLineStanding(reads.flows, reads.facts, self.clock)
+                violations.extend(
+                    Violation(found.invariant, f"tenant {tenant}: {found.detail}") for found in line.run()
+                )
         return violations
+
+
+@contextmanager
+def _hub_wide(connections: HubStoreConnections) -> Generator[Connection, None, None]:
+    """The read connection marked hub-scoped by this audit itself, for as long as the ``with`` lasts: every check on
+    it is a ``SELECT`` over all tenants' rows. The mark is set in place on the connection, so it is cleared on leaving,
+    before the tenants' own stores read through that same connection."""
+    with connections.read("check hub invariants") as conn:
+        conn.execution_options(**{HUB_SCOPED_OPTION: True})
+        try:
+            yield conn
+        finally:
+            conn.execution_options(**{HUB_SCOPED_OPTION: False})
 
 
 def _open_tenants(conn: Connection) -> list[TenantId]:

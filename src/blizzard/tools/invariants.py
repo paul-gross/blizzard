@@ -19,7 +19,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
-from blizzard.hub.tenancy import StoreScope, TenantId
+from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.runner.composition import build_host_stores
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.probe import IProcessProbe
@@ -37,12 +37,12 @@ def runner_invariants(engine: Engine, *, process: IProcessProbe | None = None) -
 
 
 def hub_invariants(engine: Engine, *, clock: IClock | None = None) -> HubInvariants:
-    """The hub half over ``engine``; each tenant's reads are built over that tenant's own scoped connections."""
+    """The hub half over ``engine``; each tenant's reads are built over the scoped connections the half hands them,
+    which share its one read transaction."""
     clock = clock if clock is not None else SystemClock()
     connections = HubStoreConnections(engine, HubStoreErrorFactory(get_logger("blizzard.hub.store")))
 
-    def tenant_reads(tenant: TenantId) -> TenantReads:
-        scoped = connections.scoped(StoreScope(tenant))
+    def tenant_reads(scoped: ScopedConnections) -> TenantReads:
         return TenantReads(ChunkFactsStore(scoped, clock), ChunkRecordStore(scoped, clock), FlowStore(scoped, clock))
 
     return HubInvariants(connections, tenant_reads, clock)
