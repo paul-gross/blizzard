@@ -430,6 +430,29 @@ def _ingest_chunk(hub: httpx2.Client, forge: httpx2.Client, landed_file: str) ->
     return chunk_id
 
 
+def _assert_delivery_matches_declarations(
+    crash_env: CrashEnv, runner_dir: Path, hub_dir: Path, hub: httpx2.Client, chunk_id: str, landed_file: str, base: str
+) -> None:
+    with _audit_connection(runner_dir) as conn:
+        declarations = conn.execute(
+            select(runner_schema.git_commit_declarations).where(
+                runner_schema.git_commit_declarations.c.chunk_id == chunk_id
+            )
+        ).all()
+    origin = crash_env.origins / "toy-api.git"
+    tree = git_bare(origin, "log", "--oneline", "--", landed_file)
+    commits = [line for line in tree.splitlines() if line.strip()]
+    if declarations:
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times:\n{tree}"
+        assert _merged_markers(hub, chunk_id) == [f"merged/{REPO}"]
+        assert _landed_repos(hub_dir, chunk_id) == [REPO]
+    else:
+        assert not commits, tree
+        assert _merged_markers(hub, chunk_id) == []
+        assert _landed_repos(hub_dir, chunk_id) == []
+        assert git_bare(origin, "rev-parse", "main") == base
+
+
 # `claim.*` fires inside the HUB — the one `_GENERIC_POINTS` family that
 # arms the hub rather than the runner; `test_kill9_at_crash_point` reads this to pick.
 _HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
@@ -442,6 +465,7 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
     on_hub = point.startswith(_HUB_SIDE_GENERIC_PREFIXES)
+    base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point if on_hub else None)
     runner_proc = None
@@ -480,7 +504,10 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         # Exactly-once delivery: the file is reachable from bare main exactly once.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
-        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+        if point.startswith("spawn."):
+            _assert_delivery_matches_declarations(crash_env, runner_dir, hub_dir, hub, chunk_id, landed_file, base)
+        else:
+            assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)
@@ -1241,13 +1268,14 @@ def test_kill9_runner_daemon_after_session_end(crash_env: CrashEnv, tmp_path: Pa
 
 def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_path: Path) -> None:
     """External ``kill -9`` of the runner daemon precisely BEFORE the worker declares its
-    commit — the pre-declaration race, pinned deterministically — must never land
-    ``done`` with an empty delivery. The land step's empty-delivery refusal is what this proves."""
+    commit — the pre-declaration race, pinned deterministically — recovers truthfully
+    whether a subsequent attempt declares a commit or produces no code."""
     landed_file = "LANDED-runner-pre-declare.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
     pushed_marker = tmp_path / "pushed.marker"
     go_marker = tmp_path / "go.marker"
+    base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
     runner_proc = None
@@ -1286,15 +1314,7 @@ def test_kill9_runner_daemon_before_commit_declared(crash_env: CrashEnv, tmp_pat
         assert status in {"done", "needs_human"}, f"chunk did not converge after runner kill -9: {status}"
         _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery", after_recovery=True)
 
-        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
-        commits = [line for line in tree.splitlines() if line.strip()]
-        if status == "done":
-            # `land`'s refusal worked through a retried build, not a silent empty delivery — without the
-            # refusal this assertion fails: `done` with `commits == []`.
-            assert len(commits) == 1, f"landed `done` with an empty delivery: {landed_file} is on main {len(commits)}x"
-        else:
-            # The refusal escalated instead of silently converging — never a landed file.
-            assert len(commits) == 0, f"escalated to needs_human but {landed_file} still landed on main:\n{tree}"
+        _assert_delivery_matches_declarations(crash_env, runner_dir, hub_dir, hub, chunk_id, landed_file, base)
     finally:
         hub.close()
         terminate(runner_proc)
@@ -1755,6 +1775,7 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
     landed_file = f"LANDED-OPENCODE-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
+    base = git_bare(crash_env.origins / "toy-api.git", "rev-parse", "main")
 
     # Every named point here fires in the RUNNER's loop (`src/blizzard/runner/lifecycle/`), never the hub.
     hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
@@ -1796,7 +1817,10 @@ def test_kill9_at_crash_point_under_opencode(crash_env: CrashEnv, tmp_path: Path
         # Exactly-once delivery: the file is reachable from bare main exactly once.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
-        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+        if point.startswith("spawn."):
+            _assert_delivery_matches_declarations(crash_env, runner_dir, hub_dir, hub, chunk_id, landed_file, base)
+        else:
+            assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)

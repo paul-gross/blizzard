@@ -160,18 +160,18 @@ A pointer matches a record by repo name, narrowed by the origin's owner and forg
 after the chunk was minted, so retiring a repository never strands work already under way. A chunk with no commits has
 nothing to resolve and lands as a no-op.
 
-The forge's unchanged answers are read conditionally, so a landing that is waiting costs at most one counted call a
-pass, and the shipped graphs poll once a minute.
+The forge's unchanged answers are read conditionally; the shipped graphs poll once a minute. A pass may also compare the
+submission and branch against the base to establish that no code remains to land.
 
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
 
 When no commits are declared, delivery completes with "no code to land" without opening a PR. If the base already
-contains a declared commit and the branch head is safe, a refused PR open likewise resolves that repository with no code
-to land. This resolution is bound to its record, base, branch and submitted commit, so a later changed declaration is
-reconsidered. It does not create a `merged/<repo>` revision or a repository landing: only an actual merge does. Mixed
-chunks record landings only for the repositories that merged. Work items close when the chunk reaches `done`, including
-when nothing merged.
+contains a declared commit and the branch head is safe, the repository resolves without opening a PR; the same proof is
+checked after a refused open. This resolution is bound to its record, base, branch and submitted commit, so a later
+changed declaration is reconsidered. It does not create a `merged/<repo>` revision or a repository landing: only an
+actual merge does. Mixed chunks record landings only for the repositories that merged. Work items close when the chunk
+reaches `done`, including when nothing merged.
 
 A forge that lacks an operation the action needs refuses the step too, escalating the chunk with
 `forge-capability-missing` ([forges.md](./forges.md#a-missing-capability)).

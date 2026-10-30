@@ -220,6 +220,8 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
             body = _pending_pull()
         elif path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
             body = {"check_runs": [{"id": 1, "name": "ci", "status": "in_progress", "conclusion": None}]}
+        elif path == f"/repos/{_WIDGET}/compare/main...{_SUBMITTED}":
+            body = {"status": "ahead", "ahead_by": 1, "behind_by": 0, "commits": [], "files": []}
         else:
             raise AssertionError(f"unexpected landing read: {request.url}")
         etag = f'"{request.url}"'
@@ -258,7 +260,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
             await asyncio.sleep(0)
 
     asyncio.run(polls())
-    assert len(answers) == 40
+    assert len(answers) == 50
     assert all(status == 304 and request.headers.get("if-none-match") for request, status in answers)
     lookups = [request for request, _ in answers if request.url.path.endswith("/pulls")]
     assert len([request for request in lookups if request.url.params["state"] == "closed"]) == 10
@@ -534,6 +536,35 @@ def test_a_base_held_submission_records_no_code_only_for_that_repo() -> None:
     assert sink.markers()[name] == data
     assert any("no code to land" in line for line in answer.log)
     assert [args["number"] for _, args in double.named("merge")] == [1]
+
+
+def test_all_base_held_repositories_resolve_without_opening_a_pr() -> None:
+    double = _forge(_WIDGET, _GADGET)
+    for repo in (_WIDGET, _GADGET):
+        double.repos[repo].compares = {
+            ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+            ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+        }
+
+    answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
+    assert answer.choice == "landed"
+    assert len([name for name in sink.markers() if name.startswith("no-code/")]) == 2
+    assert sink.landings() == []
+    assert double.named("open_change") == [] and double.named("merge") == []
+
+
+def test_a_preexisting_open_pr_whose_commit_the_base_now_holds_is_history() -> None:
+    double = _forge()
+    double.repos[_WIDGET].changes[7] = change(_WIDGET, 7, branch="feat/x", sha=_SUBMITTED, base="main")
+    double.repos[_WIDGET].compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+    }
+    answer, sink = _land(double)
+    assert answer.choice == "landed"
+    assert sink.landings() == []
+    assert any(name.startswith("no-code/") for name in sink.markers())
+    assert double.named("merge") == []
 
 
 def test_a_no_code_marker_replays_only_for_its_exact_declaration() -> None:

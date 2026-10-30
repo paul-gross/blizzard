@@ -182,6 +182,7 @@ def test_no_code_resolution_relegates_earlier_pr_to_history_without_inventing_a_
                 marker(name, data),
             ]
         ),
+        [declaration],
     )
     assert view.open_prs == []
     assert [p.number for p in view.closed_prs] == [1]
@@ -190,9 +191,14 @@ def test_no_code_resolution_relegates_earlier_pr_to_history_without_inventing_a_
 
 
 def test_a_later_pr_is_not_hidden_by_an_old_no_code_resolution() -> None:
-    name, data = no_code_marker(
-        {"repo": "acme/one", "record": "re_one", "base_branch": "main", "branch": "feat/x", "commit": "submitted"}
-    )
+    declaration = {
+        "repo": "acme/one",
+        "record": "re_one",
+        "base_branch": "main",
+        "branch": "feat/x",
+        "commit": "submitted",
+    }
+    name, data = no_code_marker(declaration)
     view = DeliveryRead.of(
         ChunkFacts(minted=True),
         delivery_sources(
@@ -205,5 +211,29 @@ def test_a_later_pr_is_not_hidden_by_an_old_no_code_resolution() -> None:
                 ),
             ]
         ),
+        [declaration],
     )
     assert [p.number for p in view.open_prs] == [2]
+
+
+@pytest.mark.parametrize("key", ["record", "base_branch", "branch", "commit", "repo"])
+def test_obsolete_no_code_does_not_hide_pr(key: str) -> None:
+    declaration = {
+        "repo": "acme/one",
+        "record": "re_one",
+        "base_branch": "main",
+        "branch": "feat/x",
+        "commit": "submitted",
+    }
+    name, data = no_code_marker(declaration)
+    sources = delivery_sources(
+        markers=[
+            pr("delivery-pr/acme/one/1", '{"repo":"acme/one","number":1,"url":"http://forge/acme/one/pull/1"}'),
+            marker(name, data),
+            marker("awaiting-external-merge", "wait"),
+        ]
+    )
+    view = DeliveryRead.of(ChunkFacts(minted=True), sources, [{**declaration, key: "changed"}])
+    assert [p.number for p in view.open_prs] == [1]
+    assert view.awaiting_external_merge
+    assert not view.landed_repos

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from urllib.parse import quote, urlsplit
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
-from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.chunk.no_code import no_code_repos
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
@@ -39,6 +39,7 @@ class DeliverySources:
     markers: list[StoredArtifact] = field(default_factory=list[StoredArtifact])
     pr_markers: list[PrMarker] = field(default_factory=list[PrMarker])
     legacy_landed: dict[str, str] = field(default_factory=dict[str, str])
+    commits: list[StoredArtifact] = field(default_factory=list[StoredArtifact])
 
 
 @domain_model
@@ -85,22 +86,16 @@ class DeliveryRead:
     landed: bool
 
     @classmethod
-    def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
+    def of(
+        cls, facts: ChunkFacts, sources: DeliverySources, declarations: Sequence[Mapping[str, str | None]] = ()
+    ) -> DeliveryRead:
         prs: dict[tuple[str, int], DeliveryPr] = {}
         legacy = {repo: sha for repo, sha in sources.legacy_landed.items() if is_landed_revision(sha)}
         landed = {**legacy, **LandedRepos.of(sources.markers).shas}
         resolved_no_code: dict[str, int] = {}
         for row in sources.markers:
-            if not row.name.startswith("no-code/"):
-                continue
-            try:
-                declaration = json.loads(row.data)
-                repo = declaration["repo"]
-                if not isinstance(repo, str) or no_code_marker(declaration) != (row.name, row.data):
-                    continue
-            except (ValueError, TypeError, KeyError):
-                continue
-            resolved_no_code[repo] = max(resolved_no_code.get(repo, -1), row.epoch)
+            for repo in no_code_repos([row], declarations):
+                resolved_no_code[repo] = max(resolved_no_code.get(repo, -1), row.epoch)
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
         external_epochs: set[int] = set()

@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefus
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
+from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.flow_places import chunk_flow_places, fact_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
@@ -263,7 +264,10 @@ class ChunkView:
         if self.delivery is not None:
             return self.delivery
         sources = self.services.chunks.artifacts.delivery_sources_for([self.chunk.chunk_id])
-        return DeliveryRead.of(self.facts, sources.get(self.chunk.chunk_id, DeliverySources()))
+        declarations = delivery_declarations_for(self.services, [self.chunk], sources)
+        return DeliveryRead.of(
+            self.facts, sources.get(self.chunk.chunk_id, DeliverySources()), declarations.get(self.chunk.chunk_id, [])
+        )
 
     @staticmethod
     def _delivery_fields(delivery: DeliveryRead) -> DeliveryWireFields:
