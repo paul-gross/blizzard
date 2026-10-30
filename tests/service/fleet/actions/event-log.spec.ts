@@ -25,6 +25,11 @@ test('test_a_verdict_less_exit_surfaces_a_critical_worker_lost_event', async ({ 
   const detail = await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${chunkId}`)).body,
     (body) => body.status === 'needs_human', 80);
   expect(detail.status).toBe('needs_human');
+  const attempts = (await runnerHost.runners['runner-local']!.leasesForChunk(chunkId)).body.items
+    .filter((lease) => lease.node_name === 'build')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  expect(attempts).toHaveLength(2);
+  expect(attempts.map((lease) => lease.state)).toEqual(['closed', 'closed']);
 
   const frames = await subscription.barrier();
   const lostFrames = frames.filter((frame) => frame.event === 'event-logged' && frame.data?.chunk_id === chunkId && frame.data?.kind === 'worker-lost');
