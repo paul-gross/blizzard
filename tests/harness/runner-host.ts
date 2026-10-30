@@ -21,7 +21,7 @@ export const SOCKET_PATH_LIMIT = 107;
 /** The variable that arms the mock harness; the host's workers must carry it, and no `runnerEnv` may take it away. */
 export const FENCE_VAR = 'BLIZZARD_MOCK_HARNESS_FENCE';
 const FENCE_FILE = '.blizzard-mock-harness-fence';
-const PLACEHOLDERS = ['workspace', 'origins', 'mockBin', 'usageBase', 'bundle', 'stubs'];
+const PLACEHOLDERS = ['workspace', 'origins', 'forgeOrigins', 'mockBin', 'usageBase', 'bundle', 'stubs'];
 const RUNNER_BINARY = 'blizzard-runner';
 const FIRST_RUNNER = 'runner-local';
 
@@ -132,6 +132,8 @@ export interface RunnerHost extends OriginReads {
    * exporter sends it. Throws when no spawned session recorded that lease.
    */
   workerHeaders(leaseId: string, form?: 'bearer' | 'lease-token'): Record<string, string>;
+  /** The lease token the runner exported to the worker of lease `leaseId`, as the mock harness recorded it at spawn; for a scan that no secret leaves. Throws when no spawned session recorded that lease. */
+  leaseToken(leaseId: string): string;
   /** The installed `blizzard` CLI, by absolute path: a worker's own `PATH` need not hold it, as under `npx playwright test`. */
   readonly cliBinary: string;
   /**
@@ -188,6 +190,8 @@ export interface HubBinding {
   tenantId?: string;
   /** A config home holding a logged-in operator's session, for `init`; the host process keeps its own. */
   operatorHome?: () => Promise<string>;
+  /** The directory the hub's forge keeps its bare repositories in, which a host's `${forgeOrigins}` expands to. */
+  forgeOrigins?: string;
 }
 
 export interface BuilderContext {
@@ -491,7 +495,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           worker: { env_passthrough: [FENCE_VAR, 'BZ_TRANSCRIPTS_ROOT'] },
         })),
       };
-      const expanded = expandProfile(profile, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle, stubs });
+      const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
@@ -600,11 +604,12 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           const token = recordedLeaseToken(sessionsDir, leaseId);
           return form === 'bearer' ? { Authorization: `Bearer ${token}` } : { 'X-Blizzard-Lease-Token': token };
         },
+        leaseToken: (leaseId) => recordedLeaseToken(sessionsDir, leaseId),
         reconfigure(overlay) {
           const problems = [...checkProfile(overlay, { contract: 'host', placeholders: PLACEHOLDERS }), ...checkOwnedKeys(overlay)];
           if (daemon !== undefined && isAlive(daemon.pid)) problems.push('the host is running; stop() it before reconfigure()');
           if (problems.length > 0) throw new Error(`the host overlay is unsound:\n${problems.join('\n')}`);
-          const placed = expandProfile(overlay, { workspace, origins, mockBin: mockBinDir(), usageBase: ctx.vendor.url });
+          const placed = expandProfile(overlay, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), usageBase: ctx.vendor.url });
           fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(mergeHostProfile(readHostFile(dir), placed)));
         },
         rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),

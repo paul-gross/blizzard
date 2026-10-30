@@ -27,6 +27,15 @@ export interface EgressDocuments {
   schemas: string[];
 }
 
+/** Which of a directory's files a read binds the dataset to. */
+export interface EgressQueryOptions {
+  /** The live passes' files (`live`), a backfill's (`backfill`), or every file a manifest names (the default). */
+  files?: 'live' | 'backfill';
+}
+
+/** One copy of a row in the shape both formats share: times as RFC 3339 in UTC, money as nine-place text, and `exported_at` kept. */
+export type EgressCopy = Record<string, unknown>;
+
 /** A fresh hub's export directory, read through the docs' own DuckDB recipes. */
 export interface EgressReader {
   /** The export directory the hub writes (`${egress}` in `hubConfig`). */
@@ -36,9 +45,16 @@ export interface EgressReader {
    * and `invocations` `<dataset>_newest`, the newest copy of each row; for `events` `events_current` and
    * `events_by_version`; and `<dataset>` for every copy. Times are read in UTC.
    */
-  query(dataset: EgressDataset, sql: string): Promise<EgressRow[]>;
+  query(dataset: EgressDataset, sql: string, options?: EgressQueryOptions): Promise<EgressRow[]>;
   /** One of the docs' named recipes, run as the docs give it. */
   recipe(name: EgressRecipe): Promise<EgressRow[]>;
+  /**
+   * Every copy of every row of `steps` or `invocations`, newest or not, in the shape the two formats share, so rows read
+   * from NDJSON and from Parquet compare equal. A test picks the newest copy itself, by `exported_at`.
+   */
+  copies(dataset: 'steps' | 'invocations', options?: EgressQueryOptions): Promise<EgressCopy[]>;
+  /** The same export directory's reader for another directory, and the format it holds. */
+  at(directory: string, format: EgressFormat): EgressReader;
   /** Whether a manifest the directory holds now names a file of `dataset`; `query` waits for one, this asks once. */
   exports(dataset: EgressDataset): boolean;
   /** Every copy of every row of `dataset`, each rendered as one JSON document, for a scan that something is nowhere in the export. */
@@ -69,6 +85,18 @@ export function docRecipe(name: string): string {
   const match = new RegExp(`<!-- recipe:${name} -->\\n\\n\`\`\`sql\\n([\\s\\S]*?)\\n\`\`\``).exec(section);
   if (match === null) throw new Error(`no recipe ${name} under ### DuckDB in docs/deployment/egress.md`);
   return match[1] as string;
+}
+
+/** The dictionary: each dataset's columns, by name and type. */
+const dictionary = JSON.parse(fs.readFileSync(path.join(BLIZZARD_ROOT, 'contracts', 'egress', 'dictionary.json'), 'utf8')) as {
+  datasets: { name: string; columns: { name: string; type: string }[] }[];
+};
+
+/** A column in the shape both formats share: a time as RFC 3339 in UTC with microseconds, money as nine-place text. */
+function canonicalColumn(name: string, type: string): string {
+  if (type === 'timestamp') return `strftime(CAST(${name} AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%fZ')`;
+  if (type === 'money') return `CAST(${name} AS DECIMAL(38, 9))::VARCHAR`;
+  return name;
 }
 
 /** The dictionary's views over a loaded dataset, by name. */
@@ -123,15 +151,24 @@ function jsonTexts(directory: string, sub: string): string[] {
 
 /** Reads `directory` with an in-memory DuckDB per call, so each read sees the files the manifests name now. */
 export function egressReader(directory: string, format: EgressFormat = 'ndjson'): EgressReader {
-  const open = async (dataset: EgressDataset, work: (connection: Awaited<ReturnType<DuckDBInstance['connect']>>) => Promise<EgressRow[]>): Promise<EgressRow[]> => {
+  const open = async (
+    dataset: EgressDataset,
+    files: EgressQueryOptions['files'],
+    work: (connection: Awaited<ReturnType<DuckDBInstance['connect']>>) => Promise<EgressRow[]>,
+  ): Promise<EgressRow[]> => {
     await waitForManifests(directory, dataset);
     const instance = await DuckDBInstance.create(':memory:');
     const connection = await instance.connect();
     try {
       await connection.run("SET TimeZone = 'UTC'");
       // The docs' load statements, a pair run in order; the dictionary's views wrap the relation they bind.
-      for (const statement of loadRecipe(dataset, format).replaceAll('<directory>', directory).replaceAll('<dataset>', dataset).split(/;\s*\n/)) {
-        if (statement.trim() !== '') await connection.run(statement);
+      const statements = loadRecipe(dataset, format).replaceAll('<directory>', directory).replaceAll('<dataset>', dataset).split(/;\s*\n/).filter((statement) => statement.trim() !== '');
+      // The first statement sets the dataset's file list from the manifests; a backfill's files carry `backfill` in their names.
+      for (const [position, statement] of statements.entries()) {
+        await connection.run(statement);
+        if (position === 0 && files !== undefined) {
+          await connection.run(`SET VARIABLE ${dataset}_files = list_filter(getvariable('${dataset}_files'), f -> ${files === 'backfill' ? '' : 'NOT '}contains(f, 'backfill'))`);
+        }
       }
       for (const view of VIEWS[dataset]) await connection.run(`CREATE VIEW ${view} AS ${viewSql(view)}`);
       return await work(connection);
@@ -140,12 +177,19 @@ export function egressReader(directory: string, format: EgressFormat = 'ndjson')
       instance.closeSync();
     }
   };
-  const query = (dataset: EgressDataset, sql: string): Promise<EgressRow[]> =>
-    open(dataset, async (connection) => (await connection.runAndReadAll(sql)).getRowObjectsJson() as EgressRow[]);
+  const query = (dataset: EgressDataset, sql: string, options: EgressQueryOptions = {}): Promise<EgressRow[]> =>
+    open(dataset, options.files, async (connection) => (await connection.runAndReadAll(sql)).getRowObjectsJson() as EgressRow[]);
   return {
     directory,
     query,
     recipe: (name) => query(EGRESS_RECIPES[name], docRecipe(name)),
+    copies: async (dataset, options = {}) => {
+      const columns = (dictionary.datasets.find((entry) => entry.name === dataset)?.columns ?? []);
+      const fields = columns.map(({ name, type }) => `'${name}': ${canonicalColumn(name, type)}`).join(', ');
+      const rows = await query(dataset, `SELECT to_json({${fields}})::VARCHAR AS row FROM ${dataset}`, options);
+      return rows.map((row) => JSON.parse(row.row as string) as EgressCopy);
+    },
+    at: (other, otherFormat) => egressReader(other, otherFormat),
     exports: (dataset) => manifestsName(directory, dataset),
     rowTexts: async (dataset) =>
       (await query(dataset, `SELECT to_json(t)::VARCHAR AS text FROM ${dataset} t`)).map((row) => row.text as string),

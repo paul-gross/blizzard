@@ -12,10 +12,8 @@ from tests.repo_files import repo_root
 _DOC = repo_root() / "docs" / "deployment" / "egress.md"
 COST_BY_NODE_BY_DAY = "cost-by-node-by-day"
 SLOWEST_STATION_OF_THE_WEEK = "slowest-station-of-the-week"
-FILES_A_STATION_READ_LAST_WEEK = "files-a-station-read-last-week"
 SKILLS_BY_STATION = "skills-by-station"
 LOAD_NDJSON = "load-ndjson"
-LOAD_EVENTS_NDJSON = "load-events-ndjson"
 LOAD_PARQUET = "load-parquet"
 
 

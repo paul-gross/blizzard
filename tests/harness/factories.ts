@@ -72,44 +72,55 @@ export function requireFreshHub(level: Level, what: string): void {
  * `POST /api/config/apply` declaring it as a work source of the tenant, the repository, and their links to `project`.
  */
 export function repositoryFactory(context: FactoryContext): (name?: string) => Promise<Repository> {
-  return async (name) => {
-    requireOwnTenant(context.level, 'repository()');
-    const repository = name ?? context.unique('r-');
-    await context.forge.createRepository(COMMON_OWNER, repository);
-    // The work source and the repository each name a credential; a second call finds the secret already there.
-    const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: 'fixture-token' } });
-    if (secret.status !== 201 && secret.status !== 409) {
-      throw new Error(`creating the fixture secret answered ${secret.status}: ${JSON.stringify(secret.body)}`);
+  const made = new Map<string, Promise<Repository>>();
+  // A name asked for twice is the one repository: a host's configuration may have made it first.
+  return (name) => {
+    if (name === undefined) return declare(context, context.unique('r-'));
+    let found = made.get(name);
+    if (found === undefined) {
+      found = declare(context, name);
+      made.set(name, found);
     }
-    const applied = await context.api.post('/api/config/apply', {
-      data: {
-        version: 1,
-        secrets: [FIXTURE_SECRET],
-        work_sources: [
-          {
-            slug: repository,
-            provider: 'github',
-            locator: `${COMMON_OWNER}/${repository}`,
-            api_base: context.forge.url,
-            secret: FIXTURE_SECRET,
-          },
-        ],
-        repositories: [
-          {
-            slug: repository,
-            forge_api_url: context.forge.url,
-            owner: COMMON_OWNER,
-            repo: repository,
-            base_branch: 'main',
-            secret_name: FIXTURE_SECRET,
-          },
-        ],
-        projects: [{ slug: context.project.slug, repositories: [repository], sources: [repository] }],
-      },
-    });
-    if (!applied.ok) throw new Error(`declaring ${repository} answered ${applied.status}: ${JSON.stringify(applied.body)}`);
-    return { name: repository, owner: COMMON_OWNER, tokenPrefix: repository };
+    return found;
   };
+}
+
+async function declare(context: FactoryContext, repository: string): Promise<Repository> {
+  requireOwnTenant(context.level, 'repository()');
+  await context.forge.createRepository(COMMON_OWNER, repository);
+  // The work source and the repository each name a credential; a second call finds the secret already there.
+  const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: 'fixture-token' } });
+  if (secret.status !== 201 && secret.status !== 409) {
+    throw new Error(`creating the fixture secret answered ${secret.status}: ${JSON.stringify(secret.body)}`);
+  }
+  const applied = await context.api.post('/api/config/apply', {
+    data: {
+      version: 1,
+      secrets: [FIXTURE_SECRET],
+      work_sources: [
+        {
+          slug: repository,
+          provider: 'github',
+          locator: `${COMMON_OWNER}/${repository}`,
+          api_base: context.forge.url,
+          secret: FIXTURE_SECRET,
+        },
+      ],
+      repositories: [
+        {
+          slug: repository,
+          forge_api_url: context.forge.url,
+          owner: COMMON_OWNER,
+          repo: repository,
+          base_branch: 'main',
+          secret_name: FIXTURE_SECRET,
+        },
+      ],
+      projects: [{ slug: context.project.slug, repositories: [repository], sources: [repository] }],
+    },
+  });
+  if (!applied.ok) throw new Error(`declaring ${repository} answered ${applied.status}: ${JSON.stringify(applied.body)}`);
+  return { name: repository, owner: COMMON_OWNER, tokenPrefix: repository };
 }
 
 /**

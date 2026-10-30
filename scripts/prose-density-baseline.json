@@ -10866,12 +10866,6 @@
    "over_cap": 1,
    "total": 63
   },
-  "e2e/egress_proof.py": {
-   "comments": 0,
-   "docstrings": 21,
-   "over_cap": 0,
-   "total": 179
-  },
   "e2e/fleet_traces.py": {
    "comments": 24,
    "docstrings": 79,
@@ -10931,12 +10925,6 @@
    "docstrings": 50,
    "over_cap": 1,
    "total": 767
-  },
-  "e2e/test_egress_night_e2e.py": {
-   "comments": 12,
-   "docstrings": 38,
-   "over_cap": 3,
-   "total": 613
   },
   "e2e/test_escalation_e2e.py": {
    "comments": 19,
