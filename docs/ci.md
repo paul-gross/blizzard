@@ -163,6 +163,7 @@ Measured port times, from the build's own Playwright run until the `ui (blizzard
 | Port                         | Project | Measured serial time |
 | ---------------------------- | ------- | -------------------- |
 | `tests/ui/event-log.spec.ts` | UI      | 49s                  |
+| `tests/ui/migration.spec.ts` | UI      | 3s                   |
 
 ## The upgrade rehearsal
 

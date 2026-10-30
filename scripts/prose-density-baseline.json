@@ -11035,10 +11035,10 @@
    "total": 229
   },
   "e2e/test_migration_e2e.py": {
-   "comments": 20,
+   "comments": 14,
    "docstrings": 9,
    "over_cap": 1,
-   "total": 236
+   "total": 201
   },
   "e2e/test_mixed_harness_e2e.py": {
    "comments": 89,
