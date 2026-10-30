@@ -113,17 +113,6 @@ def join_runner(runner_dir: Path, hub_url: str, *, allow_readd: bool = False) ->
     return _held_identity(runner_dir, hub_url)
 
 
-def adopt_runner(runner_dir: Path, hub_url: str, token: str) -> JoinedRunner:
-    """Join a runner an operator already added at a hub with sign-in to a host left unregistered: scaffold the runner
-    directory, put the token its add printed in ``.env``, and write the id the hub resolves it to into the host file —
-    what ``runner init`` keeps for a known token, without the host it would register under the operator's session."""
-    joined = _identity_of(token, hub_url)
-    config = init_host(runner_dir, hub_url=hub_url)
-    write_runner_id(HostLayout(config.root), config.sole_runner().name, joined.runner_id, strict=config.strict)
-    HubTokenFile.of(runner_dir, DEFAULT_TOKEN_ENV).write(token)
-    return joined
-
-
 def pin_runner(runner_dir: Path, *, runner_id: str, name: str) -> JoinedRunner:
     """Fix a runner's id and token up front, for a blizzard-mock hub that comes up — or comes back with
     its in-memory state gone — only after the host directory exists: the directory is scaffolded with the

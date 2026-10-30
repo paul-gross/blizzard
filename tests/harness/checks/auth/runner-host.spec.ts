@@ -19,3 +19,31 @@ test.describe('on the auth profile', () => {
     expect([401, 403]).toContain(gated.status);
   });
 });
+
+test.describe('an adopted runner', () => {
+  test.use({ isolation: 'fresh-tenant', runnerStarted: false });
+
+  test('signs in with its own id while the hub lists no host for it', async ({ api, fleet, federation, runnerHosts }) => {
+    const minted = await fleet('adopted-one');
+    const host = await runnerHosts.create({ runnerStarted: false, runnerAdopted: { name: 'adopted-one', runnerId: minted.runnerId, token: minted.token } });
+    expect(host.runners['adopted-one']?.id).toBe(minted.runnerId);
+    expect(host.hubTokens()).toEqual({ host: undefined, runners: { 'adopted-one': minted.token } });
+    host.reconfigure({ public_url: host.url });
+    await host.restart();
+    // A stepped host registers its adopted runner on a pass; the pass answers once the hub has.
+    await host.step();
+
+    const bounce = await federation.begin(host.url);
+    expect(bounce.client).toBe(minted.runnerId);
+    const hosts = await api.get('/api/hosts');
+    expect(hosts.status).toBe(200);
+    expect(hosts.body).toEqual({ hosts: [] });
+  });
+
+  test('is refused a first boot at creation', async ({ fleet, runnerHosts }) => {
+    const minted = await fleet('adopted-two');
+    await expect(
+      runnerHosts.create({ runnerStarted: true, runnerAdopted: { name: 'adopted-two', runnerId: minted.runnerId, token: minted.token } }),
+    ).rejects.toThrow(/runnerStarted: false/);
+  });
+});

@@ -11076,12 +11076,6 @@
    "over_cap": 0,
    "total": 313
   },
-  "e2e/test_runner_federation_e2e.py": {
-   "comments": 29,
-   "docstrings": 23,
-   "over_cap": 1,
-   "total": 473
-  },
   "e2e/test_runner_panel_live_e2e.py": {
    "comments": 15,
    "docstrings": 9,
