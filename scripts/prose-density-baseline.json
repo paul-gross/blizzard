@@ -1720,6 +1720,12 @@
    "over_cap": 0,
    "total": 121
   },
+  "blizzard/foundation/invariants.py": {
+   "comments": 0,
+   "docstrings": 4,
+   "over_cap": 0,
+   "total": 36
+  },
   "blizzard/foundation/invitations.py": {
    "comments": 3,
    "docstrings": 3,
@@ -4977,6 +4983,12 @@
    "docstrings": 21,
    "over_cap": 1,
    "total": 84
+  },
+  "blizzard/hub/store/internal/invariants.py": {
+   "comments": 19,
+   "docstrings": 130,
+   "over_cap": 4,
+   "total": 1458
   },
   "blizzard/hub/store/internal/invitation_store.py": {
    "comments": 6,
@@ -8788,6 +8800,12 @@
    "over_cap": 0,
    "total": 81
   },
+  "blizzard/runner/store/internal/invariants.py": {
+   "comments": 9,
+   "docstrings": 56,
+   "over_cap": 0,
+   "total": 530
+  },
   "blizzard/runner/store/internal/invocation_boundary_store.py": {
    "comments": 3,
    "docstrings": 2,
@@ -10247,10 +10265,10 @@
    "total": 141
   },
   "blizzard/tools/invariants.py": {
-   "comments": 37,
-   "docstrings": 197,
-   "over_cap": 4,
-   "total": 2047
+   "comments": 0,
+   "docstrings": 11,
+   "over_cap": 0,
+   "total": 70
   },
   "blizzard/tools/openapi.py": {
    "comments": 0,
@@ -11783,6 +11801,12 @@
    "docstrings": 6,
    "over_cap": 1,
    "total": 223
+  },
+  "test_chunk_artifact_order_store.py": {
+   "comments": 0,
+   "docstrings": 3,
+   "over_cap": 0,
+   "total": 146
   },
   "test_chunk_change_description.py": {
    "comments": 2,
@@ -17327,12 +17351,6 @@
    "docstrings": 11,
    "over_cap": 0,
    "total": 196
-  },
-  "test_chunk_artifact_order_store.py": {
-   "comments": 0,
-   "docstrings": 3,
-   "over_cap": 0,
-   "total": 146
   }
  }
 }

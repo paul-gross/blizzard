@@ -25,7 +25,7 @@ import yaml
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.e2e.test_garden_routine_e2e import _scripted_garden_graph_yaml
 from tests.fleet_launchers import OWNER, REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, REPO_NAME, basic_workspace, mint_world
@@ -258,7 +258,7 @@ def _assert_flow_record_holds(hub_dir: Path, *, settled: bool = True) -> None:
     """The three flow invariants hold over every turn taken so far; once ``settled``, no turn is left open."""
     engine = create_engine_from_url(f"sqlite:///{hub_dir / 'data' / 'hub.db'}")
     try:
-        violations = [v for v in HubInvariants(engine).run() if v.invariant in _FLOW_INVARIANTS]
+        violations = [v for v in hub_invariants(engine).run() if v.invariant in _FLOW_INVARIANTS]
     finally:
         engine.dispose()
     assert violations == []

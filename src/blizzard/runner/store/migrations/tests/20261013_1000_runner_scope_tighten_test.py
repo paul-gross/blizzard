@@ -27,7 +27,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.store import MIGRATIONS_DIR
-from blizzard.tools.invariants import RunnerInvariants
+from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import init_host
 from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.runner_scope_seeding import KEYED, T0, reflect, seed_every_keyed_table
@@ -54,7 +54,7 @@ def _invariant_violations(migration: MigrationRunner, engine: sa.Engine) -> list
     """What the invariant checker finds once the store is carried on to head — the checker judges the head schema, so
     a store left at this revision would lack the tables later revisions create."""
     migration.upgrade("head")
-    return list(RunnerInvariants(engine).run())
+    return list(runner_invariants(engine).run())
 
 
 def _seed_identity(engine: sa.Engine, runner_id: str = _RUNNER_ID) -> None:

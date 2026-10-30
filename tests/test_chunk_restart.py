@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.runner.hub.internal.http_hub import _chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from blizzard.wire.chunk import ChunkStatusView
 from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
 
@@ -824,7 +824,7 @@ def test_the_stores_invariants_hold_over_the_move(tmp_path) -> None:  # type: ig
     assert _restart(hub, chunk_id, node="audit", to_graph=target).status_code == 202
 
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
-    assert HubInvariants(engine).run() == []
+    assert hub_invariants(engine).run() == []
 
 
 def test_the_move_refuses_an_unknown_target_graph(tmp_path) -> None:  # type: ignore[no-untyped-def]

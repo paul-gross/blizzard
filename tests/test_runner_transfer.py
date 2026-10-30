@@ -21,7 +21,7 @@ from blizzard.runner.composition import build_host_read_stores, build_runner_rem
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
-from blizzard.tools.invariants import RunnerInvariants
+from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import init_host
 from tests.runner_scope_seeding import T0, reflect, seed_tables
 
@@ -174,7 +174,7 @@ def test_a_copy_carries_every_row_and_reference_of_the_runner_and_leaves_the_sou
     for name in _HOST_TABLES:
         assert _rows(here, name) == hosts[name], f"{name}: an identical host row is not carried again"
     assert _everything(source) == untouched
-    assert RunnerInvariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+    assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
 
 
 def test_a_copy_carries_each_fact_seq_and_the_fact_counter_verbatim(stores) -> None:  # type: ignore[no-untyped-def]
@@ -296,7 +296,7 @@ def test_a_removal_deletes_the_runners_rows_and_nothing_else(stores, keep_counte
     assert _rows(here, "outbox_counters", runner_id=_MOVING) == (counters if keep_counters else [])
     assert {name: _rows(here, name, runner_id=_HERE) for name in _RUNNER_TABLES} == held
     assert {name: _rows(here, name) for name in _HOST_TABLES} == hosts
-    assert RunnerInvariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
+    assert runner_invariants(here, process=_NoProcess()).run() == []  # type: ignore[arg-type]
 
 
 def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_no_row_of_it_names_it(stores) -> None:  # type: ignore[no-untyped-def]

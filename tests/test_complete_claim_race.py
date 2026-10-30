@@ -17,7 +17,7 @@ import pytest
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.support import build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
@@ -147,7 +147,7 @@ def test_a_completion_still_releases_the_route_a_claim_won_the_lock_to_create(tm
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
     # The invariant this whole seam exists to keep: no chunk is both terminal and
     # carrying a route the release's timestamp lost the ordering race against.
-    assert HubInvariants(create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")).run() == []
+    assert hub_invariants(create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")).run() == []
 
     # Pin the mechanism directly: the release is stamped from the post-advance instant, not
     # a stale pre-wait one — a stale `at` would equal the route's own `created_at` instead

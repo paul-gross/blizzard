@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from blizzard.tools.invariants import HubInvariants
+from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_store_migrations import (
     assert_frozen_table_lacks_a_later_revisions_columns,
 )
@@ -40,7 +40,7 @@ def test_a_backfilled_epoch_with_two_runners_lease_rows_is_clean(tmp_path: Path)
             )
     runner.upgrade("head")
     try:
-        assert [v for v in HubInvariants(engine).run() if v.invariant == "hub:epochs-owned"] == []
+        assert [v for v in hub_invariants(engine).run() if v.invariant == "hub:epochs-owned"] == []
     finally:
         engine.dispose()
 

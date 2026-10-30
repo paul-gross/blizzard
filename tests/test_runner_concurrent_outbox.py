@@ -15,7 +15,7 @@ from blizzard.runner.composition import build_stores
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.store import schema as runner
 from blizzard.runner.stores import RunnerStores
-from blizzard.tools.invariants import RunnerInvariants
+from blizzard.tools.invariants import runner_invariants
 from tests.config_inputs import init_host
 from tests.runner_fakes import runner_store_errors
 
@@ -86,7 +86,7 @@ def test_two_runner_threads_writing_one_store_hold_every_outbox_invariant(tmp_pa
             thread.join()
         assert failures == []
 
-        assert RunnerInvariants(engine).run() == []
+        assert runner_invariants(engine).run() == []
         with engine.connect() as conn:
             for table in (runner.outbound_buffer, runner.transcript_outbound_buffer):
                 for runner_id in _RUNNERS:
