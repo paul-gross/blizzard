@@ -729,7 +729,7 @@
     "finding": {
       "commands": {
         "get": {
-          "help": "Worker: read one finding within this chunk's own answered set by FINDING_ID, as\nJSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key\nwithin its own node-step.",
+          "help": "Worker: read one finding within the set this chunk's work items answer by FINDING_ID, as\nJSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key\nwithin its own node-step.",
           "params": [
             {
               "hidden": false,
@@ -744,19 +744,19 @@
             }
           ],
           "path": "runner finding get",
-          "short_help": "Worker: read one finding within this chunk's own answered set by FINDING_ID, as JSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key within its own node-step."
+          "short_help": "Worker: read one finding within the set this chunk's work items answer by FINDING_ID, as JSON \u2014 a key within the worker's own brief, the way ``artifact get NAME`` is a key within its own node-step."
         },
         "list": {
-          "help": "Worker: list the findings this chunk's own accepted, minted garden proposal\nanswers, as JSON.",
+          "help": "Worker: list the findings the accepted, minted garden proposals behind\nthis chunk's work items answer, as JSON.",
           "params": [],
           "path": "runner finding list",
-          "short_help": "Worker: list the findings this chunk's own accepted, minted garden proposal answers, as JSON."
+          "short_help": "Worker: list the findings the accepted, minted garden proposals behind this chunk's work items answer, as JSON."
         }
       },
-      "help": "Worker: read the findings this chunk's own accepted, minted garden proposal\nanswers.",
+      "help": "Worker: read the findings the accepted, minted garden proposals behind\nthis chunk's work items answer.",
       "params": [],
       "path": "runner finding",
-      "short_help": "Worker: read the findings this chunk's own accepted, minted garden proposal answers."
+      "short_help": "Worker: read the findings the accepted, minted garden proposals behind this chunk's work items answer."
     },
     "garden": {
       "commands": {
