@@ -503,8 +503,8 @@ class RunnerInvariants:
         violation, before REAP/RESUME ever reconciles it. A live-system or post-convergence
         caller passes ``True``; right after a raw kill -9 leaves it ``False``."""
         violations: list[Violation] = []
-        # The audit reads every runner's rows at once.
-        with self.audit.connect() as conn:
+        # The audit reads every runner's rows at once, inside one read transaction, so every check sees one moment.
+        with self.audit.read_transaction() as conn:
             checks: tuple[QueryCheck, ...] = (
                 OneLiveLeasePerChunk(conn),
                 NoUnownedLiveLeaseProcess(conn),

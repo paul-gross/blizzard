@@ -92,6 +92,7 @@ from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import migration_runner
+from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -112,6 +113,7 @@ from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
 from blizzard.runner.store.internal.host_usage_limit_store import SubscriptionUsageLimitStore
 from blizzard.runner.store.internal.host_workspace_prompt_store import WorkspacePromptStore
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
+from blizzard.runner.store.internal.invariants import RunnerInvariants
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
@@ -208,6 +210,8 @@ class HostProcess:
     harness_telemetry_names: tuple[HarnessTelemetryNames, ...]
     #: The pass the host's own thread runs: usage sampling and credential renewal.
     host_tick: HostTick
+    #: The runner half of the invariant checker over every runner on the host, one run at a time.
+    invariants: HostInvariantCheck
     #: The one HTTP client every declared subscription's sampler shares, built on first use and closed with the host.
     usage_http_client: LazyUsageHttpClient
     #: Every flag the fleet declares, and the host's own resolved answer — what its ``GET /api/flags`` publishes.
@@ -714,6 +718,7 @@ def _build_host_graph(
             host_hub_http_client = httpx2.Client(base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS)
             platform_tracing.instrument_client(host_hub_http_client)
             host_hub = HttpHostHubClient(host_hub_http_client, token=host_token)
+        process = LinuxProcessProbe()
         host = HostProcess(
             engine=engine,
             readiness=readiness,
@@ -724,8 +729,9 @@ def _build_host_graph(
             events=events,
             clock=clock,
             zone=local_zone(os.environ if environ is None else environ),
-            process=LinuxProcessProbe(),
+            process=process,
             children=children,
+            invariants=HostInvariantCheck(RunnerInvariants(host_stores.runner_audit, process)),
             telemetry_receiver=TelemetryReceiver(
                 platform_tracing=platform_tracing,
                 received_telemetry=received_telemetry,

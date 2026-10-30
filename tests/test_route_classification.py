@@ -64,6 +64,7 @@ _HUB_LEVEL: set[tuple[str, str]] = {
     ("DELETE", "/api/admin/tenants/{tenant_id}"),
     ("POST", "/api/admin/graphs/sync"),
     ("GET", "/api/admin/events"),
+    ("GET", "/api/admin/invariants"),
     ("POST", "/api/admin/sweeps/{name}/passes"),
 }
 
@@ -240,6 +241,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("DELETE", "/api/admin/tenants/{tenant_id}"): Permission.TENANT_ADMIN,
     ("POST", "/api/admin/graphs/sync"): Permission.TENANT_ADMIN,
     ("GET", "/api/admin/events"): Permission.TENANT_ADMIN,
+    ("GET", "/api/admin/invariants"): Permission.TENANT_ADMIN,
     ("POST", "/api/admin/sweeps/{name}/passes"): Permission.TENANT_ADMIN,
     # The read-only events/counts surfaces — no grant of their own.
     ("GET", "/api/analytics/events"): Permission.TRANSCRIPT_READ,

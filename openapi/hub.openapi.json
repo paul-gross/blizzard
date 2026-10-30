@@ -9253,6 +9253,40 @@
         "title": "IntendedMigrationView",
         "type": "object"
       },
+      "InvariantViolation": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "invariant": {
+            "title": "Invariant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invariant",
+          "detail"
+        ],
+        "title": "InvariantViolation",
+        "type": "object"
+      },
+      "InvariantsResponse": {
+        "properties": {
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/InvariantViolation"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "violations"
+        ],
+        "title": "InvariantsResponse",
+        "type": "object"
+      },
       "InvitationCreateRequest": {
         "description": "Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.",
         "properties": {
@@ -18286,6 +18320,31 @@
           }
         },
         "summary": "Grant Hub Admin",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/invariants": {
+      "get": {
+        "description": "Every breach of the hub store's invariants across every tenant, a per-tenant detail prefixed with its tenant;\nan empty list when every invariant holds.",
+        "operationId": "hub_invariants_api_admin_invariants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvariantsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Another invariant check is running on this hub: `{\"code\": \"invariants_in_progress\"}`."
+          }
+        },
+        "summary": "Hub Invariants",
         "tags": [
           "admin"
         ]

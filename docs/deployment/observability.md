@@ -224,6 +224,29 @@ passes for two tenants run side by side. A timed pass that finds its lock held s
    calls.
 3. Remove the `[sweeps.<name>]` table, or set it `timed`, and restart the hub to put the sweep back on its timer.
 
+## Checking the stores' invariants
+
+Two routes run the invariant checker against a live store and answer with every breach it finds. Each reads its store
+inside one read transaction, so every check sees the store as of one moment.
+
+| Route                       | Checks                                                                                                   | Who may call                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET /api/admin/invariants` | The hub store across every tenant; a breach within one tenant names that tenant in its `detail`          | A hub administrator; a runner's credential never |
+| `GET /api/host/invariants`  | The runner store across every runner on the host, including whether each active lease's process is alive | The host's human lane, as `POST /api/host/ticks` |
+
+| Answer | Meaning                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `200`  | `{violations: [{invariant, detail}]}`: each breach's check and what it found; an empty list when every invariant holds |
+| `403`  | The caller may not run the check: on the hub, anyone who is not a hub administrator, a tenant's own admins included    |
+| `409`  | `{"code": "invariants_in_progress"}`, answered at once: another check is running on the same daemon                    |
+
+`invariant` is an open vocabulary: show a value you do not recognise as it is. A daemon runs one check at a time, so
+repeated requests cannot stack scans of a live store.
+
+A runner host marks its crash-orphaned leases for resume when it starts, and its next pass reaps them. Until that pass
+completes, the live-process check can report a lease whose process died with the host. After a restart, ask the host
+only once its first pass has completed: run `POST /api/host/ticks` and wait for its answer.
+
 ## Demo mode
 
 `?demo=true` on any board URL hands the board to an automatic tour for an unattended screen; nothing in the UI announces

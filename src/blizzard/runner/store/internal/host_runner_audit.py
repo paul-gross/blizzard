@@ -8,6 +8,9 @@ read here."""
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
+
 import sqlalchemy as sa
 from sqlalchemy import Connection
 
@@ -25,6 +28,12 @@ class RunnerAudit:
     def connect(self) -> Connection:
         """A connection every statement on which is exempt from the runner guard; close it (``with``) when done."""
         return self._store.connect().execution_options(**{RUNNER_UNSCOPED_OPTION: True})
+
+    @contextmanager
+    def read_transaction(self) -> Generator[Connection, None, None]:
+        """Like :meth:`connect`, inside one read transaction: every statement on it sees the store as of one moment."""
+        with self._store.read_transaction() as conn:
+            yield conn.execution_options(**{RUNNER_UNSCOPED_OPTION: True})
 
     def named_runners(self) -> tuple[str, ...]:
         """The ids of the runners the store's identity rows name, oldest first."""

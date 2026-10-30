@@ -4299,6 +4299,40 @@
         "title": "IntendedMigrationView",
         "type": "object"
       },
+      "InvariantViolation": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "invariant": {
+            "title": "Invariant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invariant",
+          "detail"
+        ],
+        "title": "InvariantViolation",
+        "type": "object"
+      },
+      "InvariantsResponse": {
+        "properties": {
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/InvariantViolation"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "violations"
+        ],
+        "title": "InvariantsResponse",
+        "type": "object"
+      },
       "InvocationUsagePage": {
         "properties": {
           "chunk_id": {
@@ -8065,6 +8099,31 @@
           }
         },
         "summary": "List Environments",
+        "tags": [
+          "host"
+        ]
+      }
+    },
+    "/api/host/invariants": {
+      "get": {
+        "description": "Every breach of the runner store's invariants across the host's runners, its live-process check included;\nan empty list when every invariant holds. Asked right after a restart, it is sound only after the runner's first\ncompleted pass.",
+        "operationId": "host_invariants_api_host_invariants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvariantsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "Another invariant check is running on this host: `{\"code\": \"invariants_in_progress\"}`."
+          }
+        },
+        "summary": "Host Invariants",
         "tags": [
           "host"
         ]

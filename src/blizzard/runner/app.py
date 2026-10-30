@@ -69,6 +69,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.invariants import router as host_invariants_router
 from blizzard.runner.api.invocation_usage import router as invocation_usage_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.otlp_receiver import router as otlp_receiver_router
@@ -122,6 +123,7 @@ from blizzard.runner.process.internal.subprocess_child_processes import Subproce
 from blizzard.runner.route_paths import RUNNER_ROUTE_PREFIX, RUNNERS_SEGMENT, is_api_path
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, HostStores, IRunnerBinding, RunnerReadStores, RunnerStores
 from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
@@ -165,7 +167,14 @@ _HUMAN_GATE = (Depends(require_human_api),)
 # The host's own routes, at the root. Ungated: liveness and the SSO bounce.
 _HOST_UNGATED = (health_router, flags_router, readiness_router, auth_router)
 # The host's human web lane: its own reads, the workspace prompts, and the one event stream.
-_HOST_HUMAN = (host_router, workspace_prompt_router, host_floor_router, host_ticks_router, events_router)
+_HOST_HUMAN = (
+    host_router,
+    workspace_prompt_router,
+    host_floor_router,
+    host_ticks_router,
+    host_invariants_router,
+    events_router,
+)
 # Each runner's ungated routes, in mount order: the worker hooks. `asks_router` is the one mixed router — its
 # POST is ungated, its GET carries the human gate at the route.
 _RUNNER_UNGATED = (
@@ -366,6 +375,7 @@ def create_app(
     binding: IRunnerBinding | None = None,
     stepper: RunnerStepper | None = None,
     host_stepper: HostPassStepper | None = None,
+    host_invariants: HostInvariantCheck | None = None,
     flags: Flags,
 ) -> FastAPI:
     """Build the host's app from resolved config: its own routes at the root, and each of ``runners`` under its
@@ -432,6 +442,8 @@ def create_app(
     )
     app.state.config = config
     app.state.host_stepper = host_stepper
+    # The runner half of the invariant checker; absent, `GET /api/host/invariants` answers 503.
+    app.state.host_invariants = host_invariants
     app.state.flags = flags
     app.state.runners = RunnerRegistry(tuple(runners), tuple(halted))
     app.state.workspaces = tuple(workspaces)
@@ -681,6 +693,7 @@ def _wire_hosted_app(
         clock=host.clock,
         process=host.process,
         host_stepper=host_stepper,
+        host_invariants=host.invariants,
         flags=host.flags,
     )
     resumes = tuple(ResumeMarking(runner.stores, host.host_stores, host.clock, host.process) for runner in host.runners)
@@ -887,6 +900,7 @@ def _wire_runnerless_app(
         events=host.events,
         clock=host.clock,
         process=host.process,
+        host_invariants=host.invariants,
         flags=host.flags,
     )
     return HostedApp(app, (), host.engine, None, (), hub_http_client, owned_host)

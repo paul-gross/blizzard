@@ -49,6 +49,7 @@ from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.operator.requeue import RequeueService
 from blizzard.runner.selftest.service import SelfTestService
+from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import HostReadStores, IRunnerBinding, RunnerReadStores
 from blizzard.runner.throttle.floor_clear import RunnerFloorClearService, SubscriptionFloorClearService
@@ -238,6 +239,11 @@ class RunnerWiring:
     def host_stepper(self) -> HostPassStepper:
         stepper: HostPassStepper | None = self._seam("host_stepper")
         return stepper if stepper is not None else self._refuse("host stepper")
+
+    def host_invariants(self) -> HostInvariantCheck:
+        """The runner half of the invariant checker over every runner on the host."""
+        check: HostInvariantCheck | None = self._seam("host_invariants")
+        return check if check is not None else self._refuse("host invariant check")
 
     def status(self) -> RunnerStatusService:
         service: RunnerStatusService | None = self._seam("runner_status")

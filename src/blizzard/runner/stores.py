@@ -264,6 +264,11 @@ class IRunnerAudit(Protocol):
         ``with``. Typed ``Any``: the audit runs driver statements of its own, and no driver type is named here."""
         ...
 
+    def read_transaction(self) -> AbstractContextManager[Any]:
+        """Like :meth:`connect`, inside one read transaction, so every statement on it sees the store as of one
+        moment; rolled back and closed on leaving the ``with``."""
+        ...
+
     def named_runners(self) -> tuple[str, ...]:
         """The ids of the runners the store's identity rows name, oldest first — empty for a store none has joined."""
         ...

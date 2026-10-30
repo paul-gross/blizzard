@@ -236,7 +236,8 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
 
     def _bind(self, conn: Connection) -> Connection:
         conn.execution_options(**{_SCOPE_OPTION: self.scope})
-        event.listen(conn, "before_execute", _check_execute_time_keys)
+        if not event.contains(conn, "before_execute", _check_execute_time_keys):
+            event.listen(conn, "before_execute", _check_execute_time_keys)
         return conn
 
     @contextmanager

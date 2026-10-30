@@ -11,8 +11,8 @@ changes."""
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any, cast
 
 import sqlalchemy as sa
@@ -24,6 +24,7 @@ from sqlalchemy.sql.compiler import SQLCompiler
 from sqlalchemy.sql.elements import BinaryExpression
 
 from blizzard.foundation.store.key_scoping import KeyedStatements, KeyScoping
+from blizzard.foundation.store.read_transaction import read_transaction
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 
 #: The column every runner-scoped table is keyed by.
@@ -209,6 +210,16 @@ class RunnerStoreConnections:
             return self._engine.connect()
         except SQLAlchemyError as exc:
             raise self._errors.from_driver(exc, operation="connect") from exc
+
+    @contextmanager
+    def read_transaction(self) -> Generator[Connection, None, None]:
+        """A connection inside one read transaction, so every statement on it sees the store as of one moment;
+        rolled back and closed on leaving the ``with``."""
+        try:
+            with read_transaction(self._engine) as conn:
+                yield conn
+        except SQLAlchemyError as exc:
+            raise self._errors.from_driver(exc, operation="read transaction") from exc
 
     def begin(self) -> AbstractContextManager[Connection]:
         try:

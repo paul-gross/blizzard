@@ -2349,6 +2349,30 @@ export type IntendedMigrationView = {
 };
 
 /**
+ * InvariantViolation
+ */
+export type InvariantViolation = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Invariant
+     */
+    invariant: string;
+};
+
+/**
+ * InvariantsResponse
+ */
+export type InvariantsResponse = {
+    /**
+     * Violations
+     */
+    violations: Array<InvariantViolation>;
+};
+
+/**
  * InvocationUsagePage
  */
 export type InvocationUsagePage = {
@@ -4550,6 +4574,29 @@ export type ListEnvironmentsApiHostEnvironmentsGetResponses = {
 };
 
 export type ListEnvironmentsApiHostEnvironmentsGetResponse = ListEnvironmentsApiHostEnvironmentsGetResponses[keyof ListEnvironmentsApiHostEnvironmentsGetResponses];
+
+export type HostInvariantsApiHostInvariantsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/host/invariants';
+};
+
+export type HostInvariantsApiHostInvariantsGetErrors = {
+    /**
+     * Another invariant check is running on this host: `{"code": "invariants_in_progress"}`.
+     */
+    409: unknown;
+};
+
+export type HostInvariantsApiHostInvariantsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvariantsResponse;
+};
+
+export type HostInvariantsApiHostInvariantsGetResponse = HostInvariantsApiHostInvariantsGetResponses[keyof HostInvariantsApiHostInvariantsGetResponses];
 
 export type HostRegistrationApiHostRegistrationGetData = {
     body?: never;
