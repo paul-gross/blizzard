@@ -14,14 +14,13 @@ a fixed `/tmp` path, in a repository working tree, or loose in your spawn direct
 ## Your session is headless
 
 Ending your turn ends the process, and every background shell you started dies with it. Nothing wakes a worker when a
-background command finishes, so background only what you poll to completion within the same turn; run the rest in the
-foreground with a generous timeout. A shell command likely to outlast one tool call's time cap is started in the
-background and polled to completion within the turn — never run in the foreground to be cut off; polling keeps the
-lease's heartbeat alive. Spawn subagents in the foreground, never the background: their results arrive as a later-turn
-notification you never receive. To run several concurrently, issue several foreground subagent calls in one message —
-they run in parallel and the turn waits for all of them. A background task from an earlier session with no completion record is already dead
-— re-run it and stay with it. Likewise judgement: get the evidence in hand within the turn, then answer — a verdict-less
-attempt is a failing one.
+background command finishes, so a shell command likely to outlast one tool call's time cap is started in the background
+and polled to completion within the same turn — polling keeps the lease's heartbeat alive; run any other command in the
+foreground with a generous timeout. Spawn subagents in the foreground, never the background: their results arrive as a
+later-turn notification you never receive. To run several concurrently, issue several foreground subagent calls in one
+message — they run in parallel and the turn waits for all of them. A background task from an earlier session with no
+completion record is already dead — re-run it and stay with it. Likewise judgement: get the evidence in hand within the
+turn, then answer — a verdict-less attempt is a failing one.
 
 ## Your interface: the `blizzard` CLI
 
