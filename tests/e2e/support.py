@@ -13,10 +13,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.graphs import PACKAGED
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.fleet_launchers import REPO, runner_api
+from tests.fleet_launchers import runner_api
 from tests.fleet_world import PUSH_AND_DECLARE_SCRIPT, REPO_NAME, scripted_build_prompt
 from tests.runner_fakes import daemon_store
-from tests.runner_join import fleet_headers
 
 _SCOPE_FOUND = "garden-found"
 _UNKNOWN_FINDING_ID = "fin_0" + "Z" * 25
@@ -283,60 +282,3 @@ def _drive_until(config: RunnerConfig, hub: httpx2.Client, chunk_id: str, env: d
     finally:
         os.environ.clear()
         os.environ.update(prior)
-
-
-def _ingest_promote_claim(forge: httpx2.Client, hub: httpx2.Client, title: str) -> tuple[str, str]:
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "cost render chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    registered = hub.post(
-        "/api/fleet/runners",
-        json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
-        headers=fleet_headers(hub),
-    )
-    assert registered.status_code == 201, registered.text
-    claim = hub.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "workspace_id": "w1", "environment_ids": ["e"]},
-        headers=fleet_headers(hub),
-    )
-    assert claim.status_code == 201, claim.text
-    return chunk_id, claim.json()["envelope"]["node"]["node_id"]
-
-
-def _push_usage(
-    hub: httpx2.Client,
-    *,
-    chunk_id: str,
-    node_id: str,
-    seq: int,
-    cost_usd: float | None,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
-    cache_read_tokens: int = 0,
-    cache_create_tokens: int = 0,
-    estimated_cost_usd: float | None = None,
-) -> None:
-    payload = {
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": 1,
-        "kind": "spawn",
-        "model": "claude-opus-4-8",
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_tokens": cache_read_tokens,
-        "cache_create_tokens": cache_create_tokens,
-        "cost_usd": cost_usd,
-    }
-    if estimated_cost_usd is not None:
-        payload["estimated_cost_usd"] = estimated_cost_usd
-    resp = hub.post(
-        "/api/fleet/events",
-        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
-        headers=fleet_headers(hub),
-    )
-    assert resp.status_code == 200, resp.text

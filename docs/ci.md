@@ -183,6 +183,7 @@ local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time re
 | `tests/ui/transcript-tab.spec.ts`               | UI default | not itemized | 1.5s     |
 | `tests/ui/triage-history.spec.ts`               | UI default | not itemized | 2.0s     |
 | `tests/ui/board-cost-live.spec.ts`              | UI default | not itemized | 6.3s     |
+| `tests/ui/glance-board.spec.ts`                 | UI default | not itemized | 12.8s    |
 
 ## The upgrade rehearsal
 

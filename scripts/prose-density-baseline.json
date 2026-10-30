@@ -10968,12 +10968,6 @@
    "over_cap": 1,
    "total": 224
   },
-  "e2e/test_glance_board_e2e.py": {
-   "comments": 12,
-   "docstrings": 11,
-   "over_cap": 1,
-   "total": 190
-  },
   "e2e/test_graphs_diagram_browser_e2e.py": {
    "comments": 39,
    "docstrings": 32,
