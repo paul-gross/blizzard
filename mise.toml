@@ -20,7 +20,7 @@ description = "Run the standing e2e smoke suite — full-stack scenarios (see bl
 # rediscovered it by hand when this was documented prose instead.
 depends = ["web-build"]
 # The same pin as `collector-config-check`, kept beside it — change both together.
-tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = "otelcol-contrib_*", bin = "otelcol-contrib" } }
+tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = 'otelcol-contrib_*_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz' } }
 run = "BLIZZARD_E2E=1 uv run pytest tests/e2e/"
 
 [tasks.crash-sweep]
@@ -52,7 +52,8 @@ description = "Run the service tier's pytest half — the cases whose subject is
 run = "BLIZZARD_SERVICE=1 uv run pytest -n auto tests/service/"
 
 [tasks.playwright]
-description = "Run the Playwright package (tests/) — the service and UI projects; arguments after -- pass to playwright test"
+description = "Run the Playwright package (tests/), including service, UI and harness projects; arguments after -- pass to playwright test. Installs the pinned collector for service trace tests."
+tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = 'otelcol-contrib_*_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz' } }
 dir = "tests"
 run = "npx playwright test"
 
@@ -141,8 +142,8 @@ description = "Print the release notes a tag publishes with blizzard-change-note
 run = "uv run blizzard-change-notes render"
 
 [tasks.collector-config-check]
-description = "blizzard:collector-config — validate the example operator collector config (packaging/otel-collector/collector.yaml) with the pinned otelcol-contrib. Local-only: the binary is ~390 MB and the CI gate is network-free."
-tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = "otelcol-contrib_*", bin = "otelcol-contrib" } }
+description = "blizzard:collector-config — validate the example operator collector config (packaging/otel-collector/collector.yaml) with the pinned otelcol-contrib."
+tools = { "github:open-telemetry/opentelemetry-collector-releases" = { version = "0.162.0", asset_pattern = 'otelcol-contrib_*_{{ os(macos="darwin") }}_{{ arch(x64="amd64") }}.tar.gz' } }
 env = { TRACE_STORE_ENDPOINT = "tempo.example:4317", TRACE_STORE_INSECURE = "false", HOSTED_TRACES_ENDPOINT = "https://api.example.com", HOSTED_TRACES_API_KEY = "placeholder" }
 run = "otelcol-contrib validate --config=packaging/otel-collector/collector.yaml"
 

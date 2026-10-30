@@ -173,6 +173,15 @@ jobs:
       - name: npm ci
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: cd blizzard/tests && npm ci
+      - name: cache the pinned collector for service traces
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/mise/installs/github-open-telemetry-opentelemetry-collector-releases
+          key: otelcol-contrib-${{ runner.os }}-${{ hashFiles('blizzard/mise.toml') }}
+      - name: install the Playwright task's collector
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
+        run: cd blizzard && mise run collector-config-check && mise run playwright -- --version
       - name: service tier — the Playwright half, `mise run playwright`
         timeout-minutes: 30
         env:

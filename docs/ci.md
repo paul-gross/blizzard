@@ -117,6 +117,10 @@ Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run 
 `mise run crash-sweep-ci` for the bounded profile `push.yml` runs. The `e2e`, `ui`, `journey`, `image-smoke` and
 `compose-smoke` tasks can also run alone.
 
+The service tier's Playwright half requires the pinned `otelcol-contrib` for its collector trace tests. Run it locally
+with `mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner`;
+mise installs the collector on first use. CI caches and installs the same tool for each Playwright shard.
+
 **Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
 tag run the e2e job took 1453s, the full crash sweep 837s, the service tier 613s, and the merge gate's pytest shards
 about 1000s. Measured locally, the journey takes about 45s and each smoke about 80s on a warm docker cache, so none adds
