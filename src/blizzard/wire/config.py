@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.forge import OldFieldWarning
-from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.repository import LandingPolicyName, RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
@@ -62,7 +62,10 @@ class ProjectDocument(BaseModel):
     least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
     the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
     omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
-    project left is refused: name that project by its current slug."""
+    project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
+    the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
+    entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
+    stands. Export writes it only for a project that ranks a repository."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -72,6 +75,7 @@ class ProjectDocument(BaseModel):
     color: str | None = None
     sources: list[str] = []
     repositories: list[str] = []
+    landing_order: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ScopeEntry(ScopeDocument):
@@ -131,6 +135,8 @@ class RepositoryEntry(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicyName | None = None
+    park_timeout_hours: int | None = None
 
 
 class WorkSourceEntry(BaseModel):

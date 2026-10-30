@@ -34,6 +34,7 @@ describe('forge admin models', () => {
     const detail: ForgeDetail = {
       ...GITHUB,
       budgets: [],
+      offered: [],
       repositories: [{ kind: 'repository', key: 'repo_1', label: 'blizzard' }],
       work_sources: [{ kind: 'work_source', key: 'wsrc_1', label: 'issues' }],
     };

@@ -3861,6 +3861,10 @@ export type ForgeDetail = {
      */
     name: string;
     /**
+     * Offered
+     */
+    offered: Array<string>;
+    /**
      * Repositories
      */
     repositories: Array<ForgeReferenceView>;
@@ -5639,6 +5643,47 @@ export type LandedRepoView = {
 };
 
 /**
+ * LandingOrderRequest
+ *
+ * A project's whole landing order: ``repositories``, each an id or a slug, ranked ``1.0``, ``2.0``, … in the
+ * list's order; a linked repository the list leaves out becomes unranked.
+ */
+export type LandingOrderRequest = {
+    /**
+     * Repositories
+     */
+    repositories: Array<string>;
+};
+
+/**
+ * LandingPolicyName
+ *
+ * A landing policy a write may name — how a repository's changes land.
+ */
+export type LandingPolicyName = 'merge-on-checks';
+
+/**
+ * LandingPositionRequest
+ *
+ * One move in a project's landing order: ``repository`` to just after ``after_repository``, to the front when
+ * that is ``null``, or to unranked with ``unranked``. Each repository is an id or a slug.
+ */
+export type LandingPositionRequest = {
+    /**
+     * After Repository
+     */
+    after_repository?: string | null;
+    /**
+     * Repository
+     */
+    repository: string;
+    /**
+     * Unranked
+     */
+    unranked?: boolean;
+};
+
+/**
  * LeaseTranscriptView
  *
  * A lease's transcript, concatenated across every segment stored under its
@@ -6190,7 +6235,10 @@ export type ProjectCreateRequest = {
  * least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
  * the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
  * omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
- * project left is refused: name that project by its current slug.
+ * project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
+ * the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
+ * entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
+ * stands. Export writes it only for a project that ranks a repository.
  */
 export type ProjectDocument = {
     /**
@@ -6201,6 +6249,10 @@ export type ProjectDocument = {
      * Description
      */
     description?: string;
+    /**
+     * Landing Order
+     */
+    landing_order?: Array<string> | null;
     /**
      * Name
      */
@@ -6894,6 +6946,7 @@ export type RepositoryCreateRequest = {
      * @deprecated
      */
     forge_api_url?: string | null;
+    landing_policy?: LandingPolicyName;
     /**
      * Name
      */
@@ -6902,6 +6955,10 @@ export type RepositoryCreateRequest = {
      * Owner
      */
     owner: string;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours?: number | null;
     /**
      * Repo
      */
@@ -6921,7 +6978,8 @@ export type RepositoryCreateRequest = {
  *
  * A repository as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
  * ``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label —
- * the slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.
+ * the slug when omitted on create, left as stored on an edit, as is an omitted ``landing_policy`` (a new repository's
+ * is ``merge-on-checks``). ``secret_name`` names a stored secret.
  */
 export type RepositoryDocument = {
     /**
@@ -6932,6 +6990,7 @@ export type RepositoryDocument = {
      * Forge Api Url
      */
     forge_api_url: string;
+    landing_policy?: LandingPolicyName | null;
     /**
      * Name
      */
@@ -6940,6 +6999,10 @@ export type RepositoryDocument = {
      * Owner
      */
     owner: string;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours?: number | null;
     /**
      * Repo
      */
@@ -6968,6 +7031,7 @@ export type RepositoryEntry = {
      * Forge
      */
     forge: string;
+    landing_policy?: LandingPolicyName | null;
     /**
      * Name
      */
@@ -6976,6 +7040,10 @@ export type RepositoryEntry = {
      * Owner
      */
     owner: string;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours?: number | null;
     /**
      * Repo
      */
@@ -6994,7 +7062,8 @@ export type RepositoryEntry = {
  * RepositoryLinkView
  *
  * A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
- * ``linked`` is false once the link is retired (unlinked).
+ * ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
+ * order, lower landing first — ``null`` when unranked.
  */
 export type RepositoryLinkView = {
     /**
@@ -7005,6 +7074,10 @@ export type RepositoryLinkView = {
      * Name
      */
     name: string;
+    /**
+     * Position
+     */
+    position: number | null;
     /**
      * Project Id
      */
@@ -7026,7 +7099,8 @@ export type RepositoryLinkView = {
 /**
  * RepositoryLinksView
  *
- * A project's standing repository links by repository id — ``GET /api/projects/{project}/repository-links``.
+ * A project's standing repository links in landing order — ranked ones by position, then the unranked, each tie
+ * by slug — ``GET /api/projects/{project}/repository-links``.
  */
 export type RepositoryLinksView = {
     /**
@@ -7038,10 +7112,10 @@ export type RepositoryLinksView = {
 /**
  * RepositoryPatchRequest
  *
- * A sparse edit: an absent field is unchanged, a present one is set, and an explicit
- * ``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``
- * does so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims
- * it.
+ * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
+ * field but ``park_timeout_hours``, where it clears the timeout back to its default. ``forge`` re-points the
+ * repository at a forge by id or slug; ``forge_api_url`` does so the old way, with a warning. A slug that changes
+ * keeps resolving to the repository until another claims it.
  */
 export type RepositoryPatchRequest = {
     /**
@@ -7058,6 +7132,7 @@ export type RepositoryPatchRequest = {
      * @deprecated
      */
     forge_api_url?: string | null;
+    landing_policy?: LandingPolicyName | null;
     /**
      * Name
      */
@@ -7066,6 +7141,10 @@ export type RepositoryPatchRequest = {
      * Owner
      */
     owner?: string | null;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours?: number | null;
     /**
      * Repo
      */
@@ -7122,6 +7201,10 @@ export type RepositorySummary = {
      */
     forge_slug: string;
     /**
+     * Landing Policy
+     */
+    landing_policy: string;
+    /**
      * Name
      */
     name: string;
@@ -7129,6 +7212,10 @@ export type RepositorySummary = {
      * Owner
      */
     owner: string;
+    /**
+     * Park Timeout Hours
+     */
+    park_timeout_hours: number | null;
     /**
      * Repo
      */
@@ -16574,6 +16661,78 @@ export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResp
 };
 
 export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponse = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostResponses];
+
+export type PutLandingOrderApiProjectsProjectLandingOrderPutData = {
+    body: LandingOrderRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/landing-order';
+};
+
+export type PutLandingOrderApiProjectsProjectLandingOrderPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutLandingOrderApiProjectsProjectLandingOrderPutError = PutLandingOrderApiProjectsProjectLandingOrderPutErrors[keyof PutLandingOrderApiProjectsProjectLandingOrderPutErrors];
+
+export type PutLandingOrderApiProjectsProjectLandingOrderPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinksView;
+};
+
+export type PutLandingOrderApiProjectsProjectLandingOrderPutResponse = PutLandingOrderApiProjectsProjectLandingOrderPutResponses[keyof PutLandingOrderApiProjectsProjectLandingOrderPutResponses];
+
+export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostData = {
+    body: LandingPositionRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/landing-order/position';
+};
+
+export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostError = PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors[keyof PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors];
+
+export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinksView;
+};
+
+export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponse = PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponses[keyof PositionRepositoryApiProjectsProjectLandingOrderPositionPostResponses];
 
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetData = {
     body?: never;

@@ -243,6 +243,22 @@ class PlannedWrite:
 
 @domain_model
 @dataclass(frozen=True)
+class PlannedPosition:
+    """One landing-order fact the apply will commit for a project's repository link, after every record write: the
+    link's new ``position`` — ``None`` for unranked — set at ``at`` by ``by``. A position is no revision of the link,
+    so it carries no change row."""
+
+    section: str
+    index: int
+    project_id: str
+    repository_id: str
+    position: float | None
+    at: datetime
+    by: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class EntryOutcome:
     """One outcome row: a change written, or ``op=None`` for a named record that needed none."""
 
@@ -257,6 +273,8 @@ class EntryOutcome:
 class ApplyPlan:
     writes: tuple[PlannedWrite, ...] = ()
     outcomes: tuple[EntryOutcome, ...] = ()
+    #: The landing-order facts, committed after ``writes`` so a link the plan creates stands before its position.
+    positions: tuple[PlannedPosition, ...] = ()
 
 
 @domain_model
@@ -301,8 +319,11 @@ class StoredConfig:
 class IConfigApplyWriter(Protocol):
     """Commits every planned write in one transaction."""
 
-    def apply(self, writes: Sequence[PlannedWrite], *, dry_run: bool) -> None:
-        """Run each write through the same in-transaction checks its per-record verb runs, in order.
+    def apply(
+        self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
+    ) -> None:
+        """Run each write through the same in-transaction checks its per-record verb runs, in order, then append each
+        of ``positions``.
         With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
         the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
         ...
@@ -330,7 +351,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         (ROUTINES_SECTION, RecordKind.ROUTINE, declaration.routines, stored.routines),
     ):
         _reconcile_section(_DeclaredRecordSection(section, kind, declared, stored, ctx, at), stored_records, plan)
-    return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes))
+    return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes), positions=declaration.projects.positions)
 
 
 class _Accumulator:

@@ -73,6 +73,7 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
             for s in sources
             if s.fields.forge_id == record.forge_id
         ],
+        offered=sorted(services.forges.offered(record)),
         budgets=[
             ForgeBudgetView(
                 secret_name=key.secret_name,

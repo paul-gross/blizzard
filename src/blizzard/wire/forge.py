@@ -75,6 +75,8 @@ class ForgeBudgetView(WireModel):
 class ForgeDetail(ForgeSummary):
     repositories: list[ForgeReferenceView]
     work_sources: list[ForgeReferenceView]
+    #: The capabilities the forge offers, by name — what a repository's landing policy is checked against.
+    offered: list[str] = []
     #: Each budget's last reading, held in memory since the hub started; empty until the forge has been heard from.
     budgets: list[ForgeBudgetView]
 

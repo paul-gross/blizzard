@@ -60,18 +60,18 @@ def in_landing_order(links: Sequence[RankedLink]) -> list[RankedLink]:
 
 
 def whole_order(
-    links: Sequence[RankedLink], ordered: Sequence[RepositoryId], *, project: str
+    links: Sequence[RankedLink], ordered: Sequence[RepositoryId], *, project: str, field: str = "repositories"
 ) -> tuple[PositionFact, ...]:
     """The facts that rank ``ordered`` ``1.0``, ``2.0``, … and every other of ``links`` unranked.
     :class:`RepositoryNotLinked` for a repository ``links`` does not hold; :class:`ConfigFieldError` for one named
-    twice."""
+    twice — each on ``field``, the list that named it."""
     by_id = {link.repository_id: link for link in links}
     seen: set[RepositoryId] = set()
     for repository_id in ordered:
         if repository_id not in by_id:
-            raise RepositoryNotLinked("repositories", repository_id, project)
+            raise RepositoryNotLinked(field, repository_id, project)
         if repository_id in seen:
-            raise ConfigFieldError("repositories", f"repository {by_id[repository_id].slug} is named twice")
+            raise ConfigFieldError(field, f"repository {by_id[repository_id].slug} is named twice")
         seen.add(repository_id)
     wanted: dict[RepositoryId, float | None] = {link.repository_id: None for link in links}
     wanted.update((repository_id, FIRST_POSITION + index) for index, repository_id in enumerate(ordered))

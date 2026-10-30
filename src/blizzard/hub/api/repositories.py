@@ -24,6 +24,7 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD, ForgeChoice
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
+from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -34,6 +35,7 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.repository import (
+    LandingPolicyName,
     RepositoriesListView,
     RepositoryCreateRequest,
     RepositoryPatchRequest,
@@ -63,6 +65,8 @@ def _summary(record: ConfiguredRepository, forge: ConfiguredForge, names: Mappin
         repo=fields.repo,
         base_branch=fields.base_branch,
         secret_name=fields.secret_name,
+        landing_policy=fields.landing_policy,
+        park_timeout_hours=fields.park_timeout_hours,
         revision=record.revision,
         created_at=iso_utc(record.created_at),
         created_by=record.created_by,
@@ -95,6 +99,11 @@ def _forge_choice(request: RepositoryCreateRequest | RepositoryPatchRequest, ser
         api_base=request.forge_api_url if _ADDRESS in present else UNSET,
         named=None if forge is UNSET else services.forge_records.resolve(forge),
     )
+
+
+def landing_policy(value: LandingPolicyName | None) -> LandingPolicy | None:
+    """The domain's policy a request names; ``None`` passes through for the record to refuse."""
+    return None if value is None else LandingPolicy(value.value)
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -135,7 +144,12 @@ def create_repository(
     forge holds, and `forge_conflict` for a `forge_api_url` that is not `forge`'s; 409 for a slug some repository
     holds or a taken `(forge_api_url, owner, repo)`, naming the holder."""
     draft = RepositoryDraft(
-        owner=request.owner, repo=request.repo, base_branch=request.base_branch, secret_name=request.secret_name
+        owner=request.owner,
+        repo=request.repo,
+        base_branch=request.base_branch,
+        secret_name=request.secret_name,
+        landing_policy=LandingPolicy(request.landing_policy.value),
+        park_timeout_hours=request.park_timeout_hours,
     )
     try:
         authored = services.config_authoring.create_repository_naming(
@@ -169,15 +183,16 @@ def patch_repository(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RepositorySummary:
-    """Apply only the fields present; an explicit `null` is refused naming the field. A patch
-    that changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims
-    it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a
-    taken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the repository at
-    a forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry."""
+    """Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other
+    field. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until
+    another claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository
+    holds, or a taken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the
+    repository at a forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry."""
     present = request.model_fields_set
-    edit = RepositoryEdit(
-        **{field: getattr(request, field) for field in present if field not in (_ADDRESS, FORGE_FIELD)}
-    )
+    stated = {field: getattr(request, field) for field in present if field not in (_ADDRESS, FORGE_FIELD)}
+    if "landing_policy" in stated:
+        stated["landing_policy"] = landing_policy(stated["landing_policy"])
+    edit = RepositoryEdit(**stated)
     try:
         authored = services.config_authoring.edit_repository_naming(
             record, edit, _forge_choice(request, services), change_context(identity, door), if_match=if_match

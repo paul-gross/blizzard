@@ -416,8 +416,8 @@ class ConfigAuthoring:
         — under ``dry_run`` — run that same transaction and roll it back. The outcomes are the same either way."""
         plan = reconcile(declaration, stored, ctx, at=self._clock.now())
         self._require_planned_offered(plan)
-        if plan.writes:
-            self._apply_writer.apply(plan.writes, dry_run=dry_run)
+        if plan.writes or plan.positions:
+            self._apply_writer.apply(plan.writes, dry_run=dry_run, positions=plan.positions)
         return plan.outcomes
 
     # --- Carry-over --------------------------------------------------------------

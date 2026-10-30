@@ -95,6 +95,7 @@ const REPO_LINK = {
   name: 'Blizzard',
   linked: true,
   revision: 1,
+  position: null,
 };
 const GONE_LINK = sourceLink({ name: 'old', linked: false, revision: 2 });
 
@@ -232,7 +233,7 @@ describe('projects model', () => {
     ] as RepositorySummary[];
     expect(
       repositoryLinkRows(
-        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3 }],
+        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3, position: null }],
         repositories,
       ),
     ).toEqual([
@@ -287,7 +288,7 @@ describe('projects model', () => {
     expect(wiringCallout(['repository'], 4)).toBe('This project has no repository yet.');
     const wired = missingWiring(
       [sourceLink({ name: 'jira', linked: true, revision: 1 })],
-      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1 }],
+      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1, position: null }],
       true,
     );
     expect(wiringCallout(wired)).toBeNull();

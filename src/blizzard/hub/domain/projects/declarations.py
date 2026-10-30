@@ -1,9 +1,9 @@
 """Projects in a configuration document, and the project a document entry or a legacy import acts in
 (``bzh:config-apply``); the ``projects`` section is planned here for :mod:`blizzard.hub.domain.config.apply`.
 
-Each entry declares a project by slug — its name and description, and the sources and repositories it links. A
-``sources`` or ``repositories`` list an entry states is the whole set, each named by id, slug or a slug it left; one
-left out is unlinked, and an omitted list leaves the stored links. A slug some project left is refused, naming it."""
+Each entry declares a project by slug, its name and description, the sources and repositories it links — a stated
+list is the whole set, an omitted one left as stored — and its ``landing_order``, planned after the links. A slug some
+project left is refused, naming it."""
 
 from __future__ import annotations
 
@@ -19,11 +19,12 @@ from blizzard.hub.domain.config.apply import (
     ApplyPlan,
     EntryOutcome,
     LinkRecord,
+    PlannedPosition,
     PlannedWrite,
     ProjectRecord,
 )
 from blizzard.hub.domain.config.carry_over import IImportLinks, LegacyImportRefused
-from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, RecordKind
+from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import REPOSITORY_KIND, RepositoryId, RepositoryRef
 from blizzard.hub.domain.config.work_sources import (
@@ -47,10 +48,12 @@ from blizzard.hub.domain.projects.model import (
     ProjectSlug,
     sole_project,
 )
+from blizzard.hub.domain.projects.order import RankedLink, in_landing_order, whole_order
 from blizzard.hub.domain.projects.resolve import locate
 
 SOURCES_FIELD = "sources"
 REPOSITORIES_FIELD = "repositories"
+LANDING_ORDER_FIELD = "landing_order"
 PROJECT_FIELD = "project"
 
 _Link = TypeVar("_Link", SourceLink, RepositoryLink)
@@ -70,21 +73,22 @@ class EntryProjectRequired(ConfigFieldError):
 class ProjectDeclaration:
     """A project the document names by slug: the sparse edit of the name, description and color it states, and the
     sources and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored
-    links)."""
+    links) — and the repositories it ranks, in landing order, named the same way (``None`` leaves the stored order)."""
 
     slug: str
     edit: ProjectEdit
     sources: tuple[str, ...] | None = None
     repositories: tuple[str, ...] | None = None
+    landing_order: tuple[str, ...] | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class StoredProjects:
     """What the edge loaded: every project of the tenant; the project that left each slug the document names that no
-    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, linked source id
-    or repository id)``; and the work sources and repositories stored or declared in the document — retired ones
-    included — each kind with the record that left each referenced slug no record of it holds."""
+    project holds; every stored link of a declared project, unlinked ones included, by ``(project id, target id)``;
+    and the work sources and repositories stored or declared — retired ones included — each kind with the record that
+    left each referenced slug no record of it holds."""
 
     projects: tuple[Project, ...]
     former: Mapping[str, Project] = field(default_factory=dict[str, Project])
@@ -202,13 +206,14 @@ def plan_projects(
     sources = PlannedWorkSources(stored.sources, stored.former_sources)
     writes: list[PlannedWrite] = []
     outcomes: list[EntryOutcome] = []
+    positions: list[PlannedPosition] = []
     seen: set[str] = set()
     for index, entry in enumerate(declared):
         try:
             if entry.slug in seen:
                 raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
             seen.add(entry.slug)
-            planned = _Entry(index, writes, outcomes)
+            planned = _Entry(index, writes, outcomes, positions)
             record = planned.project(
                 entry, current.get(ProjectSlug.parse(entry.slug).value), stored, current.values(), pick, ctx, at
             )
@@ -222,21 +227,30 @@ def plan_projects(
                 at,
                 {ref.work_source_id: ref.slug for ref in stored.sources},
             )
+            repository_targets = _repository_targets(entry.repositories, repositories)
             planned.links(
                 record,
-                _repository_targets(entry.repositories, repositories),
+                repository_targets,
                 stored.repository_links,
                 RepositoryLink.new,
                 ctx,
                 at,
                 {ref.repository_id: ref.slug for ref in stored.repositories},
             )
+            if entry.landing_order is not None:
+                planned.order(
+                    record,
+                    _ordered(entry.landing_order, repositories),
+                    _landing_links(record, repository_targets, stored.repository_links, repositories),
+                    ctx,
+                    at,
+                )
             if not planned.written:
                 outcomes.append(EntryOutcome(RecordKind.PROJECT, entry.slug, None))
         except ConfigFieldError as exc:
             raise ApplyEntryRefused(PROJECTS_SECTION, index, exc) from exc
     return ProjectsPlan(
-        section=ApplyPlan(tuple(writes), tuple(outcomes)),
+        section=ApplyPlan(tuple(writes), tuple(outcomes), tuple(positions)),
         projects=tuple(sorted(current.values(), key=lambda p: p.slug)),
         former=stored.former,
     )
@@ -250,6 +264,7 @@ class _Entry:
     index: int
     writes: list[PlannedWrite]
     outcomes: list[EntryOutcome]
+    positions: list[PlannedPosition]
     written: bool = False
 
     def project(
@@ -315,6 +330,36 @@ class _Entry:
             if project_id == project.project_id and target not in targets:
                 self._move(project, link, link.unlink(ctx, if_match=None, at=at), slugs.get(target, target))
 
+    def order(
+        self,
+        project: Project,
+        ordered: Sequence[tuple[RepositoryId, str]],
+        links: Sequence[RankedLink],
+        ctx: ChangeContext,
+        at: datetime,
+    ) -> None:
+        """Rank ``ordered`` — each repository's id and slug — and leave every other of ``links`` unranked, planning a
+        fact only for a link whose position changes; its outcome row shows the ranked repositories before and after."""
+        facts = whole_order(
+            links, [repository_id for repository_id, _ in ordered], project=project.slug, field=LANDING_ORDER_FIELD
+        )
+        if not facts:
+            return
+        self.positions.extend(
+            PlannedPosition(
+                PROJECTS_SECTION, self.index, project.project_id, fact.repository_id, fact.position, at, ctx.actor
+            )
+            for fact in facts
+        )
+        before = [link.slug for link in in_landing_order(links) if link.position is not None]
+        after = [slug for _, slug in ordered]
+        self.outcomes.append(
+            EntryOutcome(
+                RecordKind.PROJECT, project.slug, ChangeOp.EDIT, (FieldChange(LANDING_ORDER_FIELD, before, after),)
+            )
+        )
+        self.written = True
+
     def _move(self, project: Project, link: _Link, decided: tuple[_Link, ConfigChange] | None, shown: str) -> None:
         if decided is not None:
             moved, change = decided
@@ -364,6 +409,50 @@ def _repository_targets(references: tuple[str, ...] | None, repositories: Planne
             raise ConfigFieldError(REPOSITORIES_FIELD, f"{reference!r} is neither stored nor declared in this document")
         targets[found.repository_id] = found.slug
     return targets
+
+
+def _ordered(references: tuple[str, ...], repositories: PlannedRepositories) -> list[tuple[RepositoryId, str]]:
+    """The repositories a ``landing_order`` lists, in its order — each reference resolved to the repository's id and
+    current slug. A reference must name a repository stored or declared in the document."""
+    ordered: list[tuple[RepositoryId, str]] = []
+    for reference in references:
+        found = repositories.resolve(reference)
+        if found is None:
+            raise ConfigFieldError(
+                LANDING_ORDER_FIELD, f"{reference!r} is neither stored nor declared in this document"
+            )
+        ordered.append((found.repository_id, found.slug))
+    return ordered
+
+
+def _landing_links(
+    project: Project,
+    targets: Mapping[str, str] | None,
+    stored: Mapping[tuple[str, str], RepositoryLink],
+    repositories: PlannedRepositories,
+) -> list[RankedLink]:
+    """The project's repository links as its entry leaves them, each with the position it stands at: the repositories
+    a stated ``repositories`` list names, or else the standing stored links. A link the entry creates is unranked, and
+    one it relinks keeps the position it had."""
+    if targets is None:
+        standing = {
+            target: link.position
+            for (project_id, target), link in stored.items()
+            if project_id == project.project_id and link.linked
+        }
+        slugs = {target: _slug_of(target, repositories) for target in standing}
+    else:
+        standing = {}
+        for target in targets:
+            held = stored.get((project.project_id, target))
+            standing[target] = None if held is None else held.position
+        slugs = dict(targets)
+    return [RankedLink(RepositoryId(target), slugs[target], position) for target, position in standing.items()]
+
+
+def _slug_of(repository_id: str, repositories: PlannedRepositories) -> str:
+    found = repositories.get(RepositoryId(repository_id))
+    return repository_id if found is None else found.slug
 
 
 class ImportLinks:

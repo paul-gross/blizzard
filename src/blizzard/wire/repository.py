@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
+
+
+class LandingPolicyName(StrEnum):
+    """A landing policy a write may name — how a repository's changes land."""
+
+    MERGE_ON_CHECKS = "merge-on-checks"
 
 
 class RepositorySummary(WireModel):
@@ -24,6 +32,10 @@ class RepositorySummary(WireModel):
     repo: str
     base_branch: str
     secret_name: str
+    #: How the repository's changes land; a policy this build does not know is passed through as it reads.
+    landing_policy: str
+    #: How long a parked change may wait, in hours; ``None`` reads as the default.
+    park_timeout_hours: int | None = None
     revision: int
     created_at: str
     created_by: str
@@ -36,7 +48,8 @@ class RepositorySummary(WireModel):
 class RepositoryDocument(BaseModel):
     """A repository as a document — an entry of the version-1 configuration document, and the model whose JSON Schema
     ``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label —
-    the slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret."""
+    the slug when omitted on create, left as stored on an edit, as is an omitted ``landing_policy`` (a new repository's
+    is ``merge-on-checks``). ``secret_name`` names a stored secret."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -47,6 +60,8 @@ class RepositoryDocument(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicyName | None = None
+    park_timeout_hours: int | None = None
 
 
 class RepositoryCreateRequest(BaseModel):
@@ -65,13 +80,15 @@ class RepositoryCreateRequest(BaseModel):
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicyName = LandingPolicyName.MERGE_ON_CHECKS
+    park_timeout_hours: int | None = None
 
 
 class RepositoryPatchRequest(BaseModel):
-    """A sparse edit: an absent field is unchanged, a present one is set, and an explicit
-    ``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``
-    does so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims
-    it."""
+    """A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
+    field but ``park_timeout_hours``, where it clears the timeout back to its default. ``forge`` re-points the
+    repository at a forge by id or slug; ``forge_api_url`` does so the old way, with a warning. A slug that changes
+    keeps resolving to the repository until another claims it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -83,6 +100,8 @@ class RepositoryPatchRequest(BaseModel):
     repo: str | None = None
     base_branch: str | None = None
     secret_name: str | None = None
+    landing_policy: LandingPolicyName | None = None
+    park_timeout_hours: int | None = None
 
 
 class RepositoriesListView(WireModel):

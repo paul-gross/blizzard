@@ -52,8 +52,21 @@ def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
     sources = [
         f"{row['name']} (built in)" if row.get("built_in") else row.get("slug") or row["name"] for row in source_links
     ]
-    repositories = [row["slug"] for row in repository_links]
-    return [f"sources {', '.join(sources) or '-'}", f"repositories {', '.join(repositories) or '-'}"]
+    return [f"sources {', '.join(sources) or '-'}", *_landing_order(repository_links)]
+
+
+def _landing_order(repository_links: list[Any]) -> list[str]:
+    """The project's repositories in landing order, as the hub lists them, each with its position or "unranked"."""
+    if not repository_links:
+        return ["repositories -"]
+    return [
+        "repositories, in landing order:",
+        *(f"  {row['slug']}  {_position(row.get('position'))}" for row in repository_links),
+    ]
+
+
+def _position(position: float | None) -> str:
+    return "unranked" if position is None else f"{position:g}"
 
 
 def _target(source: str | None, repository: str | None) -> tuple[str, str, str]:
@@ -97,8 +110,8 @@ def project_list(cli: CliContext) -> None:
 @project_group.command("get", cls=FleetCommand)
 @click.argument("project")
 def project_show(cli: CliContext, project: str) -> None:
-    """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources and repositories
-    linked to it."""
+    """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources linked to it and the
+    repositories linked to it, in landing order, each with its position or "unranked"."""
     missing = {404: f"no project {project}"}
     body = cli.get(f"/api/projects/{project}", "GET /projects/{project}", on_status=missing).json()
     sources = cli.get(
@@ -202,3 +215,52 @@ def project_unlink(
         door=True,
     )
     cli.show_lines(resp.json(), f"project {project} is unlinked from {kind} {record}")
+
+
+def _order_refusals(project: str) -> dict[int, str]:
+    return {404: f"no project {project}", 422: "landing order refused"}
+
+
+def _show_order(cli: CliContext, project: str, body: Any) -> None:
+    cli.show_lines(body, f"project {project}", *_landing_order(body["repository_links"]))
+
+
+@project_group.command("order", cls=FleetCommand)
+@click.argument("project")
+@click.argument("repositories", nargs=-1, required=True)
+def project_order(cli: CliContext, project: str, repositories: tuple[str, ...]) -> None:
+    """Set PROJECT's whole landing order: REPOSITORIES, each by id or slug, land first to last, and every other
+    repository PROJECT links becomes unranked, landing after them by slug. Setting the order PROJECT already has
+    writes nothing. Refused for a repository PROJECT does not link."""
+    resp = cli.put(
+        f"/api/projects/{project}/landing-order",
+        "PUT /projects/{project}/landing-order",
+        json_body={"repositories": list(repositories)},
+        on_status=_order_refusals(project),
+        door=True,
+    )
+    _show_order(cli, project, resp.json())
+
+
+@project_group.command("position", cls=FleetCommand)
+@click.argument("project")
+@click.argument("repository")
+@click.option("--after", "after", default=None, metavar="REPOSITORY", help="Land just after this ranked repository.")
+@click.option("--first", "first", is_flag=True, default=False, help="Land before every other repository.")
+@click.option("--unranked", "unranked", is_flag=True, default=False, help="Rank it no longer; it lands by slug.")
+def project_position(
+    cli: CliContext, project: str, repository: str, after: str | None, first: bool, unranked: bool
+) -> None:
+    """Move REPOSITORY in PROJECT's landing order: just after a ranked repository (--after), to the front (--first),
+    or out of the ranking (--unranked). Refused for a repository PROJECT does not link."""
+    if sum((after is not None, first, unranked)) != 1:
+        raise click.UsageError("give exactly one of --after, --first or --unranked")
+    body: dict[str, Any] = {"repository": repository, "after_repository": after, "unranked": unranked}
+    resp = cli.post(
+        f"/api/projects/{project}/landing-order/position",
+        "POST /projects/{project}/landing-order/position",
+        json_body=body,
+        on_status=_order_refusals(project),
+        door=True,
+    )
+    _show_order(cli, project, resp.json())
