@@ -538,6 +538,35 @@ def test_a_successful_read_re_arms_the_skip_announcement(tmp_path: Path) -> None
     assert len(_skip_events(hub.services)) == 2
 
 
+class _TogglingRegistry(WorkSourceRegistry):
+    """A registry whose source is neither annotating nor clearable while ``active`` is unset."""
+
+    active = True
+
+    def label_clearer(self, source: str) -> IWorkAnnotator | None:
+        return super().label_clearer(source) if self.active else None
+
+    def annotating_ids(self) -> list[str]:
+        return super().annotating_ids() if self.active else []
+
+
+@pytest.mark.component
+def test_a_source_that_stops_annotating_mid_outage_is_announced_again_on_return(tmp_path: Path) -> None:
+    hub, _, _ = _gated(tmp_path)
+    registry = _TogglingRegistry({}, {"default": _FlakyRead()})
+    reconciler = _reconciler(hub, registry)
+    reconciler.sweep()
+
+    registry.active = False
+    reconciler.sweep()
+    reconciler.sweep()
+    registry.active = True
+    hub.clock.advance(_FLOOR)
+    reconciler.sweep()
+
+    assert len(_skip_events(hub.services)) == 2
+
+
 @pytest.mark.component
 def test_a_departed_sources_unreadable_clear_is_announced_once(tmp_path: Path) -> None:
     hub, annotator, _ = _gated(tmp_path)

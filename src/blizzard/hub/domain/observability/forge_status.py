@@ -168,9 +168,10 @@ class TenantAnnotation:
         ``tenant``'s live work refs, read only when the tenant has a source to reconcile, and clear
         each departed one, counting into ``tally``; whether the tenant converged. ``outages`` is the
         tenant's sources whose skip is already announced: a skip outside it is announced and joins it,
-        and a source read again leaves it."""
+        a source read again leaves it, and one no longer reconciled here is forgotten."""
         remembered = self._memory.annotated_sources()
         leaving = departed(remembered, annotating)
+        outages.intersection_update({*annotating, *leaving})
         if not annotating and not leaving:
             return True
         self._remember(AnnotationMemoryChange.on_entry(remembered, annotating))
@@ -190,6 +191,7 @@ class TenantAnnotation:
             clearer = self._work_sources.label_clearer(name)
             if clearer is None:
                 _log.warning("forge-status source left config; its labels are not cleared", source=name)
+                outages.discard(name)
                 continue
             failed = _reconcile(name, clearer, {}, tally)
             if failed is None:
@@ -228,11 +230,10 @@ class TenantAnnotation:
 
 
 class AnnotationReconciler:
-    """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe and last converged
-    instant, so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``);
-    ``full_pass_floor`` bounds how stale a skipped pass can leave the forge. A tenant reconciles its own
-    rows alone, against its own sources. It also holds each tenant's sources in a read outage, so a skip is
-    announced once per outage, not once per pass; a restart forgets them and announces a standing outage again."""
+    """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe, last converged
+    instant and sources in a read outage (a skip is announced once per outage; a restart announces a
+    standing one again), so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``);
+    ``full_pass_floor`` bounds how stale a skipped pass can leave the forge."""
 
     def __init__(
         self,
