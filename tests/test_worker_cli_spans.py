@@ -312,6 +312,11 @@ def _open_span() -> cli_spans.CliSpan:
     return span
 
 
+#: The cap for a send whose subject is not the cap. The shipped 100 ms is a deadline for a real receiver; an
+#: instant poster's thread still has to start and finish inside it, which a loaded runner does not promise.
+_ROOMY_CAP = 10.0
+
+
 def test_the_send_posts_json_with_the_callers_headers_the_url_verbatim_and_the_cap_as_timeout() -> None:
     poster = _Post()
 
@@ -336,7 +341,7 @@ def test_the_send_posts_json_with_the_callers_headers_the_url_verbatim_and_the_c
 def test_the_send_runs_on_a_daemon_thread_so_a_hung_post_cannot_hold_the_process() -> None:
     poster = _Post()
 
-    cli_spans.send(poster, "http://runner:1", _open_span(), headers={}, environ={})
+    cli_spans.send(poster, "http://runner:1", _open_span(), headers={}, cap=_ROOMY_CAP, environ={})
 
     assert poster.daemon is True
 
@@ -345,7 +350,14 @@ def test_the_send_runs_on_a_daemon_thread_so_a_hung_post_cannot_hold_the_process
 def test_a_status_of_400_or_more_is_a_failure_reported_only_under_debug(
     capsys: pytest.CaptureFixture[str], status: int, reported: bool
 ) -> None:
-    cli_spans.send(_Post(status), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"})
+    cli_spans.send(
+        _Post(status),
+        "http://runner:1",
+        _open_span(),
+        headers={},
+        cap=_ROOMY_CAP,
+        environ={"BLIZZARD_TRACE_DEBUG": "1"},
+    )
 
     assert (f"trace send failed (the receiver answered {status})" in capsys.readouterr().err) is reported
 
@@ -353,8 +365,10 @@ def test_a_status_of_400_or_more_is_a_failure_reported_only_under_debug(
 def test_a_failure_is_silent_without_the_debug_flag_and_a_non_integer_status_is_no_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    cli_spans.send(_Post(500), "http://runner:1", _open_span(), headers={}, environ={})
-    cli_spans.send(_Post("500"), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"})
+    cli_spans.send(_Post(500), "http://runner:1", _open_span(), headers={}, cap=_ROOMY_CAP, environ={})
+    cli_spans.send(
+        _Post("500"), "http://runner:1", _open_span(), headers={}, cap=_ROOMY_CAP, environ={"BLIZZARD_TRACE_DEBUG": "1"}
+    )
 
     assert capsys.readouterr().err == ""
 
@@ -365,7 +379,7 @@ def test_a_post_that_raises_is_swallowed_and_named_under_debug(capsys: pytest.Ca
             raise ConnectionError("refused")
 
     finished = cli_spans.send(
-        Failing(), "http://runner:1", _open_span(), headers={}, environ={"BLIZZARD_TRACE_DEBUG": "1"}
+        Failing(), "http://runner:1", _open_span(), headers={}, cap=_ROOMY_CAP, environ={"BLIZZARD_TRACE_DEBUG": "1"}
     )
 
     assert finished is True
