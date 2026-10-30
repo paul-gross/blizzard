@@ -92,6 +92,8 @@ test.describe('the lifecycle of a fresh hub', () => {
   });
 
   test('reset is refused while the hub runs; stopped, it hosts empty data on the same URL with a new tenant', async ({ freshHub, testHub, tenant }) => {
+    // Three hub lifecycles — the fixture's start, the stop, the reset's re-init and start — take 16–24 s on a CI runner.
+    test.slow();
     const url = testHub.coordinates.url;
     await expect(freshHub.reset()).rejects.toThrow(/stop\(\) or kill\(\) it before reset/);
     await freshHub.stop();
