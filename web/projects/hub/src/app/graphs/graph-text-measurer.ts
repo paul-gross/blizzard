@@ -14,8 +14,8 @@ import type { TextMeasurer } from './graph-box-sizing';
  * **This file and `graph-diagram.ts`'s `styles` must change together.** Every font
  * string and tracking value below mirrors a `.node-name` / `.node-badge` / `.node-meta` /
  * `.edge-label` rule there; when they drift, boxes size to type the SVG does not draw,
- * which overflows meta lines out of their boxes. The e2e
- * `test_diagram_geometry_matches_the_rendered_text` is the guard that catches the drift.
+ * which overflows meta lines out of their boxes. `graph-diagram.shell-sweep.spec.ts` is
+ * the guard that catches the drift.
  */
 
 /**

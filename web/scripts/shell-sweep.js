@@ -107,6 +107,10 @@
  *     error line and entry line genuinely stack with the real gap `:host`'s
  *     flex column has to reproduce now that they moved out from under
  *     `.body`'s own flex column — a real CSS layout claim jsdom cannot make.
+ *   - projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts — the graph
+ *     diagram's text-measurer contract: every node box, wrapped meta line and
+ *     edge-label background the canvas measurer sized fits the text the SVG
+ *     drew, with boxes sized by their name row and by their meta row both bound.
  *   - projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts — the
  *     gardening routine panel: the record, related-scopes, strategy, trend,
  *     measurement, and last-swept blocks genuinely stack at 1280/390/320px
@@ -344,6 +348,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'fleet', spec: 'projects/fleet/src/lib/chunk/chunk-detail/chunk-facts-alignment.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
