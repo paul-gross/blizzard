@@ -67,6 +67,34 @@ test.describe('the egress reader on a fresh hub exporting Parquet', () => {
   });
 });
 
+test.describe('the egress reader on a fresh hub exporting the default format', () => {
+  test.use({
+    isolation: 'fresh-hub',
+    hubConfig: { egress: { directory: '${egress}', settle_seconds: 0n, min_free_bytes: 0n } },
+  });
+
+  test('reads NDJSON files, renders every copy of a row as text, and holds the manifests and schemas', async ({ api, issue, mockRunner, egress }) => {
+    await api.sweep('egress', { allTenants: true });
+    expect((await api.post('/api/graphs', { data: { definition_yaml: GRAPH } })).status).toBe(201);
+    const { chunk } = await issue('egress reader over ndjson');
+    expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+    const runner = await mockRunner('runner-egress-ndjson');
+    expect((await runner.drive('register')).body.status).toBe(201);
+    expect((await runner.drive('claim', { chunk_id: chunk.chunk_id })).body.claimed).toBe(true);
+    expect((await runner.drive('complete', { chunk_id: chunk.chunk_id, choice: 'pass' })).body.response?.outcome).toBe('hub_node_taken');
+    await api.sweep('egress', { allTenants: true });
+
+    const rows = await egress.query('steps', `SELECT step_key, node_name FROM steps_newest WHERE step_key LIKE '${chunk.chunk_id}/%'`);
+    expect(rows).toEqual([{ step_key: `${chunk.chunk_id}/1`, node_name: 'build' }]);
+    const texts = await egress.rowTexts('steps');
+    expect(texts.some((text) => text.includes(`${chunk.chunk_id}/1`))).toBe(true);
+    const documents = egress.documents();
+    expect(documents.manifests.length).toBeGreaterThan(0);
+    expect(documents.manifests.some((text) => text.includes('"steps"'))).toBe(true);
+    expect(documents.schemas.length).toBeGreaterThan(0);
+  });
+});
+
 test.describe('the egress reader below fresh-hub', () => {
   test.use({ isolation: 'common' });
   test.fail('is refused, naming fresh-hub', async ({ egress }) => {
