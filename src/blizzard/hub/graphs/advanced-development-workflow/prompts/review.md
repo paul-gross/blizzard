@@ -42,6 +42,17 @@ After a rebase or base merge a tip-to-tip diff is mostly base-branch motion: sco
 naming what integration touched. Restore full per-axis width only when the change moved rather than was repaired: a new
 repo in the change-set, commits beyond repairs of the last round's findings, or an amended plan.
 
+## The `review-finding-delta` asset
+
+Alongside `review-findings`, submit `review-finding-delta` with
+`blizzard runner artifact create --name
+review-finding-delta`: JSON, never prose — `{"entries": [...]}`, one entry per
+finding this round disposed of, each with a `ref` (the finding's id) and a `disposition` of `fixed`, `refuted`, or
+`deferred` (a still-open should-fix a passing review leaves unanswered; it also carries `severity`, `scope`, `class`,
+`locus`, and `summary`). Example: `{"entries":[{"ref":"F1","disposition":"fixed"}]}`. With nothing disposed of, submit
+`{"entries": []}` — not `none`. `artifact create` refuses a body that does not parse, naming the field; read the full
+shape with `blizzard runner artifact get --scope system review/finding-format --content`.
+
 ## Submit
 
 Before declaring done, run `blizzard runner artifact create --name review-findings`, content on stdin — the tip you
