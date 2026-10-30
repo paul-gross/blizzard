@@ -25,6 +25,9 @@ const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
   online: true,
   hub_paused: false,
   locally_paused: false,
+  capabilities: [],
+  gates: [],
+  subscription_unrostered: false,
   ...over,
 });
 const RUNNERS = { runners: [runner('rA', { host_id: 'h1' }), runner('rC')] };

@@ -76,14 +76,14 @@
   }
 </ng-template>
 <ng-template #spends>
-  <app-runner-subscription [name]="row().subscriptionName ?? ''" [unrostered]="row().subscription_unrostered ?? false" />
+  <app-runner-subscription [name]="row().subscriptionName ?? ''" [unrostered]="row().subscription_unrostered" />
 </ng-template>
 <ng-template #harness>
-  <app-capability-badge-group data-testid="fleet-runner-capabilities" [capabilities]="row().capabilities ?? []" />
+  <app-capability-badge-group data-testid="fleet-runner-capabilities" [capabilities]="row().capabilities" />
 </ng-template>
 <ng-template #gates>
-  @if ((row().gates ?? []).length > 0) {
-    <app-gate-badge-group data-testid="fleet-runner-gates" [labelled]="false" [gates]="row().gates ?? []" />
+  @if (row().gates.length > 0) {
+    <app-gate-badge-group data-testid="fleet-runner-gates" [labelled]="false" [gates]="row().gates" />
   } @else {
     <span class="none-inline">none</span>
   }

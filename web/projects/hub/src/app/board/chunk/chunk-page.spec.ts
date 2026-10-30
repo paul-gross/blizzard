@@ -31,6 +31,9 @@ const DETAIL = {
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 2,
+  open_prs: [],
+  closed_prs: [],
+  landed_repos: [],
   model: 'claude-opus-5',
   status: 'running',
   work_refs: [{ source: 'blizzard', ref: '26', url: null }],
@@ -92,7 +95,7 @@ describe('Mobile chunk drill-down', () => {
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path.endsWith('/work-items')) {
-        return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null }] };
+        return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null, comments: [] }] };
       }
       return DETAIL;
     });
@@ -587,6 +590,7 @@ describe('Mobile chunk drill-down', () => {
     epoch: 1,
     submitted_at: '2026-07-16T11:20:00.000Z',
     choices: [{ name: 'approve', description: '' }, { name: 'reject', description: '' }],
+    check_results: [],
   };
 
   /** Open the chunk page parked on `OPEN_DECISION`, its resolve POST answering `resolveResponse`, and click a choice. */

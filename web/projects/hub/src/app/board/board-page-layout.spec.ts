@@ -28,7 +28,7 @@ function answer(_method: string, path: string): unknown {
     case '/api/chunks':
       return { chunks: [CHUNK], next_cursor: null };
     case `/api/chunks/${RUNNING}`:
-      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [] };
+      return { ...CHUNK, graph_name: 'default', latest_epoch: 1, history: [], artifacts: [], open_prs: [], closed_prs: [], landed_repos: [] };
     case `/api/chunks/${RUNNING}/work-items`:
       return { items: [{ source: 'hub', ref: '1', title: 'Fix the lease', fetched_at: 't', comments: [] }] };
     case '/api/queue':
