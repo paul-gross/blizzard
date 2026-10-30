@@ -15,7 +15,7 @@
 # origins the scaffold mints with no winter source — no tokens, no forge, no network
 # beyond package installs. This workflow provides the sibling with a two-repo checkout:
 # `blizzard` and `blizzard-mock` laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the
-# on-disk layout the tiers' discovery expects (`tests/service/support.py`,
+# on-disk layout the tiers' discovery expects (`tests/fleet_launchers.py`,
 # `tests/crash/support.py`: `blizzard_root().parent / "blizzard-mock"`). The winter
 # binding's own tests are the local-only `winter-binding` tier and never run here. The two smokes
 # build their own wheel and need only docker, compose v2, node and uv.

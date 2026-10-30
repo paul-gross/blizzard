@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 from tests.fleet_launchers import run_hub
-from tests.service.support import service_gate
+from tests.mock_fleet_support import service_gate
 from tests.support import FIXTURE_FORGE_SECRET, free_port
 
 pytestmark = [pytest.mark.service, service_gate]

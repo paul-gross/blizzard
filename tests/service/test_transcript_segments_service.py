@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 
 from tests.fleet_launchers import REPO
-from tests.runner_join import fleet_headers
-from tests.service.support import (
+from tests.mock_fleet_support import (
     mock_hub,
     mock_hub_chunk_spec,
     require_mock_fleet,
     service_gate,
     transcript_segment_record,
 )
+from tests.runner_join import fleet_headers
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]

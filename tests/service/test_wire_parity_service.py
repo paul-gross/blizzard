@@ -22,9 +22,7 @@ from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.fleet_launchers import REPO, runner_config
 from tests.fleet_world import mint_world
-from tests.runner_fakes import daemon_store
-from tests.runner_join import fleet_headers
-from tests.service.support import (
+from tests.mock_fleet_support import (
     http_hub_client,
     mock_hub,
     mock_hub_chunk_spec,
@@ -32,6 +30,8 @@ from tests.service.support import (
     require_mock_fleet,
     service_gate,
 )
+from tests.runner_fakes import daemon_store
+from tests.runner_join import fleet_headers
 from tests.support import free_port
 
 pytestmark = [pytest.mark.service, service_gate]

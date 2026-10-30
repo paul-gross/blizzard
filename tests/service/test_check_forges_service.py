@@ -14,7 +14,7 @@ import pytest
 
 from tests.config_inputs import init_hub, migrate_hub
 from tests.forge_check_support import seed_addresses
-from tests.service.support import service_gate
+from tests.mock_fleet_support import service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

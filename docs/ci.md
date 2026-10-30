@@ -160,6 +160,14 @@ minutes. Measure each port's project time in CI against these estimates; reshape
 would make the service tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape
 holds.
 
+Final runner-tier measurement, with the Python original of every runner-tier test ported and `tests/service/` holding
+only the pytest half. A full `mise run playwright -- --project='service-*'` run, 10 workers on a 20-thread local machine
+with no CPU pinning, passed all 220 tests in 337s wall time. The runner project's 85 tests sum to 1052s serially and the
+fleet project's 39 tests to 880s. The fleet-auth project's 3 tests sum to 63s. Each runner and fleet test starts its own
+runner host, so the dedicated-host count is at most 127, at the spike's median of about 6.6s per host from init to
+healthy (the spike's figure; the run's own fixture timings do not report it). The pytest half, `mise run service-test`,
+ran 71 tests across 4 xdist workers in 97s. Compare these against the gate's slowest job before reshaping any shard.
+
 Measured port times, from the build's own Playwright run until the `ui (blizzard:ui)` job has run the change:
 
 | Port                                      | Project | Measured serial time |

@@ -22,10 +22,10 @@ from blizzard.runner.hub.internal.token_file import HubTokenFile
 from tests.config_inputs import load_host_config
 from tests.fleet_launchers import await_http, terminate
 from tests.host_files import init_runner_environment, write_host_file
+from tests.mock_fleet_support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env
 from tests.runner_store_sql import insert as insert_rows
 from tests.runner_store_sql import select, utc_text
-from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]

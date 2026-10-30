@@ -247,8 +247,7 @@ def opencode_build_script(landed_file: str) -> str:
     ``capture_output=True`` — unlike ``build_script``'s plain calls, ``mock-opencode``
     reads the spawned worker process's own first stdout line as session identity, so any
     uncaptured child-process stdout leaking into the worker's own stdout would corrupt
-    that protocol (see ``tests/service/support.py::OPENCODE_BUILD_SCRIPT``, which this
-    mirrors adapted to the crash tier's own ``landed_file``/``REPO_NAME``/git-push idiom).
+    that protocol (the crash tier's own ``landed_file``/``REPO_NAME``/git-push idiom).
     The commit is idempotent (only if dirty), :func:`pre_declare_build_script`'s own
     pattern: the two-phase spawn's own crash points confirm the launched process
     durable — and so free-running, no longer bounded by the launch trampoline — BEFORE the
@@ -435,8 +434,7 @@ OPENCODE_SESSION_NAME = "crash-sweep-opencode"
 def opencode_graph_yaml(landed_file: str) -> str:
     """:func:`graph_yaml`'s ``build -> deliver`` shape, but ``build`` resumes
     :data:`OPENCODE_SESSION_NAME`, a graph-level session declared
-    ``harnesses: [opencode]`` — see ``tests/service/support.py::mock_hub_opencode_chunk_spec``
-    for that field's own shape. These are the SAME harness-neutral ``spawn.*``/``advance.*``
+    ``harnesses: [opencode]``. These are the SAME harness-neutral ``spawn.*``/``advance.*``
     registry windows :func:`graph_yaml` already exercises under Claude Code, reached here
     under an OpenCode lineage instead of a declared ``opencode.*`` mirror family."""
     import yaml

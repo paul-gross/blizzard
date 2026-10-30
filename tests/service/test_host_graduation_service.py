@@ -20,9 +20,9 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
 from tests.config_inputs import init_host
 from tests.fleet_launchers import await_http, terminate
+from tests.mock_fleet_support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
 from tests.runner_store_sql import select, utc_text
-from tests.service.support import mock_hub, poll_until, require_mock_fleet, service_gate
 from tests.support import daemon_log_sink, free_port, read_daemon_log
 
 pytestmark = [pytest.mark.service, service_gate]
