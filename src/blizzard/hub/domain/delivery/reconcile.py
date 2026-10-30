@@ -20,6 +20,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -339,7 +340,14 @@ class FlowLineReconciler:
             node_id=node.node_id,
             epoch=epoch,
             generation=generation,
-            resources=held_resources(resolved.resolution, LandedRepos.of(artifacts).names, resolved.spec),
+            resources=held_resources(
+                resolved.resolution,
+                LandedRepos.of(artifacts).names
+                | no_code_repos(
+                    artifacts, resolved.git_commits.payload(resolved.resolution.qualified, resolved.resolution)
+                ),
+                resolved.spec,
+            ),
             at=self._clock.now(),
         )
 

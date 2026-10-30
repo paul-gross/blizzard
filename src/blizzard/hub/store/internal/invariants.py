@@ -327,9 +327,8 @@ class NoPendingIntentAgainstATerminalRef(HubQueryCheck):
 
 
 class NoUnenqueuedClosableRef(HubQueryCheck):
-    """A non-ephemeral chunk that has landed or been hand-completed owes a ``close_intents``
-    row for every still-open ``chunk_work_refs`` ref — the nine
-    call-site-guarded ``_enqueue_close_intents`` invocations' own derived invariant. A terminal
+    """A non-ephemeral chunk that has landed or completed owes a ``close_intents``
+    row for every still-open ``chunk_work_refs`` ref. A terminal
     outcome or any ``close_intents`` row (retired or not) satisfies it; neither is a missed call."""
 
     def run(self) -> list[Violation]:
@@ -346,6 +345,10 @@ class NoUnenqueuedClosableRef(HubQueryCheck):
             }
         )
         completed = {row[0] for row in self.rows(select(hub.chunk_completed.c.chunk_id))}
+        completed |= {
+            row[0]
+            for row in self.rows(select(hub.transitions.c.chunk_id).where(hub.transitions.c.to_node_id == "done"))
+        }
         eligible = (landed | completed) - ephemeral
         if not eligible:
             return violations

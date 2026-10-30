@@ -27,7 +27,7 @@ test('test_spike_chunk_terminates_with_only_asset_artifacts', async ({ repositor
     },
   };
   expect((await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify(graph) } })).status).toBe(201);
-  const { chunk } = await issue('spike toy-api', { repository: repo });
+  const { issue: filedIssue, chunk } = await issue('spike toy-api', { repository: repo });
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
   const detail = await stepUntil(host, async () => (await api.get(`/api/chunks/${chunk.chunk_id}`)).body, (state) => state.status === 'done');
   expect(detail.status).toBe('done');
@@ -35,6 +35,12 @@ test('test_spike_chunk_terminates_with_only_asset_artifacts', async ({ repositor
   expect(new Set(artifacts.map((artifact) => artifact.kind))).toEqual(new Set(['asset']));
   expect(artifacts.find((artifact) => artifact.name === 'spike-notes')?.content).toBe(notes);
   expect(artifacts.filter((artifact) => artifact.kind === 'git_commit')).toEqual([]);
+  expect(artifacts.filter((artifact) => artifact.name.startsWith('merged/'))).toEqual([]);
+  await expect.poll(async () => {
+    const response = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/issues/${filedIssue.number}`);
+    expect(response.status).toBe(200);
+    return (response.body as { state: string }).state;
+  }, { timeout: 90000 }).toBe('closed');
   const pulls = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/pulls?state=all`);
   expect(pulls.status).toBe(200);
   expect(pulls.body).toEqual([]);

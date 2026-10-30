@@ -20,6 +20,7 @@ from blizzard.hub.domain.chunk.model import WaitKind
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
@@ -139,7 +140,7 @@ class ChunkHubExecStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-        if any(is_landing_marker(row.name, row.data) for row in artifacts):
+        if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
             enqueue_close_intents(conn, chunk_id, at=at)
         return True
 

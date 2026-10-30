@@ -75,6 +75,7 @@ class ChunkArtifactsStore:
                         s.artifacts.c.kind == ArtifactKind.ASSET.value,
                         or_(
                             s.artifacts.c.name.like("merged/%"),
+                            s.artifacts.c.name.like("no-code/%"),
                             s.artifacts.c.name.like("delivery-pr/%"),
                             s.artifacts.c.name == "awaiting-external-merge",
                         ),

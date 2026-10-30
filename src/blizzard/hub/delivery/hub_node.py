@@ -25,6 +25,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, WaitKind, is_landed_revision
+from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
@@ -108,7 +109,7 @@ class BounceEnvelope:
         sources: DeliverySources,
         action: BouncedAction | None,
     ) -> BounceEnvelope:
-        landed = LandedRepos.of(sources.markers).names
+        landed = LandedRepos.of(sources.markers).names | no_code_repos(sources.markers, commits)
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
         prs = {p.repo: p for p in sorted([*read.closed_prs, *read.open_prs], key=lambda p: p.number)}
         unlanded: list[dict[str, object]] = []
@@ -223,7 +224,9 @@ class HubNodeRouter:
         # A delivery kick-back, detected from the landed-marker fact and never from the choice name.
         if commits and to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
-            if not pending_repos.issubset(LandedRepos.of(self._artifacts.load_artifacts(chunk.chunk_id)).names):
+            artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
+            finished = LandedRepos.of(artifacts).names | no_code_repos(artifacts, commits)
+            if not pending_repos.issubset(finished):
                 envelope = BounceEnvelope.of(
                     cause=choice,
                     summary=f"hub node `{node.name}` routed `{choice}` to `{edge.to_node_name}` — delivery incomplete",
@@ -350,7 +353,7 @@ class HubNodeRouter:
         envelope = BounceEnvelope.of(
             cause="poll-timeout",
             summary=f"hub node `{node.name}` exceeded its poll_timeout awaiting `{_PENDING}`",
-            commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified)],
+            commits=[{k: v or "" for k, v in c.items()} for c in rows.payload(resolution.qualified, resolution)],
             sources=self._delivery_sources(chunk),
             action=None,
         ).serialize()

@@ -15,7 +15,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, ingest
+from tests.support import HubHarness, build_hub, chunk_stores, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -158,3 +158,98 @@ def test_a_ref_carrying_only_a_failed_outcome_still_enqueues(tmp_path: Path) -> 
     _land(hub, chunk_id)
 
     assert _pending_intents(hub) == {(chunk_id, "default", "1")}
+
+
+@pytest.mark.parametrize("hub_step", [False, True])
+def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(tmp_path: Path, hub_step: bool) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    stores = chunk_stores(hub.engine, hub.clock)
+
+    def transition(target: str, transition_id: str) -> None:
+        with stores.exclusive.locked([chunk_id]) as handle:
+            if hub_step:
+                assert stores.hub_exec.record_hub_step_transition_locked(
+                    handle,
+                    chunk_id,
+                    from_node_id=transition_id,
+                    to_node_id=target,
+                    choice_name="success",
+                    epoch=1,
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    runner_id="r1",
+                    transition_id=transition_id,
+                    at=hub.clock.now(),
+                    artifacts=[],
+                    release_route=False,
+                )
+            else:
+                assert (
+                    stores.movement.record_transition_locked(
+                        handle,
+                        transition_id=transition_id,
+                        chunk_id=chunk_id,
+                        from_node_id=transition_id,
+                        to_node_id=target,
+                        choice_name="success",
+                        epoch=1,
+                        admission=EpochAdmission.AT_OR_ABOVE,
+                        runner_id="r1",
+                        at=hub.clock.now(),
+                        artifacts=[],
+                    )
+                    is None
+                )
+
+    transition("later", "tr_later")
+    assert _pending_intents(hub) == set()
+    transition("done", "tr_done")
+    assert _pending_intents(hub) == {(chunk_id, "default", "1")}
+
+
+@pytest.mark.parametrize("hub_step", [False, True])
+def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bool) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    stores = chunk_stores(hub.engine, hub.clock)
+    with pytest.raises(RuntimeError), stores.exclusive.locked([chunk_id]) as handle:
+        if hub_step:
+            assert stores.hub_exec.record_hub_step_transition_locked(
+                handle,
+                chunk_id,
+                from_node_id="node",
+                to_node_id="done",
+                choice_name="success",
+                epoch=1,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                runner_id="r1",
+                transition_id="tr_abort",
+                at=hub.clock.now(),
+                artifacts=[],
+                release_route=False,
+            )
+        else:
+            assert (
+                stores.movement.record_transition_locked(
+                    handle,
+                    transition_id="tr_abort",
+                    chunk_id=chunk_id,
+                    from_node_id="node",
+                    to_node_id="done",
+                    choice_name="success",
+                    epoch=1,
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    runner_id="r1",
+                    at=hub.clock.now(),
+                    artifacts=[],
+                )
+                is None
+            )
+        assert _pending_intents(hub) == set()
+        raise RuntimeError("abort")
+    assert _pending_intents(hub) == set()
+    with hub.engine.connect() as conn:
+        assert (
+            conn.execute(hub_scoped(select(s.transitions).where(s.transitions.c.transition_id == "tr_abort"))).first()
+            is None
+        )

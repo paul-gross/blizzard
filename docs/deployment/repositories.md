@@ -166,6 +166,13 @@ pass, and the shipped graphs poll once a minute.
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
 
+When no commits are declared, delivery completes with "no code to land" without opening a PR. If the base already
+contains a declared commit and the branch head is safe, a refused PR open likewise resolves that repository with no code
+to land. This resolution is bound to its record, base, branch and submitted commit, so a later changed declaration is
+reconsidered. It does not create a `merged/<repo>` revision or a repository landing: only an actual merge does. Mixed
+chunks record landings only for the repositories that merged. Work items close when the chunk reaches `done`, including
+when nothing merged.
+
 A forge that lacks an operation the action needs refuses the step too, escalating the chunk with
 `forge-capability-missing` ([forges.md](./forges.md#a-missing-capability)).
 

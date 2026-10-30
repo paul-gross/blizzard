@@ -11,6 +11,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources, PrMarker
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.no_code import no_code_marker
 
 pytestmark = pytest.mark.unit
 
@@ -162,3 +163,47 @@ def test_blank_legacy_landed_entry_is_dropped() -> None:
         ChunkFacts(minted=True), delivery_sources(legacy_landed={"acme/one": "", "acme/two": "sha-2"})
     )
     assert [r.repo for r in view.landed_repos] == ["acme/two"]
+
+
+def test_no_code_resolution_relegates_earlier_pr_to_history_without_inventing_a_landing() -> None:
+    declaration = {
+        "repo": "acme/one",
+        "record": "re_one",
+        "base_branch": "main",
+        "branch": "feat/x",
+        "commit": "submitted",
+    }
+    name, data = no_code_marker(declaration)
+    view = DeliveryRead.of(
+        ChunkFacts(minted=True),
+        delivery_sources(
+            markers=[
+                pr("delivery-pr/acme/one/1", '{"repo":"acme/one","number":1,"url":"http://forge/acme/one/pull/1"}'),
+                marker(name, data),
+            ]
+        ),
+    )
+    assert view.open_prs == []
+    assert [p.number for p in view.closed_prs] == [1]
+    assert view.landed_repos == []
+    assert not view.awaiting_external_merge
+
+
+def test_a_later_pr_is_not_hidden_by_an_old_no_code_resolution() -> None:
+    name, data = no_code_marker(
+        {"repo": "acme/one", "record": "re_one", "base_branch": "main", "branch": "feat/x", "commit": "submitted"}
+    )
+    view = DeliveryRead.of(
+        ChunkFacts(minted=True),
+        delivery_sources(
+            markers=[
+                marker(name, data),
+                pr(
+                    "delivery-pr/acme/one/2",
+                    '{"repo":"acme/one","number":2,"url":"http://forge/acme/one/pull/2"}',
+                    epoch=2,
+                ),
+            ]
+        ),
+    )
+    assert [p.number for p in view.open_prs] == [2]
