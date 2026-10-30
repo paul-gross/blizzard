@@ -19,14 +19,14 @@ from tests.repo_files import repo_root
 pytestmark = pytest.mark.unit
 
 _ROOT = repo_root()
-_PLATFORM_TIERS = ("service", "e2e", "crash", "journey")
-_PLAYWRIGHT_TIERS = ("harness", "service")
+_PLATFORM_TIERS = ("service", "e2e", "crash")
+_PLAYWRIGHT_TIERS = ("harness", "service", "journey")
 _WORKFLOWS = sorted((_ROOT / ".github" / "workflows").glob("*.yml"))
 
 #: Configures the winter provider or hands a fixture a winter source — what a platform-tier module must never do.
 _WINTER_BOUND = re.compile(r"""provider\s*=\s*["']winter["']|--winter-source|winter_source|WINTER_SOURCE""")
 #: A step command that runs tests.
-_RUNS_TESTS = re.compile(r"pytest|mise run e2e|mise run playwright|playwright test")
+_RUNS_TESTS = re.compile(r"pytest|mise run e2e|mise run journey|mise run playwright|playwright test")
 
 
 def _platform_modules() -> list[Path]:

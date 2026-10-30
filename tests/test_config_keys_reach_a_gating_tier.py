@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 _ROOT = repo_root()
 
 #: Test roots the merge gate does not run — `mise run gate` is unit + component only.
-_NON_GATING = {"e2e", "journey", "crash", "service"}
+_NON_GATING = {"e2e", "crash", "service"}
 
 #: Every operator-written config dataclass, not just the two roots: a key on a nested
 #: block (a legacy `[[work_source]]` the import reads, an `[[auth.oauth.provider]]`) is as droppable as a root one.

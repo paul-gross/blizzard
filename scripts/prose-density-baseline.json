@@ -11154,24 +11154,6 @@
    "over_cap": 0,
    "total": 41
   },
-  "journey/__init__.py": {
-   "comments": 0,
-   "docstrings": 0,
-   "over_cap": 0,
-   "total": 0
-  },
-  "journey/conftest.py": {
-   "comments": 2,
-   "docstrings": 6,
-   "over_cap": 0,
-   "total": 11
-  },
-  "journey/test_journey_rehearsal.py": {
-   "comments": 60,
-   "docstrings": 23,
-   "over_cap": 4,
-   "total": 612
-  },
   "migration_support_carried_config_round_trip.py": {
    "comments": 2,
    "docstrings": 1,

@@ -123,9 +123,9 @@ mise installs the collector on first use. CI caches and installs the same tool f
 
 **Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
 tag run the e2e job took 1453s, the full crash sweep 837s, the service tier 613s, and the merge gate's pytest shards
-about 1000s. Measured locally, the journey takes about 45s and each smoke about 80s on a warm docker cache, so none adds
-to the critical path. A pull request therefore finishes in roughly 25 minutes plus runner queueing, against about 17
-without e2e. A release cut adds the upgrade rehearsal after its wheel build.
+about 1000s. Measured locally, the journey, a Playwright project, takes about 70s and each smoke about 80s on a warm
+docker cache, so none adds to the critical path. A pull request therefore finishes in roughly 25 minutes plus runner
+queueing, against about 17 without e2e. A release cut adds the upgrade rehearsal after its wheel build.
 
 The winter binding's own tests are the `winter-binding` tier (`mise run winter-binding`, gated on
 `BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
