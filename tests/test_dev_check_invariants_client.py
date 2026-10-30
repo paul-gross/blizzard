@@ -164,3 +164,20 @@ def test_a_dir_without_a_serving_socket_exits_one_naming_it(tmp_path: Path) -> N
     assert result.exit_code == 1
     assert "runner host at" in result.output
     assert "no runner daemon" in result.output
+
+
+def test_dir_and_runner_url_together_on_the_commandline_are_refused(tmp_path: Path) -> None:
+    result = bind_transport(_daemons()).runner.invoke(
+        blizzard, ["dev", "check-invariants", "--dir", str(tmp_path), "--runner-url", HOST]
+    )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
+def test_a_commandline_runner_url_outranks_an_environment_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("BZ_RUNNER_DIR", str(tmp_path))
+    result = bind_transport(_daemons(host=_holds)).runner.invoke(
+        blizzard, ["dev", "check-invariants", "--runner-url", HOST]
+    )
+    assert result.exit_code == 0, result.output
+    assert "invariants hold" in result.output
