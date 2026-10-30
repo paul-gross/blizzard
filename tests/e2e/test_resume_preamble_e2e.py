@@ -25,7 +25,7 @@ from blizzard.runner.harness.preamble import (
     RESUME_UPDATED_NOTICE,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.test_session_modes_e2e import _graph_yaml
+from tests.e2e.support import _graph_yaml
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.host_files import with_workspace

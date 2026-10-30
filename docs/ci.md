@@ -131,6 +131,33 @@ The winter binding's own tests are the `winter-binding` tier (`mise run winter-b
 `BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
 enclosing winter workspace, and never in CI.
 
+### Prospective fleet-port speed guard
+
+This is sizing for the planned e2e ports, not a description of an implemented job. The 25 fleet roster rows total 1746s
+and the 13 UI rows 262s in the last serial run. These are allocation estimates, not measured Playwright times: charge
+each row to its listed profile, split the event log's 82s in the ratio 1:4 between fleet/actions and UI/default, remove
+about 24s for the delivery case moving down, and allocate 25s to the migration's browser half. The resulting profile
+budgets are:
+
+| Planned project | Estimated serial time |
+| --------------- | --------------------- |
+| Fleet default   | 1263s                 |
+| Fleet actions   | 223s                  |
+| Fleet egress    | 170s                  |
+| UI default      | 273s                  |
+| UI actions      | 10s                   |
+| UI auth         | 70s                   |
+
+Nine trace companions repeat one case's per-file average on fresh hubs, adding an estimated 243s across the fleet
+projects; tail-sampling remains in the acceptance row. As a cross-check, 60 retained fleet cases at about 6.6s host
+initialization plus 13s per whole test suggest 1176s before companions, below the adjusted 1656s serial-row allowance.
+Plan four service shards, distributing the companions across them; run `service-fleet-actions` on a separate
+single-worker hub and egress in its own single-worker fresh-hub profile. The hub-actions refusal stays in default
+fresh-hub, and UI auth stays in its own profile. The pessimistic ordinary-shard estimate is 613 + (1263 + 243) / 8 + 170
+≈ 971s against the roughly 1000s merge-gate baseline. Every Playwright step must fit within 30 minutes. Measure each
+port's project time in CI against these estimates; reshape the jobs before landing a port that would make the service
+tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape holds.
+
 ## The upgrade rehearsal
 
 [`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the

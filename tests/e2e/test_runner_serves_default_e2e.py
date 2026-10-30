@@ -16,9 +16,8 @@ import pytest
 
 from blizzard.runner.cli.runtime import read_stores
 from blizzard.runner.host_layout import HostLayout
-from tests.e2e.test_basic_workspace import bare_origin
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
-from tests.fleet_world import REPO_NAME
+from tests.fleet_world import REPO_NAME, bare_origin
 from tests.host_files import load_runner_config
 from tests.runner_join import RUNNER_BIN, join_runner, runner_spawn_env
 from tests.support import free_port

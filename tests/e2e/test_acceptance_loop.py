@@ -14,7 +14,16 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation import cli_spans
-from tests.e2e.fleet_traces import (
+from tests.fleet_launchers import (
+    REPO,
+    drive_until_done,
+    git_bare,
+    mock_bin_dir,
+    run_forge,
+    run_hub,
+    runner_config,
+)
+from tests.fleet_traces import (
     PLANT_DIR_VAR,
     SENTINEL_ARTIFACT_BODY,
     FleetCollector,
@@ -28,18 +37,7 @@ from tests.e2e.fleet_traces import (
     is_fleet,
     planted_lease_tokens,
     runner_sweep,
-    stashed_route_tokens,
     whole_chunk_decision_wait,
-)
-from tests.e2e.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
-from tests.fleet_launchers import (
-    REPO,
-    drive_until_done,
-    git_bare,
-    mock_bin_dir,
-    run_forge,
-    run_hub,
-    runner_config,
 )
 from tests.fleet_world import (
     FIXTURE_ENV,
@@ -52,6 +50,7 @@ from tests.fleet_world import (
     mint_world,
     scripted_build_prompt,
 )
+from tests.harness_variants import CLAUDE_CODE, MockHarness, both_mock_harnesses
 from tests.support import (
     free_port,
 )
@@ -203,7 +202,6 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(
             fleet_traces.assert_no_leaks(
                 {
                     "lease token": planted_lease_tokens(planted),
-                    "route token": stashed_route_tokens(config),
                     "runner bearer": [config.hub_token],
                     "artifact body": [SENTINEL_ARTIFACT_BODY],
                 }

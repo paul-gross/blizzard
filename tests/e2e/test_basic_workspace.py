@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.provider import WorkspaceRepo
 from tests.fleet_launchers import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,
@@ -18,57 +15,9 @@ from tests.fleet_launchers import (
     mock_bin_dir,
     run_forge,
     run_hub,
-    runner_config,
 )
-from tests.fleet_world import REPO_NAME, graph_yaml
-from tests.host_files import with_workspace, write_host_file
+from tests.fleet_world import REPO_NAME, bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.support import free_port
-
-
-def bare_origin(tmp_path: Path) -> Path:
-    """Only git: no winter fixture or winter workspace is used to mint this world."""
-    origins = tmp_path / "origins"
-    origins.mkdir()
-    bare = origins / f"{REPO_NAME}.git"
-    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True)
-    seed = tmp_path / "seed"
-    seed.mkdir()
-    for args in (("init", "-b", "main"), ("config", "user.email", "test@example.com"), ("config", "user.name", "Test")):
-        subprocess.run(["git", "-C", str(seed), *args], check=True, capture_output=True)
-    (seed / "README.md").write_text("# toy-api\n")
-    for args in (
-        ("add", "-A"),
-        ("commit", "-m", "seed"),
-        ("remote", "add", "origin", str(bare)),
-        ("push", "origin", "main"),
-    ):
-        subprocess.run(["git", "-C", str(seed), *args], check=True, capture_output=True)
-    return bare
-
-
-def basic_graph_yaml() -> str:
-    """The scripted graph, whose build already switches to its own branch on the detached worktree."""
-    return graph_yaml()
-
-
-def basic_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int, origin: Path) -> RunnerConfig:
-    config = with_workspace(
-        runner_config(runner_dir, workspace, bin_dir, hub_port), repos=(WorkspaceRepo(REPO_NAME, f"file://{origin}"),)
-    )
-    write_host_file(config)
-    return config
-
-
-def trap_winter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Fail the exercise if any child tries to invoke winter, even if it is installed."""
-    bin_dir = tmp_path / "no-winter"
-    bin_dir.mkdir()
-    invoked = tmp_path / "winter-invoked"
-    winter = bin_dir / "winter"
-    winter.write_text(f"#!/bin/sh\ntouch '{invoked}'\nexit 99\n")
-    winter.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
-    return invoked
 
 
 @pytest.mark.e2e

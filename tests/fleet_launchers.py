@@ -29,7 +29,7 @@ from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.loop_wiring import LoopWiring
 from tests.config_inputs import load_hub_config
-from tests.e2e.fleet_traces import PLANT_DIR_VAR, FleetCollector
+from tests.fleet_traces import PLANT_DIR_VAR, FleetCollector
 from tests.fleet_world import REPO_NAME, basic_workspace
 from tests.harness_sections import claude_code, opencode, sections
 from tests.host_files import init_runner_environment, sampler_without_credentials

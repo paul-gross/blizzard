@@ -229,8 +229,32 @@ def test_commit_pass_writes_the_manifest_last_listing_exactly_the_files_passed(f
     assert [f["path"] for f in manifest["files"]] == [f.path for f in files[:2]]
     for entry in manifest["files"]:
         assert entry["sha256"] == hashlib.sha256((tmp_path / entry["path"]).read_bytes()).hexdigest()
+        assert entry["rows"] == len(read_back(fmt, tmp_path / entry["path"]))
         assert {"dataset", "version", "rows", "first_position", "last_position", "partition"} <= entry.keys()
     assert manifest["backfill"] is False
+
+
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_live_and_backfill_manifests_account_for_every_file_once(fmt: str, tmp_path: Path) -> None:
+    writer = make(fmt, tmp_path)
+    for egress_pass in (PASS, EgressPass(PASS.started_at, True)):
+        files = written(
+            writer.write(EgressBatch(SCHEMA, date(2026, 10, 1), egress_pass, (row("p1"), row("p2"), row("p3"))))
+        )
+        assert isinstance(writer.commit_pass(egress_pass, files), ManifestCommitted)
+
+    entries = [
+        entry for path in (tmp_path / "_manifests").glob("*.json") for entry in json.loads(path.read_text())["files"]
+    ]
+    paths = [entry["path"] for entry in entries]
+    assert len(paths) == len(set(paths)) == 4
+    assert set(paths) == {
+        p.relative_to(tmp_path).as_posix() for p in (tmp_path / "things").rglob(f"*.{EXTENSIONS[fmt]}")
+    }
+    for entry in entries:
+        path = tmp_path / entry["path"]
+        assert entry["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        assert entry["rows"] == len(read_back(fmt, path))
 
 
 def test_the_schema_is_placed_once_and_an_identical_existing_one_is_success(tmp_path: Path) -> None:

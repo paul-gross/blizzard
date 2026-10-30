@@ -3155,6 +3155,32 @@ def test_a_line_whose_visits_stand_at_their_node_holds_every_flow_invariant(tmp_
     assert _flow_line_breaches(engine) == []
 
 
+def test_flow_invariants_hold_before_submission_and_after_landing(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        _seed_at_deliver(conn)
+    assert _flow_line_breaches(engine) == []
+
+    with engine.begin() as conn:
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        _open_turn(conn, "htn_1", "fsub_1")
+    assert _flow_line_breaches(engine) == []
+
+    with engine.begin() as conn:
+        conn.execute(
+            hub_scoped(sa.update(hub.hub_turns).where(hub.hub_turns.c.turn_id == "htn_1")).values(
+                ended_at=_NOW, outcome="landed"
+            )
+        )
+        conn.execute(
+            insert(hub.flow_submission_closures).values(
+                stamp(hub.flow_submission_closures, submission_id="fsub_1", outcome="landed", closed_at=_NOW)
+            )
+        )
+    assert _flow_line_breaches(engine) == []
+
+
 def test_two_open_turns_on_one_flow_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

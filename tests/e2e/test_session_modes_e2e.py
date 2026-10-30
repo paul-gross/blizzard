@@ -15,8 +15,9 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.engine import create_engine_from_url
+from tests.e2e.support import _graph_yaml, _sessions_by_node
 from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
-from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
+from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.runner_fakes import daemon_store
 from tests.support import free_port
 
@@ -27,113 +28,6 @@ pytestmark = [
         reason="e2e session modes needs the live stack; set BLIZZARD_E2E=1 (see module docstring)",
     ),
 ]
-
-# build: append a line to BUILD.md and commit — always a real change, so a re-entry after
-# a review fail commits again (two commits => build ran twice, entered twice).
-_BUILD_SCRIPT = scripted_build_prompt(
-    "import subprocess, pathlib\n"
-    f"repo = {REPO_NAME!r}\n"
-    'p = pathlib.Path(repo) / "BUILD.md"\n'
-    'p.write_text((p.read_text() if p.exists() else "") + "build pass\\n")\n'
-    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
-    "subprocess.run(\n"
-    '    ["git", "-C", repo,\n'
-    '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
-    '     "commit", "-m", "feat: a build pass"],\n'
-    "    check=True,\n"
-    ")\n" + PUSH_AND_DECLARE_SCRIPT
-)
-_BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
-
-# review base prompt: a no-op turn — the verdict is elicited on the judgement resume.
-_REVIEW_SCRIPT = "pass\n"
-# review judgement: fail the FIRST visit (a marker file in the held env dir persists
-# across the cycle), pass the second — 'fails once then passes'.
-_REVIEW_JUDGEMENT = (
-    "import pathlib\n"
-    "m = pathlib.Path('.review-count')\n"
-    "n = (int(m.read_text()) if m.exists() else 0) + 1\n"
-    "m.write_text(str(n))\n"
-    "if n == 1:\n"
-    "    verdict('fail', 'BLOCKING: guard the empty input before delivery')\n"
-    "else:\n"
-    "    verdict('pass', 'findings addressed; ready to deliver')\n"
-)
-
-
-def _graph_yaml() -> str:
-    """A ``build -> review -> deliver`` graph carrying the real feature's session modes.
-
-    ``build`` is ``session: resume:build`` and ``review`` is ``session: fresh`` — the
-    exact shape plan Q4 exists to express, and the standing coverage of the
-    ``resume:<node>`` form."""
-    import yaml
-
-    graph = {
-        "name": "default-delivery",
-        "entry": "build",
-        "nodes": {
-            "build": {
-                "executor": "runner",
-                "prompt": _BUILD_SCRIPT,
-                # The feature under test: a re-entered build resumes its OWN prior build
-                # session, not the reviewer's more-recent fresh one (plan Q4).
-                "session": "resume:build",
-                "judgement": {
-                    "prompt": _BUILD_JUDGEMENT,
-                    "choices": {
-                        "pass": {"description": "Committed and green.", "to": "review"},
-                        "fail": {"description": "Incomplete.", "to": "build"},
-                    },
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "review": {
-                "executor": "runner",
-                "prompt": _REVIEW_SCRIPT,
-                "session": "fresh",
-                "produces": ["review-findings"],
-                "judgement": {
-                    "prompt": _REVIEW_JUDGEMENT,
-                    "choices": {
-                        "pass": {"description": "Passes review.", "to": "deliver"},
-                        "fail": {"description": "Blocking issues found.", "to": "build"},
-                    },
-                },
-                "retries": {"max": 1, "exhausted": "escalate"},
-            },
-            "deliver": {
-                "executor": "hub",
-                "action": "land",
-                "poll_interval": 1,
-                "judgement": {
-                    "choices": {
-                        "landed": {"description": "Landed.", "to": "done"},
-                        "conflict": {"description": "Conflict.", "to": "build"},
-                        "failure": {"description": "Failed.", "to": "build"},
-                        "inherited-failure": {"description": "The base check stays red.", "to": "build"},
-                    }
-                },
-            },
-        },
-    }
-    return yaml.safe_dump(graph, sort_keys=False)
-
-
-def _sessions_by_node(db_url: str, chunk_id: str) -> dict[str, list[str]]:
-    """Map ``node_name -> [session_id, ...]`` (mint order) from the runner store.
-
-    Reopens the runner's own sqlite store after the run — the runner-side truth that pairs
-    with the mock's on-disk per-session ``turns``.
-    """
-    store = daemon_store(create_engine_from_url(db_url))
-    leases = [store.lease(lid) for lid in store.lease_ids_for_chunk(chunk_id)]
-    ordered = sorted((lz for lz in leases if lz is not None), key=lambda lz: lz.created_at)
-    by_node: dict[str, list[str]] = {}
-    for lz in ordered:
-        if lz.session_id is not None:
-            by_node.setdefault(lz.node_name, []).append(lz.session_id)
-    return by_node
 
 
 def _session_turns(workspace: Path, session_id: str) -> int:

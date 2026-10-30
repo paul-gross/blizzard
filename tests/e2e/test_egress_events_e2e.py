@@ -25,11 +25,11 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from tests.e2e import egress_proof as proof
-from tests.e2e.harness_variants import CLAUDE_CODE, OPENCODE_SESSION_MODEL
-from tests.e2e.test_ask_answer_e2e import _tick_until
+from tests.e2e.support import _tick_until
 from tests.egress_recipes import FILES_A_STATION_READ_LAST_WEEK, recipe
 from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build
+from tests.harness_variants import CLAUDE_CODE, OPENCODE_SESSION_MODEL
 from tests.host_files import write_host_file
 from tests.support import free_port
 

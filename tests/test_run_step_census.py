@@ -19,7 +19,6 @@ pytestmark = pytest.mark.unit
 #: Files under ``tests/`` whose subject is a pre-action document or a hub that cannot read ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(
     {
-        "e2e/test_run_carry_over_e2e.py",
         "rehearsal/test_upgrade_rehearsal.py",
         "test_legacy_run.py",
     }

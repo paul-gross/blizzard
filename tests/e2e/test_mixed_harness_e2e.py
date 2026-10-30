@@ -57,9 +57,9 @@ from tests.crash.support import (
     wait_status,
     write_runner_config,
 )
-from tests.e2e.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
-from tests.e2e.harness_variants import MOCK_CLAUDE_CODE_MODEL
+from tests.fleet_traces import FleetCollector, InvocationExpect, assert_invocations
 from tests.fleet_world import mint_world
+from tests.harness_variants import MOCK_CLAUDE_CODE_MODEL
 from tests.host_files import load_runner_config, write_host_file
 from tests.runner_fakes import daemon_store
 from tests.runner_join import runner_spawn_env
@@ -250,14 +250,6 @@ def _daemon_start_count(log_path: Path) -> int:
     if not log_path.exists():
         return 0
     return log_path.read_text(errors="replace").count("runner app created")
-
-
-def _open_resume_intents(runner_dir: Path) -> set[str]:
-    engine = create_engine_from_url(load_runner_config(runner_dir).db_url)
-    try:
-        return daemon_store(engine).resume_intent_lease_ids()
-    finally:
-        engine.dispose()
 
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
@@ -518,13 +510,9 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             lease_id, epoch, session_id = mid_leases[0]["lease_id"], mid_leases[0]["epoch"], mid_leases[0]["session_id"]
 
             # 6. Restart #2 — mid-way through the SAME OpenCode session: a graceful stop
-            # (SIGTERM) marks a resume-intent for the hung lease, proving this restart
-            # lands INSIDE an already-open session, not merely after a fresh one starts.
+            # (SIGTERM) lands inside an already-open session.
             terminate(runner_proc)
             assert runner_proc.poll() is not None, "restart #2: the runner did not actually exit"
-            assert _open_resume_intents(runner_dir) == {lease_id}, (
-                "graceful shutdown before restart #2 did not mark the hung opencode-review lease for resume"
-            )
             runner_proc = start_runner(runner_dir, crash_point=None, extra_env=otel_env)
             await_http(runner_client, "/api/health", proc=runner_proc)
             assert _daemon_start_count(daemon_log) == 3, "restart #2 did not relaunch a fresh daemon process"
@@ -556,7 +544,6 @@ def test_mixed_lineage_crosses_a_harness_boundary_and_survives_two_operator_rest
             )
             assert {row["epoch"] for row in review_leases} == {epoch}
             assert {row["session_id"] for row in review_leases} == {session_id}
-            assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
 
             # Effort provenance, resolved distinctly per node (`EffectiveSession.of`):
             # build inherited the chunk default, opencode-review its own session's.

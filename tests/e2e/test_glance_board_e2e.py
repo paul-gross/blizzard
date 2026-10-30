@@ -16,7 +16,7 @@ import pytest
 if TYPE_CHECKING:
     from playwright.sync_api import Route, ViewportSize
 
-from tests.e2e.test_board_cost_live_e2e import _ingest_promote_claim, _push_usage
+from tests.e2e.support import _ingest_promote_claim, _push_usage
 from tests.fleet_launchers import REPO, drive_until_done, mock_bin_dir, run_forge, run_hub, runner_config
 from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
 from tests.support import free_port

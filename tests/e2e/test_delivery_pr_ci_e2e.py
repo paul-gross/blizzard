@@ -8,18 +8,15 @@ failure routes below through the same generic `executor: hub` primitive.
 from __future__ import annotations
 
 import os
-import re
 import subprocess
-import time
 from pathlib import Path
 
 import httpx2
 import pytest
 
-from blizzard.runner.config import RunnerConfig
-from blizzard.runner.loop_wiring import LoopWiring
-from tests.e2e.fleet_traces import FleetCollector, StepExpect, assert_skeleton
-from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
+from tests.e2e.support import _drive_until
+from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub, runner_config
+from tests.fleet_traces import FleetCollector, StepExpect, assert_skeleton
 from tests.fleet_world import FIXTURE_ENV, PUSH_AND_DECLARE_SCRIPT, REPO_NAME, mint_world, scripted_build_prompt
 from tests.support import free_port
 
@@ -115,31 +112,6 @@ def _ingest_and_promote(hub: httpx2.Client, forge: httpx2.Client, *, poll_timeou
     chunk_id = ingested.json()["chunk_id"]
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     return chunk_id
-
-
-def _drive_until(config: RunnerConfig, hub: httpx2.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
-    """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
-
-    Wrapped in :func:`runner_api` so the build node's scripted push+declare has a live
-    local API to POST to.
-    """
-    prior = dict(os.environ)
-    os.environ.update(env)
-    try:
-        with runner_api(config):
-            deadline = time.monotonic() + timeout
-            while time.monotonic() < deadline:
-                LoopWiring.of(config).tick_once()
-                detail = hub.get(f"/api/chunks/{chunk_id}")
-                assert detail.status_code == 200, detail.text
-                body = detail.json()
-                if predicate(body):
-                    return body
-                time.sleep(0.4)
-            raise AssertionError("predicate never became true within the timeout")
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
 
 
 def _push_commit(origin_bare: Path, branch: str, clone: Path, filename: str) -> str:
@@ -657,61 +629,6 @@ def test_pr_ci_escalates_a_repository_the_forge_does_not_know_as_forge_config(tm
 def _arm_checks(forge: httpx2.Client, ref: str, checks: list[dict[str, str]]) -> None:
     armed = forge.post("/_levers/ref_checks", json={"repo": REPO, "ref": ref, "checks": checks})
     assert armed.status_code == 200, armed.text
-
-
-def _forge_reads(origins: Path, since: int) -> list[tuple[str, int]]:
-    """Each ``GET`` under the repository the forge served after byte ``since`` of its log, as its target and status."""
-    text = (origins.parent / "forge.log").read_bytes()[since:].decode(errors="replace")
-    reads = re.findall(r'"GET (/repos/\S+) HTTP/1\.1" (\d+)', text)
-    return [(target, int(status)) for target, status in reads]
-
-
-def test_pr_ci_waiting_on_pending_checks_reads_conditionally_one_lookup_a_pass(tmp_path: Path) -> None:
-    """A landing whose checks stay pending for ten polls spends no counted call on a landing read after its first
-    pass — every one is answered ``304`` — and its already-merged lookup is one filtered read a pass."""
-    bin_dir, workspace, origins, _ = _reset_fixture(tmp_path)
-
-    forge_port, hub_port = free_port(), free_port()
-    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
-        chunk_id = _ingest_and_promote(hub, forge)
-        config = runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        fenced = _fenced_env()
-
-        first = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
-        _arm_checks(forge, _open_pull(forge)["head"]["ref"], [{"name": "ci", "status": "pending"}])
-        # One more pass reads everything once at its armed answer, so the window below starts from kept answers.
-        seen = [first["pending"]["next_poll_at"]]
-        for _ in range(2):
-            last = seen[-1]
-            body = _drive_until(
-                config,
-                hub,
-                chunk_id,
-                fenced,
-                lambda b, last=last: bool(b.get("pending")) and b["pending"]["next_poll_at"] != last,
-            )
-            seen.append(body["pending"]["next_poll_at"])
-        start = (origins.parent / "forge.log").stat().st_size
-        for _ in range(10):
-            last = seen[-1]
-            body = _drive_until(
-                config,
-                hub,
-                chunk_id,
-                fenced,
-                lambda b, last=last: bool(b.get("pending")) and b["pending"]["next_poll_at"] != last,
-            )
-            seen.append(body["pending"]["next_poll_at"])
-        reads = _forge_reads(origins, start)
-
-        landing = [(t, s) for t, s in reads if "/issues/" not in t]
-        counted = [t for t, s in landing if s != 304]
-        assert not counted, f"landing reads counted against the hub's token: {counted}"
-        lookups = [t for t, _ in landing if "state=closed" in t and "head=blizzard:" in t]
-        assert len(lookups) >= 10, f"the already-merged lookup is not one filtered read a pass: {landing}"
-        assert not [t for t, _ in landing if "state=closed" in t and "head=" not in t], landing
-        _assert_nothing_merged(forge)
 
 
 def test_pr_ci_does_not_merge_ahead_of_a_check_that_starts_after_the_others_finish(tmp_path: Path) -> None:

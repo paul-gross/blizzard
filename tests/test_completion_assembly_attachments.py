@@ -21,6 +21,8 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService
+from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
+from blizzard.runner.tracing.assembly import assemble_lease
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
@@ -66,6 +68,8 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         )
     )
     store.record_lease_token("lease_r", TokenHash(_TOKEN).hex, _NOW)
+    route_token = "route-token-secret-for-assembly"
+    store.set_route_token("ch_1", token=route_token, at=_NOW)
     store.record_spawn(
         "lease_r",
         pid=100,
@@ -129,3 +133,9 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     # The exact #90 aliasing bug: the two produced names must not read back the same
     # content just because only one was ever explicitly attached.
     assert by_name["review-findings"].content != by_name["review-diary"].content
+    facts = LeaseTraceFactsStore(store.connections).lease_trace_facts("lease_r")
+    assert facts is not None
+    spans = assemble_lease(facts)
+    assert spans
+    assert route_token not in repr(spans)
+    assert route_token not in repr(submission.artifacts)

@@ -11,12 +11,11 @@ import os
 import re
 from pathlib import Path
 
-import httpx2
 import pytest
 
-from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
-from tests.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml, mint_world
-from tests.runner_join import fleet_headers
+from tests.e2e.support import _ingest_promote_claim, _push_usage
+from tests.fleet_launchers import mock_bin_dir, run_forge, run_hub
+from tests.fleet_world import FIXTURE_ENV, graph_yaml, mint_world
 from tests.support import free_port
 
 pytestmark = [
@@ -26,72 +25,6 @@ pytestmark = [
         reason="e2e board cost/usage needs the live stack; set BLIZZARD_E2E=1 (see module docstring)",
     ),
 ]
-
-
-def _ingest_promote_claim(forge: httpx2.Client, hub: httpx2.Client, title: str) -> tuple[str, str]:
-    """File an issue, ingest it, promote it, and claim a route straight through the hub API.
-
-    Returns ``(chunk_id, node_id)`` for a chunk that derives ``running`` (a live route) and
-    so renders as a card on the board — with a node the usage facts below attach to.
-    """
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "cost render chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    registered = hub.post(
-        "/api/fleet/runners",
-        json={"name": "r1", "workspace_id": "w1", "capabilities": [{"harness_id": "claude", "default": True}]},
-        headers=fleet_headers(hub),
-    )
-    assert registered.status_code == 201, registered.text
-    claim = hub.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "workspace_id": "w1", "environment_ids": ["e"]},
-        headers=fleet_headers(hub),
-    )
-    assert claim.status_code == 201, claim.text
-    node_id = claim.json()["envelope"]["node"]["node_id"]
-    return chunk_id, node_id
-
-
-def _push_usage(
-    hub: httpx2.Client,
-    *,
-    chunk_id: str,
-    node_id: str,
-    seq: int,
-    cost_usd: float | None,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
-    cache_read_tokens: int = 0,
-    cache_create_tokens: int = 0,
-    estimated_cost_usd: float | None = None,
-) -> None:
-    """Push one ``usage.recorded`` fact through the hub's real store-and-forward endpoint.
-    ``estimated_cost_usd`` is omitted from the payload, not sent as ``None``, when unused.
-    """
-    payload = {
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "epoch": 1,
-        "kind": "spawn",
-        "model": "claude-opus-4-8",
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_tokens": cache_read_tokens,
-        "cache_create_tokens": cache_create_tokens,
-        "cost_usd": cost_usd,
-    }
-    if estimated_cost_usd is not None:
-        payload["estimated_cost_usd"] = estimated_cost_usd
-    resp = hub.post(
-        "/api/fleet/events",
-        json={"facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
-        headers=fleet_headers(hub),
-    )
-    assert resp.status_code == 200, resp.text
 
 
 def test_board_renders_cost_and_updates_live_over_sse(tmp_path: Path, chromium_available: bool) -> None:

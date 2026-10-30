@@ -11,11 +11,10 @@ import os
 import re
 from pathlib import Path
 
-import httpx2
 import pytest
 
-from tests.fleet_launchers import REPO, mock_bin_dir, run_forge, run_hub
-from tests.fleet_world import FIXTURE_ENV, REPO_NAME, mint_world
+from tests.e2e.support import _ingest, _mint
+from tests.fleet_launchers import mock_bin_dir, run_forge, run_hub
 from tests.runner_join import fleet_headers
 from tests.support import free_port
 
@@ -26,21 +25,6 @@ pytestmark = [
         reason="e2e transcript tab browser needs the live stack; set BLIZZARD_E2E=1 (see module docstring)",
     ),
 ]
-
-
-def _mint(bin_dir: Path, scratch: Path) -> Path:
-    """Mint a fresh, disposable fixture world — only its forge-registered repo matters
-    here, since no runner (and so no workspace/harness fence) is ever spawned."""
-    mint_world(bin_dir, scratch)
-    return scratch / FIXTURE_ENV / "origins"
-
-
-def _ingest(forge: httpx2.Client, hub: httpx2.Client, title: str) -> str:
-    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
-    assert issue.status_code == 201, issue.text
-    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
-    assert ingested.status_code == 201, ingested.text
-    return str(ingested.json()["chunk_id"])
 
 
 def _segment_one(chunk_id: str) -> dict:

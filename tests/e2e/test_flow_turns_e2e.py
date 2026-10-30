@@ -26,7 +26,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.tools.invariants import hub_invariants
-from tests.e2e.test_garden_routine_e2e import _scripted_garden_graph_yaml
+from tests.e2e.support import _scripted_garden_graph_yaml
 from tests.fleet_launchers import OWNER, REPO, mock_bin_dir, run_forge, run_hub, runner_api, runner_config
 from tests.fleet_world import FIXTURE_ENV, REPO_NAME, basic_workspace, mint_world
 from tests.support import create_repositories, fixture_repository, free_port

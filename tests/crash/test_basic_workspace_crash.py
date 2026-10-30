@@ -14,9 +14,8 @@ from blizzard.tools.invariants import Invariants
 from tests.config_inputs import load_hub_config
 from tests.crash.support import start_runner, terminate, wait_death, wait_status
 from tests.crash.test_kill9_sweep import _abandon_graph_yaml, _await_marker, _leases_for_chunk, _wait_for_closure
-from tests.e2e.test_basic_workspace import bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.fleet_launchers import REPO, git_bare, mock_bin_dir, run_forge, run_hub
-from tests.fleet_world import REPO_NAME
+from tests.fleet_world import REPO_NAME, bare_origin, basic_config, basic_graph_yaml, trap_winter
 from tests.runner_fakes import daemon_store
 from tests.support import free_port
 from tests.support_child_launch import workspace_launch

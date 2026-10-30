@@ -11,10 +11,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import httpx2
 import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.delivery.actions.land import Land
@@ -31,6 +33,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryResolution,
     ResolvedRepository,
 )
+from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
     Change,
     ChangeState,
@@ -46,10 +49,12 @@ from blizzard.hub.forge.landing import (
     ForgeUnavailable,
     Mergeability,
     MergeMethod,
+    RepositoryForge,
     Update,
     UpdateMethod,
     UpdateOutcome,
 )
+from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.github_double import GREEN, DoubleRepo, GitHubDouble, change, check, comparison
@@ -196,6 +201,76 @@ def _land(
     repos = dict(zip(visit.resolution.records, visit.resolution.qualified, strict=True))
     forges = MappingProxyType({RepositoryId(r): double.forge(r, repo, offered) for r, repo in repos.items()})
     return asyncio.run(Land().take(visit, forges, sink)), sink
+
+
+def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_pass() -> None:
+    answers: list[tuple[httpx2.Request, int]] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        path = request.url.path
+        if path == f"/repos/{_WIDGET}/pulls":
+            if request.url.params["state"] == "closed":
+                body: object = []
+            else:
+                body = [_pending_pull()]
+        elif path == f"/repos/{_WIDGET}/pulls/1":
+            body = _pending_pull()
+        elif path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
+            body = {"check_runs": [{"id": 1, "name": "ci", "status": "in_progress", "conclusion": None}]}
+        else:
+            raise AssertionError(f"unexpected landing read: {request.url}")
+        etag = f'"{request.url}"'
+        if request.headers.get("if-none-match") == etag:
+            answers.append((request, 304))
+            return httpx2.Response(304)
+        answers.append((request, 200))
+        return httpx2.Response(200, json=body, headers={"ETag": etag})
+
+    binding = ForgeBinding(
+        kind="github",
+        api_url="https://api.github.example",
+        owner="acme",
+        repo="widget",
+        token="tok",
+        write_lock=asyncio.Lock,
+        learn=lambda _headers: None,
+    )
+    forge = GitHubLanding(
+        binding, clock=FixedClock(datetime(2026, 10, 23, tzinfo=UTC)), transport=httpx2.MockTransport(answer)
+    )
+    visit = _visit()
+    sink = _Sink()
+    forges = MappingProxyType(
+        {RepositoryId("re_widget"): RepositoryForge(RepositoryId("re_widget"), forge, forge, forge, forge.OFFERED)}
+    )
+
+    async def polls() -> None:
+        try:
+            assert (await Land().take(visit, forges, sink)).choice == "pending"
+            answers.clear()
+            for _ in range(10):
+                assert (await Land().take(visit, forges, sink)).choice == "pending"
+        finally:
+            forge.close()
+            await asyncio.sleep(0)
+
+    asyncio.run(polls())
+    assert len(answers) == 40
+    assert all(status == 304 and request.headers.get("if-none-match") for request, status in answers)
+    lookups = [request for request, _ in answers if request.url.path.endswith("/pulls")]
+    assert len([request for request in lookups if request.url.params["state"] == "closed"]) == 10
+    assert all(request.url.params["head"] == "acme:feat/x" for request in lookups)
+
+
+def _pending_pull() -> dict[str, object]:
+    return {
+        "number": 1,
+        "state": "open",
+        "mergeable_state": "blocked",
+        "head": {"ref": "feat/x", "sha": _SUBMITTED},
+        "base": {"ref": "main", "sha": "base"},
+        "html_url": f"https://github.example/{_WIDGET}/pull/1",
+    }
 
 
 def test_a_clean_green_pr_merges_its_current_head_and_hands_over_the_landing() -> None:
