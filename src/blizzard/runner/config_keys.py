@@ -60,6 +60,7 @@ from blizzard.runner.host_layout import (
 )
 from blizzard.runner.hub.token_file import ENV_FILE_MODE, ENV_FILENAME
 from blizzard.runner.loop.mode import LoopMode
+from blizzard.runner.process.child_env import DEFAULT_WORKER_SHELL
 from blizzard.runner.throttle.settings import DEFAULT_BUDGET_WINDOW_HOURS, DEFAULT_PACE_LEAD_PCT, HoldOrRelease
 from blizzard.runner.tracing.config import RUNNER_TRACING_KEYS
 
@@ -201,6 +202,7 @@ _HOST_KEYS = (
     ConfigKey("runner[].worker", TABLE),
     ConfigKey("runner[].worker.env_passthrough", STRING_LIST, default=()),
     ConfigKey("runner[].worker.path_prepend", STRING_LIST, default=()),
+    ConfigKey("runner[].worker.shell", STRING, default=DEFAULT_WORKER_SHELL),
     ConfigKey("runner[].queue", TABLE),
     ConfigKey("runner[].queue.strict", BOOLEAN, default=DEFAULT_QUEUE_STRICT),
     ConfigKey("runner[].cost", TABLE),

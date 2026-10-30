@@ -51,7 +51,7 @@ from blizzard.runner.composition import (
     build_runner_process,
     runner_store_migrations,
 )
-from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig
+from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.bundle import BundleSnapshot
@@ -945,6 +945,9 @@ def _start(
     """Start the host over its built runners, reporting each halted one; returns when the host has stopped."""
     for runner in halted:
         click.echo(f"warning: {runner.describe()}")
+    for built in runners:
+        if refusal := worker_shell_refusal(built.config.worker_shell):
+            raise click.ClickException(f"runner {built.config.name}: {refusal}")
     bundles = {built.id: _publish_harness_bundle(built.config, collaborators) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:

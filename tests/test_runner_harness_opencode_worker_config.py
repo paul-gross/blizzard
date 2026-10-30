@@ -40,3 +40,11 @@ def test_write_worker_config_persists_valid_json(tmp_path: Path) -> None:
 
     assert path.exists()
     parse_worker_config(json.loads(path.read_text()))
+
+
+def test_render_worker_config_pins_bash_by_default() -> None:
+    assert render_worker_config()["shell"] == "/bin/bash"
+
+
+def test_render_worker_config_carries_the_configured_shell() -> None:
+    assert render_worker_config(shell="/usr/bin/fish")["shell"] == "/usr/bin/fish"

@@ -30,7 +30,7 @@ from blizzard.runner.harness.bundle import HARNESS_CONFIG_DIRNAME
 from blizzard.runner.harness.wiring import HarnessSections, HarnessSettings
 from blizzard.runner.harness.workspace_prompts import PACKAGED, UnknownWorkspacePromptSample
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.process.child_env import DEFAULT_WORKER_SHELL, AllowlistedEnv, ChildEnv
 from blizzard.runner.public_origins import PublicOrigins
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.runner.throttle.settings import (
@@ -193,6 +193,28 @@ def expanded_path_prepend(raw: tuple[str, ...]) -> tuple[str, ...]:
             raise ConfigError(f"[worker] path_prepend entries must be absolute (~ allowed), got {entry!r}")
         expanded.append(str(path))
     return tuple(expanded)
+
+
+def parsed_worker_shell(raw: object) -> str:
+    """The ``[worker] shell``: unset is the default bash; otherwise a non-empty absolute path (``~`` allowed)."""
+    if raw is None:
+        return DEFAULT_WORKER_SHELL
+    if not isinstance(raw, str) or not raw.strip():
+        raise ConfigError(f"[worker] shell must be a non-empty path string, got {raw!r}")
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        raise ConfigError(f"[worker] shell must be absolute (~ allowed), got {raw!r}")
+    return str(path)
+
+
+def worker_shell_refusal(shell: str) -> str | None:
+    """Why ``shell`` cannot run a worker's Bash tool — absent or not executable — or ``None`` when it can."""
+    path = Path(shell)
+    if not path.is_file():
+        return f"[worker] shell {shell} does not exist or is not a file"
+    if not os.access(path, os.X_OK):
+        return f"[worker] shell {shell} is not executable"
+    return None
 
 
 @domain_model
@@ -793,6 +815,8 @@ class RunnerConfig:
     worker_env_passthrough: tuple[str, ...] = ()
     #: Absolute directories (``~`` expanded at load) led onto every worker's ``PATH`` ahead of the daemon's own.
     worker_path_prepend: tuple[str, ...] = ()
+    #: Absolute path of the shell every worker's Bash tool runs under (``[worker] shell``).
+    worker_shell: str = DEFAULT_WORKER_SHELL
     #: Every browser-reachable origin this runner answers on, authored as `public_url` — one URL or
     #: a list; first is canonical, empty registers no federation identity.
     public_urls: tuple[str, ...] = ()
@@ -837,7 +861,7 @@ class RunnerConfig:
             *(n for n in self.worker_env_passthrough if n.startswith(_WINTER_OTEL_PREFIX)),
         }
         passthrough = tuple(name for name in self.worker_env_passthrough if name not in dropped)
-        return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend)
+        return AllowlistedEnv.of(passthrough, path_prepend=self.worker_path_prepend, shell=self.worker_shell)
 
     def tool_env(self, tracing: TracingSettings) -> ChildEnv:
         """The tool profile every runner-launched tool child (``git``, ``winter``, checks, probes) is built from —

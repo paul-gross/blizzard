@@ -29,6 +29,7 @@ from blizzard.runner.config import (
     DEFAULT_WORKER_STDOUT_RETENTION_DAYS,
     ConfigError,
     RunnerConfig,
+    worker_shell_refusal,
 )
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import (
@@ -91,6 +92,7 @@ def test_every_knob_defaults_when_its_key_is_absent(tmp_path: Path) -> None:
         DEFAULT_CONTEXT_SAMPLE_INTERVAL_SECONDS,
     )
     assert config.worker_env_passthrough == () and config.worker_path_prepend == ()
+    assert config.worker_shell == "/bin/bash"
     assert (config.runner_prompt, config.runner_prompt_file, config.transcripts_root) == ("", "", "")
     assert (config.home_workspace.prompt, config.home_workspace.prompt_file, config.home_workspace.prompt_package) == (
         "",
@@ -117,7 +119,7 @@ def test_every_knob_parses_from_a_hand_written_file_and_survives_a_round_trip(tm
             "\n[runner.queue]\nstrict = true\n"
             "\n[runner.cost]\nchunk_cap_usd = 5.0\nrunner_ceiling_usd = 50.0\nwindow_hours = 6.0\n"
             "\n[runner.context]\nwarn_tokens = 300000\nsample_interval_seconds = 15\n"
-            '\n[runner.worker]\nenv_passthrough = ["FOO"]\npath_prepend = ["/opt/bin"]\n'
+            '\n[runner.worker]\nenv_passthrough = ["FOO"]\npath_prepend = ["/opt/bin"]\nshell = "/opt/bin/sh"\n'
         ),
     )
     assert config.public_urls == ("https://a.example", "https://b.example")
@@ -134,6 +136,8 @@ def test_every_knob_parses_from_a_hand_written_file_and_survives_a_round_trip(tm
     assert (config.chunk_cap_usd, config.runner_ceiling_usd, config.runner_ceiling_window_hours) == (5.0, 50.0, 6.0)
     assert (config.context_warn_tokens, config.context_sample_interval_seconds) == (300000, 15)
     assert (config.worker_env_passthrough, config.worker_path_prepend) == (("FOO",), ("/opt/bin",))
+    assert config.worker_shell == "/opt/bin/sh"
+    assert config.worker_env(NO_TRACING).worker({}).variables["CLAUDE_CODE_SHELL"] == "/opt/bin/sh"
 
     assert _round_tripped(tmp_path) == replace(config, autonomy_source="")
 
@@ -158,6 +162,7 @@ def test_a_malformed_host_level_value_refuses_the_file(tmp_path: Path, kwargs: d
     [
         ("[runner.queue]\nstrict = 1\n", "strict"),
         ('[runner.worker]\npath_prepend = ["relative/bin"]\n', "absolute"),
+        ('[runner.worker]\nshell = "bash"\n', "shell must be absolute"),
         ('runner_prompt_file = "nowhere.md"\n[runner.claude_code]\nenabled = "yes"\n', "enabled"),
         ('harness_binary = "/a/claude"\n[runner.claude_code]\nbinary = "/b/claude"\n', "not both"),
         ("[runner.claude_code]\nenabled = false\n[runner.opencode]\nenabled = false\n", "enable at least one"),
@@ -309,6 +314,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "runner[].harness.config_dir": "/opt/harness",
     "runner[].opencode.models.supported": ["openai/*"],
     "runner[].worker.path_prepend": ["/opt/bin"],
+    "runner[].worker.shell": "/opt/bin/sh",
     "runner[].throttle.budget.usd": 0.25,
     "runner[].throttle.schedule.days": ["mon"],
     "runner[].throttle.schedule.hours": ["19:00-08:00"],
@@ -430,3 +436,16 @@ def test_a_malformed_usage_api_base_is_refused_without_echoing_the_value(tmp_pat
     errors = str(raised.value)
     assert "usage_api_base must be an http(s) URL" in errors
     assert base.strip('"') not in errors.replace("http(s)", "")
+
+
+def test_a_worker_shell_that_is_missing_or_not_executable_is_refused(tmp_path: Path) -> None:
+    plain = tmp_path / "plain"
+    plain.write_text("#!/bin/sh\n")
+    plain.chmod(0o644)
+    runnable = tmp_path / "runnable"
+    runnable.write_text("#!/bin/sh\n")
+    runnable.chmod(0o755)
+    assert "does not exist" in (worker_shell_refusal(str(tmp_path / "gone")) or "")
+    assert "not executable" in (worker_shell_refusal(str(plain)) or "")
+    assert worker_shell_refusal(str(runnable)) is None
+    assert worker_shell_refusal("/bin/bash") is None

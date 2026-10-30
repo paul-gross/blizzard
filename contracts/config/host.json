@@ -896,6 +896,14 @@
       "type": "list of strings"
     },
     {
+      "default": "/bin/bash",
+      "deprecated": false,
+      "path": "runner[].worker.shell",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
       "default": null,
       "deprecated": true,
       "path": "runner[].worker_settings_path",

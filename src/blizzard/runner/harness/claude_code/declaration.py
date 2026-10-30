@@ -122,7 +122,7 @@ class ClaudeCodeDeclaration:
     def publish_layout(self, section: ClaudeCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return claude_code_bundle_layout(claude_code_permission_mode(autonomy, section.permission_mode))
 
-    def scaffold_runtime(self, section: ClaudeCodeSection, root: Path) -> None:
+    def scaffold_runtime(self, section: ClaudeCodeSection, root: Path, *, worker_shell: str) -> None:
         # Written idempotently: the content is versioned with the runner, so re-running
         # `init` refreshes it to head.
         (root / WORKER_SETTINGS_FILENAME).write_text(WorkerSettings.of().json)

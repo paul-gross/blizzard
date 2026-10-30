@@ -136,12 +136,14 @@ class OpenCodeDeclaration:
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return opencode_bundle_layout(section.worker_config_at(runtime_root))
 
-    def scaffold_runtime(self, section: OpenCodeSection, root: Path) -> None:
+    def scaffold_runtime(self, section: OpenCodeSection, root: Path, *, worker_shell: str) -> None:
         # The runner-owned plugin and the permission/plugin document referencing it, never
         # inside a project repository.
         plugin_path = root / PLUGIN_DIRNAME / PLUGIN_FILENAME
         write_plugin(plugin_path)
-        write_worker_config(section.worker_config_at(root), plugins=(plugin_reference(plugin_path),))
+        write_worker_config(
+            section.worker_config_at(root), shell=worker_shell, plugins=(plugin_reference(plugin_path),)
+        )
 
     def diagnostics(self, section: OpenCodeSection, shared: SharedHarnessInputs, *, spawn_root: str) -> tuple[str, ...]:
         return ()

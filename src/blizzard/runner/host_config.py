@@ -72,6 +72,7 @@ from blizzard.runner.config import (
     expanded_path_prepend,
     parse_autonomy,
     parse_harness_config_dir,
+    parsed_worker_shell,
     resolve_session_secret,
     workspace_repos,
 )
@@ -1184,6 +1185,7 @@ def _own_tables(raw: ConfigView, *, root: Path, db_url: str, path: Path) -> Runn
         context_sample_interval_seconds=context.sample_interval_seconds,
         worker_env_passthrough=worker.names("env_passthrough"),
         worker_path_prepend=expanded_path_prepend(worker.names("path_prepend")),
+        worker_shell=parsed_worker_shell(worker.get("shell")),
     )
 
 
@@ -1317,6 +1319,7 @@ def _runner_toml(entry: RunnerEntry) -> str:
         "\n[runner.worker]\n"
         f"env_passthrough = {json.dumps(list(own.worker_env_passthrough))}\n"
         f"path_prepend = {json.dumps(list(own.worker_path_prepend))}\n"
+        f"shell = {json.dumps(own.worker_shell)}\n"
     )
     if own.queue_strict:
         text += "\n[runner.queue]\nstrict = true\n"
