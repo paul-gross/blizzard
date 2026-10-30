@@ -37,6 +37,7 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, I
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
+from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, IWriteLeaseLivenessRepository
 from blizzard.runner.leases.operator_requests import (
     IReadAttachmentRepository,
@@ -45,16 +46,13 @@ from blizzard.runner.leases.operator_requests import (
     IWriteRequeueRepository,
 )
 from blizzard.runner.leases.overload import IReadOverloadRepository, IWriteOverloadRepository
-from blizzard.runner.leases.record import IReadLeaseRecordRepository, IWriteLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository, IWriteLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository, IWriteLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository, IWriteLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, IWriteGraphArtifactRepository
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository, IWriteDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import IReadCheckRepository, IWriteCheckRepository
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
-    IReadGitCommitDeclarationRepository,
-    IWriteGitCommitDeclarationRepository,
-)
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository, IWriteTakeoverRepository
 from blizzard.runner.throttle.pause import IReadPauseRepository, IWritePauseRepository
 from blizzard.runner.throttle.usage_limits import (
@@ -99,7 +97,7 @@ class IRunnerBinding(Protocol):
 
 
 class IReadRunnerStore(
-    IReadLeaseRecordRepository,
+    IReadChunkLeaseRepository,
     IReadLeaseSessionRepository,
     IReadLeaseLivenessRepository,
     IReadLeaseResumeIntentRepository,
@@ -198,7 +196,7 @@ class RunnerReadStores:
     """The read-only runner-store bundle — every field typed to its concept's read
     Protocol only, over the same instances :meth:`of` is given."""
 
-    lease_record: IReadLeaseRecordRepository
+    lease_record: IReadChunkLeaseRepository
     session: IReadLeaseSessionRepository
     liveness: IReadLeaseLivenessRepository
     resume_intent: IReadLeaseResumeIntentRepository

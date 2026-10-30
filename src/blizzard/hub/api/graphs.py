@@ -72,7 +72,12 @@ def _node_view(node: Node) -> GraphNodeView:
 
 
 def _graph_view(
-    graph: Graph, *, retired: bool, follow_latest: bool | None = None, warnings: list[str] | None = None
+    graph: Graph,
+    *,
+    definition_yaml: str,
+    retired: bool,
+    follow_latest: bool | None = None,
+    warnings: list[str] | None = None,
 ) -> GraphView:
     return GraphView(
         graph_id=graph.graph_id,
@@ -112,7 +117,15 @@ def _graph_view(
             for e in graph.edges
         ],
         warnings=warnings or [],
+        definition_yaml=definition_yaml,
     )
+
+
+def _body(services: Services, graph_id: str) -> str:
+    """The graph's stored authoring body; a graph the route already read always has one."""
+    body = services.graph_bodies.definition_yaml(graph_id)
+    assert body is not None
+    return body
 
 
 @router.post(
@@ -136,7 +149,7 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
         return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
-    return _graph_view(graph, retired=False, warnings=warnings)
+    return _graph_view(graph, definition_yaml=_body(services, graph.graph_id), retired=False, warnings=warnings)
 
 
 @router.post(
@@ -194,7 +207,10 @@ def get_graph(graph_id: str, services: Services) -> GraphView:
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     return _graph_view(
-        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+        graph,
+        definition_yaml=_body(services, graph_id),
+        retired=services.graphs.is_retired(graph_id),
+        follow_latest=services.graphs.follow_latest(graph_id),
     )
 
 
@@ -214,7 +230,12 @@ def retire_graph(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     services.graph_lifecycle.retire(graph, by=identity.user_id)
-    return _graph_view(graph, retired=True, follow_latest=services.graphs.follow_latest(graph_id))
+    return _graph_view(
+        graph,
+        definition_yaml=_body(services, graph_id),
+        retired=True,
+        follow_latest=services.graphs.follow_latest(graph_id),
+    )
 
 
 @router.post(
@@ -233,7 +254,12 @@ def enable_graph(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     services.graph_lifecycle.enable(graph, by=identity.user_id)
-    return _graph_view(graph, retired=False, follow_latest=services.graphs.follow_latest(graph_id))
+    return _graph_view(
+        graph,
+        definition_yaml=_body(services, graph_id),
+        retired=False,
+        follow_latest=services.graphs.follow_latest(graph_id),
+    )
 
 
 @router.patch("/graphs/{graph_id}", response_model=GraphView)
@@ -254,7 +280,10 @@ def patch_graph(
     if "follow_latest" in request.model_fields_set:
         services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
-        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+        graph,
+        definition_yaml=_body(services, graph_id),
+        retired=services.graphs.is_retired(graph_id),
+        follow_latest=services.graphs.follow_latest(graph_id),
     )
 
 
@@ -280,5 +309,8 @@ def set_graph_follow_latest(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
-        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+        graph,
+        definition_yaml=_body(services, graph_id),
+        retired=services.graphs.is_retired(graph_id),
+        follow_latest=services.graphs.follow_latest(graph_id),
     )

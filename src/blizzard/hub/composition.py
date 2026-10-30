@@ -135,7 +135,7 @@ from blizzard.hub.domain.garden.runs.sweeps import GardenSweepsService
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeLifecycle, ScopeRegistry
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.lifecycle import GraphLifecycleService
-from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository
+from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphBodies, IReadGraphRepository
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
     EventDerivationService,
@@ -267,6 +267,8 @@ class TenantServices:
     #: narrower, write-capable seams directly.
     chunks: ChunkReadStores
     graphs: IReadGraphRepository
+    #: Each mint's stored authoring body.
+    graph_bodies: IReadGraphBodies
     ingest: IngestService
     promote: PromoteService
     demote: DemoteService
@@ -454,6 +456,8 @@ class HubServices:
     close_tenant_objects: Callable[[], None]
     #: The hub's own occurrences — its exports', its startup — recorded in ``hub_event_log``, published to no stream.
     hub_event_log: HubEventLogService
+    #: Every tenant's live event broker — what ends a logged-out session's streams in every tenant.
+    event_brokers: TenantBrokers
     #: The hub's own event log, read newest-first — by hub administrators alone.
     hub_events: IReadHubEventLog
     #: Creates, renames and lists the hub's tenants.
@@ -1114,6 +1118,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             dependencies=chunk_dependencies,
         ),
         graphs=graph_store,
+        graph_bodies=graph_store,
         ingest=IngestService(
             record=chunk_record,
             exclusive=chunk_exclusive,
@@ -1221,7 +1226,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         event_log=event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
-        default_graph_yaml=PACKAGED.default.text,
+        default_graph_yaml=PACKAGED.default.inlined_yaml(parts.graph_yaml),
         system_artifacts=parts.system_artifacts,
         work_sources=work_sources,
         users=parts.users,
@@ -1354,6 +1359,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             work_sources=work_sources,
             memory=ForgeAnnotationStore(tenant_connections),
+            events=event_log,
             clock=clock,
         ),
     )
@@ -1633,6 +1639,7 @@ def build_services(
         action_loop=action_loop,
         close_tenant_objects=core.tenants.close_served,
         hub_event_log=hub_event_log,
+        event_brokers=brokers,
         hub_events=hub_events,
         tenant_admin=tenant_admin,
         tenant_teardown=tenant_teardown,

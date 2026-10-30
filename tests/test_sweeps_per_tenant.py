@@ -224,6 +224,7 @@ class _TenantAnnotation:
         annotating: Sequence[str],
         rows: Callable[[], Sequence[TenantWorkRef]],
         tally: AnnotationTally,
+        outages: set[str],
     ) -> bool:
         self.reconciled.append((tenant, list(annotating), [row.chunk_id for row in rows()]))
         return True
@@ -371,6 +372,7 @@ def _annotation_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Ann
             annotating: Sequence[str],
             rows: Callable[[], Sequence[TenantWorkRef]],
             tally: AnnotationTally,
+            outages: set[str],
         ) -> bool:
             _log.info("tenant annotation work")
             recorder.log(tenant, "reconcile", list(annotating), [row.chunk_id for row in rows()])
@@ -501,7 +503,9 @@ def test_annotation_source_left_warning_inherits_tenant_from_its_sweep() -> None
         sources = Mock()
         sources.annotating_ids.return_value = []
         sources.label_clearer.return_value = None
-        return TenantAnnotation(facts=Mock(), work_sources=sources, memory=memory, clock=FixedClock(_NOW))
+        return TenantAnnotation(
+            facts=Mock(), work_sources=sources, memory=memory, events=Mock(), clock=FixedClock(_NOW)
+        )
 
     sweep = AnnotationReconciler(
         corpus=_WorkRefs([]),

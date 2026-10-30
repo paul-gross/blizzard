@@ -734,6 +734,7 @@ def _wire_runner(
         environments=read_stores.environments,
         overload=read_stores.overload,
         elicitations=read_stores.elicitations,
+        git_commits=read_stores.git_commit_declarations,
         takeovers=read_stores.takeover,
         escalations=read_stores.escalations,
     )

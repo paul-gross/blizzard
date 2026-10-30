@@ -7,7 +7,8 @@ import { GRAPH_LAYOUT, GraphDiagram } from './graph-diagram';
 import type { LaidOutGraph, LayoutOutcome } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  definition_yaml: '',
   artifacts: [],
   edges: [],
   follow_latest: null,

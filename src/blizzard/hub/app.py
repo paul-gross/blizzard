@@ -62,6 +62,7 @@ from blizzard.hub.api.fleet import claim_router as fleet_claim_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.fleet_host import router as fleet_host_router
 from blizzard.hub.api.fleet_identity import router as fleet_identity_router
+from blizzard.hub.api.flow_submissions import router as flow_submissions_router
 from blizzard.hub.api.forges import router as forges_router
 from blizzard.hub.api.garden_proposals import project_router as project_garden_proposals_router
 from blizzard.hub.api.garden_proposals import router as garden_proposals_router
@@ -506,6 +507,7 @@ def create_app(
     app.include_router(hub_admins_router)
     app.include_router(invitations_router)
     app.include_router(transcripts_router)
+    app.include_router(flow_submissions_router)
     app.include_router(analytics_router)
     app.include_router(traces_router)
     app.include_router(egress_router)

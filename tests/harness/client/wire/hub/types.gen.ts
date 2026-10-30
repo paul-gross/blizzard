@@ -1384,6 +1384,22 @@ export type ChunkEscalationView = {
 };
 
 /**
+ * ChunkFlowSubmissionsView
+ *
+ * ``GET /api/chunks/{chunk_id}/flow-submissions`` — every submission of the chunk, in arrival order.
+ */
+export type ChunkFlowSubmissionsView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Items
+     */
+    items: Array<FlowSubmissionView>;
+};
+
+/**
  * ChunkGroupRequest
  *
  * Merge unacquired chunks into one.
@@ -3463,6 +3479,55 @@ export type FleetSummaryView = {
 };
 
 /**
+ * FlowSubmissionClosureView
+ *
+ * How a submission left its flows. ``outcome`` is a verdict's choice or a closure word.
+ */
+export type FlowSubmissionClosureView = {
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Outcome
+     */
+    outcome: string;
+};
+
+/**
+ * FlowSubmissionView
+ *
+ * One submission of a visit; ``closure`` is ``null`` while it is open.
+ */
+export type FlowSubmissionView = {
+    /**
+     * Arrival
+     */
+    arrival: number;
+    closure: FlowSubmissionClosureView | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Generation
+     */
+    generation: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Submission Id
+     */
+    submission_id: string;
+    /**
+     * Submitted At
+     */
+    submitted_at: string;
+};
+
+/**
  * ForgeBudgetView
  *
  * One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous
@@ -4499,6 +4564,10 @@ export type GraphView = {
      * Artifacts
      */
     artifacts: Array<string>;
+    /**
+     * Definition Yaml
+     */
+    definition_yaml: string;
     /**
      * Edges
      */
@@ -12286,6 +12355,36 @@ export type DetachChunkApiChunksChunkIdDetachPostResponses = {
 };
 
 export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
+
+export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/flow-submissions';
+};
+
+export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetError = ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors[keyof ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors];
+
+export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkFlowSubmissionsView;
+};
+
+export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponse = ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses[keyof ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetResponses];
 
 export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData = {
     body: GardenDeliveryRequest;

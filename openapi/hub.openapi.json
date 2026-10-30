@@ -2476,6 +2476,28 @@
         "title": "ChunkEscalationView",
         "type": "object"
       },
+      "ChunkFlowSubmissionsView": {
+        "description": "``GET /api/chunks/{chunk_id}/flow-submissions`` \u2014 every submission of the chunk, in arrival order.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FlowSubmissionView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "items"
+        ],
+        "title": "ChunkFlowSubmissionsView",
+        "type": "object"
+      },
       "ChunkGroupRequest": {
         "description": "Merge unacquired chunks into one.\n\n``merge_chunk_ids`` fold into the path's survivor, which absorbs the union of their\nwork refs. Self-references and duplicates are ignored; a non-ready member is ``409``.",
         "properties": {
@@ -6229,6 +6251,75 @@
         "title": "FleetSummaryView",
         "type": "object"
       },
+      "FlowSubmissionClosureView": {
+        "description": "How a submission left its flows. ``outcome`` is a verdict's choice or a closure word.",
+        "properties": {
+          "closed_at": {
+            "title": "Closed At",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "closed_at"
+        ],
+        "title": "FlowSubmissionClosureView",
+        "type": "object"
+      },
+      "FlowSubmissionView": {
+        "description": "One submission of a visit; ``closure`` is ``null`` while it is open.",
+        "properties": {
+          "arrival": {
+            "title": "Arrival",
+            "type": "integer"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSubmissionClosureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "submitted_at": {
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id",
+          "node_id",
+          "epoch",
+          "generation",
+          "arrival",
+          "submitted_at",
+          "closure"
+        ],
+        "title": "FlowSubmissionView",
+        "type": "object"
+      },
       "ForgeBudgetView": {
         "description": "One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous\nbudget), and the limit, remaining and reset the forge last answered with.",
         "properties": {
@@ -7981,6 +8072,10 @@
             "title": "Artifacts",
             "type": "array"
           },
+          "definition_yaml": {
+            "title": "Definition Yaml",
+            "type": "string"
+          },
           "edges": {
             "default": [],
             "items": {
@@ -8057,7 +8152,8 @@
           "artifacts",
           "nodes",
           "edges",
-          "warnings"
+          "warnings",
+          "definition_yaml"
         ],
         "title": "GraphView",
         "type": "object"
@@ -22500,6 +22596,49 @@
         "summary": "Detach Chunk",
         "tags": [
           "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/flow-submissions": {
+      "get": {
+        "description": "Every submission of the chunk's visits, open or closed, in arrival order. Unpaged: the read is bounded by one\nchunk's visits \u2014 a submission per hub-node visit generation.",
+        "operationId": "list_flow_submissions_api_chunks__chunk_id__flow_submissions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkFlowSubmissionsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Flow Submissions",
+        "tags": [
+          "flows"
         ]
       }
     },

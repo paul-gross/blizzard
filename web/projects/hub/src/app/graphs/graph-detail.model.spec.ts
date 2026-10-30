@@ -18,7 +18,8 @@ const NODE_DEFAULTS: Pick<GraphNodeView, 'action' | 'action_args' | 'checks' | '
   session_source: null,
 };
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  definition_yaml: '',
   artifacts: [],
   edges: [],
   follow_latest: null,

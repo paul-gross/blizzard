@@ -16,8 +16,10 @@ from structlog.contextvars import bound_contextvars
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.work_refs import (
@@ -34,6 +36,8 @@ from blizzard.hub.work_sources.source import IWorkSourceRegistry
 _log = get_logger("blizzard.hub.forge_status")
 
 MarkerAction = Literal["set", "clear", "skip"]
+
+_SOURCE_SKIPPED: EventLogKind = "forge-status-source-skipped"
 
 #: The full-pass floor, in sweep intervals — how long forge-side drift may outlive a skipped pass.
 FULL_PASS_FLOOR_INTERVALS = 5
@@ -131,7 +135,7 @@ class AnnotationTally:
 class TenantAnnotation:
     """One tenant's half of the forge-status pass, per opted-in work source of that tenant: the
     desired-vs-actual marker diff, writing only the gap, and the one-shot clear of each source that
-    left its configuration. ``facts``, ``work_sources`` and ``memory`` all serve that one tenant."""
+    left its configuration. ``facts``, ``work_sources``, ``memory`` and ``events`` all serve that one tenant."""
 
     def __init__(
         self,
@@ -139,11 +143,13 @@ class TenantAnnotation:
         facts: IReadChunkFactsRepository,
         work_sources: IWorkSourceRegistry,
         memory: IWriteAnnotatedSources,
+        events: EventLogService,
         clock: IClock,
     ) -> None:
         self._facts = facts
         self._work_sources = work_sources
         self._memory = memory
+        self._events = events
         self._clock = clock
 
     def annotating(self) -> Sequence[str]:
@@ -156,12 +162,16 @@ class TenantAnnotation:
         annotating: Sequence[str],
         rows: Callable[[], Sequence[TenantWorkRef]],
         tally: AnnotationTally,
+        outages: set[str],
     ) -> bool:
         """Reconcile each of ``annotating`` — the tenant's sources annotating now — against ``rows``,
         ``tenant``'s live work refs, read only when the tenant has a source to reconcile, and clear
-        each departed one, counting into ``tally``; whether the tenant converged."""
+        each departed one, counting into ``tally``; whether the tenant converged. ``outages`` is the
+        tenant's sources whose skip is already announced: a skip outside it is announced and joins it,
+        a source read again leaves it, and one no longer reconciled here is forgotten."""
         remembered = self._memory.annotated_sources()
         leaving = departed(remembered, annotating)
+        outages.intersection_update({*annotating, *leaving})
         if not annotating and not leaving:
             return True
         self._remember(AnnotationMemoryChange.on_entry(remembered, annotating))
@@ -173,20 +183,46 @@ class TenantAnnotation:
             if annotator is None:  # pragma: no cover - annotating_ids() only names built ones
                 continue
             if _reconcile(name, annotator, desired, tally) is None:
-                tally.sources_skipped.append(name)
+                self._skipped(name, outages, tally)
+            else:
+                outages.discard(name)
         unfinished: list[str] = []
         for name in leaving:
             clearer = self._work_sources.label_clearer(name)
             if clearer is None:
                 _log.warning("forge-status source left config; its labels are not cleared", source=name)
+                outages.discard(name)
                 continue
             failed = _reconcile(name, clearer, {}, tally)
             if failed is None:
-                tally.sources_skipped.append(name)
+                self._skipped(name, outages, tally)
+            else:
+                outages.discard(name)
             if failed != 0:
                 unfinished.append(name)
         self._remember(AnnotationMemoryChange.on_departure(leaving, unfinished))
         return len(tally.sources_skipped) == skipped_before and tally.failed == failed_before and not unfinished
+
+    def _skipped(self, name: str, outages: set[str], tally: AnnotationTally) -> None:
+        tally.sources_skipped.append(name)
+        if name not in outages:
+            self._announce_skipped(name)
+            outages.add(name)
+
+    def _announce_skipped(self, name: str) -> None:
+        """Record the first skip of an outage of the source keyed ``name`` in this tenant's event log."""
+        label = self._work_sources.source_label(name)
+        self._events.record(
+            kind=_SOURCE_SKIPPED,
+            runner_id=None,
+            chunk_id=None,
+            project_id=None,
+            lease_id=None,
+            node_name=None,
+            message=f"forge-status labels skipped for work source {label}: its forge could not be read",
+            detail={"source": label, "work_source_id": name},
+            at=self._clock.now(),
+        )
 
     def _remember(self, change: AnnotationMemoryChange) -> None:
         if change.entered or change.left:
@@ -194,10 +230,10 @@ class TenantAnnotation:
 
 
 class AnnotationReconciler:
-    """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe and last converged
-    instant, so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``);
-    ``full_pass_floor`` bounds how stale a skipped pass can leave the forge. A tenant reconciles its own
-    rows alone, against its own sources."""
+    """The forge-status pass, one per hub. Holds, in memory only, each tenant's probe, last converged
+    instant and sources in a read outage (a skip is announced once per outage; a restart announces a
+    standing one again), so a tenant is due on its own state alone (``bzh:pass-isolates-tenants``);
+    ``full_pass_floor`` bounds how stale a skipped pass can leave the forge."""
 
     def __init__(
         self,
@@ -214,6 +250,7 @@ class AnnotationReconciler:
         self._clock = clock
         self._full_pass_floor = full_pass_floor
         self._converged: dict[TenantId, tuple[AnnotationProbe, datetime]] = {}
+        self._outages: dict[TenantId, set[str]] = {}
 
     def sweep(self) -> None:
         """One reconciliation pass over every due tenant (never converged, floor elapsed, or probe
@@ -233,6 +270,8 @@ class AnnotationReconciler:
                 else:
                     opened[tenant] = half
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in opened}
+        known = {*opened, *unconverged}
+        self._outages = {tenant: names for tenant, names in self._outages.items() if tenant in known}
         signatures = self._corpus.live_work_refs_signature()
         probes = {tenant: _probe(tenant, opened[tenant], signatures) for tenant in opened}
         now = self._clock.now()
@@ -321,7 +360,8 @@ class AnnotationReconciler:
         converged. A closed tenant's refusal propagates."""
         try:
             half, annotating = opened
-            converged = half.reconcile(tenant, annotating, partial(corpus.rows_of, tenant), tally)
+            outages = self._outages.setdefault(tenant, set())
+            converged = half.reconcile(tenant, annotating, partial(corpus.rows_of, tenant), tally, outages)
         except (TenantClosed, UnknownTenant):
             raise
         except Exception as exc:

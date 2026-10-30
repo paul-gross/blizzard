@@ -195,6 +195,9 @@ def logout(request: Request, response: Response) -> Response:
             session = services.sessions.get_by_hash(id_hash)
             if session is not None:
                 services.auth.revoke(session)
+                # The delete has committed: the session's open event streams end in every tenant, and every
+                # other session of its user keeps streaming.
+                services.event_brokers.end_session(id_hash)
     response.delete_cookie(SESSION_COOKIE_NAME)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

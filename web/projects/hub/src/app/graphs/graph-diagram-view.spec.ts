@@ -4,7 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import type { GraphView, GraphNodeView } from 'fleet';
 import { GraphDiagramView } from './graph-diagram-view';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  definition_yaml: '',
   artifacts: [],
   edges: [],
   follow_latest: null,

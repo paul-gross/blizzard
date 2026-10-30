@@ -5,7 +5,8 @@ import type { GraphView, GraphNodeView } from 'fleet';
 import { GraphDiagramDetail } from './graph-diagram-detail';
 import type { DiagramSelection } from './graph-diagram-selection';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  definition_yaml: '',
   artifacts: [],
   edges: [],
   follow_latest: null,

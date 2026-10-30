@@ -87,7 +87,16 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
 
-class IWriteLeaseRecordRepository(IReadLeaseRecordRepository, Protocol):
+class IReadChunkLeaseRepository(IReadLeaseRecordRepository, Protocol):
+    """The lease record plus one chunk's whole lease history — the lease list's chunk filter."""
+
+    def chunk_leases(self, chunk_id: str) -> list[Lease | ClosedLease]:
+        """Every lease of this chunk, open (a :class:`Lease`) or closed (a :class:`ClosedLease`),
+        oldest mint first (``created_at``, then ``epoch``). Unbounded: one chunk's leases bound it."""
+        ...
+
+
+class IWriteLeaseRecordRepository(IReadChunkLeaseRepository, Protocol):
     """Read-write lease-identity store — held only by the domain (the loop steps)."""
 
     def record_lease(self, lease: NewLease) -> None:

@@ -317,6 +317,9 @@ export const heartbeatRunnersRunnerIdApiHeartbeatPost = <ThrowOnError extends bo
  * List Leases
  *
  * Active leases, then recently-closed ones, derived at read time.
+ *
+ * With ``chunk_id``, every lease of that chunk instead — open and closed, oldest mint first,
+ * uncapped: one chunk's node-steps and retries bound it.
  */
 export const listLeasesRunnersRunnerIdApiLeasesGet = <ThrowOnError extends boolean = false>(options: Options<ListLeasesRunnersRunnerIdApiLeasesGetData, ThrowOnError>): RequestResult<ListLeasesRunnersRunnerIdApiLeasesGetResponses, ListLeasesRunnersRunnerIdApiLeasesGetErrors, ThrowOnError> => (options.client ?? client).get<ListLeasesRunnersRunnerIdApiLeasesGetResponses, ListLeasesRunnersRunnerIdApiLeasesGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases', ...options });
 

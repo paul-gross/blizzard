@@ -14,6 +14,7 @@ from blizzard.foundation.leases import LeaseDisplayStatus
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, ClosedLeaseActivity, LeaseActivity
+from blizzard.wire.git_commits import LeaseGitCommitView
 from blizzard.wire.lease import LeaseListResponse, LeaseView
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -35,6 +36,10 @@ class _CommonFields(TypedDict):
     display_status: LeaseDisplayStatus
     project_id: str | None
     stale_after_seconds: int
+    resolved_model: str | None
+    resolved_effort: str | None
+    harness_version: str | None
+    git_commits: list[LeaseGitCommitView]
 
 
 def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
@@ -53,6 +58,19 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "display_status": activity.display_status,
         "project_id": activity.project_id,
         "stale_after_seconds": int(HEARTBEAT_STALENESS_THRESHOLD.total_seconds()),
+        "resolved_model": lease.resolved_model,
+        "resolved_effort": lease.resolved_effort,
+        "harness_version": activity.stamps.harness_version,
+        "git_commits": [
+            LeaseGitCommitView(
+                environment_id=commit.environment_id,
+                repo=commit.repo,
+                branch=commit.branch,
+                commit=commit.commit,
+                declared_at=iso_utc(commit.declared_at),
+            )
+            for commit in activity.stamps.git_commits
+        ],
     }
     if isinstance(activity, ClosedLeaseActivity):
         return LeaseView(
@@ -78,7 +96,11 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
 
 
 @router.get("/leases", response_model=LeaseListResponse)
-def list_leases(request: Request) -> LeaseListResponse:
-    """Active leases, then recently-closed ones, derived at read time."""
+def list_leases(request: Request, chunk_id: str | None = None) -> LeaseListResponse:
+    """Active leases, then recently-closed ones, derived at read time.
+
+    With ``chunk_id``, every lease of that chunk instead — open and closed, oldest mint first,
+    uncapped: one chunk's node-steps and retries bound it."""
     service = RunnerWiring.of(request).leases()
-    return LeaseListResponse(items=[_view(activity) for activity in service.list_recent()])
+    activities = service.list_recent() if chunk_id is None else service.list_for_chunk(chunk_id)
+    return LeaseListResponse(items=[_view(activity) for activity in activities])

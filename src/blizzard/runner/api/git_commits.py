@@ -12,7 +12,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_scope import authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
+from blizzard.runner.leases.git_commit_declaration import (
     GitCommitDeclarationOnClosedLease,
     GitCommitDeclarationTooLate,
     GitCommitDeclarationUnknownRepo,

@@ -7,7 +7,7 @@ holds the read model, which derives state from facts at read time
 
 from __future__ import annotations
 
-from collections.abc import Container, Sequence
+from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -20,10 +20,11 @@ from blizzard.runner.environments.repository import EnvBinding, IReadEnvironment
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import ParkedEscalation
+from blizzard.runner.leases.git_commit_declaration import DeclaredLeaseCommit, IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, LeaseLivenessFacts
-from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.model import ClosedLease, Lease
 from blizzard.runner.leases.overload import IReadOverloadRepository, backing_off_facts
-from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository
 
 #: Deliberately **conservative**: bounded below by the longest tool call a healthy worker makes.
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
@@ -112,6 +113,19 @@ NO_HUMAN_FACTS = OpenHumanFacts()
 
 @domain_model
 @dataclass(frozen=True)
+class LeaseStamps:
+    """What a lease's worker recorded about itself: the newest spawn's ``harness_version`` and
+    its declared commits, newest per ``(environment_id, repo)``."""
+
+    harness_version: str | None = None
+    git_commits: tuple[DeclaredLeaseCommit, ...] = ()
+
+
+NO_STAMPS = LeaseStamps()
+
+
+@domain_model
+@dataclass(frozen=True)
 class LeaseActivity:
     """An active lease with the facts its state derives from, plus its binding — the panel's read model.
 
@@ -128,6 +142,7 @@ class LeaseActivity:
     human: OpenHumanFacts = NO_HUMAN_FACTS
     #: The chunk's project, as the hub names it; ``None`` until a binding of the chunk names one.
     project_id: str | None = None
+    stamps: LeaseStamps = NO_STAMPS
 
     @classmethod
     def of(
@@ -143,6 +158,7 @@ class LeaseActivity:
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
         human: OpenHumanFacts = NO_HUMAN_FACTS,
         project_id: str | None = None,
+        stamps: LeaseStamps = NO_STAMPS,
     ) -> LeaseActivity:
         """Assemble ``lease``'s activity from facts already read: its liveness facts (``None``
         when it has none yet), the parked and backing-off lease ids, its chunk's held bindings,
@@ -161,6 +177,7 @@ class LeaseActivity:
             last_heartbeat_at=heartbeat,
             human=human,
             project_id=project_id,
+            stamps=stamps,
         )
 
     @property
@@ -201,6 +218,7 @@ class ClosedLeaseActivity:
     human: OpenHumanFacts = NO_HUMAN_FACTS
     #: The chunk's project, read off its retained (released) bindings; ``None`` when none named one.
     project_id: str | None = None
+    stamps: LeaseStamps = NO_STAMPS
 
     @property
     def state(self) -> LeaseState:
@@ -248,12 +266,13 @@ class LocalLeaseService:
         clock: IClock,
         process: IProcessProbe,
         *,
-        lease_record: IReadLeaseRecordRepository,
+        lease_record: IReadChunkLeaseRepository,
         liveness: IReadLeaseLivenessRepository,
         asks: IReadAskRepository,
         environments: IReadEnvironmentRepository,
         overload: IReadOverloadRepository,
         elicitations: IReadElicitationRepository,
+        git_commits: IReadGitCommitDeclarationRepository,
         takeovers: IOpenTakeoverChunks,
         escalations: IOpenEscalations,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
@@ -265,6 +284,7 @@ class LocalLeaseService:
         self._environments = environments
         self._overload = overload
         self._elicitations = elicitations
+        self._git_commits = git_commits
         self._takeovers = takeovers
         self._escalations = escalations
         self._clock = clock
@@ -273,16 +293,52 @@ class LocalLeaseService:
         self._recent_limit = recent_limit
 
     def list_active(self) -> list[LeaseActivity]:
-        """Every active lease, joined with its binding and derived state.
+        """Every active lease, joined with its binding and derived state."""
+        leases = self._lease_record.list_active_leases()
+        return self._active(leases, self._stamps([lease.lease_id for lease in leases]))
 
-        The reported heartbeat and the staleness baseline share one bulk
+    def list_recent(self) -> list[LeaseActivity | ClosedLeaseActivity]:
+        """Active leases, then the most recently closed — the panel's list.
+
+        Every active lease first — unbounded, so a long-running agent is never crowded
+        out — then up to ``recent_limit`` closed leases, newest first."""
+        leases = self._lease_record.list_active_leases()
+        records = self._lease_record.list_closed_leases(self._recent_limit)
+        stamps = self._stamps([*(lease.lease_id for lease in leases), *(r.lease.lease_id for r in records)])
+        return [*self._active(leases, stamps), *self._closed(records, stamps)]
+
+    def list_for_chunk(self, chunk_id: str) -> list[LeaseActivity | ClosedLeaseActivity]:
+        """Every lease of ``chunk_id``, open or closed, oldest mint first.
+
+        No ``recent_limit``: the chunk bounds the read — its node-steps and their retries."""
+        entries = self._lease_record.chunk_leases(chunk_id)
+        opened = [entry for entry in entries if isinstance(entry, Lease)]
+        closed = [entry for entry in entries if isinstance(entry, ClosedLease)]
+        order = [entry.lease_id if isinstance(entry, Lease) else entry.lease.lease_id for entry in entries]
+        stamps = self._stamps(order)
+        by_id: dict[str, LeaseActivity | ClosedLeaseActivity] = {
+            activity.lease.lease_id: activity
+            for activity in [*self._active(opened, stamps), *self._closed(closed, stamps)]
+        }
+        return [by_id[lease_id] for lease_id in order]
+
+    def _stamps(self, lease_ids: list[str]) -> dict[str, LeaseStamps]:
+        """Each lease's :class:`LeaseStamps` — one grouped read of each, never per lease."""
+        versions = self._liveness.latest_spawn_harness_versions(lease_ids)
+        commits = self._git_commits.git_commit_declarations_for_leases(lease_ids)
+        return {
+            lease_id: LeaseStamps(harness_version=versions.get(lease_id), git_commits=tuple(commits.get(lease_id, ())))
+            for lease_id in set(versions) | set(commits)
+        }
+
+    def _active(self, leases: Sequence[Lease], stamps: Mapping[str, LeaseStamps]) -> list[LeaseActivity]:
+        """``leases``' activity: the reported heartbeat and the staleness baseline share one bulk
         :meth:`~IReadLeaseLivenessRepository.liveness_facts` read; bindings come from one
         :meth:`~IReadEnvironmentRepository.held_bindings` read — no per-lease reads."""
         now = self._clock.now()
         human = self._human_facts()
         parked = self._asks.parked_lease_ids()
         backing_off = backing_off_facts(self._overload, self._liveness, self._elicitations)
-        leases = self._lease_record.list_active_leases()
         facts_by_lease = self._liveness.liveness_facts([lease.lease_id for lease in leases])
         bindings_by_chunk = group_bindings_by_chunk(self._environments.held_bindings())
         projects = self._environments.chunk_project_ids(sorted({lease.chunk_id for lease in leases}))
@@ -298,24 +354,17 @@ class LocalLeaseService:
                 stale_after=self._stale_after,
                 human=human.of_chunk(lease.chunk_id),
                 project_id=projects.get(lease.chunk_id),
+                stamps=stamps.get(lease.lease_id, NO_STAMPS),
             )
             for lease in leases
         ]
 
-    def list_recent(self) -> list[LeaseActivity | ClosedLeaseActivity]:
-        """Active leases, then the most recently closed — the panel's list.
-
-        Every active lease first — unbounded, so a long-running agent is never crowded
-        out — then up to ``recent_limit`` closed leases, newest first."""
-        return [*self.list_active(), *self._list_closed()]
-
-    def _list_closed(self) -> list[ClosedLeaseActivity]:
-        """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
+    def _closed(self, records: Sequence[ClosedLease], stamps: Mapping[str, LeaseStamps]) -> list[ClosedLeaseActivity]:
+        """``records``' activity — no probe, no heartbeat read.
 
         A closed lease's pid may have been reused, so a pid read here would be actively
         misleading. Bindings are already released; their retained rows still name the chunk's project."""
         human = self._human_facts()
-        records = self._lease_record.list_closed_leases(self._recent_limit)
         projects = self._environments.chunk_project_ids(sorted({record.lease.chunk_id for record in records}))
         return [
             ClosedLeaseActivity(
@@ -324,6 +373,7 @@ class LocalLeaseService:
                 closure_reason=record.reason,
                 human=human.of_chunk(record.lease.chunk_id),
                 project_id=projects.get(record.lease.chunk_id),
+                stamps=stamps.get(record.lease.lease_id, NO_STAMPS),
             )
             for record in records
         ]

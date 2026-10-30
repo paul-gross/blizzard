@@ -216,6 +216,64 @@ def test_get_graph_returns_full_view(tmp_path: Path) -> None:
     assert set(edge.keys()) >= {"from_node_id", "choice_id", "to_node_name", "prompt_addendum"}
 
 
+def test_get_graph_serves_the_authoring_body_verbatim(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_A)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["definition_yaml"] == _GRAPH_A
+
+
+def test_every_route_serving_the_graph_view_carries_its_body(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_A})
+    graph_id = minted.json()["graph_id"]
+
+    responses = [
+        minted,
+        hub.client.post(f"/api/graphs/{graph_id}/retire"),
+        hub.client.post(f"/api/graphs/{graph_id}/enable"),
+        hub.client.patch(f"/api/graphs/{graph_id}", json={"follow_latest": True}),
+        hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": None}),
+    ]
+
+    assert [r.status_code for r in responses] == [201, 202, 202, 200, 202]
+    assert all(r.json()["definition_yaml"] == _GRAPH_A for r in responses)
+
+
+def test_posting_the_served_body_back_unchanged_mints_the_same_graph_again(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    first = hub.client.get(f"/api/graphs/{_mint(hub, _GRAPH_A)}").json()
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": first["definition_yaml"]})
+
+    assert resp.status_code == 201, resp.text
+    second = resp.json()
+    assert second["graph_id"] != first["graph_id"]
+    assert second["definition_yaml"] == first["definition_yaml"]
+    assert [(n["name"], n["prompt"]) for n in second["nodes"]] == [(n["name"], n["prompt"]) for n in first["nodes"]]
+
+
+def test_the_default_graphs_body_round_trips_with_its_prompts_inlined(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    first = hub.client.get(f"/api/graphs/{graph.graph_id}").json()
+
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": first["definition_yaml"]})
+
+    assert resp.status_code == 201, resp.text
+    second = resp.json()
+    assert second["name"] == first["name"]
+    assert [(n["name"], n["prompt"]) for n in second["nodes"]] == [(n["name"], n["prompt"]) for n in first["nodes"]]
+    assert {n.name: n.prompt for n in hub.services.default_graph_doc.nodes} == {
+        n["name"]: n["prompt"] for n in second["nodes"]
+    }
+
+
 def test_get_graph_classifies_each_edge_target(tmp_path: Path) -> None:
     """Each edge carries its target's kind — ``done`` for the reserved terminal, ``node`` for a
     same-graph node — and no target graph for either."""

@@ -153,6 +153,8 @@ class GraphView(WireModel):
     nodes: list[GraphNodeView] = []
     edges: list[GraphEdgeView] = []
     warnings: list[str] = []
+    #: The graph's source YAML exactly as minted, resubmittable as :attr:`GraphMintRequest.definition_yaml`.
+    definition_yaml: str
 
 
 class GraphSyncEntry(WireModel):

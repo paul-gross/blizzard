@@ -26,6 +26,14 @@ class TenantBrokers:
                 broker = self._brokers[tenant] = EventBroker()
             return broker
 
+    def end_session(self, session: str) -> None:
+        """End every stream opened under ``session`` on every tenant's broker — a session spans tenants —
+        leaving every other stream open."""
+        with self._lock:
+            brokers = list(self._brokers.values())
+        for broker in brokers:
+            broker.end_session(session)
+
     def drop(self, tenant: TenantId) -> None:
         """Forget ``tenant``'s broker, if it has one, closing it so every stream open on it ends; a later
         use creates a fresh one."""

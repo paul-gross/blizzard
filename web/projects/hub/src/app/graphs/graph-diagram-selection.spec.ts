@@ -8,7 +8,8 @@ import {
 } from './graph-diagram-selection';
 import type { LaidOutGraph } from './graph-layout';
 
-const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+const GRAPH_DEFAULTS: Pick<GraphView, 'artifacts' | 'definition_yaml' | 'edges' | 'follow_latest' | 'retired' | 'sessions' | 'warnings'> = {
+  definition_yaml: '',
   artifacts: [],
   edges: [],
   follow_latest: null,

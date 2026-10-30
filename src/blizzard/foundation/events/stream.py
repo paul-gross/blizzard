@@ -85,6 +85,8 @@ class Stream:
     admits: Callable[[Event], Awaitable[bool]] | None = None
     #: The principal the subscription is opened for, so its broker can end that principal's streams.
     owner: str | None = None
+    #: The session the subscription is opened under, so its broker can end that session's streams alone.
+    session: str | None = None
 
     async def frames(self) -> AsyncIterator[bytes]:
         """Yield the reserved comment, the buffered replay tail, then live events until the broker closes.
@@ -100,7 +102,7 @@ class Stream:
             return
 
         shutdown = self.shutdown if self.shutdown is not None else asyncio.Event()
-        sub = broker.subscribe(self.owner)
+        sub = broker.subscribe(self.owner, self.session)
         # One value, taken against the mark recorded at registration, shared by the replay and the dedup below.
         resume_from = self.cursor.resume_from(sub.joined_at)
         last_sent = resume_from

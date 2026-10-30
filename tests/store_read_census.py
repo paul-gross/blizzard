@@ -110,7 +110,7 @@ from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, Ru
 from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
 from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
-from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, IReadManyGraphs
+from blizzard.hub.domain.graph.model import Graph, IReadGraphBodies, IReadGraphRepository, IReadManyGraphs
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
@@ -192,17 +192,17 @@ from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, S
 from blizzard.runner.leases.asks import IReadAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
 from blizzard.runner.leases.overload import IReadOverloadRepository
-from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository, IReadLeaseRecordRepository
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
 from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import IReadGitCommitDeclarationRepository
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
@@ -777,6 +777,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
     (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
+    (IReadChunkLeaseRepository, "chunk_leases"): lambda w: w.read.lease_record.chunk_leases(w.chunk_1),
     (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
     (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
     (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
@@ -795,6 +796,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadLeaseLivenessRepository, "liveness_facts"): lambda w: w.read.liveness.liveness_facts([w.lease_2]),
     (IReadLeaseLivenessRepository, "lease_generations"): lambda w: w.read.liveness.lease_generations([w.lease_2]),
+    (IReadLeaseLivenessRepository, "latest_spawn_harness_versions"): lambda w: (
+        w.read.liveness.latest_spawn_harness_versions([w.lease_2])
+    ),
     (IReadLeaseResumeIntentRepository, "resume_intent_lease_ids"): lambda w: (
         w.read.resume_intent.resume_intent_lease_ids()
     ),
@@ -940,6 +944,9 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     ),
     (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_lease"): lambda w: (
         w.read.git_commit_declarations.git_commit_declarations_for_lease(w.lease_2)
+    ),
+    (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_leases"): lambda w: (
+        w.read.git_commit_declarations.git_commit_declarations_for_leases([w.lease_2])
     ),
     (IReadCheckRepository, "nudge_fired"): lambda w: w.read.checks.nudge_fired(w.lease_2, 2),
     (IReadCheckRepository, "checks_ran"): lambda w: w.read.checks.checks_ran(w.lease_2, 2),
@@ -2416,6 +2423,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlows, "submission_for_visit"): lambda w: w.hub.services.flows.submission_for_visit(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
     ),
+    (IReadFlows, "submissions_of"): lambda w: w.hub.services.flows.submissions_of(w.flow_chunk),
     (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
     (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
         w.flow_chunk, node_id=w.deliver_node_id, epoch=1
@@ -2570,6 +2578,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
     (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
         _HUB_GRAPH_NAME
+    ),
+    (IReadGraphBodies, "definition_yaml"): lambda w: w.hub.services.graph_bodies.definition_yaml(
+        w.retired_graph.graph_id
     ),
     (IReadGraphRepository, "is_retired"): lambda w: w.hub.services.graphs.is_retired(w.retired_graph.graph_id),
     (IReadGraphRepository, "retired_graph_ids"): lambda w: w.hub.services.graphs.retired_graph_ids(),

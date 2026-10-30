@@ -32,6 +32,10 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   closed_at: null,
   closure_reason: null,
   stale_after_seconds: 3600,
+  resolved_model: null,
+  resolved_effort: null,
+  harness_version: null,
+  git_commits: [],
   harness_id: null,
   project_id: null,
   // A long runner name, so the card's step row has to hold it inside a phone's width too.
