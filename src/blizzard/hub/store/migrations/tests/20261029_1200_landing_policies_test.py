@@ -1,7 +1,7 @@
 """The landing-policies revision: ``repositories`` and ``hub_node_poll`` each gain a tightened column that keeps its
-server default and a nullable one, and two empty tables are created, all as ``schema.py`` declares them; a re-run
-changes nothing; a row written without either tightened column reads its default; and the downgrade restores the
-parent store exactly."""
+server default and a nullable one, and two empty tables are created, all as ``src/blizzard/hub/store/schema.py``
+declares them; a re-run changes nothing; a row written without either tightened column reads its default; and the
+downgrade restores the parent store exactly."""
 
 from __future__ import annotations
 
