@@ -1,15 +1,16 @@
 import { expect, holdingChunk, seededLeaseWithWorker, runnerTest as test } from '../../harness/fixtures';
 
-// A worker's analytics reads through a real runner host, proxied to the test's own mock hub: the mock's seeded rows come
-// back as the hub served them, and a chunk that is no routine run is refused rather than answered as an empty bucket.
-// Each lease is a real one, held open by its judgement turn, and the worker calls carry its recorded spawn credential.
+// A worker's analytics reads through a real runner host, proxied to the test's own mock hub: the mock's seeded rows
+// come back as the hub served them, and a chunk that is no routine run is refused rather than answered as an empty
+// bucket. Each lease is a real one, held open at a checkpoint in its spawn turn, and the worker calls carry its
+// recorded spawn credential.
 
 const RUNNER = 'runner-local';
 
-test('test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows', async ({ mockHub, runnerHost }) => {
+test('test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
-  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, {
-    ...holdingChunk(),
+  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint, {
+    ...holdingChunk(workerCheckpoint),
     garden_run: { routine_name: 'nightly', scope_slug: 'blizzard' },
     analytics: {
       counts_skills: [{ key: 'wf-commit', count: 2 }],
@@ -44,10 +45,10 @@ test('test_a_workers_analytics_reads_proxy_through_to_the_mock_hubs_seeded_rows'
   expect(byName.body.spend).toEqual(rows);
 });
 
-test('test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_bucket', async ({ mockHub, runnerHost }) => {
+test('test_a_leases_chunk_with_no_run_context_is_a_legible_refusal_not_an_empty_bucket', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
   // No `garden_run` at all: the chunk is no routine run.
-  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, holdingChunk());
+  const { leaseId, headers } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint);
 
   const refused = await runner.expecting(404).leaseAnalytics(leaseId, 'counts', 'files', { headers });
   expect(refused.status).toBe(404);

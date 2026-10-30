@@ -1,4 +1,4 @@
-import { expect, test, stepUntil } from '../../harness/fixtures';
+import { expect, test, stepUntil, stepUntilHeld } from '../../harness/fixtures';
 
 // The forge-status projection, end to end: a chunk's status shows on its forge issue as a label and clears when the chunk
 // leaves the live set, a label deleted by hand comes back, and a forge outage degrades to a recorded skip. Every pass of
@@ -56,9 +56,7 @@ test.describe('at fresh-hub', () => {
     // -- ingested -> in-progress while a worker holds the lease -> cleared on done --
     const a = await filed('sweep me end to end');
     expect(await swept(a.number)).toEqual(['blizzard:ingested']);
-    let arrived = false;
-    void workerCheckpoint.reached('hold').then(() => { arrived = true; });
-    await stepUntil(runnerHost, async () => arrived, Boolean);
+    await stepUntilHeld(runnerHost, a.chunkId, workerCheckpoint, 'hold');
     expect(await swept(a.number)).toEqual(['blizzard:in-progress']);
     workerCheckpoint.release('hold');
     await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${a.chunkId}`)).body.status, (status) => status === 'done');

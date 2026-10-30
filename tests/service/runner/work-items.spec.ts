@@ -1,15 +1,16 @@
 import { expect, holdingChunk, seededLeaseWithWorker, runnerTest as test } from '../../harness/fixtures';
 
-// A worker's work-items read through a real runner host, proxied to the test's own mock hub. Each case runs a real lease,
-// held open by its judgement turn, and reads as the worker would: by the spawn credential the mock harness recorded.
+// A worker's work-items read through a real runner host, proxied to the test's own mock hub. Each case runs a real
+// lease, held open at a checkpoint in its spawn turn, and reads as the worker would: by the spawn credential the mock
+// harness recorded.
 
 const RUNNER = 'runner-local';
 const WORK_REF = 'toy-api/issues/1';
 
-test('test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop', async ({ mockHub, runnerHost }) => {
+test('test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop', async ({ mockHub, runnerHost, workerCheckpoint }) => {
   const runner = runnerHost.runners[RUNNER]!;
-  const spec = { ...holdingChunk(), chunk_id: 'ch_work_items_hop' };
-  const { leaseId } = await seededLeaseWithWorker(mockHub, runnerHost, spec);
+  const spec = { ...holdingChunk(workerCheckpoint), chunk_id: 'ch_work_items_hop' };
+  const { leaseId } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint, spec);
 
   const proxied = await runner.workItems(spec.chunk_id, { headers: runnerHost.workerHeaders(leaseId, 'lease-token') });
   expect(proxied.status).toBe(200);
@@ -31,11 +32,11 @@ test('test_work_items_proxy_carries_the_widened_fields_unchanged_over_a_real_hop
 test.describe('a hub restart under an in-flight read', () => {
   test.use({ mockHubRelay: true });
 
-  test('test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart', async ({ mockHub, runnerHost }) => {
+  test('test_a_worker_lane_proxied_read_rides_out_a_real_mock_hub_restart', async ({ mockHub, runnerHost, workerCheckpoint }) => {
     const relay = mockHub.relay!;
     const runner = runnerHost.runners[RUNNER]!;
-    const spec = { ...holdingChunk(), chunk_id: 'ch_work_items_restart' };
-    const { leaseId } = await seededLeaseWithWorker(mockHub, runnerHost, spec);
+    const spec = { ...holdingChunk(workerCheckpoint), chunk_id: 'ch_work_items_restart' };
+    const { leaseId } = await seededLeaseWithWorker(mockHub, runnerHost, workerCheckpoint, spec);
     const headers = runnerHost.workerHeaders(leaseId, 'lease-token');
 
     // The outage stays open under the read until the restarted hub knows the runner and the chunk: a retry that landed on

@@ -2,14 +2,14 @@ import {
   chunkTraceId,
   claudeCodeExports,
   expect,
-  HOLD_OPEN,
+  holdingChunk,
   type HostRoutes,
-  type MockChunkSpec,
   type MockHub,
   type ReceivedSpan,
   type RunnerHost,
   runnerTest as test,
   runningLeaseWithWorker,
+  type WorkerCheckpoint,
 } from '../../harness/fixtures';
 
 // A real stepped runner host exporting to the host-owned OTLP sink: the platform spans it opens, and the worker telemetry
@@ -31,30 +31,12 @@ function transports(host: RunnerHost): [string, HostRoutes][] {
   ];
 }
 
-function holdingChunk(): MockChunkSpec {
-  return {
-    entry: 'build',
-    nodes: {
-      build: {
-        executor: 'runner',
-        session: 'resume',
-        judged_by: 'worker',
-        prompt: 'pass\n',
-        judgement_prompt: HOLD_OPEN,
-        choices: [{ name: 'pass', description: 'committed and green', to: 'done' }],
-        retries_max: 1,
-      },
-    },
-    work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }],
-  };
-}
-
-/** A running lease for a seeded chunk, and the worker headers that carry its recorded token as the worker's exporter sends it. */
-async function leaseOfWorker(mockHub: MockHub, host: RunnerHost) {
-  const seeded = await mockHub.seed.chunk(holdingChunk());
+/** A running lease for a seeded chunk held at `checkpoint`, and the worker headers that carry its recorded token as the worker's exporter sends it. */
+async function leaseOfWorker(mockHub: MockHub, host: RunnerHost, checkpoint: WorkerCheckpoint) {
+  const seeded = await mockHub.seed.chunk(holdingChunk(checkpoint));
   expect(seeded.status).toBe(201);
   const chunkId = seeded.body.chunk_id;
-  const { lease } = await runningLeaseWithWorker(host, chunkId);
+  const { lease } = await runningLeaseWithWorker(host, chunkId, checkpoint);
   return { chunkId, leaseId: lease.lease_id, headers: host.workerHeaders(lease.lease_id, 'lease-token') };
 }
 
@@ -80,8 +62,8 @@ test.describe('a runner host with platform tracing on', () => {
     expect(JSON.stringify([sink.spans(), sink.sumPoints(), sink.logRecords()])).not.toContain('planted-secret');
   });
 
-  test('test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter', async ({ runnerHost, mockHub }) => {
-    const { chunkId, headers } = await leaseOfWorker(mockHub, runnerHost);
+  test('test_a_worker_span_posted_over_tcp_and_the_socket_reaches_the_real_exporter', async ({ runnerHost, mockHub, workerCheckpoint }) => {
+    const { chunkId, headers } = await leaseOfWorker(mockHub, runnerHost, workerCheckpoint);
     const trace = chunkTraceId(chunkId);
     const body = JSON.stringify({
       resourceSpans: [
@@ -120,9 +102,9 @@ test.describe('a runner host with platform tracing on', () => {
 test.describe('a runner host forwarding Claude Code telemetry', () => {
   test.use({ runnerOtlp: true, runnerConfig: { tracing: { platform: true, platform_sample_ratio: 1, harness_telemetry: true } } });
 
-  test('test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_real_exporters', async ({ runnerHost, mockHub }) => {
+  test('test_claude_code_metrics_and_logs_posted_over_tcp_and_the_socket_reach_the_real_exporters', async ({ runnerHost, mockHub, workerCheckpoint }) => {
     const runner = runnerHost.runners[RUNNER]!;
-    const { leaseId, headers } = await leaseOfWorker(mockHub, runnerHost);
+    const { leaseId, headers } = await leaseOfWorker(mockHub, runnerHost, workerCheckpoint);
     // The first step registered the runner: the identity every forwarded item is stamped with.
     const identity = (await runner.status()).body;
     for (const [transport, routes] of transports(runnerHost)) {

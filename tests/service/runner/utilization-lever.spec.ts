@@ -1,4 +1,4 @@
-import { expect, runnerTest as test, stepUntil } from '../../harness/fixtures';
+import { expect, runnerTest as test, stepUntil, stepUntilHeld } from '../../harness/fixtures';
 import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // A utilization line holds a runner's next node and not the step in flight: one host, one runner spending a sampled
@@ -75,9 +75,7 @@ test('test_a_utilization_line_declines_the_next_node_and_never_the_step_in_fligh
 
   await sampled(40);
   const chunkId = (await mockHub.seed.chunk(twoNodes(workerCheckpoint.snippet(CHECKPOINT)))).body.chunk_id;
-  let arrived = false;
-  void workerCheckpoint.reached(CHECKPOINT).then(() => (arrived = true));
-  await stepUntil(host, async () => arrived, (here) => here);
+  await stepUntilHeld(host, chunkId, workerCheckpoint, CHECKPOINT);
   const [building] = await leasesOn(host, chunkId, 'build');
   expect(building!.closed_at ?? null).toBeNull();
 
