@@ -153,9 +153,9 @@ reads when nothing has, running a full pass anyway once five intervals (ten minu
 on the hub side shows on the forge within one interval; a hand-removed label, an edit by another actor, or a source's
 binding edit self-heals within that five-interval floor. Mid-sweep crashes, forge outages, and failed writes or clears
 are retried on the very next pass. A forge that is down, slow, or rate-limiting degrades the label sweep to a skip of
-that source, which records a `forge-status-source-skipped` warning in the tenant's event log (`GET /api/events`),
-naming the source and its id — once per outage, not once per pass: a source read successfully again re-arms it, and a
-hub restart during an outage announces it once more. A skip never blocks a chunk transition, an ingest, or any other hub
+that source, which records a `forge-status-source-skipped` warning in the tenant's event log (`GET /api/events`), naming
+the source and its id — once per outage, not once per pass: a source read successfully again re-arms it, and a hub
+restart during an outage announces it once more. A skip never blocks a chunk transition, an ingest, or any other hub
 request. The sweep is among the first callers the forge's [rate budget](./forges.md#the-rate-budget) turns away: below
 two fifths of the limit its source is skipped without a request, and the pass after the reset runs it again.
 

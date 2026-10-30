@@ -41,8 +41,7 @@ it speaks: the `blizzard-hub.toml` key `follow_latest` (`true`/`false`, default 
 graphs that say nothing, and `blizzard hub graph follow-latest <graph-id> true|false|inherit` is the mint's override —
 `inherit`, every mint's default, defers to the hub key. `GET /api/graphs/{id}` serves the stored tri-state as-is:
 says-nothing is distinguishable from says-false. The view also carries `definition_yaml`, the graph's source exactly as
-it was minted; posted back to `POST /api/graphs`, edited or
-not, it mints a new version.
+it was minted; posted back to `POST /api/graphs`, edited or not, it mints a new version.
 
 Over HTTP, `PATCH /api/graphs/{id}` with `{"follow_latest": true|false|null}` sets the override and answers `200` with
 the graph; `null` is `inherit`, and a body without `follow_latest` changes nothing.
