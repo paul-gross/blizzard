@@ -198,9 +198,13 @@ test.describe('the night, held on one stack', () => {
         graphOf({ [SLOW_STATION]: buildNode(commitScript(cliPath, 'feature/night-plain', 'PLAIN.md', 'a plain build', workerCheckpoint.snippet('slow')), 'deliver'), deliver: deliverNode(SLOW_STATION) }, SLOW_STATION, LANE_GRAPH),
         'plain',
       );
-      let arrived = false;
-      void workerCheckpoint.reached('slow').then(() => { arrived = true; });
-      await stepUntil(runnerHost, async () => arrived, Boolean, 400);
+      // The hub starts the step's clock when the lease's `lease.minted` fact reaches it, on whichever pass flushes it, so
+      // the hold starts only once that fact is acked and the worker is at the checkpoint: no pass moves the worker there.
+      const runner = runnerHost.runners[RUNNER]!;
+      const mintedAcked = async () =>
+        (await runner.facts()).body.items.some((fact) => fact.kind === 'lease.minted' && fact.chunk_id === plain && fact.acked_at !== null);
+      await stepUntil(runnerHost, mintedAcked, Boolean);
+      await workerCheckpoint.reached('slow');
       const holdFrom = Date.now();
       await expect.poll(() => Date.now(), { timeout: SLOW_HOLD_MS + 15_000 }).toBeGreaterThan(holdFrom + SLOW_HOLD_MS);
       workerCheckpoint.release('slow');
