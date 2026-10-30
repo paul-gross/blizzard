@@ -19,7 +19,8 @@ import {
   requireOwnTenant,
   type RunnerOptions,
 } from './factories';
-import { binDir, daemonEnv, requireBinary } from './env';
+import { binDir, daemonEnv, requireBinary, TESTS_ROOT } from './env';
+import { type OriginReads, originReads } from './runner-git';
 import { type HubLog, hubLog as readHubLog } from './logs';
 import { uniqueName } from './base';
 import { mockWorld } from './mock-world';
@@ -58,7 +59,8 @@ interface Fixtures {
   /** A client sending only `Authorization: Bearer <token>`, on a context holding no cookie, so the token alone authenticates. */
   bearer: (token: string) => Promise<Verbs>;
   fleet: (name: string, options?: RunnerOptions) => Promise<FleetClient>;
-  forge: ForgeApi;
+  /** The hub's mock forge, and reads of its bare repositories, which `owner/name` names. */
+  forge: ForgeApi & OriginReads;
   events: Events;
   hubLog: HubLog;
   /**
@@ -220,7 +222,8 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
   },
 
   forge: async ({ testHub, ledger }, use, testInfo) => {
-    await use(forgeApi({ context: testHub.context, testInfo, url: testHub.coordinates.forgeUrl, ledger }));
+    const api = forgeApi({ context: testHub.context, testInfo, url: testHub.coordinates.forgeUrl, ledger });
+    await use({ ...api, ...originReads(testHub.coordinates.originsPath, daemonEnv(), TESTS_ROOT) });
   },
 
   openedSubscriptions: async ({}, use) => {
