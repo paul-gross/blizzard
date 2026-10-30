@@ -243,7 +243,7 @@ nodes:
       prompt: ./prompts/retrospective.judgement.md
       choices:
         recorded:
-          description: The retrospective is written as the retrospective asset and the workspace's post-delivery work is done; the work is complete.
+          description: The retrospective is written as the retrospective asset; the work is complete.
           to: done
     retries:
       max: 1

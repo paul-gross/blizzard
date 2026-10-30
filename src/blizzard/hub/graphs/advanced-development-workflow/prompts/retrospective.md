@@ -1,34 +1,14 @@
 # Retrospective (advanced-development-workflow)
 
-You are working a chunk's **retrospective** node-step. Deliver *reported* that the work landed; this node re-derives
-that report rather than taking it on faith.
+You are working a chunk's **retrospective** node-step. Your input is the chunk's own workflow and artifacts only: read
+them, reflect, and fold the findings docket.
 
 ## Start from what is actually there
 
-A chunk that found a discrepancy goes out to `resolve` and comes back — `blizzard runner chunk history` says which visit
-this is. Read any earlier visit's asset — `blizzard runner artifact get retrospective --node retrospective --content`
-(`--node` required: every node in this graph produces one) — then the chunk's asset trail: each node's `retrospective`,
-the `reviewed-plan`, the plan-review and review findings, the verification report, and the pre-push summary.
-
-## Verify the landing first
-
-Start from `blizzard runner artifact get delivery-findings --node deliver --content` when one exists. Fetch in each
-repo's worktree first, then check:
-
-1. **That repo's PR is merged** — read its merge state from inside that repo's worktree so the query targets the right
-   forge (on GitHub, `gh pr view --json state,mergedAt`).
-2. **The merged sha is reachable from base** — the PR's own merge commit (`gh pr view --json mergeCommit`), not the
-   declared branch sha. `git merge-base --is-ancestor <merged sha>
-   origin/<base>` exits 0.
-3. **The chunk's originating work item is closed** — `blizzard runner work-items <chunk-id>` gives each ref's `web_url`;
-   ask the forge. An open item is a finding — never on its own a reason to select `delivery-incomplete`; only legs 1 and
-   2 are.
-
-Record the result in **Landing Verification** either way. If leg 1 or 2 fails for any repo, submit the asset now naming
-the discrepancy; your judgement then takes `delivery-incomplete`.
-
-Separately, check whether the landing turned the base branch's own gate red — query by the PR's merge commit, per repo.
-Never a reason to route backward: raise a red run as a finding here and leave it for the cross-chunk analysis pass.
+Read `blizzard runner chunk history` for the chunk's transitions and bounces, then its asset trail: each node's
+`retrospective` diary (`blizzard runner artifact get retrospective --node <node> --content` — `--node` required, every
+node in this graph produces one), the `reviewed-plan`, the plan-review and review findings, the verification report, and
+the pre-push summary.
 
 ## Fold the findings docket
 
@@ -44,11 +24,9 @@ out of the fold; when a chunk had one, name it in the fold table. For each id:
 
 ## Submit
 
-Submit this node's `retrospective` asset before you declare done, on **every** visit —
-`blizzard runner artifact create --name retrospective`, content on stdin. On a clean landing, or once a prior
-discrepancy is repaired, write the full asset:
+Submit this node's `retrospective` asset before you declare done —
+`blizzard runner artifact create --name retrospective`, content on stdin:
 
-- **Landing Verification** — the three-leg check and the merge-commit gate check.
 - **What Went Well**
 - **What Didn't Go Well**
 - **Harness / Context Improvements** — concrete changes to make the next run faster, more accurate, or more autonomous —
@@ -56,11 +34,4 @@ discrepancy is repaired, write the full asset:
 - **What We Skipped** — untested paths, deferred work, known gaps.
 - **Findings Docket** — the fold table (id, source, severity, anchor, outcome), or a note that nothing needed folding.
 
-On a discrepancy visit the asset needs only **Landing Verification**. Keep it honest and specific: name files and
-findings, not vibes. Do not change the delivered code from this node.
-
-## Post-delivery
-
-Only on the visit that writes the full closing reflection, after the asset is submitted: carry out whatever
-post-delivery work the workspace's agent context asks of this node. A workspace that declares none leaves this node at
-the reflection above.
+Keep it honest and specific: name files and findings, not vibes. Do not change the delivered code from this node.
