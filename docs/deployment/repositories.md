@@ -45,20 +45,28 @@ Name such a repository by its new slug.
 
 ## Fields
 
-| Field           | Meaning                                                                                      |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| `slug`          | The handle you type. It may be edited; the one it leaves still resolves.                     |
-| `name`          | The display name, free text. It may be edited.                                               |
-| `forge`         | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`. |
-| `forge_api_url` | Deprecated. The forge's API origin, derived from `forge` on reads.                           |
-| `owner`         | The repository's owner on the forge.                                                         |
-| `repo`          | The repository's name on the forge.                                                          |
-| `base_branch`   | The branch work lands on.                                                                    |
-| `secret_name`   | The stored [secret](./secrets.md) holding the forge token (`--secret`).                      |
+| Field                | Meaning                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                              |
+| `name`               | The display name, free text. It may be edited.                                                                        |
+| `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                          |
+| `forge_api_url`      | Deprecated. The forge's API origin, derived from `forge` on reads.                                                    |
+| `owner`              | The repository's owner on the forge.                                                                                  |
+| `repo`               | The repository's name on the forge.                                                                                   |
+| `base_branch`        | The branch work lands on.                                                                                             |
+| `secret_name`        | The stored [secret](./secrets.md) holding the forge token (`--secret`).                                               |
+| `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                       |
+| `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it. |
 
-Every field but the deprecated `forge_api_url` is required, and none can be cleared. Each `(forge, owner, repo)` belongs
-to one record. `create` takes exactly one of `forge` and `forge_api_url`; the old field is accepted with a warning until
-a later release retires it, and [forges.md](./forges.md#the-old-address-fields) owns how it resolves.
+Every field but the deprecated `forge_api_url`, `landing_policy` and `park_timeout_hours` is required. `landing_policy`
+defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the one field that can, with
+`edit --clear park-timeout` or a `PATCH` sending `null`. `merge-on-checks` opens a pull request for the change, keeps it
+up to date with the base branch, and merges it once its checks are green. A policy is refused
+`422 forge_capability_missing` when the repository's forge does not offer every capability it needs, naming each one;
+`GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge show`
+lists the capabilities a forge offers. Each `(forge, owner, repo)` belongs to one record. `create` takes exactly one of
+`forge` and `forge_api_url`; the old field is accepted with a warning until a later release retires it, and
+[forges.md](./forges.md#the-old-address-fields) owns how it resolves.
 
 ### The forge token
 
@@ -75,13 +83,14 @@ Without Actions write, an inherited failure is never re-run and routes as the ch
 
 ## Verbs
 
-`create <slug>` stores the repository at revision 1, named `--name` (default: the slug). It is refused when another
-repository holds the slug as its current one, when the forge, owner and repo are already taken, or when the secret is
-missing or retired. Taking a slug another repository left moves it to the new repository. Every later change moves the
-revision by one:
+`create <slug>` stores the repository at revision 1, named `--name` (default: the slug), landing by `--policy` (default:
+`merge-on-checks`). It is refused when another repository holds the slug as its current one, when the forge, owner and
+repo are already taken, when the secret is missing or retired, or when the forge cannot honour the policy. Taking a slug
+another repository left moves it to the new repository. Every later change moves the revision by one:
 
 - `edit <repository>` changes only the flags given: `--slug`, `--name`, `--forge`, `--forge-api-url`, `--owner`,
-  `--repo`, `--base-branch`, and `--secret`. An edit that leaves every field as it is writes nothing and keeps the
+  `--repo`, `--base-branch`, `--secret`, `--policy`, and `--park-timeout`; `--clear park-timeout` clears the timeout,
+  and is refused beside `--park-timeout`. An edit that leaves every field as it is writes nothing and keeps the
   revision.
 - `retire <repository>` hides the repository from `list` unless `--include-retired` is given. A retired repository keeps
   its forge, owner and repo, so `create` for another slug on the same coordinate is refused with a message naming the
@@ -98,7 +107,8 @@ Writes need the `config:edit` permission and reads need `fleet:view`. Over HTTP 
 `/api/repositories`, `GET` and `PATCH` `/api/repositories/{repository}`, and
 `POST /api/repositories/{repository}/retire` and `/enable`, where `{repository}` is an id or a slug. A body carries
 `slug` and `name`; `name` defaults to `slug` on create. `PATCH` applies only the fields present and refuses an explicit
-`null`. The document schema is served at `GET /api/config/schema/repositories`.
+`null` on every field but `park_timeout_hours`, where it clears the timeout. The document schema is served at
+`GET /api/config/schema/repositories`.
 
 The board's Admin page lists repositories, with each record's revision, last change, and history. On a desktop, a user
 with `config:edit` can create, edit, retire, and enable them there, seeing the fields that will change before an edit
@@ -167,6 +177,12 @@ Three outcomes refuse the step before it runs and route its failure choice; the 
   link it to the project, or decide the chunk's work strayed.
 - `repository-secret-unavailable` — a record's secret is missing or retired; the log names the repository by slug.
   Replace or enable the secret.
+
+Each repository lands by its own `landing_policy`. A chunk whose work reaches several repositories lands them in its
+project's landing order: the repositories the project ranks first, lowest position first, then every unranked one in
+slug order, so a project that ranks nothing lands by slug ([projects.md](./projects.md#landing-order)). A `deliver` step
+takes the order and each repository's policy at its first turn and keeps them through retries and hub restarts, so an
+edit made while it waits reaches the next step, not that one.
 
 Records that differ on forge, owner, base branch or secret do not refuse the step. The `land` action lands each
 repository against its own record and records each repository's landing, and the step refuses two commit entries that
