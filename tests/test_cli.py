@@ -698,11 +698,30 @@ def _host_answering(sock_path: Path, *replies: bytes) -> socket.socket:
         for reply in replies:
             conn, _ = server.accept()
             with conn:
-                conn.recv(4096)
+                _read_request(conn)
                 conn.sendall(reply)
 
     threading.Thread(target=_answer, daemon=True).start()
     return server
+
+
+def _read_request(conn: socket.socket) -> None:
+    """Read one whole request — head, then the ``Content-Length`` body. The client sends a body apart from its head,
+    and closing with that body unread resets the connection under the client before it reads the reply."""
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = conn.recv(4096)
+        if not chunk:
+            return
+        data += chunk
+    head, _, body = data.partition(b"\r\n\r\n")
+    lengths = [line.split(b":", 1)[1] for line in head.split(b"\r\n") if line.lower().startswith(b"content-length:")]
+    remaining = int(lengths[0]) - len(body) if lengths else 0
+    while remaining > 0:
+        chunk = conn.recv(remaining)
+        if not chunk:
+            return
+        remaining -= len(chunk)
 
 
 def _json_reply(status: str, body: str) -> bytes:
