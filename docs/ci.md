@@ -197,6 +197,21 @@ connection drop on its first run; that traced case passed alone and the full sha
 measurements, not CI job timings. The slowest local shard remains below the former 971s pessimistic estimate and the
 30-minute CI step limit; CI timings remain the measure of actual gate balance.
 
+The same local `CI=1` shard-2 run reported the elapsed case times for each ported file, excluding shared setup and
+teardown. These per-file sums measure runner time rather than shard wall time because two workers overlap cases:
+
+| Fleet spec                      | Cases (including trace) | Sum of case times |
+| ------------------------------- | ----------------------- | ----------------- |
+| `basic-workspace.spec.ts`       | 1                       | 18.2s             |
+| `checks-gate.spec.ts`           | 2                       | 33.0s             |
+| `post-merge-node.spec.ts`       | 1                       | 12.8s             |
+| `runner-serves-default.spec.ts` | 1                       | 6.4s              |
+| `spike-terminal.spec.ts`        | 1                       | 12.4s             |
+| `delivery-pr-ci.spec.ts`        | 16                      | 266.1s            |
+
+Each file's observed cost fits the four-shard plan; the complete shard-2 wall time was 687.78s against the prospective
+971s budget. GitHub Actions timing remains to be measured on an actual CI run.
+
 ## The upgrade rehearsal
 
 [`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml) is reusable (`workflow_call`) and runs the
