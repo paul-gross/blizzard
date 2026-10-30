@@ -116,17 +116,17 @@ jobs:
           BLIZZARD_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
         run: cd blizzard && uv run pytest -n auto tests/service/ -v
 
-  # The service tier's Playwright half — the harness's own specs and the `service-*` projects — in two
+  # The service tier's Playwright half — the harness's own specs and the `service-*` projects — in four
   # shards, reported under the same check name by `service-tier-result`. A failing shard uploads the run's
   # evidence.
   service-playwright:
     needs: [mock-ref]
-    name: service tier (blizzard:service-test) — playwright shard ${{ matrix.shard }}/2
+    name: service tier (blizzard:service-test) — playwright shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - name: checkout blizzard
         uses: actions/checkout@v4
@@ -187,7 +187,7 @@ jobs:
         env:
           CI: "1"
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/blizzard
-        run: cd blizzard && mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner --project=harness-actions --shard=${{ matrix.shard }}/2
+        run: cd blizzard && mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner --project=harness-actions --shard=${{ matrix.shard }}/4
       - name: keep the failure evidence
         if: ${{ failure() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

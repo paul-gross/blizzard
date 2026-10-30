@@ -74,6 +74,8 @@ export interface RunnerHostOptions {
    * the runner's own registration.
    */
   runnerAdopted: { name: string; runnerId: string; token: string } | undefined;
+  /** Forge-backed bare origins supplied by repositories the test owns, replacing the fixture's same-named origins. */
+  runnerRepositories: Record<string, string>;
 }
 
 export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
@@ -90,6 +92,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerModelPrices: {},
   runnerWinterTrap: false,
   runnerAdopted: undefined,
+  runnerRepositories: {},
 };
 
 /** A test-owned runner host: a real `blizzard-runner host` built only through the CLI and the documented files. */
@@ -103,6 +106,10 @@ export interface RunnerHost extends OriginReads {
   readonly socket: string;
   /** The host's private home: the config, data and credential directories its process sees. */
   readonly home: string;
+  /** Host file immediately after init, before fixture overlays. */
+  readonly initHostFile: string;
+  /** Current host file bytes, encoded as UTF-8. */
+  hostFile(): string;
   /** Its runners by name, each a client at the host's URL under the id enrollment gave. */
   readonly runners: Record<string, RunnerClient & { id: string; name: string }>;
   readonly api: RunnerHostClient;
@@ -165,6 +172,8 @@ export interface RunnerHost extends OriginReads {
   prepareStopped(layout: { hostToken?: string; runnerTokens?: Record<string, string>; runnerSubscriptions?: Record<string, string>; runnerIds?: Record<string, string> }): void;
   /** Whether the winter trap has been run since the host was built; `false` on a host built without `runnerWinterTrap`. */
   winterInvoked(): boolean;
+  /** Basic-provider layout observations for a chunk and repository in this workspace. */
+  workspaceLayout(chunk: string, repo: string): { landed: boolean; project: boolean; winter: boolean };
   /** The commit a branch of the minted world's bare origin `repo` points at, or `undefined` when the branch is not there. */
   originHead(repo: string, branch: string): Promise<string | undefined>;
   /** The session records the mock harness kept in the minted workspace, each parsed, in file-name order. */
@@ -454,10 +463,14 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(scaffold));
       }
       // An adopted runner's host is never registered: the scaffold above is the whole of `init`.
+      let initHostFile: string;
       if (adopted === undefined) {
         const init = await run(runner, ['init', dir, '--hub', ctx.hub.url, ...(ctx.hub.tenantId === undefined ? [] : ['--tenant', ctx.hub.tenantId])], operatorHome);
+        initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
         const hostId = /\((hs_[0-9A-Z]+)\)/.exec(init.stdout + init.stderr)?.[1];
         if (hostId !== undefined) ctx.ledger.add('host', hostId);
+      } else {
+        initHostFile = fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8');
       }
       timings.initMs = Date.now() - started;
 
@@ -482,6 +495,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         delete written.subscription;
         for (const entry of (written.runner ?? []) as TomlTable[]) delete entry.subscription;
       }
+      const bound = options.runnerRepositories;
       const baseline: TomlTable = {
         host: '127.0.0.1',
         port,
@@ -495,7 +509,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
               .readdirSync(origins)
               .filter((name) => name.endsWith('.git'))
               .sort()
-              .map((name) => ({ name: name.slice(0, -'.git'.length), url: `file://${path.join(origins, name)}` })),
+              .map((name) => ({ name: name.slice(0, -'.git'.length), url: bound[name.slice(0, -'.git'.length)] ?? `file://${path.join(origins, name)}` }))
+              .concat(Object.entries(bound).filter(([name]) => !fs.existsSync(path.join(origins, `${name}.git`))).map(([name, url]) => ({ name, url }))),
           },
         ],
         subscription: options.runnerSubscribed
@@ -561,7 +576,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
       const runners: RunnerHost['runners'] = {};
       for (const entry of entries) runners[entry.name] = { ...api.runner(entry.id), id: entry.id, name: entry.name };
 
-      const reads = originReads(origins, env, root);
+      const reads = originReads(origins, env, root, bound);
       const host: RunnerHost = {
         ...reads,
         dir,
@@ -569,6 +584,8 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         url,
         socket,
         home,
+        initHostFile,
+        hostFile: () => fs.readFileSync(path.join(dir, 'blizzard-host.toml'), 'utf8'),
         runners,
         api,
         socketApi: sock,
@@ -675,8 +692,13 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
           }
         },
         winterInvoked: () => fs.existsSync(trapSentinel),
+        workspaceLayout: (chunk, repo) => ({
+          landed: fs.existsSync(path.join(workspace, chunk, repo, 'LANDED.md')),
+          project: fs.existsSync(path.join(workspace, 'projects', repo)),
+          winter: fs.existsSync(path.join(workspace, '.winter')),
+        }),
         async originHead(repo, branch) {
-          const result = await runCommand('git', ['--git-dir', path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
+          const result = await runCommand('git', ['--git-dir', bound[repo] ?? path.join(origins, `${repo}.git`), 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { env, cwd: root });
           return result.code === 0 ? result.stdout.trim() : undefined;
         },
         workerLog: (name) => (fs.existsSync(path.join(logs, name)) ? fs.readFileSync(path.join(logs, name), 'utf8') : undefined),

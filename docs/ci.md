@@ -28,10 +28,10 @@ catches. Every gate check is seams-mocked and token-free, needing no real forge,
 package installs. `gate / playwright static` is a required check of its own; an operator adds it to branch protection
 once the job exists on `master`.
 
-The pytest tier runs as four parallel shard jobs, and the service tier below as three.
-`BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite, chosen
-by a stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job reports
-each sharded tier under its single check name — `gate / pytest (unit + component)`,
+The pytest tier runs as four parallel shard jobs. The service tier below runs three Python shards and four Playwright
+shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite,
+chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job
+reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
 `upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
 Unset, the variable keeps the whole suite; the local commands below run unsharded.
 
@@ -118,7 +118,8 @@ Individual commands include `mise run service-test` (`BLIZZARD_SERVICE=1 uv run 
 `compose-smoke` tasks can also run alone.
 
 The service tier's Playwright half requires the pinned `otelcol-contrib` for its collector trace tests. Run it locally
-with `mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner`;
+with
+`mise run playwright -- --project='service-*' --project=harness --project=harness-auth --project=harness-runner --project=harness-actions`;
 mise installs the collector on first use. CI caches and installs the same tool for each Playwright shard.
 
 **Wall-clock time.** The jobs run in parallel, so a pull request takes as long as its slowest job: e2e. On the `v0.2.0`
@@ -131,13 +132,12 @@ The winter binding's own tests are the `winter-binding` tier (`mise run winter-b
 `BLIZZARD_WINTER_BINDING=1`): local-only, run against a winter source found via `BLIZZARD_MOCK_WINTER_SOURCE` or the
 enclosing winter workspace, and never in CI.
 
-### Prospective fleet-port speed guard
+### Fleet-port timing
 
-This is sizing for the planned e2e ports, not a description of an implemented job. The 25 fleet roster rows total 1746s
-and the 13 UI rows 262s in the last serial run. These are allocation estimates, not measured Playwright times: charge
-each row to its listed profile, split the event log's 82s in the ratio 1:4 between fleet/actions and UI/default, remove
-about 24s for the delivery case moving down, and allocate 25s to the migration's browser half. The resulting profile
-budgets are:
+The implemented Playwright service job runs four shards, each with a 30-minute step timeout; the Python half retains
+three shards. The former prospective estimate was 1263s serial for fleet default, plus 243s for trace companions, and
+about 971s for a pessimistic ordinary service shard. Those estimates covered more than the six newly ported specs and
+are not comparable directly to the following local subset.
 
 | Planned project | Estimated serial time |
 | --------------- | --------------------- |
@@ -187,6 +187,15 @@ local `--workers=1` run until the `upper-tiers / ui (blizzard:ui)` job's time re
 | `tests/ui/graphs-diagram.spec.ts`               | UI default | not itemized | 4.0s     |
 | `tests/ui/runner-panel-live.spec.ts`            | UI default | not itemized | 8.1s     |
 | `tests/ui/board-browser.spec.ts`                | UI default | not itemized | 32.2s    |
+
+On 2026-10-30,
+`mise run playwright -- --project=service-fleet basic-workspace.spec.ts checks-gate.spec.ts delivery-pr-ci.spec.ts post-merge-node.spec.ts runner-serves-default.spec.ts spike-terminal.spec.ts`
+completed in 89.28s wall time locally: 22 cases plus setup and teardown, with 10 workers. Other verification was running
+concurrently. With `CI=1`, two workers and the workflow's project selection, the four complete local shards took 438.49s
+(125 tests), 687.78s (121 tests), 282.76s (123 tests), and 176.51s (117 tests), respectively. Shard 3 had one fresh-hub
+connection drop on its first run; that traced case passed alone and the full shard passed on rerun. These are local
+measurements, not CI job timings. The slowest local shard remains below the former 971s pessimistic estimate and the
+30-minute CI step limit; CI timings remain the measure of actual gate balance.
 
 ## The upgrade rehearsal
 

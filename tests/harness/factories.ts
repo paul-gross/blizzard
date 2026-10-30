@@ -17,6 +17,8 @@ export interface Repository {
   name: string;
   owner: string;
   tokenPrefix: string;
+  /** The forge's bare Git repository, also used by the runner's basic workspace. */
+  origin?: string;
 }
 
 export interface MockRunner {
@@ -90,7 +92,7 @@ export function repositoryFactory(context: FactoryContext): (name?: string) => P
 async function declare(context: FactoryContext, repository: string, linked: string[]): Promise<Repository> {
   requireOwnTenant(context.level, 'repository()');
   linked.push(repository);
-  await context.forge.createRepository(COMMON_OWNER, repository);
+  const created = await context.forge.createRepository(COMMON_OWNER, repository);
   // The work source and the repository each name a credential; a second call finds the secret already there.
   const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: 'fixture-token' } });
   if (secret.status !== 201 && secret.status !== 409) {
@@ -123,7 +125,7 @@ async function declare(context: FactoryContext, repository: string, linked: stri
     },
   });
   if (!applied.ok) throw new Error(`declaring ${repository} answered ${applied.status}: ${JSON.stringify(applied.body)}`);
-  return { name: repository, owner: COMMON_OWNER, tokenPrefix: repository };
+  return { name: repository, owner: COMMON_OWNER, tokenPrefix: repository, origin: created.origin };
 }
 
 /**
