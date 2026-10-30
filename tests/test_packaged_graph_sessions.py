@@ -55,7 +55,7 @@ def test_no_packaged_pool_name_collides_with_a_node_name(name: str) -> None:
     assert not (set(doc.sessions) & {n.name for n in doc.nodes})
 
 
-def test_adv_dwf_declares_the_seven_pools_and_bounds_only_the_accumulating_ones() -> None:
+def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() -> None:
     doc = _doc("advanced-development-workflow")
 
     assert set(doc.sessions) == {"planning", "code", "integration", "verification", "gate", "retro"}
