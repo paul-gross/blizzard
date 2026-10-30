@@ -126,6 +126,11 @@ chunk anywhere and is never issued at a chunk ([runner-doors.md](./runner-doors.
 graph reached its reserved terminal (`to: done`; in the shipped graphs, the retrospective node's recorded choice) or an
 operator hand-completed it, no graph cooperation needed.
 
+A graph choice may also point at the reserved target `escalate` (`to: escalate`) instead of `done`: taking it records no
+transition and parks the chunk `needs_human` with an `escalate-choice` escalation, on the node the worker judged at.
+Requeue the chunk to re-run that node at a fresh epoch, with a note that settles what the worker could not; stop it to
+end it. It is legal on runner nodes only.
+
 `chunk stop` is CLI/API only (`POST /api/chunks/{id}/stop`) — no board control, unlike Pause, Detach, and Complete. stop
 is refused (409) only on a chunk already `done` or `stopped`; it is not retroactive un-delivery and not a lever for
 clearing a `delivering`, `waiting_on_human`, or `needs_human` chunk back to fresh — only for ending it.

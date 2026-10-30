@@ -31,7 +31,7 @@ def test_default_graph_is_a_single_triage_router() -> None:
     assert doc.node("triage").executor is Executor.RUNNER  # type: ignore[union-attr]
 
 
-def test_default_graph_triage_routes_to_lanes_or_done() -> None:
+def test_default_graph_triage_routes_to_lanes_done_or_escalation() -> None:
     triage = PACKAGED.default.doc.node("triage")
     assert triage is not None and triage.judgement is not None
     routes = {c.name: c.to for c in triage.judgement.choices}
@@ -40,10 +40,17 @@ def test_default_graph_triage_routes_to_lanes_or_done() -> None:
         "basic": "graph:bas-dwf",
         "advanced": "graph:adv-dwf",
         "harness": "graph:bas-hwf",
+        "unfulfillable": "escalate",
     }
     # The lane choices are cross-graph migration targets, parsed as such.
     targets = {c.name: c.target_graph for c in triage.judgement.choices}
-    assert targets == {"already-done": None, "basic": "bas-dwf", "advanced": "adv-dwf", "harness": "bas-hwf"}
+    assert targets == {
+        "already-done": None,
+        "basic": "bas-dwf",
+        "advanced": "adv-dwf",
+        "harness": "bas-hwf",
+        "unfulfillable": None,
+    }
 
 
 def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:

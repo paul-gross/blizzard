@@ -64,13 +64,17 @@ class GateResolutionUnapplied(CompletionRefused):
     only the resolving transition, naming the decision, moves on — to the resolved choice."""
 
 
+# The escalations a repeat of the same report is answered over, with no write.
+HUB_AUTHORED_ESCALATIONS = (EscalationCause.MIGRATION_TARGET_UNRESOLVABLE, EscalationCause.ESCALATE_CHOICE)
+
+
 def refuse_incoherent_attempt(
     facts: ChunkFacts, graph: Graph, *, from_node: Node, epoch: int, re_escalating: bool = False
 ) -> None:
     """Refuse a report the attempt at ``epoch`` cannot make — one epoch is one node-step attempt.
     At the current epoch the report must come from the current node (:class:`CompletionNotAtCurrentNode`);
     an attempt whose own escalation is open (:class:`ChunkEscalated`) or whose own question is unanswered
-    (:class:`OpenQuestion`) is parked. The hub's own migration-target escalation parks only a report
+    (:class:`OpenQuestion`) is parked. The hub's own migration-target or escalate-choice escalation parks only a report
     that would record a write: one that would re-escalate (``re_escalating``, see :func:`re_escalates`)
     passes, to be answered with no write. A report at another epoch is left to the write fence."""
     if epoch == facts.epoch_floor():
@@ -80,9 +84,7 @@ def refuse_incoherent_attempt(
                 f"node `{from_node.name}` is not the chunk's current node `{current.name}` at epoch {epoch}"
             )
     escalation = facts.open_escalation_at(epoch)
-    if escalation is not None and not (
-        re_escalating and escalation.cause == EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
-    ):
+    if escalation is not None and not (re_escalating and escalation.cause in HUB_AUTHORED_ESCALATIONS):
         raise ChunkEscalated(f"the attempt at epoch {epoch} escalated — requeue the chunk before it moves on")
     asked = facts.open_questions_at(epoch)
     if asked:
@@ -90,12 +92,15 @@ def refuse_incoherent_attempt(
 
 
 def re_escalates(facts: ChunkFacts, edge: Edge | None, targets: MigrationTargets, *, epoch: int) -> bool:
-    """Whether taking ``edge`` at ``epoch`` would only re-escalate: it crosses graphs, its target
-    still names no enabled graph, and the attempt at ``epoch`` already escalated — answered
-    ``escalated`` with nothing written."""
-    return (
-        edge is not None and edge.target_graph is not None and targets.cross_graph is None and facts.escalated_at(epoch)
-    )
+    """Whether taking ``edge`` at ``epoch`` would only re-escalate — answered ``escalated`` with
+    nothing written: it crosses graphs to a target that still names no enabled graph, or it is
+    the ``escalate`` choice, and the attempt at ``epoch`` already escalated."""
+    if edge is None:
+        return False
+    if edge.escalates:
+        escalation = facts.open_escalation_at(epoch)
+        return escalation is not None and escalation.cause == EscalationCause.ESCALATE_CHOICE
+    return edge.target_graph is not None and targets.cross_graph is None and facts.escalated_at(epoch)
 
 
 def refuse_hub_executed(from_node: Node) -> None:
@@ -142,17 +147,21 @@ class Destination:
 @dataclass(frozen=True)
 class CompletionPlan:
     """The edge a completion takes and where it lands in its own graph; ``to_node_id`` is
-    ``None`` exactly when the edge crosses graphs, which migrates the chunk instead."""
+    ``None`` when the edge crosses graphs, which migrates the chunk instead, or escalates it."""
 
     edge: Edge
     to_node_id: str | None
+
+    @property
+    def escalates(self) -> bool:
+        return self.edge.escalates
 
     @property
     def migrates(self) -> bool:
         return self._crosses_graphs()
 
     def _crosses_graphs(self) -> bool:
-        return self.to_node_id is None
+        return self.to_node_id is None and not self.edge.escalates
 
     @classmethod
     def plain(
@@ -187,7 +196,7 @@ class CompletionPlan:
         produces_rejection = Produces(from_node, submission.artifacts).rejection(mode=produces_mode)
         if produces_rejection is not None:
             raise CompletionRefused(produces_rejection)
-        if edge.target_graph is not None:
+        if edge.target_graph is not None or edge.escalates:
             return cls(edge, None)
         to_node_id = cls._destination(graph, edge, submission.choice)
         return cls(edge, to_node_id)
@@ -221,7 +230,7 @@ class CompletionPlan:
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             raise CompletionRefused(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
-        if edge.target_graph is not None:
+        if edge.target_graph is not None or edge.escalates:
             return cls(edge, None)
         return cls(edge, cls._destination(graph, edge, submission.choice))
 
@@ -271,6 +280,26 @@ class UnresolvableTarget:
                 f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
             ),
             detail=f"cross-graph target graph `{edge.target_graph}` names no enabled graph",
+        )
+
+
+@domain_model
+@dataclass(frozen=True)
+class EscalateChoice:
+    """The hub's escalation when a worker takes a choice whose ``to:`` is the reserved ``escalate``."""
+
+    takeover_command: str
+    detail: str
+    cause: EscalationCause = EscalationCause.ESCALATE_CHOICE
+
+    @classmethod
+    def of(cls, node: Node, choice: str) -> EscalateChoice:
+        return cls(
+            takeover_command=(
+                f"node `{node.name}` escalated through choice `{choice}` — read the assets it produced, "
+                f"then requeue this chunk with a note that settles it"
+            ),
+            detail=f"node `{node.name}` took choice `{choice}`, which escalates for a human",
         )
 
 

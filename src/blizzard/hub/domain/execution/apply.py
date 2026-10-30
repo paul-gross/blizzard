@@ -32,6 +32,7 @@ from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToke
 from blizzard.hub.domain.execution.completion import (
     CompletionPlan,
     CompletionRefused,
+    EscalateChoice,
     Landing,
     MigrationTargets,
     NextStep,
@@ -111,13 +112,18 @@ class ApplyResult:
         )
 
     @classmethod
-    def escalated(cls, target_graph_name: str | None) -> ApplyResult:
-        """An unresolved cross-graph target's park — ``FAILURE`` would requeue and supersede the
-        escalation this answers."""
-        return cls(
-            outcome=ApplyOutcome.PARKED_AT_GATE,
-            detail=f"cross-graph target `{target_graph_name}` did not resolve; chunk escalated for a human",
-        )
+    def escalated(cls, detail: str) -> ApplyResult:
+        """The park an escalation the hub itself wrote answers with — ``FAILURE`` would requeue and
+        supersede it."""
+        return cls(outcome=ApplyOutcome.PARKED_AT_GATE, detail=detail)
+
+    @classmethod
+    def unresolved_target(cls, target_graph_name: str | None) -> ApplyResult:
+        return cls.escalated(f"cross-graph target `{target_graph_name}` did not resolve; chunk escalated for a human")
+
+    @classmethod
+    def escalate_choice(cls, node: Node, choice: str) -> ApplyResult:
+        return cls.escalated(f"node `{node.name}` choice `{choice}` escalated the chunk for a human")
 
     @classmethod
     def taken_over(cls, to_node: Node, transition_id: str | None) -> ApplyResult:
@@ -298,6 +304,8 @@ class ApplyService:
         # the decision, and threading `decision_id` through keeps the gate from staying live.
         resolving = submission.decision_id is not None
         artifacts = () if resolving else submission.artifacts
+        if plan.escalates:
+            return self._escalate_choice(chunk, facts, from_node, submission, plan.edge, targets)
         if plan.migrates:
             return self._migrate_across(chunk, graph, facts, from_node, submission, plan.edge, targets, artifacts)
         assert plan.to_node_id is not None
@@ -386,7 +394,7 @@ class ApplyService:
         """Take a cross-graph edge — land on its resolved target, or escalate once per epoch
         (:meth:`ApplyResult.escalated`)."""
         if re_escalates(facts, edge, targets, epoch=submission.epoch):
-            return ApplyResult.escalated(edge.target_graph)
+            return ApplyResult.unresolved_target(edge.target_graph)
         if targets.cross_graph is not None:
             landing = Landing.authored(edge, targets.cross_graph, from_node)
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
@@ -405,7 +413,36 @@ class ApplyService:
         )
         if isinstance(escalated, FenceRefusal):
             return ApplyResult.failure(escalated.detail)
-        return ApplyResult.escalated(edge.target_graph)
+        return ApplyResult.unresolved_target(edge.target_graph)
+
+    def _escalate_choice(
+        self,
+        chunk: Chunk,
+        facts: ChunkFacts,
+        from_node: Node,
+        submission: Completion,
+        edge: Edge,
+        targets: MigrationTargets,
+    ) -> ApplyResult:
+        """Take the ``escalate`` choice — write an escalation instead of a transition, once per
+        epoch. The worker's reasoning stays in the artifacts it produced."""
+        if re_escalates(facts, edge, targets, epoch=submission.epoch):
+            return ApplyResult.escalate_choice(from_node, submission.choice)
+        draft = EscalateChoice.of(from_node, submission.choice)
+        escalated = self._escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=submission.epoch,
+            admission=EpochAdmission.CURRENT,
+            claimant=self._exit_claimant(facts, chunk.chunk_id, submission),
+            takeover_command=draft.takeover_command,
+            at=self._clock.now(),
+            decision_id=submission.decision_id,
+            cause=draft.cause,
+            detail=draft.detail,
+        )
+        if isinstance(escalated, FenceRefusal):
+            return ApplyResult.failure(escalated.detail)
+        return ApplyResult.escalate_choice(from_node, submission.choice)
 
     def _land_migration(
         self,

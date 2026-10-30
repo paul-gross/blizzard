@@ -18,7 +18,8 @@ const WRAPPED_DETAIL: ChunkDetail = chunkDetail({
   artifacts: [],
   escalation: {
     epoch: 3,
-    takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
+    takeover_command:
+      'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     wrapped_takeover_command:
       'blizzard runner takeover ch_01esc00000000000000000000000 --dir /var/lib/blizzard/runner',
     cause: null,
@@ -36,7 +37,8 @@ const RAW_ONLY_DETAIL: ChunkDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
     epoch: 3,
-    takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
+    takeover_command:
+      'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     wrapped_takeover_command: '',
     cause: null,
     detail: null,
@@ -51,8 +53,9 @@ const PROSE_ONLY_DETAIL: ChunkDetail = {
   ...WRAPPED_DETAIL,
   escalation: {
     epoch: 3,
-    takeover_command: 'cross-graph target `review` names no enabled graph — mint a graph named `review` '
-      + '(or edit the choice), then requeue this chunk',
+    takeover_command:
+      'cross-graph target `review` names no enabled graph — mint a graph named `review` ' +
+      '(or edit the choice), then requeue this chunk',
     wrapped_takeover_command: '',
     cause: null,
     detail: null,
@@ -94,12 +97,19 @@ describe('ChunkEscalation', () => {
   let originalClipboardDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
-    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(globalThis.navigator, 'clipboard');
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis.navigator,
+      'clipboard',
+    );
   });
 
   afterEach(() => {
     if (originalClipboardDescriptor) {
-      Object.defineProperty(globalThis.navigator, 'clipboard', originalClipboardDescriptor);
+      Object.defineProperty(
+        globalThis.navigator,
+        'clipboard',
+        originalClipboardDescriptor,
+      );
     } else {
       delete (globalThis.navigator as { clipboard?: Clipboard }).clipboard;
     }
@@ -117,15 +127,23 @@ describe('ChunkEscalation', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain(
+    expect(
+      el.querySelector('[data-testid="takeover-command"]')?.textContent,
+    ).toContain(
       'blizzard runner takeover ch_01esc00000000000000000000000 --dir /var/lib/blizzard/runner',
     );
     // The wrapped branch's own hint text — the socket/service-account warning
     // `docs/deployment/chunk-operations.md` calls load-bearing — was never asserted by any spec case.
-    expect(el.querySelector('.esc-hint')?.textContent).toContain("Run as the runner's service account");
-    const fallback = el.querySelector<HTMLDetailsElement>('[data-testid="takeover-command-raw-fallback"]');
+    expect(el.querySelector('.esc-hint')?.textContent).toContain(
+      "Run as the runner's service account",
+    );
+    const fallback = el.querySelector<HTMLDetailsElement>(
+      '[data-testid="takeover-command-raw-fallback"]',
+    );
     expect(fallback).not.toBeNull();
-    expect(fallback?.textContent).toContain('cd /work/ch_01esc00000000000000000000000 && claude --resume se_01');
+    expect(fallback?.textContent).toContain(
+      'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
+    );
     expect(fallback?.open).toBe(false);
   });
 
@@ -136,30 +154,45 @@ describe('ChunkEscalation', () => {
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="takeover-command"]')).toBeNull();
     expect(el.querySelector('[data-testid="copy-takeover"]')).toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
-    expect(el.querySelector('[data-testid="no-command-hint"]')?.textContent).toContain(
-      'no composed command for this escalation',
-    );
+    expect(
+      el.querySelector('[data-testid="takeover-command-raw-fallback"]'),
+    ).toBeNull();
+    expect(
+      el.querySelector('[data-testid="no-command-hint"]')?.textContent,
+    ).toContain('no composed command for this escalation');
   });
 
   it('renders a raw-only runnable command as the primary copyable command, with no fallback disclosure', async () => {
     const fixture = await render(RAW_ONLY_DETAIL);
     const el = fixture.nativeElement as HTMLElement;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true });
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
 
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain(
+    expect(
+      el.querySelector('[data-testid="takeover-command"]')?.textContent,
+    ).toContain(
       'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
     );
-    expect(el.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
+    expect(
+      el.querySelector('[data-testid="takeover-command-raw-fallback"]'),
+    ).toBeNull();
     // Framed as the unwrapped field, not as a command to run — see the prose case below
     // for why this branch cannot claim runnability.
-    expect(el.querySelector('[data-testid="unwrapped-hint"]')?.textContent).toContain('either a resume');
+    expect(
+      el.querySelector('[data-testid="unwrapped-hint"]')?.textContent,
+    ).toContain('either a resume');
 
-    el.querySelector<HTMLButtonElement>('[data-testid="copy-takeover"]')?.click();
+    el.querySelector<HTMLButtonElement>(
+      '[data-testid="copy-takeover"]',
+    )?.click();
     await fixture.whenStable();
-    expect(writeText).toHaveBeenCalledWith('cd /work/ch_01esc00000000000000000000000 && claude --resume se_01');
+    expect(writeText).toHaveBeenCalledWith(
+      'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
+    );
   });
 
   it('renders hub-authored guidance prose under the same unwrapped framing, claiming no runnability', async () => {
@@ -170,20 +203,29 @@ describe('ChunkEscalation', () => {
     // branch is shared by construction: it stays copyable (an uncopyable command would be
     // a regression; copying prose is harmless) but tells nobody to run what it shows.
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain(
-      'mint a graph named `review`',
-    );
+    expect(
+      el.querySelector('[data-testid="takeover-command"]')?.textContent,
+    ).toContain('mint a graph named `review`');
     expect(el.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command-raw-fallback"]')).toBeNull();
-    expect(el.querySelector('[data-testid="unwrapped-hint"]')?.textContent).not.toContain('Run the');
+    expect(
+      el.querySelector('[data-testid="takeover-command-raw-fallback"]'),
+    ).toBeNull();
+    expect(
+      el.querySelector('[data-testid="unwrapped-hint"]')?.textContent,
+    ).not.toContain('Run the');
   });
 
   it('copies the wrapped command when it is primary, flipping the label and resetting it after the timeout', async () => {
     const fixture = await render(WRAPPED_DETAIL);
     const el = fixture.nativeElement as HTMLElement;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(globalThis.navigator, 'clipboard', { value: { writeText }, configurable: true });
-    const button = el.querySelector<HTMLButtonElement>('[data-testid="copy-takeover"]');
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    const button = el.querySelector<HTMLButtonElement>(
+      '[data-testid="copy-takeover"]',
+    );
 
     expect(button?.textContent).toContain('Copy');
 
@@ -212,10 +254,17 @@ describe('ChunkEscalation', () => {
 
   it('does not touch the clipboard or raise an application error when the clipboard API is unavailable', async () => {
     const handleError = vi.fn();
-    const fixture = await render(WRAPPED_DETAIL, [{ provide: ErrorHandler, useValue: { handleError } }]);
+    const fixture = await render(WRAPPED_DETAIL, [
+      { provide: ErrorHandler, useValue: { handleError } },
+    ]);
     const el = fixture.nativeElement as HTMLElement;
-    Object.defineProperty(globalThis.navigator, 'clipboard', { value: undefined, configurable: true });
-    const button = el.querySelector<HTMLButtonElement>('[data-testid="copy-takeover"]');
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    });
+    const button = el.querySelector<HTMLButtonElement>(
+      '[data-testid="copy-takeover"]',
+    );
 
     button?.click();
     await fixture.whenStable();
@@ -231,16 +280,27 @@ describe('ChunkEscalation', () => {
 
   describe('cause sentence', () => {
     async function causeOf(cause: string | null, detail: string | null) {
-      const fixture = await render({ ...WRAPPED_DETAIL, escalation: { ...WRAPPED_DETAIL.escalation!, cause, detail } });
+      const fixture = await render({
+        ...WRAPPED_DETAIL,
+        escalation: { ...WRAPPED_DETAIL.escalation!, cause, detail },
+      });
       const el = fixture.nativeElement as HTMLElement;
       return {
-        sentence: el.querySelector('[data-testid="escalation-cause"]')?.textContent?.trim(),
-        detail: el.querySelector('[data-testid="escalation-detail"]')?.textContent?.trim() ?? null,
+        sentence: el
+          .querySelector('[data-testid="escalation-cause"]')
+          ?.textContent?.trim(),
+        detail:
+          el
+            .querySelector('[data-testid="escalation-detail"]')
+            ?.textContent?.trim() ?? null,
       };
     }
 
     it('renders a hub-authored cause without mentioning a worker', async () => {
-      const { sentence, detail } = await causeOf('bounce-cap', 'bounced 5 times at review');
+      const { sentence, detail } = await causeOf(
+        'bounce-cap',
+        'bounced 5 times at review',
+      );
       expect(sentence).toBe('The chunk reached its bounce cap (epoch 3).');
       expect(sentence?.toLowerCase()).not.toContain('worker');
       expect(detail).toBe('bounced 5 times at review');
@@ -249,16 +309,22 @@ describe('ChunkEscalation', () => {
     it('separates the sentence from the detail with a space', async () => {
       const fixture = await render({
         ...WRAPPED_DETAIL,
-        escalation: { ...WRAPPED_DETAIL.escalation!, cause: 'bounce-cap', detail: 'bounced 5 times at review' },
+        escalation: {
+          ...WRAPPED_DETAIL.escalation!,
+          cause: 'bounce-cap',
+          detail: 'bounced 5 times at review',
+        },
       });
-      const text = (fixture.nativeElement as HTMLElement).querySelector('.esc-hint')?.textContent;
+      const text = (fixture.nativeElement as HTMLElement).querySelector(
+        '.esc-hint',
+      )?.textContent;
       expect(text).toContain('(epoch 3). bounced 5 times at review');
     });
 
     it.each([
       [
         'hub-action-missing',
-        "hub node `deliver` names no action (its stored run: ./ship.sh)",
+        'hub node `deliver` names no action (its stored run: ./ship.sh)',
         'The hub node the chunk stands at names no action the hub can take (epoch 3).',
       ],
       [
@@ -286,17 +352,33 @@ describe('ChunkEscalation', () => {
         'blizzard/toy-api at https://api.github.com does not offer checks.read',
         "The repository's forge does not offer what the hub node's action needs (epoch 3).",
       ],
-    ])('renders the hub-authored cause %s with its detail', async (cause, given, expected) => {
-      const { sentence, detail } = await causeOf(cause, given);
-      expect(sentence).toBe(expected);
-      expect(sentence?.toLowerCase()).not.toContain('worker');
-      expect(detail).toBe(given);
-    });
+    ])(
+      'renders the hub-authored cause %s with its detail',
+      async (cause, given, expected) => {
+        const { sentence, detail } = await causeOf(cause, given);
+        expect(sentence).toBe(expected);
+        expect(sentence?.toLowerCase()).not.toContain('worker');
+        expect(detail).toBe(given);
+      },
+    );
 
     it('renders a runner cause with its detail', async () => {
-      const { sentence, detail } = await causeOf('retries-exhausted', 'judge failed 3 attempts');
+      const { sentence, detail } = await causeOf(
+        'retries-exhausted',
+        'judge failed 3 attempts',
+      );
       expect(sentence).toBe('The worker exhausted its retries (epoch 3).');
       expect(detail).toBe('judge failed 3 attempts');
+    });
+
+    it("renders an escalate-choice cause as the worker's own judgement, with its detail", async () => {
+      const given =
+        'node `triage` took choice `unfulfillable`, which escalates for a human';
+      const { sentence, detail } = await causeOf('escalate-choice', given);
+      expect(sentence).toBe(
+        'The worker judged the work cannot be completed by a fleet worker (epoch 3).',
+      );
+      expect(detail).toBe(given);
     });
 
     it('renders a neutral sentence naming no actor when the cause is absent', async () => {
@@ -321,9 +403,17 @@ describe('ChunkEscalation', () => {
     it('renders the cause sentence in the raw-only and no-command branches too', async () => {
       for (const base of [RAW_ONLY_DETAIL, NO_COMMAND_DETAIL]) {
         TestBed.resetTestingModule();
-        const fixture = await render({ ...base, escalation: { ...base.escalation!, cause: 'migration-target-unresolvable' } });
+        const fixture = await render({
+          ...base,
+          escalation: {
+            ...base.escalation!,
+            cause: 'migration-target-unresolvable',
+          },
+        });
         const el = fixture.nativeElement as HTMLElement;
-        expect(el.querySelector('[data-testid="escalation-cause"]')?.textContent).toContain(
+        expect(
+          el.querySelector('[data-testid="escalation-cause"]')?.textContent,
+        ).toContain(
           "The chunk's migration target could not be resolved (epoch 3).",
         );
       }

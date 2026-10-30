@@ -50,7 +50,7 @@ class EligibilityCheck:
     def _reachable_runner_nodes(self) -> list[Node]:
         """Every runner-owned node reached from :attr:`node`, DFS over the graph's edges,
         visiting each node id at most once (cycle-safe). A hub node is traversed through but
-        contributes nothing itself; a cross-graph or terminal edge ends its path there,
+        contributes nothing itself; a cross-graph, escalating, or terminal edge ends its path there,
         evaluating nothing past it."""
         seen: set[str] = set()
         runner_nodes: list[Node] = []
@@ -63,7 +63,7 @@ class EligibilityCheck:
             if current.executor is Executor.RUNNER:
                 runner_nodes.append(current)
             for edge in self.graph.edges_from(current.node_id):
-                if edge.target_graph is not None or edge.to_node_name == RESERVED_TERMINAL:
+                if edge.target_graph is not None or edge.escalates or edge.to_node_name == RESERVED_TERMINAL:
                     continue
                 target = self.graph.node_by_name(edge.to_node_name)
                 if target is not None:

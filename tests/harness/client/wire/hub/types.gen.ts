@@ -924,9 +924,10 @@ export type CheckResult = {
 /**
  * ChoiceTargetKind
  *
- * A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.
+ * A same-graph ``node``, the reserved terminal ``done``, the reserved ``escalate``, or a
+ * cross-graph ``graph``.
  */
-export type ChoiceTargetKind = 'node' | 'done' | 'graph';
+export type ChoiceTargetKind = 'node' | 'done' | 'graph' | 'escalate';
 
 export type ChunkChangeCause = 'minted' | 'promoted' | 'demoted' | 'grouped' | 'claimed' | 'node-completed' | 'migrated' | 'decision-submitted' | 'decision-resolved' | 'question-asked' | 'question-answered' | 'escalated' | 'requeued' | 'restarted' | 'detached' | 'released' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'hub-advanced' | 'deleted' | 'edited';
 
@@ -2893,7 +2894,7 @@ export type EnvelopeChoice = {
 /**
  * EscalationCause
  */
-export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing';
+export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing' | 'escalate-choice';
 
 /**
  * EventLogSeverity

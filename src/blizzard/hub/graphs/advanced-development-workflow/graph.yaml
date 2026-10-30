@@ -189,6 +189,9 @@ nodes:
           description: The gate found blocking findings, recorded in the plan-findings asset.
           to: plan
           prompt_addendum: ./prompts/plan.from-plan-review.md
+        unfulfillable:
+          description: The plan carries a step or acceptance criterion no fleet worker can complete, and no operator answer can make it completable; the chunk escalates to a person.
+          to: escalate
     retries:
       max: 2
       exhausted: escalate

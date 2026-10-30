@@ -54,6 +54,10 @@ class TargetGraphRetired(Exception):
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
+# The reserved escalation a choice may point at: taking it parks the chunk `needs_human`
+# with an escalation instead of recording a transition.
+RESERVED_ESCALATE = "escalate"
+
 # The cross-graph target prefix: a ``to: graph:<name>`` choice re-pins the
 # chunk rather than transitioning it (``bzh:migration-not-transition``).
 GRAPH_TARGET_PREFIX = "graph:"
@@ -84,12 +88,14 @@ class ChoiceTarget:
         return self.node is None and self.graph is None
 
     def kind(self) -> ChoiceTargetKind:
-        """``graph`` for a cross-graph target, ``done`` for the reserved terminal, else
-        ``node`` — a malformed target included, which validation refuses before any mint."""
+        """``graph`` for a cross-graph target, ``done`` for the reserved terminal, ``escalate`` for the
+        reserved escalation, else ``node`` — a malformed target included, which validation refuses before any mint."""
         if self.graph is not None:
             return ChoiceTargetKind.GRAPH
         if self.node == RESERVED_TERMINAL:
             return ChoiceTargetKind.DONE
+        if self.node == RESERVED_ESCALATE:
+            return ChoiceTargetKind.ESCALATE
         return ChoiceTargetKind.NODE
 
 
@@ -608,10 +614,15 @@ class Edge:
 
     from_node_id: str
     choice_id: str
-    to_node_name: str  # a node name of this graph, RESERVED_TERMINAL, or ``graph:<name>``
+    to_node_name: str  # a node name of this graph, RESERVED_TERMINAL, RESERVED_ESCALATE, or ``graph:<name>``
     prompt_addendum: str | None = None
     target_graph: str | None = None
     model: str | None = None
+
+    @property
+    def escalates(self) -> bool:  # ast-grep-ignore: bzh:property-delegates
+        """Whether taking this edge escalates the chunk rather than moving it."""
+        return self.to_node_name == RESERVED_ESCALATE
 
 
 @domain_model
