@@ -14,7 +14,7 @@ function graph(host: RunnerHost, repo: string): string {
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
 async function firstBounce({ api, forge, issue, repository, runnerHosts }: World) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo] });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const main = await host.originHead(repo.name, 'main');
   expect((await forge.call('POST', '/_levers/merge_conflict', { repo: `${repo.owner}/${repo.name}` })).status).toBe(200);
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);

@@ -37,7 +37,7 @@ for (const harness of harnesses) {
     test('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, forge, issue, repository, runnerHosts }) => {
       test.slow();
       const repo = await repository();
-      const runnerHost = await runnerHosts.create({ runnerRepositories: [repo] });
+      const runnerHost = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
       expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harness, repo.name) } })).status).toBe(201);
       const filed = await issue('land a change', { repository: repo });
       const chunkId = filed.chunk.chunk_id;
@@ -63,7 +63,7 @@ test.describe('work item pass-through', () => {
     const body = 'PASSTHROUGH-BODY: the widget flake reproduces under load';
     const comment = 'PASSTHROUGH-COMMENT: attached a failing repro in the linked gist';
     const repo = await repository();
-    const runnerHost = await runnerHosts.create({ runnerRepositories: [repo] });
+    const runnerHost = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
     expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harnesses[0]!, repo.name, { passthrough: true }) } })).status).toBe(201);
     const filed = await forge.createIssue(`${repo.owner}/${repo.name}`, { title: 'pass-through', body });
     expect((await forge.call('POST', `/repos/${repo.owner}/${repo.name}/issues/${filed.number}/comments`, { body: comment })).status).toBe(201);
@@ -85,7 +85,7 @@ for (const setting of [{ name: 'short', wait: 1 }, { name: 'whole-chunk', wait: 
     collectorTest.use({ isolation: 'fresh-hub', collectorWait: setting.wait });
     collectorTest('test_a_tail_sampling_decision_wait_splits_or_keeps_the_chunk_trace', async ({ api, issue, repository, runnerHosts, workerCheckpoint, collector }) => {
       const repo = await repository();
-      const host = await runnerHosts.create({ runnerRepositories: [repo] });
+      const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
       expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, harnesses[0]!, repo.name, { probed: true, checkpoint: workerCheckpoint.snippet('before-commit') }) } })).status).toBe(201);
       const { chunk } = await issue('whole chunk tail sampling', { repository: repo });
       await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
@@ -127,7 +127,7 @@ traced('test_acceptance_loop_one_chunk_ingest_to_landed', async ({ api, issue, r
   test.setTimeout(120000);
   const harness = harnesses[0]!;
   const repo = await repository();
-  const runnerHost = await runnerHosts.create({ runnerRepositories: [repo] });
+  const runnerHost = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(runnerHost, harness, repo.name, { probed: true }) } })).status).toBe(201);
   const { chunk } = await issue('trace acceptance', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);

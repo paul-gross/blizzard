@@ -14,7 +14,7 @@ export async function migratedChunk(world: {
 }) {
   const { api, issue, repository, runnerHosts } = world;
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo] });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   const cli = JSON.stringify(host.cliBinary);
   const build = `import os, pathlib, subprocess\nrepo = pathlib.Path(os.environ['BLIZZARD_ENV_WORKDIRS'].split(',')[0]) / ${JSON.stringify(repo.name)}\nsubprocess.run(['git', '-C', str(repo), 'switch', '-C', '${branch}'], check=True)\n(repo / 'LANDED.md').write_text('landed by the mock harness after a migration\\n')\nsubprocess.run(['git', '-C', str(repo), 'add', '-A'], check=True)\nsubprocess.run(['git', '-C', str(repo), '-c', 'user.email=mock@blizzard.local', '-c', 'user.name=Mock Harness', 'commit', '-m', 'feat: land a change after migrating graphs'], check=True)\nsha = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True, text=True, check=True).stdout.strip()\nsubprocess.run(['git', '-C', str(repo), 'push', 'origin', '${branch}'], check=True)\nsubprocess.run([${cli}, 'runner', 'artifact', 'commit', '--repo', ${JSON.stringify(repo.name)}, '--branch', '${branch}', '--commit', sha], check=True)\n`;
   const target = await api.post('/api/graphs', { data: { definition_yaml: JSON.stringify({ name: 'triage-delivery', entry: 'build', nodes: {

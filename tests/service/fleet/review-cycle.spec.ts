@@ -30,7 +30,7 @@ function graph(host: RunnerHost, repo: string, harness: typeof harnesses[number]
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
 async function cycle({ api, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo], ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name, harness) } })).status).toBe(201);
   const { chunk } = await issue('review cycle', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);

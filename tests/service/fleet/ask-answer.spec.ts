@@ -32,7 +32,7 @@ function answer(repo: string, cli: string): string {
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'cli' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
 async function scenario({ api, cli, forge, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo], ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness, host.cliBinary) } })).status).toBe(201);
   const { chunk } = await issue('ask/answer', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);

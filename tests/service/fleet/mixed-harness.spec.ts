@@ -23,7 +23,7 @@ function graph(host: RunnerHost, repo: string, checkpoint: WorkerCheckpoint): st
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'issue' | 'repository' | 'runnerHosts' | 'runnerConfig' | 'workerCheckpoint'>;
 async function traverse({ api, issue, repository, runnerHosts, runnerConfig, workerCheckpoint }: World) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo], runnerConfig: { ...runnerConfig, transcripts: { ship: true }, runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, runnerConfig: { ...runnerConfig, transcripts: { ship: true }, runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } });
   const minted = await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name, workerCheckpoint) } });
   expect(minted.status, JSON.stringify(minted.body)).toBe(201);
   const nodeIds = Object.fromEntries((minted.body.nodes as { name: string; node_id: string }[]).map((node) => [node.name, node.node_id]));

@@ -15,7 +15,7 @@ function graph(host: RunnerHost, repo: string): string {
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'cli' | 'forge' | 'issue' | 'repository' | 'runnerHosts'>;
 async function gated({ api, cli, forge, issue, repository, runnerHosts }: World) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo] });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(host, repo.name) } })).status).toBe(201);
   const { chunk } = await issue('gate', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);

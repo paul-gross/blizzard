@@ -21,7 +21,7 @@ function graph(harness: typeof harnesses[number]): string {
 type World = Pick<Parameters<Parameters<typeof test>[2]>[0], 'api' | 'issue' | 'repository' | 'runnerHosts'>;
 async function escalated({ api, issue, repository, runnerHosts }: World, harness: typeof harnesses[number]) {
   const repo = await repository();
-  const host = await runnerHosts.create({ runnerRepositories: [repo], ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
+  const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! }, ...(harness.name === 'opencode' ? { runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockBin}/mock-opencode' } }] } } : {}) });
   expect((await api.post('/api/graphs', { data: { definition_yaml: graph(harness) } })).status).toBe(201);
   const { chunk } = await issue('escalation', { repository: repo });
   await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
@@ -47,7 +47,7 @@ for (const harness of harnesses) {
       const before = (await state.host.mockSessions()).find((session) => session.session_id === sessionId);
       expect(before).toBeDefined();
       const marker = `human takeover ${state.chunk.chunk_id}`;
-      const result = await state.host.takeover(escalation.takeover_command, `# ${marker}\n`);
+      const result = await state.host.shell(escalation.takeover_command, `# ${marker}\n`);
       expect(result.code, result.stderr).toBe(0);
       const after = (await state.host.mockSessions()).find((session) => session.session_id === sessionId);
       if (harness.name === 'opencode') expect(result.stdout).toContain(sessionId!);

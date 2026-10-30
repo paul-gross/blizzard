@@ -137,12 +137,12 @@ enclosing winter workspace, and never in CI.
 The implemented Playwright service job runs four shards, each with a 30-minute step timeout; the Python half retains
 three shards. The former prospective estimate was 1263s serial for fleet default, plus 243s for trace companions, and
 about 971s for a pessimistic ordinary service shard. Those estimates covered more than the six newly ported specs and
-are not comparable directly to the following local subset.
-The eight traced fleet scenario ports run in `service-fleet/`, with migration's browser half in `ui/`. An earlier
-three-shard local CI-shaped run (`CI=1`, two workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes;
-the full service project passed in 17.2 minutes and UI in 3.3 minutes. The current four-shard measurements are below.
-These are local durations; authoritative CI timings arrive with the PR run. The merge gate's slowest pytest shard was
-about 20 minutes at preflight, and every measured service shard remains below it and the timeout.
+are not comparable directly to the following local subset. The eight traced fleet scenario ports run in
+`service-fleet/`, with migration's browser half in `ui/`. An earlier three-shard local CI-shaped run (`CI=1`, two
+workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes; the full service project passed in 17.2
+minutes and UI in 3.3 minutes. The current four-shard measurements are below. These are local durations; authoritative
+CI timings arrive with the PR run. The merge gate's slowest pytest shard was about 20 minutes at preflight, and every
+measured service shard remains below it and the timeout.
 
 The following is sizing for remaining e2e ports, not a description of the current job. The initial serial e2e run
 measured 1746s across 25 fleet rows and 262s across 13 UI rows. These were allocation estimates, not measured Playwright

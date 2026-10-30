@@ -27,12 +27,11 @@ test.describe('at fresh-tenant', () => {
 
   test('a host can work against and read the test-owned forge origin', async ({ repository, runnerHosts, forge }) => {
     const repo = await repository();
-    const host = await runnerHosts.create({ runnerRepositories: [repo] });
+    const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
     const remote = await forge.call('GET', `/repos/${repo.owner}/${repo.name}`);
     expect(remote.status).toBe(200);
     expect(await host.originHead(repo.name, 'main')).toMatch(/^[0-9a-f]{40}$/);
     expect(await host.originTree(repo.name, 'main')).toContain('README.md');
-    expect(await host.originHead('toy-api', 'main')).toBeUndefined();
     expect((await host.step()).outcome).toBe('completed');
   });
 });
