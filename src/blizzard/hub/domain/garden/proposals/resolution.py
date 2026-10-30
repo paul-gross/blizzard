@@ -119,7 +119,7 @@ class GardenProposalDeliveryResolution:
 
 
 class AnsweredFindingsReader:
-    """Reads the findings `chunk`'s own accepted, minted garden proposal answers — the
+    """Reads the findings the accepted, minted garden proposals behind `chunk`'s work items answer — the
     worker-facing read a leased chunk can reach its own findings through, sibling to
     :class:`GardenProposalDeliveryResolution`'s write-side walk but read-only and keyed
     off the chunk itself rather than a delivered pointer. Named apart from the module's

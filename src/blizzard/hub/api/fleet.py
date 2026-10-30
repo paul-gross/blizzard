@@ -592,7 +592,7 @@ def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[F
 
 @router.get("/chunks/{chunk_id}/findings", response_model=list[FindingView])
 def get_chunk_findings(chunk_id: str, services: Services) -> list[FindingView]:
-    """The findings the chunk's own accepted, minted garden proposal answers — a worker's
+    """The findings the accepted, minted garden proposals behind the chunk's work items answer — a worker's
     per-chunk read, distinct from ``get_garden_findings``'s routine-run bucket. 404 both
     for an unknown chunk and for one answering no such proposal."""
     return _answered_findings_or_404(chunk_id, services)
@@ -600,7 +600,7 @@ def get_chunk_findings(chunk_id: str, services: Services) -> list[FindingView]:
 
 @router.get("/chunks/{chunk_id}/findings/{finding_id}", response_model=FindingView)
 def get_chunk_finding(chunk_id: str, finding_id: str, services: Services) -> FindingView:
-    """One finding within the chunk's own answered set — ``get_chunk_findings`` narrowed
+    """One finding within the set the chunk's work items answer — ``get_chunk_findings`` narrowed
     to a single id. An id outside that set is structurally unreachable rather than
     filtered after the fact, so it 404s the same as an id belonging to no proposal at
     all."""

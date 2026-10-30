@@ -31,9 +31,9 @@ shape.
 
 A worker whose own chunk an accepted garden-proposal accept minted reads a different bucket the same way:
 `blizzard runner finding list`, flagless, and `finding get <finding_id>` for one — the findings the accepted, minted
-proposals behind each of the chunk's work items answer, resolved server-side from the chunk itself, so neither verb can be pointed at another
-chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at all. It needs no hub
-credential in its child environment either, and shares the same endpoint-shape home.
+proposals behind each of the chunk's work items answer, resolved server-side from the chunk itself, so neither verb can
+be pointed at another chunk's proposal. An id outside that set 404s the same as a chunk answering no such proposal at
+all. It needs no hub credential in its child environment either, and shares the same endpoint-shape home.
 
 A person takes a finding out of the live set for good with one of five exit verbs, each requiring `--note`:
 `blizzard hub finding resolve <finding_id>...`, `confirm-gone <finding_id>...`, `wont-fix <finding_id>...`,
