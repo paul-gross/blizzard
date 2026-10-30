@@ -317,8 +317,8 @@ const traceTest = test.extend<{ traceSink: OtlpSink }>({
   isolation: 'fresh-hub',
   traceSink: async ({ otlpSink }, use) => { await use(await otlpSink()); },
   hubEnv: async ({ hubEnv, traceSink }, use) => { await use({ ...hubEnv, OTEL_EXPORTER_OTLP_ENDPOINT: traceSink.endpoint }); },
-  hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n }, sweeps: { trace_export: { mode: 'timed' } } })); },
-  runnerConfig: async ({ runnerConfig }, use) => { await use(mergeHostProfile(runnerConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n } })); },
+  hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n, platform: true, platform_sample_ratio: 0 }, sweeps: { trace_export: { mode: 'timed' } } })); },
+  runnerConfig: async ({ runnerConfig }, use) => { await use(mergeHostProfile(runnerConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n, platform: true, platform_sample_ratio: 0 } })); },
   runnerTraceEndpoint: async ({ traceSink }, use) => { await use(traceSink.endpoint); },
 });
 

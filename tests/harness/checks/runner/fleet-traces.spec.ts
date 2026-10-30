@@ -128,7 +128,7 @@ test('platform chain and leak scan reject missing query and planted values', () 
 
 test('the sink decodes posted spans with exact nanoseconds, ordered events, links and nested values', async () => {
   const schema = protobuf.Root.fromJSON({ nested: {
-    Value: { fields: { stringValue: { type: 'string', id: 1 }, intValue: { type: 'int64', id: 3 }, doubleValue: { type: 'double', id: 4 }, arrayValue: { type: 'ArrayValue', id: 5 }, kvlistValue: { type: 'KeyValueList', id: 6 }, bytesValue: { type: 'bytes', id: 7 } } },
+    Value: { oneofs: { value: { oneof: ['stringValue', 'boolValue', 'intValue', 'doubleValue', 'arrayValue', 'kvlistValue', 'bytesValue'] } }, fields: { stringValue: { type: 'string', id: 1 }, boolValue: { type: 'bool', id: 2 }, intValue: { type: 'int64', id: 3 }, doubleValue: { type: 'double', id: 4 }, arrayValue: { type: 'ArrayValue', id: 5 }, kvlistValue: { type: 'KeyValueList', id: 6 }, bytesValue: { type: 'bytes', id: 7 } } },
     ArrayValue: { fields: { values: { rule: 'repeated', type: 'Value', id: 1 } } },
     KeyValueList: { fields: { values: { rule: 'repeated', type: 'KV', id: 1 } } },
     KV: { fields: { key: { type: 'string', id: 1 }, value: { type: 'Value', id: 2 } } },
@@ -142,7 +142,7 @@ test('the sink decodes posted spans with exact nanoseconds, ordered events, link
   } });
   const type = schema.lookupType('Request');
   const bytes = (value: string): Uint8Array => Buffer.from(value, 'hex');
-  const raw = { resourceSpans: [{ scopeSpans: [{ spans: [{ traceId: bytes(trace), spanId: bytes(rootId), parentSpanId: bytes(chunkSpanId(chunk)), name: 'step build', startTimeUnixNano: '1700000000000000123', endTimeUnixNano: '1700000000000000456', attributes: [{ key: 'cost', value: { doubleValue: 1 } }, { key: 'nested', value: { kvlistValue: { values: [{ key: 'items', value: { arrayValue: { values: [{ stringValue: 'one' }, { intValue: '42' }, { bytesValue: bytes('beef') }] } } }] } } }], events: [{ name: 'later', timeUnixNano: '1700000000000000300', attributes: [{ key: 'a', value: { stringValue: 'b' } }] }, { name: 'earlier', timeUnixNano: '1700000000000000200' }], links: [{ traceId: bytes(trace), spanId: bytes(rootId), attributes: [{ key: 'blizzard.link.reason', value: { stringValue: 'next' } }] }], status: { code: 2, message: 'error' } }] }] }] };
+  const raw = { resourceSpans: [{ scopeSpans: [{ spans: [{ traceId: bytes(trace), spanId: bytes(rootId), parentSpanId: bytes(chunkSpanId(chunk)), name: 'step build', startTimeUnixNano: '1700000000000000123', endTimeUnixNano: '1700000000000000456', attributes: [{ key: 'cost', value: { doubleValue: 1 } }, { key: 'off', value: { boolValue: false } }, { key: 'nested', value: { kvlistValue: { values: [{ key: 'items', value: { arrayValue: { values: [{ stringValue: 'one' }, { intValue: '42' }, { bytesValue: bytes('beef') }] } } }] } } }], events: [{ name: 'later', timeUnixNano: '1700000000000000300', attributes: [{ key: 'a', value: { stringValue: 'b' } }] }, { name: 'earlier', timeUnixNano: '1700000000000000200' }], links: [{ traceId: bytes(trace), spanId: bytes(rootId), attributes: [{ key: 'blizzard.link.reason', value: { stringValue: 'next' } }] }], status: { code: 2, message: 'error' } }] }] }] };
   const sink = await startOtlpSink();
   let decoded: ReceivedSpan | undefined;
   try {
@@ -163,6 +163,7 @@ test('the sink decodes posted spans with exact nanoseconds, ordered events, link
   expect(decoded?.spanId).toBe(rootId);
   expect(decoded?.parentSpanId).toBe(chunkSpanId(chunk));
   expect(decoded?.startTimeUnixNano).toBe('1700000000000000123');
+  expect(decoded?.attributes.off).toBe(false);
   expect(decoded?.endTimeUnixNano).toBe('1700000000000000456');
   expect(decoded?.status).toEqual({ code: 2, message: 'error' });
   expect(decoded?.attributeTypes?.cost).toBe('double');

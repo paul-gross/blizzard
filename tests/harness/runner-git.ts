@@ -19,6 +19,8 @@ export interface OriginReads {
   originFile(repo: string, ref: string, filePath: string): Promise<string | undefined>;
   /** Make a test-owned external commit on a branch of the same bare origin the forge merges. */
   originCommit(repo: string, branch: string, filePath: string, text: string, subject: string): Promise<string>;
+  /** The complete message of the ref's tip commit, including its work-item trailers. */
+  originMessage(repo: string, ref: string): Promise<string | undefined>;
 }
 
 const SHA = /^[0-9a-f]{4,40}$/;
@@ -62,6 +64,12 @@ export function originReads(origins: string, env: NodeJS.ProcessEnv, cwd: string
       const sha = await resolve(repo, ref);
       if (sha === undefined) return undefined;
       const result = await git(repo, ['cat-file', 'blob', `${sha}:${filePath}`]);
+      return result.code === 0 ? result.stdout : undefined;
+    },
+    async originMessage(repo, ref) {
+      const sha = await resolve(repo, ref);
+      if (sha === undefined) return undefined;
+      const result = await git(repo, ['log', '-1', '--format=%B', sha]);
       return result.code === 0 ? result.stdout : undefined;
     },
     async originCommit(repo, branch, filePath, text, subject) {
