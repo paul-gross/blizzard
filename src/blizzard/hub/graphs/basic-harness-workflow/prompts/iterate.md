@@ -25,6 +25,9 @@ instead of proceeding past them.
 
 ## Push and declare the commits
 
+Before pushing, run the project's linter-class checks — formatter, linters, generated-output drift — and the unit tests
+covering what the change touched. Targeted, not the entire suite: CI owns the full suite.
+
 Push the branch to each repo's origin. For every repo you touched, you MUST then run
 `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>`; the declaration is mandatory, and an
 undeclared push does not count. Re-declaring a tip that was already declared is harmless, so declare again rather than
