@@ -15,8 +15,8 @@ needs its tip declared (below).
 
 ## What must be true when you finish
 
-**One branch per repo.** Every environment's work for a repo is rolled up into a single branch; delivery refuses a repo
-that arrives with two.
+**One branch per repo, the declared one** (`blizzard runner artifact get branch --node plan --content`). Every
+environment's work for a repo is rolled up into a single branch; delivery refuses a repo that arrives with two.
 
 **Every ahead repo is rebased onto the current base** — the repo's recorded base branch. Where a repo has work in more
 than one environment, rebase those onto each other first, then onto the base. Resolve every conflict **inside the

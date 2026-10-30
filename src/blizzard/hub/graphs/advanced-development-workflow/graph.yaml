@@ -146,6 +146,7 @@ nodes:
       # instead of its own prior drafting context
     produces:
       - plan
+      - branch  # asset artifact — the chunk's branch name, republished for every later reader
       # The refutation channel (see prompts/plan.from-plan-review.md): findings from a
       # prior plan-review round the plan declines rather than fixes, with the argument.
       # plan-review reads it before re-reviewing and must accept or reject each one

@@ -16,9 +16,11 @@ cannot account for; on finding branch work you cannot explain, stop and ask with
 
 ## Branch and commit
 
-Finished work is commits on one branch, `feat/<slug>` — a short kebab-case slug derived from the work item — the same in
-every repo changed. Before the first commit, put each touched repo on the feature branch so no push from this
-environment can reach the base branch; how you arrange that is the workspace's business, the outcome is mandatory.
+Finished work is commits on the declared branch (`blizzard runner artifact get branch --node triage --content`), the
+same in every repo changed. With none declared, derive it from the project's guidance. Create or switch to it in every
+repo before the first commit, and connect it with the environment's connect step so its upstream is that branch on
+origin, never the base. Confirm branch and upstream before pushing. Never commit on, push to, or declare the base
+branch.
 
 ## Verify it by hand
 

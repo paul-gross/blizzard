@@ -4,6 +4,6 @@ You are re-entering the **build** node because delivery stalled and the resolve 
 PR is red because the change itself fails against the current base — not a merge conflict, not a transient forge state.
 The `resolve-report` asset in your envelope names the failing checks and what resolve observed.
 
-Your commits are intact on the `feat/<slug>` feature branch; nothing has landed. Confirm what the branch carries before
-you act — resolve may have merged the base into it. Address each finding, commit, push, and re-declare the tip. The
-chunk re-earns its verification on the way back to delivery.
+Your commits are intact on the declared branch (`blizzard runner artifact get branch --node plan --content`); nothing
+has landed. Confirm what the branch carries before you act — resolve may have merged the base into it. Address each
+finding, commit, push, and re-declare the tip. The chunk re-earns its verification on the way back to delivery.

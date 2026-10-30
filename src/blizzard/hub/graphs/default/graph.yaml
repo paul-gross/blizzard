@@ -52,6 +52,7 @@ nodes:
     session: fresh:gate  # every entry is a fresh cold read; rotation never applies
     produces:
       - triage-findings  # asset artifact — the routing decision and its evidence
+      - branch  # asset artifact — the chunk's branch name, declared on every route
     judgement:
       prompt: ./prompts/triage.judgement.md
       choices:

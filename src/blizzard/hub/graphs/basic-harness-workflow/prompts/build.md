@@ -23,10 +23,11 @@ you: ask `blizzard runner ask "<question>"` rather than proceeding.
 
 ## Build the change
 
-The work exists as commits on one feature branch named `feat/<slug>`, a short kebab-case slug derived from the work
-item, and the same branch name is used in every repo the change touches. Before the first commit, each repo you touch is
-on that feature branch and arranged so a push from this environment reaches the feature branch and not the base branch
-it started on.
+The work exists as commits on the declared branch (`blizzard runner artifact get branch --node triage --content`), the
+same in every repo the change touches. With none declared, derive it from the project's guidance. Create or switch to it
+in every repo before the first commit, and connect it with the environment's connect step so its upstream is that branch
+on origin, never the base. Confirm branch and upstream before pushing. Never commit on, push to, or declare the base
+branch.
 
 Harness work is validated by reading the change back as the agent who will receive it: does the rule say what it means,
 does the routing to it land, and does the instruction survive being followed literally?
