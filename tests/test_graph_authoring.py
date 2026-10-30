@@ -58,21 +58,14 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert deliver.bounce_cap is None
 
 
-def test_adv_dwf_retrospective_carries_the_delivery_incomplete_choice() -> None:
-    """#238 AC2: retrospective's judgement gains an authored `delivery-incomplete`
-    choice routing to `resolve`, alongside `recorded -> done`; loading the packaged doc
-    also proves the `resolve.from-retrospective.md` addendum resolves."""
+def test_adv_dwf_retrospective_records_only() -> None:
+    """Retrospective's judgement has `recorded -> done` as its only outcome."""
     doc = PACKAGED.named("advanced-development-workflow").doc
     graph = Reification.of(doc, _clock()).graph
     retrospective = graph.node_by_name("retrospective")
     assert retrospective is not None
-    assert {c.name for c in retrospective.choices} == {"recorded", "delivery-incomplete"}
-    edges = graph.edges_from(retrospective.node_id)
-    targets = {e.to_node_name for e in edges}
-    assert targets == {"done", "resolve"}
-    resolve_edge = next(e for e in edges if e.to_node_name == "resolve")
-    assert resolve_edge.prompt_addendum
-    assert "resolve" in resolve_edge.prompt_addendum.lower()
+    assert {c.name for c in retrospective.choices} == {"recorded"}
+    assert {e.to_node_name for e in graph.edges_from(retrospective.node_id)} == {"done"}
 
 
 def test_adv_dwf_deliver_authors_the_conflict_edge() -> None:

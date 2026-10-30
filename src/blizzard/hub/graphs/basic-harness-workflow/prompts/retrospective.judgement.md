@@ -1,9 +1,6 @@
 # Retrospective — judgement
 
-Before recording the outcome, confirm:
+Confirm the retrospective was written as the `retrospective` asset — honest and specific, carrying every required
+section: What Went Well, What Didn't Go Well, Harness / Context Improvements, and What We Skipped.
 
-- the `retrospective` asset is written with every required section, above all Landing Verification;
-- this workspace's post-delivery convention, where it declares one, was carried out — or its failure is reported
-  plainly.
-
-Record `recorded`, this node's only outcome.
+`recorded` is the only outcome, and it closes the chunk.
