@@ -138,6 +138,16 @@ The implemented Playwright service job runs four shards, each with a 30-minute s
 three shards. The former prospective estimate was 1263s serial for fleet default, plus 243s for trace companions, and
 about 971s for a pessimistic ordinary service shard. Those estimates covered more than the six newly ported specs and
 are not comparable directly to the following local subset.
+The eight traced fleet scenario ports run in `service-fleet/`, with migration's browser half in `ui/`. An earlier
+three-shard local CI-shaped run (`CI=1`, two workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes;
+the full service project passed in 17.2 minutes and UI in 3.3 minutes. The current four-shard measurements are below.
+These are local durations; authoritative CI timings arrive with the PR run. The merge gate's slowest pytest shard was
+about 20 minutes at preflight, and every measured service shard remains below it and the timeout.
+
+The following is sizing for remaining e2e ports, not a description of the current job. The initial serial e2e run
+measured 1746s across 25 fleet rows and 262s across 13 UI rows. These were allocation estimates, not measured Playwright
+times: they assigned each row to its profile and split the event log's 82s between fleet/actions and UI/default. The
+resulting profile budgets were:
 
 | Planned project | Estimated serial time |
 | --------------- | --------------------- |
@@ -151,14 +161,8 @@ are not comparable directly to the following local subset.
 Nine trace companions repeat one case's per-file average on fresh hubs, adding an estimated 243s across the fleet
 projects; tail-sampling remains in the acceptance row. As a cross-check, 60 retained fleet cases at about 6.6s host
 initialization plus 13s per whole test suggest 1176s before companions, below the adjusted 1656s serial-row allowance.
-Plan four service shards, distributing the companions across them; run `service-fleet-actions` on a separate
-single-worker hub. The egress files are `fresh-hub` tests in `service-fleet`, not a profile of their own: the events
-file under its 70s allocation and the night, which runs once on one held stack, under its 100s. The hub-actions refusal
-stays in default fresh-hub, and UI auth stays in its own profile. The pessimistic ordinary-shard estimate is 613 +
-(1263 + 243) / 8 + 170 ≈ 971s against the roughly 1000s merge-gate baseline. Every Playwright step must fit within 30
-minutes. Measure each port's project time in CI against these estimates; reshape the jobs before landing a port that
-would make the service tier the slowest gate job. Actual timings and shard balance decide whether this prospective shape
-holds.
+If remaining ports cross the guard, use a fourth service shard and distribute trace companions across them. Every
+Playwright step must fit within 30 minutes; measured CI shard times decide whether another reshaping is needed.
 
 Final runner-tier measurement, with the Python original of every runner-tier test ported and `tests/service/` holding
 only the pytest half. A full `mise run playwright -- --project='service-*'` run, 10 workers on a 20-thread local machine
