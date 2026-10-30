@@ -28,6 +28,13 @@ export default defineConfig({
     ...serviceProjects(profiles, fleetProfileFolders(profiles)),
     ...uiProjects(uiProfileFolders(profiles)),
     {
+      // The acceptance journey rehearses a night on a hub and a runner host of its own. It is no `service-*` project, so
+      // no service selection runs it; it has no profile, so its hub's sweeps are timed, and it reads no shared hub, so it
+      // has no setup. The upper tiers' `journey` job selects it by name.
+      name: 'journey',
+      testDir: 'journey',
+    },
+    {
       // The harness's own proof runs on the default profile's setup and is selected by name, never by `service-*`.
       name: 'harness',
       testDir: 'harness/checks',

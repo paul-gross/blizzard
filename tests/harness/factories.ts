@@ -73,20 +73,23 @@ export function requireFreshHub(level: Level, what: string): void {
  */
 export function repositoryFactory(context: FactoryContext): (name?: string) => Promise<Repository> {
   const made = new Map<string, Promise<Repository>>();
+  // The project's links are declared whole by each apply, so a later repository carries the earlier ones with it.
+  const linked: string[] = [];
   // A name asked for twice is the one repository: a host's configuration may have made it first.
   return (name) => {
-    if (name === undefined) return declare(context, context.unique('r-'));
+    if (name === undefined) return declare(context, context.unique('r-'), linked);
     let found = made.get(name);
     if (found === undefined) {
-      found = declare(context, name);
+      found = declare(context, name, linked);
       made.set(name, found);
     }
     return found;
   };
 }
 
-async function declare(context: FactoryContext, repository: string): Promise<Repository> {
+async function declare(context: FactoryContext, repository: string, linked: string[]): Promise<Repository> {
   requireOwnTenant(context.level, 'repository()');
+  linked.push(repository);
   await context.forge.createRepository(COMMON_OWNER, repository);
   // The work source and the repository each name a credential; a second call finds the secret already there.
   const secret = await context.api.post('/api/secrets', { data: { name: FIXTURE_SECRET, value: 'fixture-token' } });
@@ -116,7 +119,7 @@ async function declare(context: FactoryContext, repository: string): Promise<Rep
           secret_name: FIXTURE_SECRET,
         },
       ],
-      projects: [{ slug: context.project.slug, repositories: [repository], sources: [repository] }],
+      projects: [{ slug: context.project.slug, repositories: [...linked], sources: [...linked] }],
     },
   });
   if (!applied.ok) throw new Error(`declaring ${repository} answered ${applied.status}: ${JSON.stringify(applied.body)}`);

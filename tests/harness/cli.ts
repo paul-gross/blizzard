@@ -28,19 +28,19 @@ export interface Prompt {
 /**
  * Runs `command args` to completion and returns its exit code and output; a non-zero exit is a result, not an error.
  * A command still running after `timeoutMs` is killed with everything it started, and the call throws naming it. With a
- * `prompt` the command's stdin is answered once; without one it is closed at once.
+ * `prompt` the command's stdin is answered once; without one it is closed at once, after `input` when given.
  */
 export function runCommand(
   command: string,
   args: string[],
-  options: { env: NodeJS.ProcessEnv; cwd?: string; timeoutMs?: number; prompt?: Prompt },
+  options: { env: NodeJS.ProcessEnv; cwd?: string; timeoutMs?: number; prompt?: Prompt; input?: string },
 ): Promise<CliResult> {
   const timeoutMs = options.timeoutMs ?? CLI_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     // Detached, so the kill reaches the whole process group and not only a wrapper shell.
     const child = spawn(command, args, { env: options.env, cwd: options.cwd, stdio: 'pipe', detached: true });
     // Without a prompt the command reads end-of-input at once, as it would from a closed stdin.
-    if (options.prompt === undefined) child.stdin.end();
+    if (options.prompt === undefined) child.stdin.end(options.input);
     // A command that exits before it is answered closes the pipe; the exit is the result, not a write error.
     child.stdin.on('error', () => {});
     let stdout = '';
