@@ -63,7 +63,8 @@ def test_a_raise_while_a_run_waits_kills_its_grandchild(tmp_path: Path, monkeypa
         return real_communicate(self, input, timeout)
 
     monkeypatch.setattr(subprocess.Popen, "communicate", interrupted)
-    script = ShellCommand(f"sleep 900 & echo $! > {pid_file}; wait")
+    # The raise lands the moment the file exists, so it must exist only whole: a redirect creates it empty first.
+    script = ShellCommand(f"sleep 900 & echo $! > {pid_file}.tmp && mv {pid_file}.tmp {pid_file}; wait")
     with pytest.raises(KeyboardInterrupt):
         SubprocessChildProcesses().run(script, cwd=tmp_path, env=_TOOL, timeout=60)
     assert _gone(int(pid_file.read_text()))
