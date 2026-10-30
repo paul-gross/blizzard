@@ -374,6 +374,6 @@ daemon's, an operator taking over a worker's session resolves the same prepended
 
 `[runner.worker]` `shell` names the absolute shell (`~` allowed) a worker's Bash tool runs under, `/bin/bash` when
 unset. A Claude Code worker's environment carries it as `CLAUDE_CODE_SHELL` — the supported override, which the
-allowlist's absent `SHELL` would otherwise leave to Claude Code's own detection, preferring zsh wherever installed —
-and an OpenCode worker's runner-owned config (`opencode-worker-config.json`, refreshed by `runner init`) carries it as
+allowlist's absent `SHELL` would otherwise leave to Claude Code's own detection, preferring zsh wherever installed — and
+an OpenCode worker's runner-owned config (`opencode-worker-config.json`, refreshed by `runner init`) carries it as
 `"shell"`. `runner host` refuses to start, naming the runner, when the path does not exist or is not executable.
