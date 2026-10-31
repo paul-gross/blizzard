@@ -61,8 +61,7 @@ def refuses_before_checks(state: RepoState | Admitted) -> bool:
 
 async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoState]]) -> Pass:
     """Fold each unlanded repository's state into the pass's answer, landing every ready one in order once all
-    are prepared. A parked state — :class:`Held` or :class:`AwaitingMerge` — is refused: no policy that produces
-    one is run."""
+    are prepared. A held park opens its change only after other repositories are prepared."""
     ordered = sorted(stepped, key=lambda pair: _landing_key(pair[0]))
     states = [state for _, state in ordered]
     for repo, state in ordered:

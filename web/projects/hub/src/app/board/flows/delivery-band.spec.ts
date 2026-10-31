@@ -16,7 +16,7 @@ const flow = (over: Partial<FlowView> = {}): FlowView => ({
   turn: { chunk_id: 'ch_01landing000000000000000000', started_at: '2026-10-29T11:59:00Z' },
   line: [
     { chunk_id: 'ch_01landing000000000000000000', submission_id: 'sub_a', arrival: 1, state: 'landing', position: 1, next_poll_at: null },
-    { chunk_id: 'ch_01inline0000000000000000000', submission_id: 'sub_b', arrival: 2, state: 'awaiting-merge' as FlowView['line'][number]['state'], position: 2, next_poll_at: null },
+    { chunk_id: 'ch_01inline0000000000000000000', submission_id: 'sub_b', arrival: 2, state: 'future-state' as FlowView['line'][number]['state'], position: 2, next_poll_at: null },
   ],
   last_verdict: null,
   last_landing: null,
@@ -61,7 +61,7 @@ describe('DeliveryBand', () => {
   it('renders a state this build does not know raw, in the idle tone', async () => {
     const el = (await render()).nativeElement as HTMLElement;
     const badge = el.querySelector('[data-testid="delivery-in-line"] [data-testid="delivery-state"]');
-    expect(badge?.textContent?.trim()).toBe('awaiting-merge');
+    expect(badge?.textContent?.trim()).toBe('future-state');
     expect(badge?.querySelector<HTMLElement>('.badge')?.style.color).toBe(toneColor('idle'));
   });
 

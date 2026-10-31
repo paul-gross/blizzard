@@ -10813,7 +10813,9 @@
         },
         "required": [
           "node_name",
-          "next_poll_at"
+          "next_poll_at",
+          "kind",
+          "since"
         ],
         "title": "PendingView",
         "type": "object"

@@ -38,7 +38,7 @@ describe('placeText', () => {
   });
 
   it('places a state this build does not know by its position', () => {
-    expect(placeText(place({ state: 'awaiting-merge' as ChunkFlowPlaceView['state'], position: 2 }))).toBe('2nd on blizzard/master');
+    expect(placeText(place({ state: 'future-state' as ChunkFlowPlaceView['state'], position: 2 }))).toBe('2nd on blizzard/master');
   });
 });
 
@@ -58,8 +58,10 @@ describe('place state look', () => {
   });
 
   it('reads a state this build does not know raw, in the idle tone', () => {
-    expect(placeStateLabel('awaiting-merge')).toBe('awaiting-merge');
-    expect(placeStateTone('awaiting-merge')).toBe('idle');
+    expect(placeStateLabel('future-state')).toBe('future-state');
+    expect(placeStateTone('future-state')).toBe('idle');
+    expect(placeStateLabel('awaiting-merge')).toBe('awaiting merge');
+    expect(placeStateTone('awaiting-merge')).toBe('waiting');
   });
 });
 

@@ -164,6 +164,7 @@ async def failed_checks(
     """Route owned failures and rerun inherited failures once, independent of how the revision lands."""
     run = repo.run
     if not all(inherited(check["base_red"]) for check in checks):
+        run.say(f"{repo.repo} has a terminal CI check failure — will not re-poll")
         return Failure(({**identity, "decision": FAILED, "checks": checks},))
     unsigned = [
         check
@@ -174,7 +175,9 @@ async def failed_checks(
     if unsigned:
         accepted = [await rerun_once(repo, check, head) for check in unsigned]
         if False in accepted:
+            run.say(f"{repo.repo}'s failing checks could not be re-run — will not re-poll")
             return Failure(({**identity, "decision": FAILED, "checks": checks},))
+        run.say(f"{repo.repo}'s failing checks are inherited from the base — re-requested once; re-polling")
         return Waiting(f"{repo.repo}'s inherited failures re-run")
     rows = [
         {
@@ -185,6 +188,7 @@ async def failed_checks(
         }
         for check in failing
     ]
+    run.say(f"{repo.repo}'s failing checks are still inherited from the base after a re-run — repair the base")
     return Inherited(({**identity, "decision": INHERITED_FAILURE, "base_branch": repo.base_branch, "checks": rows},))
 
 
