@@ -18,10 +18,11 @@ from tests.test_land_action import _GADGET, _SUBMITTED, _WIDGET, _forge, _land, 
 pytestmark = pytest.mark.component
 
 
-def parked_visit(repos=(_WIDGET,)):
+def parked_visit(repos=(_WIDGET,), *, park_index=0):
     visit = _visit(repos)
     targets = tuple(
-        replace(t, landing_policy=LandingPolicy.PARK) if i == 0 else t for i, t in enumerate(visit.resolution.targets)
+        replace(t, landing_policy=LandingPolicy.PARK) if i == park_index else t
+        for i, t in enumerate(visit.resolution.targets)
     )
     return replace(visit, resolution=replace(visit.resolution, targets=targets))
 
@@ -54,6 +55,30 @@ def test_timeout_and_new_epoch_adoption():
     assert answer.choice == "awaiting-merge"
     assert f"delivery-pr/{_WIDGET}/1" in sink.markers()
     assert "awaiting-external-merge" in sink.markers()
+
+
+def test_each_parked_repository_uses_its_own_timeout_and_marker_clock():
+    visit = parked_visit((_WIDGET, _GADGET))
+    targets = (
+        replace(visit.resolution.targets[0], park_timeout_hours=1),
+        replace(visit.resolution.targets[1], landing_policy=LandingPolicy.PARK, park_timeout_hours=3),
+    )
+    visit = replace(visit, resolution=replace(visit.resolution, targets=targets))
+    old = marker(visit, age=2)
+    recent = replace(
+        _row(ArtifactKind.ASSET, f"delivery-pr/{_GADGET}/2", "{}"),
+        produced_at=visit.now - timedelta(hours=2),
+    )
+    forge = _forge(_WIDGET, _GADGET)
+    forge.repo(_WIDGET).changes[1] = change(_WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main")
+    forge.repo(_GADGET).changes[2] = change(_GADGET, 2, branch="feat/x", sha=_SUBMITTED, base="main")
+    answer, _ = _land(forge, replace(visit, markers=(old, recent)))
+    assert answer.escalation and answer.escalation.cause == EscalationCause.PARK_TIMEOUT
+    assert "acme/widget#1" in answer.escalation.detail
+
+    newer = replace(old, produced_at=visit.now - timedelta(minutes=30))
+    answer, _ = _land(forge, replace(visit, markers=(newer, recent)))
+    assert answer.choice == "awaiting-merge"
 
 
 def test_open_parked_change_excludes_later_repositories():
@@ -146,3 +171,48 @@ def test_unopened_park_waits_for_other_repositories_checks():
     answer, _ = _land(forge, visit)
     assert answer.choice == "pending"
     assert not any(repo == _WIDGET for _, repo, _ in forge.calls)
+
+
+def test_parked_library_blocks_prepared_consumer_until_the_person_merges():
+    visit = parked_visit((_WIDGET, _GADGET))
+    visit = replace(
+        visit,
+        resolution=replace(
+            visit.resolution,
+            targets=tuple(
+                replace(target, landing_position=float(index + 1))
+                for index, target in enumerate(visit.resolution.targets)
+            ),
+        ),
+    )
+    forge = _forge(_WIDGET, _GADGET)
+    answer, sink = _land(forge, visit)
+    assert answer.choice == "awaiting-merge"
+    assert sink.landings() == []
+    assert forge.named("merge") == []
+    assert [repo for repo, _ in forge.named("open_change")] == [_GADGET, _WIDGET]
+
+    merged = change(
+        _WIDGET, 1, branch="feat/x", sha=_SUBMITTED, base="main", state=ChangeState.MERGED, merged_revision="person"
+    )
+    forge.repo(_WIDGET).changes[1] = replace(merged, closed_at=visit.now)
+    current = replace(visit, markers=(marker(visit),))
+    answer, sink = _land(forge, current)
+    assert answer.choice == "landed"
+    assert [row.repo for row in sink.landings()] == [_WIDGET, _GADGET]
+    assert sink.landings()[0].revision == "person"
+
+
+def test_parked_consumer_opens_only_after_library_landing_is_durable():
+    visit = parked_visit((_GADGET, _WIDGET), park_index=1)
+    forge = _forge(_GADGET, _WIDGET)
+    answer, sink = _land(forge, visit)
+    assert answer.choice == "awaiting-merge"
+    assert [row.repo for row in sink.landings()] == [_GADGET]
+    assert [repo for repo, _ in forge.named("merge")] == [_GADGET]
+    assert [repo for repo, _ in forge.named("open_change")] == [_GADGET, _WIDGET]
+
+    held = _Sink(fence_landings=True)
+    blocked, _ = _land(_forge(_GADGET, _WIDGET), visit, held)
+    assert blocked.choice == "failure"
+    assert f"delivery-pr/{_WIDGET}/1" not in held.markers()
