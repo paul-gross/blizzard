@@ -10,6 +10,11 @@ Run `blizzard runner artifact list` first: an existing `plan` asset is yours to 
 (`blizzard runner artifact get plan --content`) — do not start over; a `plan-findings` asset names what to fix; neither
 means a first draft.
 
+## Read before planning
+
+Open the project's architecture guidance and verifiability matrix and, for the code the work touches, the documents they
+route it to, until you reach the rules themselves; plan from what you read, not memory.
+
 ## What the plan must contain
 
 - **The branch**, named at the top. Read triage's declaration with
@@ -24,6 +29,7 @@ means a first draft.
 - **Conformance to the project's architecture guidance.**
 - **Every surface the change owes** — code, agent-facing context, public documentation — each as planned work.
 - **Acceptance criteria** referencing those verification methods.
+- **What it was planned against** — the path of each project document read for it, per concern.
 
 Size the plan to the work: a small change earns a small plan, and only work needing ordered, independently verifiable
 increments earns numbered **phases**. If this workspace declares its own planning process, author through it.
