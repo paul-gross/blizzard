@@ -725,6 +725,13 @@ class IReadRunnerRegistry(Protocol):
         absent. One read per id batch, none for no ids."""
         ...
 
+    def runners_serving(self, project_id: str) -> frozenset[str]:
+        """The ids of every runner, retired ones included, some entry of whose served declaration resolved to
+        ``project_id``, read off the stored declaration alone — no lifecycle, pause, usage, or host read. Rows read
+        track the runners that ever served this project, not the fleet (``bzh:page-bounded-read``); retired ones are
+        kept because history names them."""
+        ...
+
     def is_retired(self, runner_id: str) -> bool:
         """Whether ``runner_id``'s newest lifecycle fact reads retired, read without
         reconstituting the registration. A runner with no

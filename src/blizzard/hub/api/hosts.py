@@ -171,7 +171,7 @@ def add_host(
 @router.get("/hosts", response_model=HostRegistryListResponse, dependencies=[Depends(require(Permission.FLEET_VIEW))])
 def list_hosts(services: Services, include_retired: Annotated[bool, Query()] = False) -> HostRegistryListResponse:
     """The host registry — every added host, oldest first; a retired host excluded by default, included and marked when
-    ``include_retired``."""
+    ``include_retired``. Not paged: a tenant has a handful of hosts, and callers read the whole roster."""
     hosts = services.hosts.list_hosts(include_retired=include_retired)
     usage = services.hosts.usage_of([h.host_id for h in hosts])
     return HostRegistryListResponse(hosts=[registry_view(services, h, usage[h.host_id]) for h in hosts])

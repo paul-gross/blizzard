@@ -11,17 +11,6 @@ from collections.abc import Awaitable, Callable
 
 from blizzard.foundation.events.broker import Event
 from blizzard.foundation.hub_event_types import HubEventType
-from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
-
-
-def runners_serving(registry: IReadRunnerRegistry, project: ProjectId) -> frozenset[str]:
-    """The ids of the tenant's runners, retired ones included, whose served declaration resolves to ``project`` —
-    one registry read."""
-    return frozenset(
-        runner.runner_id for runner in registry.list_runners(include_retired=True) if runner.serves(project)
-    )
-
 
 #: The ``runner-changed`` kinds that can change which projects a runner serves: an add names them, a registration
 #: declares them.

@@ -1762,7 +1762,7 @@ export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options
  * List Hosts
  *
  * The host registry — every added host, oldest first; a retired host excluded by default, included and marked when
- * ``include_retired``.
+ * ``include_retired``. Not paged: a tenant has a handful of hosts, and callers read the whole roster.
  */
 export const listHostsApiHostsGet = <ThrowOnError extends boolean = false>(options?: Options<ListHostsApiHostsGetData, ThrowOnError>): RequestResult<ListHostsApiHostsGetResponses, ListHostsApiHostsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListHostsApiHostsGetResponses, ListHostsApiHostsGetErrors, ThrowOnError>({ url: '/api/hosts', ...options });
 
@@ -2557,7 +2557,8 @@ export const routineSweepsApiRoutinesRoutineIdSweepsGet = <ThrowOnError extends 
  * List Runners
  *
  * The fleet registry — every added runner, oldest first, with its connection condition and
- * paused state; a retired runner excluded by default, included and marked when ``include_retired``.
+ * paused state; a retired runner excluded by default, included and marked when ``include_retired``. Not paged: a
+ * tenant has tens of runners, and callers read the whole roster.
  */
 export const listRunnersApiRunnersGet = <ThrowOnError extends boolean = false>(options?: Options<ListRunnersApiRunnersGetData, ThrowOnError>): RequestResult<ListRunnersApiRunnersGetResponses, ListRunnersApiRunnersGetErrors, ThrowOnError> => (options?.client ?? client).get<ListRunnersApiRunnersGetResponses, ListRunnersApiRunnersGetErrors, ThrowOnError>({ url: '/api/runners', ...options });
 

@@ -28821,7 +28821,7 @@
     },
     "/api/hosts": {
       "get": {
-        "description": "The host registry \u2014 every added host, oldest first; a retired host excluded by default, included and marked when\n``include_retired``.",
+        "description": "The host registry \u2014 every added host, oldest first; a retired host excluded by default, included and marked when\n``include_retired``. Not paged: a tenant has a handful of hosts, and callers read the whole roster.",
         "operationId": "list_hosts_api_hosts_get",
         "parameters": [
           {
@@ -33039,7 +33039,7 @@
     },
     "/api/runners": {
       "get": {
-        "description": "The fleet registry \u2014 every added runner, oldest first, with its connection condition and\npaused state; a retired runner excluded by default, included and marked when ``include_retired``.",
+        "description": "The fleet registry \u2014 every added runner, oldest first, with its connection condition and\npaused state; a retired runner excluded by default, included and marked when ``include_retired``. Not paged: a\ntenant has tens of runners, and callers read the whole roster.",
         "operationId": "list_runners_api_runners_get",
         "parameters": [
           {

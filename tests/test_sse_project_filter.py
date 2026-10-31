@@ -36,12 +36,9 @@ class _Registry:
     served: dict[str, set[str]] = field(default_factory=dict)
     reads: int = 0
 
-    def list_runners(self, *, include_retired: bool = False) -> list[SimpleNamespace]:
+    def runners_serving(self, project: str) -> frozenset[str]:
         self.reads += 1
-        return [
-            SimpleNamespace(runner_id=runner_id, serves=lambda project, served=served: project in served)
-            for runner_id, served in self.served.items()
-        ]
+        return frozenset(runner_id for runner_id, served in self.served.items() if project in served)
 
 
 class _ConnectedRequest:

@@ -100,6 +100,20 @@ class RunnerRegistryStore:
             ).all()
             return self._hydrate(conn, rows, include_retired=include_retired)
 
+    def runners_serving(self, project_id: str) -> frozenset[str]:
+        registrations = s.runner_registrations
+        with self._store.read("runners_serving") as conn:
+            rows = conn.execute(
+                self._store.select(registrations, registrations.c.runner_id, registrations.c.projects).where(
+                    registrations.c.projects.contains(json.dumps(project_id), autoescape=True)
+                )
+            ).all()
+        return frozenset(
+            row.runner_id
+            for row in rows
+            if any(entry.project_id == project_id for entry in _served_entries(row.projects))
+        )
+
     def get_runners(self, runner_ids: Iterable[str]) -> dict[str, RunnerRegistration]:
         ids = list(dict.fromkeys(runner_ids))
         if not ids:
@@ -690,7 +704,6 @@ class RunnerRegistryStore:
         gates: list[str] = json.loads(row.gates) if row.gates else []
         binding_entries: list[dict[str, Any]] | None = json.loads(row.bindings) if row.bindings is not None else None
         declining_entries: list[dict[str, Any]] = json.loads(row.declining) if row.declining else []
-        served_entries: list[dict[str, Any]] = json.loads(row.projects) if row.projects else []
         capabilities = tuple(
             RunnerCapability(
                 harness_id=c["harness_id"],
@@ -756,8 +769,14 @@ class RunnerRegistryStore:
             reported_version=row.reported_version,
             version_refusal=None if row.version_refusal is None else VersionRefusalReason(row.version_refusal),
             version_judged_at=row.version_judged_at,
-            served=tuple(ServedEntry(entry=e["entry"], project_id=e.get("project_id")) for e in served_entries),
+            served=_served_entries(row.projects),
         )
+
+
+def _served_entries(stored: str | None) -> tuple[ServedEntry, ...]:
+    """The served declaration decoded from its stored column — ``_served_json``'s inverse; ``NULL`` serves nothing."""
+    entries: list[dict[str, Any]] = json.loads(stored) if stored else []
+    return tuple(ServedEntry(entry=e["entry"], project_id=e.get("project_id")) for e in entries)
 
 
 def _served_json(served: tuple[ServedEntry, ...]) -> str:

@@ -34,7 +34,7 @@ from blizzard.hub.domain.chunk.model import ActivityEntry, ActivityFeed, EventFe
 from blizzard.hub.domain.chunk.ports.events import FeedLens
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.events.project_lens import ProjectLens, runners_serving
+from blizzard.hub.events.project_lens import ProjectLens
 from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
 
@@ -80,14 +80,14 @@ async def _stream_lens(services: TenantServices, project: ProjectId) -> ProjectL
     """The stream's lens for ``project``, its served-runner set read off the event loop, now and on each refresh."""
 
     async def serving() -> frozenset[str]:
-        return await run_in_threadpool(runners_serving, services.registry, project)
+        return await run_in_threadpool(services.registry.runners_serving, project)
 
     return ProjectLens(project, await serving(), serving)
 
 
 def _feed_lens(services: TenantServices, project: ProjectId | None) -> FeedLens | None:
     """The lens ``?project=`` puts on a feed — ``None`` when the feed reads the whole tenant."""
-    return None if project is None else FeedLens(project, runners_serving(services.registry, project))
+    return None if project is None else FeedLens(project, services.registry.runners_serving(project))
 
 
 def _runner_names(services: TenantServices, runner_ids: Iterable[str | None]) -> dict[str, str]:
