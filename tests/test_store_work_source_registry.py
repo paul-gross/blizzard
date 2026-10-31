@@ -266,6 +266,35 @@ def test_a_retired_source_whose_secret_is_retired_reads_as_absent_not_as_an_erro
     assert _sources(services).label(WorkRef(source=source_id, ref="1")) == "widget#1"
 
 
+def test_board_reads_a_retired_source_without_its_secret_and_renames_on_the_next_request(
+    hub: tuple[TestClient, HubServices], forge: tuple[TestClient, str]
+) -> None:
+    client, services = hub
+    source_id = _create(client, services, forge[1])
+    minted = _ingest(client, "widget:1")
+    assert minted.status_code == 201, minted.text
+    chunk_id = minted.json()["chunk_id"]
+    before = client.get(f"/api/chunks/{chunk_id}").json()["work_refs"][0]
+    assert before["label"] == "widget#1"
+    _rename(services, source_id, "widget-core")
+    after = client.get(f"/api/chunks/{chunk_id}").json()["work_refs"][0]
+    assert after["label"] == "widget-core#1"
+    assert client.post(f"/api/work-sources/{source_id}/retire").status_code == 200
+    assert client.post("/api/secrets/gh/retire").status_code == 200
+    assert _sources(services).get(source_id) is None
+
+    def labels() -> None:
+        page = client.get("/api/chunks")
+        detail = client.get(f"/api/chunks/{chunk_id}")
+        assert page.status_code == detail.status_code == 200
+        (row,) = page.json()["chunks"]
+        assert row["work_refs"] == detail.json()["work_refs"]
+        assert row["work_refs"][0]["label"] == f"{_sources(services).source_label(source_id)}#1"
+        assert row["work_refs"][0]["web_url"] is None
+
+    labels()
+
+
 # --------------------------------------------------------------------------- #
 # Identity: refs hold the id, tokens may name any handle, labels follow a rename.
 

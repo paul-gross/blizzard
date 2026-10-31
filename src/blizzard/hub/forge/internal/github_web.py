@@ -2,9 +2,11 @@
 
 from dataclasses import dataclass
 
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.config.repositories import RepositoryFields
 
 
+@adapter_model
 @dataclass(frozen=True)
 class GitHubWebLinks:
     web_origin: str

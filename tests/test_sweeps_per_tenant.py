@@ -206,7 +206,10 @@ class _WorkRefs:
         return self.rows
 
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
-        return {row.tenant: WorkRefsSignature(marks=()) for row in self.rows}
+        counts: dict[TenantId, int] = {}
+        for row in self.rows:
+            counts[row.tenant] = counts.get(row.tenant, 0) + 1
+        return {tenant: WorkRefsSignature(marks=(("refs", count, count),)) for tenant, count in counts.items()}
 
     def work_source_changes_signature(self) -> dict[TenantId, int]:
         return self.changes
@@ -268,11 +271,12 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
         opened.append(tenant)
         return cast(TenantAnnotation, units[tenant])
 
+    clock = FixedClock(_NOW)
     reconciler = AnnotationReconciler(
         corpus=corpus,
         tenants=lambda: tenants,
         tenant=open_tenant,
-        clock=FixedClock(_NOW),
+        clock=clock,
         full_pass_floor=timedelta(minutes=10),
     )
     reconciler.sweep()
@@ -287,6 +291,17 @@ def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_o
     assert opened == [_B]
     assert len(units[_B].reconciled) == 2
     assert len(units[_A].reconciled) == 1
+
+    opened.clear()
+    corpus.rows.append(_work_ref(_A, "ch_new"))
+    reconciler.sweep()
+    assert opened == [_A]
+    assert units[_A].reconciled[-1] == (_A, ["forge"], [f"ch_{_A}", "ch_new"])
+
+    opened.clear()
+    clock.advance(timedelta(minutes=10))
+    reconciler.sweep()
+    assert opened == sorted(tenants)
 
 
 @pytest.mark.unit

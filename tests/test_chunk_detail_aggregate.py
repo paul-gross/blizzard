@@ -6,6 +6,7 @@ build->gate scenario and asserts every piece is present."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -180,6 +181,22 @@ def test_a_tracker_sourced_chunk_links_its_branch_through_the_repository_its_com
     chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT], pointer={"source": "tracker", "ref": "PROJ-7"})
 
     assert _branch_urls(hub, chunk_id) == {"acme/widget": "https://ghe.example/acme/widget/tree/feature/widget"}
+
+
+def test_a_repository_on_an_unhandled_forge_has_no_github_shaped_branch_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _pass_build(hub, [_BUILD_ARTIFACT])
+    assert _branch_urls(hub, chunk_id) == {"acme/widget": "http://forge.fixture/acme/widget/tree/feature/widget"}
+    forges = hub.services.forge_records
+    get_many = forges.get_many
+
+    def other_kind(ids):  # type: ignore[no-untyped-def]
+        return {key: replace(forge, kind="other") for key, forge in get_many(ids).items()}
+
+    monkeypatch.setattr(forges, "get_many", other_kind)
+    assert _branch_urls(hub, chunk_id) == {"acme/widget": None}
 
 
 def test_a_commit_in_a_repository_its_project_does_not_link_or_no_record_names_has_no_branch_link(
