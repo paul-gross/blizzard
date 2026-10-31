@@ -22,17 +22,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import ProjectBinding, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.tools.invariants import hub_invariants
+from tests.e2e.flow_support import _graph, flow_world, set_lever, ticking_runner
 from tests.e2e.test_flow_turns_e2e import (
     _WEB_REPO,
     _WEB_REPO_NAME,
     _await_landed,
     _detail,
-    _graph,
     _pending,
-    _runner,
-    _set_lever,
     _store,
-    _world,
 )
 from tests.fleet_launchers import OWNER, REPO, run_forge, run_hub, runner_config
 from tests.fleet_world import REPO_NAME, basic_workspace, world_repos
@@ -83,7 +80,7 @@ def _add_lib(hub: httpx2.Client, forge: httpx2.Client, forge_port: int) -> Path:
     return Path(made.json()["origin"].removeprefix("file://"))
 
 
-def _config(
+def flow_runner_config(
     tmp_path: Path,
     workspace: Path,
     bin_dir: Path,
@@ -164,12 +161,12 @@ def _assert_landing_record_holds(hub_dir: Path) -> None:
 
 def _release(forge: httpx2.Client, *repos: str) -> None:
     for repo in repos:
-        _set_lever(forge, repo, armed=False)
+        set_lever(forge, repo, armed=False)
 
 
 def test_a_library_ranked_first_lands_before_its_consumer(tmp_path: Path) -> None:
     """Ranked ahead of ``toy-api`` — against slug order — ``toy-web`` lands first."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
 
@@ -177,7 +174,7 @@ def test_a_library_ranked_first_lands_before_its_consumer(tmp_path: Path) -> Non
         _add_web(hub, forge_port)
         _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
         assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
-        with _runner(_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
             chunk = _chunk(hub, forge, "LIBRARY.md", _BOTH)
             tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
         _await_landed(hub, chunk)
@@ -192,7 +189,7 @@ def test_a_library_ranked_first_lands_before_its_consumer(tmp_path: Path) -> Non
 
 def test_a_second_project_lands_the_same_repositories_in_its_own_order(tmp_path: Path) -> None:
     """Two projects linking both repositories in reverse orders each land their own chunk in their own order."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
     forge_api = f"http://127.0.0.1:{forge_port}"
@@ -209,8 +206,8 @@ def test_a_second_project_lands_the_same_repositories_in_its_own_order(tmp_path:
         _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
         _order(hub, _SECOND_PROJECT, REPO_NAME, _WEB_REPO_NAME)
 
-        config = _config(tmp_path, workspace, bin_dir, hub_port, projects=("default", _SECOND_PROJECT))
-        with _runner(config) as tick_until:
+        config = flow_runner_config(tmp_path, workspace, bin_dir, hub_port, projects=("default", _SECOND_PROJECT))
+        with ticking_runner(config) as tick_until:
             first = _chunk(hub, forge, "FIRST-PROJECT.md", _BOTH)
             second = _chunk(hub, forge, "SECOND-PROJECT.md", _BOTH, source=_WEB_REPO_NAME)
             assert _detail(hub, second)["project_id"] == created.json()["project_id"]
@@ -225,7 +222,7 @@ def test_a_second_project_lands_the_same_repositories_in_its_own_order(tmp_path:
 
 def test_one_ranked_repository_lands_before_two_unranked_in_slug_order(tmp_path: Path) -> None:
     """With only ``toy-web`` ranked, it lands first, then ``toy-api`` and ``toy-lib`` by slug."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
     three = (REPO_NAME, _LIB_REPO_NAME, _WEB_REPO_NAME)
@@ -237,7 +234,9 @@ def test_one_ranked_repository_lands_before_two_unranked_in_slug_order(tmp_path:
         assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, None), (_LIB_REPO_NAME, None)]
 
         extra = (WorkspaceRepo(_LIB_REPO_NAME, f"file://{lib_origin}"),)
-        with _runner(_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)) as tick_until:
+        with ticking_runner(
+            flow_runner_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)
+        ) as tick_until:
             chunk = _chunk(hub, forge, "RANKED.md", three)
             tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
         _await_landed(hub, chunk)
@@ -249,7 +248,7 @@ def test_one_ranked_repository_lands_before_two_unranked_in_slug_order(tmp_path:
 def test_a_relinked_repository_keeps_its_position(tmp_path: Path) -> None:
     """Unlinking a ranked repository drops it from the order; relinking it restores its position, and a chunk lands
     in that order."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
 
@@ -263,7 +262,7 @@ def test_a_relinked_repository_keeps_its_position(tmp_path: Path) -> None:
         assert hub.put(f"/api/projects/default/repository-links/{_WEB_REPO_NAME}").status_code == 200
         assert _links(hub, "default") == [(_WEB_REPO_NAME, 1.0), (REPO_NAME, 2.0)]
 
-        with _runner(_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
             chunk = _chunk(hub, forge, "RELINKED.md", _BOTH)
             tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
         _await_landed(hub, chunk)
@@ -275,7 +274,7 @@ def test_a_relinked_repository_keeps_its_position(tmp_path: Path) -> None:
 def test_an_exhausted_gap_is_renumbered_and_the_order_lands(tmp_path: Path) -> None:
     """Moving two repositories in turn just after a third halves the gap until no midpoint is left; the next move
     renumbers the order ``1.0, 2.0, …`` and takes the midpoint, and a chunk lands in the order that leaves."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
     three = (REPO_NAME, _LIB_REPO_NAME, _WEB_REPO_NAME)
@@ -301,7 +300,9 @@ def test_an_exhausted_gap_is_renumbered_and_the_order_lands(tmp_path: Path) -> N
         expected = [slug for slug, _ in renumbered]
 
         extra = (WorkspaceRepo(_LIB_REPO_NAME, f"file://{lib_origin}"),)
-        with _runner(_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)) as tick_until:
+        with ticking_runner(
+            flow_runner_config(tmp_path, workspace, bin_dir, hub_port, extra_repos=extra)
+        ) as tick_until:
             chunk = _chunk(hub, forge, "RENUMBERED.md", three)
             tick_until(lambda: _detail(hub, chunk)["status"] in {"done", "needs_human", "stopped"})
         _await_landed(hub, chunk)
@@ -314,7 +315,7 @@ def test_a_reorder_while_a_chunk_waits_behind_another_reaches_only_later_chunks(
     """Two chunks on both repositories wait behind the checks, the second behind the first; a reorder then reaches
     neither — both land in the order their first turns took — while a chunk whose first turn follows it lands in the
     new order."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
 
@@ -322,9 +323,9 @@ def test_a_reorder_while_a_chunk_waits_behind_another_reaches_only_later_chunks(
         _add_web(hub, forge_port)
         _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
         for repo in (REPO, _WEB_REPO):
-            _set_lever(forge, repo, armed=True)
-        config = _config(tmp_path, workspace, bin_dir, hub_port)
-        with _runner(config) as tick_until:
+            set_lever(forge, repo, armed=True)
+        config = flow_runner_config(tmp_path, workspace, bin_dir, hub_port)
+        with ticking_runner(config) as tick_until:
             ahead = _chunk(hub, forge, "AHEAD.md", _BOTH)
             tick_until(_pending(hub, ahead))
             behind = _chunk(hub, forge, "BEHIND.md", _BOTH)
@@ -337,7 +338,7 @@ def test_a_reorder_while_a_chunk_waits_behind_another_reaches_only_later_chunks(
         assert _landed_order(hub_dir, ahead) == [_WEB_REPO_NAME, REPO_NAME]
         assert _landed_order(hub_dir, behind) == [_WEB_REPO_NAME, REPO_NAME]
 
-        with _runner(config) as tick_until:
+        with ticking_runner(config) as tick_until:
             later = _chunk(hub, forge, "LATER.md", _BOTH)
             tick_until(lambda: _detail(hub, later)["status"] in {"done", "needs_human", "stopped"})
         _await_landed(hub, later)
@@ -348,7 +349,7 @@ def test_a_reorder_while_a_chunk_waits_behind_another_reaches_only_later_chunks(
 def test_an_interrupted_turn_keeps_the_terms_its_first_turn_took(tmp_path: Path) -> None:
     """A chunk waiting behind the checks after its first turn is reordered under; the hub restarts with the checks
     green, and the chunk lands in the order it first took."""
-    bin_dir, workspace, origins = _world(tmp_path)
+    bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
 
@@ -357,8 +358,8 @@ def test_an_interrupted_turn_keeps_the_terms_its_first_turn_took(tmp_path: Path)
             _add_web(hub, forge_port)
             _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
             for repo in (REPO, _WEB_REPO):
-                _set_lever(forge, repo, armed=True)
-            with _runner(_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+                set_lever(forge, repo, armed=True)
+            with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
                 chunk = _chunk(hub, forge, "INTERRUPTED.md", _BOTH)
                 tick_until(_pending(hub, chunk))
             taken = _terms(hub_dir, chunk)
@@ -382,7 +383,7 @@ def _written(applied: dict[str, Any]) -> list[tuple[str, str, str]]:
 def test_an_exported_document_applies_back_writing_nothing(tmp_path: Path) -> None:
     """A hub with a ranked and an unranked repository exports its configuration; applying the document back writes
     no record and no position."""
-    bin_dir, _, origins = _world(tmp_path)
+    bin_dir, _, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
     forge_port, hub_port = free_port(), free_port()
 
