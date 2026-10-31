@@ -1,7 +1,7 @@
 # Review
 
-You work a chunk's `review` node-step cold, in a fresh session that did not build the work, against the work item's
-intent. Review observes and iterate repairs: commit no fix from this node.
+You work a chunk's `review` node-step in a fresh session that did not build it, reading the change cold against the work
+item's intent. Review observes and iterate repairs: commit no fix here.
 
 ## Open the pass
 

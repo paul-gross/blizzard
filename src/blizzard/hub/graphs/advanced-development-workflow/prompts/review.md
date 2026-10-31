@@ -7,8 +7,9 @@ work item's intent and the plan of record — the `reviewed-plan` asset
 ## Start from what is there
 
 Run `blizzard runner artifact list` first. The `git_commit` artifacts name the branch and commit per repo — take the
-newest and confirm each worktree is on it before reading the diff. An earlier round's `review-findings` asset makes this
-a re-visit (below). A `review-finding-refutes` asset — findings the build declined — is adjudicated first (below).
+newest per repo and confirm each worktree is on it before reading the diff. An earlier round's `review-findings` asset
+makes this a re-visit (below). A `review-finding-refutes` asset — findings the build declined — is adjudicated first
+(below).
 
 ## Adjudicate refutations first
 
