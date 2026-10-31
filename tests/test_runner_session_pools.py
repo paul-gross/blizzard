@@ -853,6 +853,56 @@ def test_opencode_context_rotates_or_resumes_pool_head(tmp_path, bound, resumed)
 
 
 @pytest.mark.component
+def test_opencode_rotation_reads_growth_after_resume_boundary(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
+
+    class Exporter:
+        tokens = 50
+
+        def export(self, session_id: str) -> str:
+            return json.dumps(
+                {
+                    "info": {"id": session_id},
+                    "messages": [
+                        {
+                            "info": {
+                                "id": "msg",
+                                "sessionID": session_id,
+                                "role": "assistant",
+                                "tokens": {
+                                    "input": self.tokens,
+                                    "output": 1,
+                                    "reasoning": 0,
+                                    "cache": {"read": 0, "write": 0},
+                                },
+                            },
+                            "parts": [],
+                        }
+                    ],
+                }
+            )
+
+    exporter = Exporter()
+    source = OpenCodeTranscriptSource(exporter, TranscriptErrorFactory(get_logger("test")))
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t", pgid=9), verdict="pass"
+    )
+    harness.resolved_model = "sonnet"
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    resolver = SessionResolver(leases=store, harnesses=registry, transcripts_wired=True)
+    node = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=100)).node
+
+    assert source.tail_position(head, spawn_cwd=None) is not None
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session == SessionReference(OPENCODE_HARNESS_ID, head)
+    assert source.tail_position(head, spawn_cwd=None) is not None
+    exporter.tokens = 200
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session is None
+    exporter.tokens = 50
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session == SessionReference(OPENCODE_HARNESS_ID, head)
+
+
+@pytest.mark.component
 def test_the_context_bound_reads_the_transcript_not_the_usage_facts(tmp_path):  # type: ignore[no-untyped-def]
     """A usage fact carries one invocation's cumulative tokens, far above the context the
     session holds; the bound reads the transcript's context size, so a head whose usage

@@ -277,7 +277,7 @@ class OpenCodeTranscriptSource:
     def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         """Input plus cache reads and writes of the newest completed, non-summary root turn."""
         del spawn_cwd
-        export = self._export(session_id, recovered=True)
+        export = self._export(session_id, recovered=True, fresh=True)
         if export is None:
             return None
         for message in reversed(export.messages):
