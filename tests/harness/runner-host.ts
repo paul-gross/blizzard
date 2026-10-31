@@ -666,7 +666,7 @@ export function runnerHostBuilder(ctx: BuilderContext): RunnerHostBuilder {
         },
         rotateTranscripts: () => fs.rmSync(transcriptsRoot(), { recursive: true, force: true }),
         cli: (args) => runCommand(runner, args, { env: { ...hostEnv(), BZ_RUNNER_DIR: dir }, cwd: root }),
-        shell: (command, input) => runCommand('sh', ['-c', command], { env: hostEnv(), cwd: root, input }),
+        shell: (command, input) => runCommand('sh', ['-c', command], { env: { ...hostEnv(), BZ_RUNNER_DIR: dir }, cwd: root, input }),
         prepareStopped(layout) {
           if (daemon !== undefined && isAlive(daemon.pid)) throw new Error('stop the host before changing its documented files');
           const file = readHostFile(dir);

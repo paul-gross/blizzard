@@ -46,7 +46,7 @@ export function assertConforms(spans: readonly ReceivedSpan[]): void {
     for (const [key, value] of Object.entries(bag)) {
       const entry = dictionary.attributes.find((item) => item.name === key);
       assert.ok(entry, `${where}: attribute ${key} is not in the dictionary`);
-      assert.equal(types?.[key] ?? typeOf(value), entry.type, `${where}: ${key} has wrong type`);
+      assert.equal(types?.[key] ?? typeOf(value), entry.type, `${where}: ${key} has wrong type (${JSON.stringify(value)})`);
       assert.ok(entry.on.includes(role), `${where}: ${key} is not published for ${role}`);
     }
     for (const entry of dictionary.attributes) {

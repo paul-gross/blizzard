@@ -35,6 +35,7 @@ export function runCommand(
   args: string[],
   options: { env: NodeJS.ProcessEnv; cwd?: string; timeoutMs?: number; prompt?: Prompt; input?: string },
 ): Promise<CliResult> {
+  if (options.prompt !== undefined && options.input !== undefined) throw new Error('prompt and input cannot both own stdin');
   const timeoutMs = options.timeoutMs ?? CLI_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     // Detached, so the kill reaches the whole process group and not only a wrapper shell.
