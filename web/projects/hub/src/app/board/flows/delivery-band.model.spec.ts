@@ -93,8 +93,8 @@ describe('deliveryLanes', () => {
   });
 
   it('reads a state this build does not know raw, in the idle tone', () => {
-    const [lane] = deliveryLanes([flow({ line: [place('ch_x', 1, { state: 'awaiting-merge' as FlowPlaceView['state'] })] })], NO_ITEMS, NOW);
-    expect(lane.line[0]).toEqual(expect.objectContaining({ stateLabel: 'awaiting-merge', tone: 'idle' }));
+    const [lane] = deliveryLanes([flow({ line: [place('ch_x', 1, { state: 'future-state' as FlowPlaceView['state'] })] })], NO_ITEMS, NOW);
+    expect(lane.line[0]).toEqual(expect.objectContaining({ stateLabel: 'future-state', tone: 'idle' }));
   });
 
   it('titles a chunk from the board\'s work items once they are read, and leaves it to its short id until then', () => {

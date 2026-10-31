@@ -6545,7 +6545,7 @@ export type PendingView = {
     /**
      * Kind
      */
-    kind?: string;
+    kind: string;
     /**
      * Next Poll At
      */
@@ -6557,7 +6557,7 @@ export type PendingView = {
     /**
      * Since
      */
-    since?: string | null;
+    since: string | null;
 };
 
 /**

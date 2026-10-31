@@ -17,7 +17,6 @@ from blizzard.hub.delivery.actions.landing.repo import (
     AwaitingMerge,
     Conflict,
     Failure,
-    Held,
     Inherited,
     Landed,
     LandingRun,
@@ -183,7 +182,7 @@ def test_a_refusal_after_a_landing_answers_pending_and_leaves_the_landed_reposit
     assert "merge of acme/app#1 did not land" in answer.log
 
 
-@pytest.mark.parametrize("parked", [Held(), AwaitingMerge(7)], ids=["held", "awaiting-merge"])
-def test_a_parked_state_is_refused_rather_than_answered(parked: RepoState) -> None:
-    with pytest.raises(ValueError, match="parks"):
-        _fold([("a", parked)])
+def test_an_open_park_waits_without_landing_a_prepared_repository() -> None:
+    answer, sink = _fold([("a", AwaitingMerge(7)), ("b", _ready("rb"))])
+    assert answer.choice == "awaiting-merge"
+    assert sink.landed() == []

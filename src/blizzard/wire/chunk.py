@@ -410,7 +410,7 @@ class HubAdvanceResponse(WireModel):
     detail: str = ""
 
 
-class PendingView(BaseModel):
+class PendingView(WireModel):
     """A hub node's in-progress poll — whether a chunk parked at a hub node is about to run its
     first attempt or is already mid-poll, and when the next is due. Never itself a status."""
 
