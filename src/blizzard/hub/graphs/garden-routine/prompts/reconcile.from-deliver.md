@@ -1,11 +1,11 @@
 # Reconcile — after a rejected delivery
 
-Delivery rejected your artifact on shape validation and wrote nothing. The failure is attached — read it with
+Delivery rejected your delta on validation and wrote nothing. The failure is attached — read it with
 `blizzard runner artifact get garden-delivery-failure --content`.
 
 This is a structural problem, not a judgment one: a malformed entry, a missing required field, a `fin_` id that is not
-live on this routine, or a commit reference that does not resolve. Your findings are not in question — the shape they
-were submitted in is.
+live on this routine, an add-op ref repeated, or a commit reference that does not resolve. Your findings are not in
+question — the shape they were submitted in is.
 
 Re-read the delta shape with `blizzard runner artifact get --scope system garden/finding-format --content` — a
 `FindingDelta` is `scope`, `revisions`, `measurement`, and `findings`, each entry an `add`/`observed`/`gone` op per the
@@ -14,6 +14,7 @@ names against that shape and resubmit the delta with `blizzard runner artifact c
 about what you concluded while you are in there; correcting a format error is not an invitation to revisit the matching.
 
 **Loop bound.** Retry once, then escalate. Before resubmitting, read `blizzard runner chunk history`. You are here
-because of an `invalid` transition out of `deliver`; that one does not count. If an *earlier* `invalid` transition out
-of `deliver` precedes it for this chunk, this is the second rejection: do not resubmit. Record its detail as a finding
-of its own and escalate with `blizzard runner ask` rather than let the cycle repeat.
+because of an `invalid` transition out of `deliver`; that one does not count. Count only `invalid` — an
+`invalid-proposals` transition faults the docket, not your delta. If an *earlier* `invalid` transition out of `deliver`
+precedes it for this chunk, this is the second rejection: do not resubmit. Record its detail as a finding of its own and
+escalate with `blizzard runner ask` rather than let the cycle repeat.

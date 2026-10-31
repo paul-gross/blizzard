@@ -30,6 +30,10 @@ Conventions for the `prompts/` tree are owned by the
   survives, some rationale does not.
 - **`survey` fans out before it bails.** An over-large sweep is split across at most 10 subagent batches before the
   survey may choose `excessive`.
+- **`deliver` authors an `invalid-proposals` edge.** The plan's single `invalid` answer sent every rejection to
+  `reconcile`, which cannot repair a docket. A delta fault still answers `invalid` and routes to `reconcile`; a docket
+  fault, or a citation spanning both artifacts, answers `invalid-proposals` and routes to `propose`
+  (`propose.from-deliver-invalid.md`). Each addendum's loop bound counts rejections of its own artifact only.
 - **`deliver` authors a `failure` edge.** The plan left the delivery's own `failure` answer (a record the chunk has
   moved past, a pass that raised) with no edge to route through, which deadlocks the chunk per
   `bzh:hub-node-outcome-protocol`. Routes to `propose`, which re-affirms the standing docket and retries; bounded by a

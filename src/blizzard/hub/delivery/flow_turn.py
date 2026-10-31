@@ -523,7 +523,7 @@ class TurnRunner:
                         chunk=chunk, node=node, epoch=epoch, run=run, delta_names=delta, proposal_names=proposals
                     )
                 except GardenDeliveryRejected as exc:
-                    return EffectResult(EffectStatus.INVALID, str(exc))
+                    return EffectResult(EffectStatus.INVALID, str(exc), refused=exc.fault.value)
                 if delivered is DeliveryOutcome.FENCED:
                     return EffectResult(EffectStatus.FENCED, _FENCED_DETAIL)
                 return EffectResult(EffectStatus.RECORDED)

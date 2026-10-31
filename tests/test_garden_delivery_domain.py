@@ -41,6 +41,7 @@ from blizzard.hub.domain.garden.formats import (
     ProposalCandidate,
 )
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from tests.garden_artifacts import add_op, candidate, wire_json
 
 _PROJECT = "proj_test"
@@ -165,8 +166,9 @@ def test_parse_delta_rejects_malformed_json() -> None:
 
 
 def test_parse_delta_rejects_a_shape_mismatch() -> None:
-    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")):
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("survey.json")) as exc:
         _FORMATS.finding_delta("survey.json", '{"revisions": {}}')  # missing required `scope`
+    assert exc.value.fault is GardenDeliveryFault.DELTA
 
 
 @pytest.mark.parametrize("field", ["class", "locus", "summary"])
@@ -194,8 +196,9 @@ def test_parse_proposals_rejects_malformed_json() -> None:
 def test_parse_proposals_rejects_a_shape_mismatch() -> None:
     # `findings` must be a list — a bare string fails the wire shape.
     body = '[{"ref": "p1", "class": "remediate", "title": "t", "body": "b", "findings": "not-a-list"}]'
-    with pytest.raises(GardenDeliveryRejected, match=re.escape("proposals.json")):
+    with pytest.raises(GardenDeliveryRejected, match=re.escape("proposals.json")) as exc:
         _FORMATS.proposal_candidates("proposals.json", body)
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
 
 def test_parse_proposals_accepts_well_formed_candidates() -> None:
@@ -220,8 +223,9 @@ def test_check_delta_rejects_a_finding_id_not_live_on_this_routine() -> None:
     unknown = _fin()
     delta = DeliveredDelta(scope="runner", findings=[FindingObservedOp(id=unknown)])
 
-    with pytest.raises(GardenDeliveryRejected, match="not live on routine"):
+    with pytest.raises(GardenDeliveryRejected, match="not live on routine") as exc:
         _check(delta, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.DELTA
 
 
 def test_check_delta_rejects_a_delta_whose_scope_differs_from_the_runs_declared_scope() -> None:
@@ -247,8 +251,9 @@ def test_check_delta_rejects_a_transformation_outside_the_declared_scope() -> No
 def test_check_proposal_rejects_a_finding_not_live_on_this_routine() -> None:
     proposal = _proposal(findings=[_fin()])
 
-    with pytest.raises(GardenDeliveryRejected, match="not live on routine"):
+    with pytest.raises(GardenDeliveryRejected, match="not live on routine") as exc:
         check_proposal(proposal, run=_RUN, live_findings=_live())
+    assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
 
 def test_check_proposal_accepts_a_live_finding() -> None:

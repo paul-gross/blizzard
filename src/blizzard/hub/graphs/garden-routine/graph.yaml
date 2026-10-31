@@ -114,7 +114,9 @@ nodes:
     executor: hub
     action: garden-deliver
     with: {delta: delta, proposals: docket}
-    # The action validates each artifact's shape and nothing else: that it parses,
+    # The action answers `invalid` for a delta fault and `invalid-proposals` for a docket fault,
+    # so each goes back to the node that produces the artifact at fault. It validates each
+    # artifact's shape and nothing else: that it parses,
     # that every finding carries the fields the format requires, that every
     # transformation's id is well-formed and live on this routine, that a proposal's
     # own citation is either such a live fin_ id or a ref this delivery's own add op
@@ -129,9 +131,13 @@ nodes:
           description: The delta and proposals are durable; findings and proposals are attached to the routine.
           to: done
         invalid:
-          description: An artifact failed shape validation — malformed entry, an unknown finding id or ref, a ref or citation repeated where it must be unique, or a commit that does not exist. Nothing was written.
+          description: The delta failed validation — a malformed entry, an unknown finding id, an add-op ref repeated, or a commit that does not exist. Nothing was written.
           to: reconcile
           prompt_addendum: ./prompts/reconcile.from-deliver.md
+        invalid-proposals:
+          description: The docket failed validation — a malformed entry, a citation of an unknown or non-live finding id or of a ref no add op carries, a proposal ref or citation repeated, or a citation of a finding in another project. A citation that spans both artifacts counts here. Nothing was written.
+          to: propose
+          prompt_addendum: ./prompts/propose.from-deliver-invalid.md
         failure:
           description: The garden-deliver action answered failure rather than a clean outcome — the record was refused because the chunk had moved past this visit, or the pass itself raised. The delta and docket stand as drafted; routed to propose to re-affirm them and retry, the same recovery point the sibling lanes return to on this outcome.
           to: propose

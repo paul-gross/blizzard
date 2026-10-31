@@ -105,6 +105,16 @@ def test_an_answer_the_node_authors_no_choice_for_is_refused() -> None:
     assert any("can answer `inherited-failure`" in e for e in errors)
 
 
+def test_a_garden_deliver_node_without_invalid_proposals_is_refused() -> None:
+    node = {
+        "executor": "hub",
+        "action": "garden-deliver",
+        "with": {"delta": "delta", "proposals": "docket"},
+        "judgement": _choices("recorded", "invalid", "failure"),
+    }
+    assert any("can answer `invalid-proposals`" in e for e in _errors(node))
+
+
 def test_a_test_actions_answers_are_its_arguments_values() -> None:
     node = {"executor": "hub", "action": "test.answer", "with": {"choice": "landed"}, "judgement": _choices("failure")}
     assert any("can answer `landed`" in e for e in _errors(node))
@@ -255,6 +265,7 @@ nodes:
       choices:
         recorded: {description: Recorded., to: done}
         invalid: {description: Invalid., to: done}
+        invalid-proposals: {description: Invalid docket., to: done}
         failure: {description: Failed., to: done}
 """
 

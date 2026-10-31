@@ -32,11 +32,12 @@ def rows():
 def bucket():
     return [r for r in rows() if r['scope_slug'] == scope and r['live']]
 addendum_marker = pathlib.Path(f'.garden-addendum-{chunk_id}')
+docket_marker = pathlib.Path(f'.garden-docket-addendum-{chunk_id}')
 `;
   const survey = String.raw`rev = sh('git', '-C', '${repo}', 'rev-parse', 'HEAD').strip()
 fmt = sh('blizzard', 'runner', 'artifact', 'get', '--scope', 'system', 'garden/finding-format', '--content')
 assert 'FindingDelta' in fmt
-if path in ('found', 'invalid', 'virgin'):
+if path in ('found', 'invalid', 'both', 'virgin'):
     cands = [
         {'ref': 'F1', 'class': 'stale-docstring', 'locus': 'src/app.py:1', 'summary': 'first weed'},
         {'ref': 'F2', 'class': 'stale-docstring', 'locus': 'src/app.py:2', 'summary': 'second weed'},
@@ -59,7 +60,7 @@ publish('delta', json.dumps({'scope': scope, 'revisions': {'${repo}': rev},
 live = bucket()
 if path == 'virgin':
     assert any(r['scope_slug'] == '${FOUND}' for r in rows()), 'neighbour findings not shown'
-if path == 'invalid' and not addendum_marker.exists():
+if path in ('invalid', 'both') and not addendum_marker.exists():
     delta = {'scope': scope, 'revisions': envelope['revisions'], 'measurement': envelope['measurement'],
              'findings': [{'op': 'observed', 'id': '${UNKNOWN_ID}'}]}
 else:
@@ -83,23 +84,26 @@ if path == 'virgin':
     own_refs = [op['ref'] for op in delta['findings'] if op['op'] == 'add']
     docket = [{'ref': 'P1', 'class': 'handoff', 'title': f'hand {scope} out of the fleet',
                'body': 'scripted proposal citing the refs this very run minted', 'findings': own_refs}]
-elif path == 'invalid' or not live:
+elif path in ('invalid', 'both') or not live:
     docket = []
 else:
     docket = [{'ref': 'P1', 'class': 'handoff', 'title': f'hand {scope} out of the fleet',
                'body': 'scripted proposal citing every live finding in the bucket',
                'findings': [f['finding_id'] for f in live]}]
+if path == 'both' and addendum_marker.exists() and not docket_marker.exists():
+    docket = [{'ref': 'P1', 'class': 'handoff', 'title': 'cites a finding that is not live',
+               'body': 'scripted docket fault', 'findings': ['${UNKNOWN_ID}']}]
 publish('docket', json.dumps(docket))
 `;
   graph.nodes.survey!.prompt = common + survey;
-  graph.nodes.survey!.judgement.prompt = common + String.raw`choice = {'found': 'found', 'invalid': 'found', 'virgin': 'found', 'excessive': 'excessive',
+  graph.nodes.survey!.judgement.prompt = common + String.raw`choice = {'found': 'found', 'invalid': 'found', 'both': 'found', 'virgin': 'found', 'excessive': 'excessive',
           'no-strategy': 'no-strategy', 'clean': 'clean'}[path]
 verdict(choice, 'scripted sweep')
 `;
   graph.nodes.reconcile!.prompt = common + reconcile;
-  graph.nodes.reconcile!.judgement.prompt = common + "verdict('nothing-to-propose' if addendum_marker.exists() else 'converged', 'scripted match')\n";
+  graph.nodes.reconcile!.judgement.prompt = common + "verdict('nothing-to-propose' if path == 'invalid' and addendum_marker.exists() else 'converged', 'scripted match')\n";
   graph.nodes.propose!.prompt = common + propose;
-  graph.nodes.propose!.judgement.prompt = common + String.raw`verdict('proposed' if (path == 'virgin' or (path != 'invalid' and bucket())) else 'none',
+  graph.nodes.propose!.judgement.prompt = common + String.raw`verdict('proposed' if (path == 'virgin' or (path not in ('invalid', 'both') and bucket())) else 'none',
         'scripted propose')
 `;
   graph.nodes.deliver!.judgement.choices.invalid!.prompt_addendum = String.raw`failure = sh('blizzard', 'runner', 'artifact', 'get', 'garden-delivery-failure', '--content')
@@ -109,12 +113,18 @@ good = {'scope': scope, 'revisions': envelope['revisions'], 'measurement': envel
 publish('delta', json.dumps(good))
 addendum_marker.write_text('threaded')
 `;
+  graph.nodes.deliver!.judgement.choices['invalid-proposals']!.prompt_addendum = String.raw`failure = sh('blizzard', 'runner', 'artifact', 'get', 'garden-delivery-failure', '--content')
+assert 'fin_' in failure, f'failure artifact does not name the rejected id: {failure!r}'
+publish('docket', json.dumps([]))
+docket_marker.write_text('threaded')
+`;
   expect(graph.nodes.deliver!.action).toBe('garden-deliver');
   expect(graph.name).toBe(body.name);
   expect(graph.nodes.deliver).toEqual({ ...body.nodes.deliver,
     judgement: { ...body.nodes.deliver!.judgement, choices: {
       ...body.nodes.deliver!.judgement.choices,
       invalid: { ...body.nodes.deliver!.judgement.choices.invalid, prompt_addendum: graph.nodes.deliver!.judgement.choices.invalid!.prompt_addendum },
+      'invalid-proposals': { ...body.nodes.deliver!.judgement.choices['invalid-proposals'], prompt_addendum: graph.nodes.deliver!.judgement.choices['invalid-proposals']!.prompt_addendum },
     } },
   });
   return JSON.stringify(graph);
@@ -246,8 +256,14 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repos
     ['propose', 'none'], ['deliver', 'recorded']]);
   expect(await findings(UNDECLARED)).toEqual([expect.objectContaining({ class: 'undeclared-axis', live: true })]);
 
+  // A delta fault goes back to reconcile, then a docket fault to propose: each artifact's rejection is
+  // its own, so neither escalates.
+  const both = await run('both', FOUND, [['survey', 'found'], ['reconcile', 'converged'], ['propose', 'none'],
+    ['deliver', 'invalid'], ['reconcile', 'converged'], ['propose', 'none'],
+    ['deliver', 'invalid-proposals'], ['propose', 'none'], ['deliver', 'recorded']]);
+
   const sessions = await host.mockSessions();
-  for (const id of [found, first, second, invalid, virgin, undeclared]) {
+  for (const id of [found, first, second, invalid, both, virgin, undeclared]) {
     const leases = await host.runners['runner-local']!.leasesForChunk(id);
     expect(leases.status).toBe(200);
     const items = leases.body.items;
@@ -259,7 +275,7 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, repos
     expect(matches[0]).toEqual(expect.any(String));
     expect(matches[0]).not.toBe(surveySession);
     expect(proposalSession).toBe(matches[0]);
-    if (id === invalid) {
+    if (id === invalid || id === both) {
       expect(matches).toHaveLength(2);
       expect(matches[1]).not.toBe(matches[0]);
     } else expect(matches).toHaveLength(1);

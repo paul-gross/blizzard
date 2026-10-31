@@ -25,6 +25,7 @@ from blizzard.hub.domain.garden.findings.model import GUARD_ATTEMPTS
 from blizzard.hub.domain.garden.formats import IGardenFormats
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -102,5 +103,6 @@ class GardenDeliveryRecorder:
                 return outcome
         raise GardenDeliveryRejected(
             "findings this delivery names kept changing while it was being recorded — nothing was written; "
-            "re-run the delivery"
+            "re-run the delivery",
+            GardenDeliveryFault.DELTA,
         )

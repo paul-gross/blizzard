@@ -24,6 +24,7 @@ from blizzard.hub.domain.garden.formats import (
 )
 from blizzard.hub.domain.garden.proposals.model import GardenProposalBlankFieldError, require_text
 from blizzard.hub.domain.garden.run_context import RunContext
+from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 
 # Lowercase hex, 7-40 characters — a well-formed commit sha's shape. Says nothing about
 # whether the commit actually exists; that is `CommitResolver`'s question.
@@ -33,7 +34,12 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 class GardenDeliveryRejected(Exception):
     """A delivered artifact failed validation. This exception's own message is the
     operator-legible reason the graph attaches to its bounce — never a raw pydantic
-    error, never a stack of causes a person has to untangle."""
+    error, never a stack of causes a person has to untangle. ``fault`` names the artifact
+    to repair; a citation that spans both is the docket's, which carries it."""
+
+    def __init__(self, message: str, fault: GardenDeliveryFault) -> None:
+        super().__init__(message)
+        self.fault = fault
 
 
 # Every finding known to this routine, live or gone, minus an exited one:
@@ -122,7 +128,9 @@ def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtif
     Refuses a delivery naming no delta, or naming one with no artifact."""
     missing = [name for name in names if name not in latest]
     if not names or missing:
-        raise GardenDeliveryRejected(f"delta artifact not found — missing: {', '.join(missing) or '<none named>'}")
+        raise GardenDeliveryRejected(
+            f"delta artifact not found — missing: {', '.join(missing) or '<none named>'}", GardenDeliveryFault.DELTA
+        )
     return SelectedArtifacts(
         contents={name: latest[name].data for name in names},
         artifact_ids={name: latest[name].artifact_id for name in names},
@@ -171,7 +179,8 @@ def check_delta(
     `(repo, sha)` resolved for an `add`'s `introduced` commit, for `introduced_at`."""
     if delta.scope != run.scope_slug:
         raise GardenDeliveryRejected(
-            f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}"
+            f"delta declares scope {delta.scope!r}, this run's declared scope is {run.scope_slug!r}",
+            GardenDeliveryFault.DELTA,
         )
     for repo, sha in delta.revisions.items():
         _resolved(repo, sha, resolutions)
@@ -185,7 +194,8 @@ def check_delta(
                 # Otherwise the shape rule a proposal's citation is discriminated on
                 # could be gamed into rebinding an existing finding id.
                 raise GardenDeliveryRejected(
-                    f"add op ref {op.ref!r} is shaped like a finding id and cannot be used as a submission-local ref"
+                    f"add op ref {op.ref!r} is shaped like a finding id and cannot be used as a submission-local ref",
+                    GardenDeliveryFault.DELTA,
                 )
             if op.introduced is not None:
                 # `introduced` names no repository of its own, so it resolves only against
@@ -196,14 +206,25 @@ def check_delta(
                 else:
                     _check_commit_wellformed(op.introduced, context="a finding addition's introduced commit")
             continue
-        _check_known_id(op.id, run=run, live_findings=live_findings, scope=delta.scope, exited_ids=exited_ids)
+        _check_known_id(
+            op.id,
+            run=run,
+            live_findings=live_findings,
+            scope=delta.scope,
+            exited_ids=exited_ids,
+            fault=GardenDeliveryFault.DELTA,
+        )
         if op.id in seen_ids:
             # Two ops naming one finding could durably write contradictory facts, an
             # `observed` and a `resolved` both landing on the same record.
-            raise GardenDeliveryRejected(f"finding {op.id!r} is named by more than one op in this delta")
+            raise GardenDeliveryRejected(
+                f"finding {op.id!r} is named by more than one op in this delta", GardenDeliveryFault.DELTA
+            )
         seen_ids.add(op.id)
         if isinstance(op, FindingGoneOp) and not op.note.strip():
-            raise GardenDeliveryRejected(f"finding {op.id!r}'s gone fact must carry a non-empty note")
+            raise GardenDeliveryRejected(
+                f"finding {op.id!r}'s gone fact must carry a non-empty note", GardenDeliveryFault.DELTA
+            )
     return introduced_at
 
 
@@ -217,7 +238,9 @@ def check_add_refs(deltas: Sequence[DeliveredDelta]) -> frozenset[str]:
         for op in delta.findings:
             if isinstance(op, FindingAddOp) and op.ref is not None:
                 if op.ref in seen:
-                    raise GardenDeliveryRejected(f"add op ref {op.ref!r} is carried more than once in this delivery")
+                    raise GardenDeliveryRejected(
+                        f"add op ref {op.ref!r} is carried more than once in this delivery", GardenDeliveryFault.DELTA
+                    )
                 seen.add(op.ref)
     return frozenset(seen)
 
@@ -238,18 +261,30 @@ def check_proposal(
         try:
             require_text(value, field_name)
         except GardenProposalBlankFieldError:
-            raise GardenDeliveryRejected(f"proposal {proposal.ref!r} has a blank {field_name}") from None
+            raise GardenDeliveryRejected(
+                f"proposal {proposal.ref!r} has a blank {field_name}", GardenDeliveryFault.PROPOSALS
+            ) from None
     seen: set[str] = set()
     for entry in proposal.findings:
         if entry in seen:
-            raise GardenDeliveryRejected(f"proposal {proposal.ref!r} cites {entry!r} more than once")
+            raise GardenDeliveryRejected(
+                f"proposal {proposal.ref!r} cites {entry!r} more than once", GardenDeliveryFault.PROPOSALS
+            )
         seen.add(entry)
         if is_finding_id_shaped(entry):
-            _check_known_id(entry, run=run, live_findings=live_findings, scope=None, exited_ids=exited_ids)
+            _check_known_id(
+                entry,
+                run=run,
+                live_findings=live_findings,
+                scope=None,
+                exited_ids=exited_ids,
+                fault=GardenDeliveryFault.PROPOSALS,
+            )
         elif entry not in known_refs:
             raise GardenDeliveryRejected(
                 f"proposal cites {entry!r}, which is neither a live finding id nor a ref carried by an add op "
-                "in this delivery's own deltas"
+                "in this delivery's own deltas",
+                GardenDeliveryFault.PROPOSALS,
             )
 
 
@@ -263,7 +298,8 @@ def check_proposal_refs(artifact_name: str, proposals: Sequence[ProposalCandidat
     for proposal in proposals:
         if proposal.ref in seen:
             raise GardenDeliveryRejected(
-                f"artifact {artifact_name!r} carries the proposal ref {proposal.ref!r} more than once"
+                f"artifact {artifact_name!r} carries the proposal ref {proposal.ref!r} more than once",
+                GardenDeliveryFault.PROPOSALS,
             )
         seen.add(proposal.ref)
 
@@ -369,32 +405,41 @@ def _check_known_id(
     run: RunContext,
     live_findings: LiveFindings,
     scope: str | None,
+    fault: GardenDeliveryFault,
     exited_ids: frozenset[str] = frozenset(),
 ) -> None:
     if not is_finding_id_shaped(finding_id):
-        raise GardenDeliveryRejected(f"finding id {finding_id!r} is not a well-formed {IdPrefix.FINDING}_<ULID> id")
+        raise GardenDeliveryRejected(
+            f"finding id {finding_id!r} is not a well-formed {IdPrefix.FINDING}_<ULID> id", fault
+        )
     live_scope = live_findings.get(finding_id)
     if live_scope is None:
         if finding_id in exited_ids:
             raise GardenDeliveryRejected(
                 f"finding {finding_id!r} has been exited on routine {run.routine_name!r} and cannot be transformed "
-                "by a run — only a person's reopen can revive it"
+                "by a run — only a person's reopen can revive it",
+                fault,
             )
-        raise GardenDeliveryRejected(f"finding {finding_id!r} is not live on routine {run.routine_name!r}")
+        raise GardenDeliveryRejected(f"finding {finding_id!r} is not live on routine {run.routine_name!r}", fault)
     if scope is not None and live_scope != scope:
         raise GardenDeliveryRejected(
-            f"finding {finding_id!r} is outside the declared scope {scope!r} (its own scope is {live_scope!r})"
+            f"finding {finding_id!r} is outside the declared scope {scope!r} (its own scope is {live_scope!r})",
+            fault,
         )
 
 
 def _check_commit_wellformed(sha: str, *, context: str) -> None:
     if not _COMMIT_RE.fullmatch(sha):
-        raise GardenDeliveryRejected(f"commit {sha!r} ({context}) is not a well-formed commit sha")
+        raise GardenDeliveryRejected(
+            f"commit {sha!r} ({context}) is not a well-formed commit sha", GardenDeliveryFault.DELTA
+        )
 
 
 def _resolved(repo: str, sha: str, resolutions: CommitResolutions | None) -> CommitResolution | None:
     _check_commit_wellformed(sha, context=f"repository {repo!r}")
     resolution = (resolutions or {}).get((repo, sha))
     if resolution is not None and not resolution.exists:
-        raise GardenDeliveryRejected(f"commit {sha!r} for repository {repo!r} does not resolve")
+        raise GardenDeliveryRejected(
+            f"commit {sha!r} for repository {repo!r} does not resolve", GardenDeliveryFault.DELTA
+        )
     return resolution
