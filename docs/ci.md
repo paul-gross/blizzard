@@ -31,7 +31,7 @@ seams-mocked and token-free, needing no real forge, no tokens, and no network be
 `gate / playwright static` is a required check of its own; an operator adds it to branch protection once the job exists
 on `master`.
 
-The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and four Playwright
+The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
 shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite,
 chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job
 reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
@@ -137,7 +137,7 @@ enclosing winter workspace, and never in CI.
 
 ### Fleet-port timing
 
-The implemented Playwright service job runs four shards, each with a 30-minute step timeout; the Python half retains
+The implemented Playwright service job runs six shards, each with a 30-minute step timeout; the Python half retains
 three shards. The former prospective estimate was 1263s serial for fleet default, plus 243s for trace companions, and
 about 971s for a pessimistic ordinary service shard. Those estimates covered more than the six newly ported specs and
 are not comparable directly to the following local subset. The eight traced fleet scenario ports run in
