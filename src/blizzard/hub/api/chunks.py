@@ -87,6 +87,7 @@ from blizzard.hub.domain.operations.restart import (
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.hub.work_sources.source import AuthorView, WorkSourceError
 from blizzard.wire.chunk import (
     BlockedView,
@@ -306,10 +307,9 @@ def list_chunks(
     # The page's projects — one batched read, narrowed to the page.
     projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     # Config revisions are read once per distinct source on each request, never cached across requests.
-    sources = {
-        name: services.work_sources.get(name)
-        for name in sorted({pointer.source for chunk in page_chunks for pointer in chunk.work_refs})
-    }
+    sources = SelectedWorkSources(
+        services.work_sources, (pointer.source for chunk in page_chunks for pointer in chunk.work_refs)
+    )
     # A page chunk's flow place depends on the submissions ahead of it, whose chunks need not be on the page: the
     # read covers the whole line of every flow the page's chunks hold — bounded by the line, not the fleet.
     flow_places = chunk_flow_places(services, page_ids)
@@ -961,7 +961,7 @@ def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
                 )
             )
             continue
-        label = source.label(pointer) or services.work_sources.label(pointer)
+        label = services.work_sources.label(pointer)
         web_url = source.web_url(pointer, live_holder=holders.get(pointer))
         try:
             item = source.fetch(pointer)

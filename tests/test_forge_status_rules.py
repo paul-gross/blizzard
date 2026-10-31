@@ -82,10 +82,10 @@ _FLOOR = timedelta(minutes=10)
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _probe(marks: int = 1, annotating: tuple[str, ...] = ("a",)) -> AnnotationProbe:
+def _probe(marks: int = 1, source_change: int = 1) -> AnnotationProbe:
     return AnnotationProbe(
         work_refs=WorkRefsSignature(marks=(("chunks", marks, None),)),
-        annotating=frozenset(annotating),
+        source_change=source_change,
     )
 
 
@@ -96,7 +96,7 @@ def _probe(marks: int = 1, annotating: tuple[str, ...] = ("a",)) -> AnnotationPr
         (None, _probe(), None, _NOW, True),  # a fresh reconciler has converged no pass
         (_probe(), _probe(), _NOW, _NOW + timedelta(seconds=1), False),
         (_probe(), _probe(marks=2), _NOW, _NOW + timedelta(seconds=1), True),  # a fact or work-ref insert
-        (_probe(), _probe(annotating=("a", "b")), _NOW, _NOW + timedelta(seconds=1), True),  # the set moved
+        (_probe(), _probe(source_change=2), _NOW, _NOW + timedelta(seconds=1), True),
         (_probe(), _probe(), _NOW, _NOW + _FLOOR - timedelta(seconds=1), False),
         (_probe(), _probe(), _NOW, _NOW + _FLOOR, True),  # the floor elapsed
     ],

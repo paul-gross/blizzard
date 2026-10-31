@@ -76,7 +76,7 @@ from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
-from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
+from blizzard.hub.domain.chunk.model import WorkRefLabel
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
@@ -908,14 +908,6 @@ def build_hub_core(engine: Engine, *, clock: IClock) -> HubCore:
     )
 
 
-def _work_ref_label(work_sources: IWorkSourceRegistry) -> WorkRefLabel:
-    def label(ref: WorkRef) -> str | None:
-        source = work_sources.get(ref.source)
-        return source.label(ref) if source is not None else None
-
-    return label
-
-
 def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> Callable[[], IEgressWriter]:
     """A fresh writer per backfill, each with a newly minted process token. The export's own writer was built from
     these same settings, so a backfill's writer can fail to build only if that one did not."""
@@ -1114,7 +1106,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         public_url=parts.public_url,
         work_sources=work_sources,
     )
-    work_ref_label = _work_ref_label(work_sources)
+    work_ref_label: WorkRefLabel = work_sources.label
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
     services = TenantServices(
         forges=forges,

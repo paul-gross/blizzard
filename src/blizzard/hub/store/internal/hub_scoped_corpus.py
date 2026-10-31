@@ -22,6 +22,7 @@ from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, li
 
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
+from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, LineSignature
 from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
 from blizzard.hub.domain.observability.analytics.events import (
@@ -116,6 +117,17 @@ class SweepCorpusReads:
         tables = sorted((*status_family_tables(), s.chunk_work_refs, *_EPHEMERAL_TABLES), key=lambda t: t.name)
         marks = self._signature_marks(tables, "corpus live work refs signature")
         return {tenant: WorkRefsSignature(marks=by_table) for tenant, by_table in marks.items()}
+
+    def work_source_changes_signature(self) -> dict[TenantId, int]:
+        """The latest appended work-source change per tenant, including retirements."""
+        changes = s.config_changes
+        with self._read("corpus work source changes signature") as conn:
+            rows = conn.execute(
+                select(changes.c.tenant_id, func.max(changes.c.id))
+                .where(changes.c.record_kind == RecordKind.WORK_SOURCE.value)
+                .group_by(changes.c.tenant_id)
+            ).all()
+        return {TenantId(tenant): latest for tenant, latest in rows}
 
     # --- flow driver ------------------------------------------------------------------
 

@@ -164,6 +164,36 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
     assert revisions.calls[-2:] == ["default", "other"]
 
 
+def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource()})
+    for size in (3, 9):
+        ingest(hub, [{"source": "default", "ref": f"{size}-{n}"} for n in range(size)])
+
+    class FallbackSource(FakeWorkSource):
+        def label(self, pointer: WorkRef) -> None:
+            return None
+
+    registry = StoreWorkSourceRegistry(
+        records=hub.services.work_source_records,
+        objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
+        build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
+        built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+    )
+    serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+
+    def page(limit: int) -> None:
+        response = hub.client.get("/api/chunks", params={"limit": limit})
+        assert response.status_code == 200, response.text
+        assert len(response.json()["chunks"]) == limit
+        for row in response.json()["chunks"]:
+            for pointer in row["work_refs"]:
+                assert pointer["label"] == f"default#{pointer['ref']}"
+                assert pointer["web_url"] == f"http://forge.local/acme/widget/issues/{pointer['ref']}"
+
+    page(2)  # warm the adapter before counting
+    assert count_queries(hub.engine, lambda: page(1)) == count_queries(hub.engine, lambda: page(2))
+
+
 class _CountingFactsStore(ChunkFactsStore):
     """Counts calls to the bulk and per-chunk facts reads, so a test can pin which shape
     `list_chunks` actually reaches — mirrors `test_load_all_facts_store`'s own

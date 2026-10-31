@@ -2287,6 +2287,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
     ),
+    (IReadWorkRefsCorpus, "work_source_changes_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.work_source_changes_signature()
+    ),
     (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: (
         w.hub.hub_services.hub_scoped_reads.corpus.flow_lines_signature()
     ),

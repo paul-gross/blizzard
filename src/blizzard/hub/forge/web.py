@@ -1,10 +1,12 @@
-"""A forge's browser addresses — pure string work, shared by every binding that links into a forge's web pages
-(``bzh:deterministic-shell``). The forge's effective web origin is the domain's to derive."""
+"""Forge browser links, selected by kind without opening a credentialed client."""
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from blizzard.hub.domain.config.forges import ConfiguredForge, derived_web_origin
 from blizzard.hub.domain.config.repositories import RepositoryFields
+from blizzard.hub.forge.internal.github_web import GitHubWebLinks
 
 
 def web_origin(api_base: str) -> str:
@@ -12,6 +14,14 @@ def web_origin(api_base: str) -> str:
     return derived_web_origin("github", api_base)
 
 
-def branch_url(forge: ConfiguredForge, repository: RepositoryFields, branch_name: str) -> str:
-    """The browser ``tree`` address of ``branch_name`` on ``repository``, which lives on ``forge``."""
-    return f"{forge.web_origin}/{repository.owner}/{repository.repo}/tree/{branch_name}"
+class IForgeWebLinks(Protocol):
+    """The browser addresses a forge binding can give for its repositories."""
+
+    def branch_url(self, repository: RepositoryFields, branch_name: str) -> str: ...
+
+
+def web_links(forge: ConfiguredForge) -> IForgeWebLinks | None:
+    """The kind's pure link binding, absent for a forge kind without one."""
+    if forge.kind == "github":
+        return GitHubWebLinks(forge.web_origin)
+    return None

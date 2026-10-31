@@ -92,6 +92,10 @@ class IReadWorkRefsCorpus(Protocol):
         holding none of those rows has no entry."""
         ...
 
+    def work_source_changes_signature(self) -> Mapping[TenantId, int]:
+        """The latest work-source configuration change id per tenant, in one hub-wide statement."""
+        ...
+
 
 class IReadChunkWorkRefsRepository(Protocol):
     """Read-only chunk-work-refs access."""

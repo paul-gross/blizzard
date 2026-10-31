@@ -110,13 +110,14 @@ def _view(
     slug: str,
     live_holder: str | None,
     runner_names: Mapping[str, str],
+    label: str,
 ) -> WorkItemView:
     pointer = WorkRef(source=item.source, ref=item.ref)
     return WorkItemView(
         source=item.source,
         slug=slug,
         ref=item.ref,
-        label=source_obj.label(pointer) or f"{slug}#{item.ref}",
+        label=label,
         web_url=source_obj.web_url(pointer, live_holder=live_holder),
         title=item.title,
         body=item.body,
@@ -376,15 +377,17 @@ def list_work_items(
     }
     users_by_id = services.users.get_many(list(user_ids))
     runner_names = _runner_names(services, (item.author for item in items))
+    slug = services.work_sources.source_label(source) if items else source
     return WorkItemsListView(
         items=[
             _view(
                 item,
                 source_obj,
                 resolve_author_view(item.author, users_by_id),
-                slug=services.work_sources.source_label(source),
+                slug=slug,
                 live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
                 runner_names=runner_names,
+                label=services.work_sources.label(WorkRef(source=item.source, ref=item.ref)),
             )
             for item in items
         ]
@@ -449,6 +452,7 @@ def create_work_item(
             slug=services.work_sources.source_label(source),
             live_holder=created.chunk_id,
             runner_names=_runner_names(services, [created.item.author]),
+            label=services.work_sources.label(WorkRef(source=created.item.source, ref=created.item.ref)),
         ).model_dump(),
         chunk_id=created.chunk_id,
     )
@@ -475,6 +479,7 @@ def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkIt
         slug=services.work_sources.source_label(source),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
         runner_names=_runner_names(services, [item.author]),
+        label=services.work_sources.label(pointer),
     )
 
 
@@ -517,6 +522,7 @@ def patch_work_item(
         slug=services.work_sources.source_label(source),
         live_holder=services.chunks.work_refs.find_live_holder(pointer),
         runner_names=_runner_names(services, [updated.author]),
+        label=services.work_sources.label(pointer),
     )
 
 
@@ -557,6 +563,7 @@ def withdraw_work_item(
         slug=services.work_sources.source_label(source),
         live_holder=holder,
         runner_names=_runner_names(services, [withdrawn.item.author]),
+        label=services.work_sources.label(pointer),
     )
 
 

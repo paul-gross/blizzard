@@ -16,7 +16,7 @@ current slug, so a rename reaches every displayed work ref with no stored ref re
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import partial
 from typing import Protocol, cast
@@ -47,6 +47,12 @@ class BuiltWorkSource:
 
     def close(self) -> None:
         self.release()
+
+
+def label_from_binding(pointer: WorkRef, source: IWorkSource | None, fallback_slug: Callable[[], str]) -> str:
+    """Render the binding's label, resolving its current slug only for a ``None`` label."""
+    rendered = source.label(pointer) if source is not None else None
+    return rendered if rendered is not None else f"{fallback_slug()}#{pointer.ref}"
 
 
 class StoreWorkSourceRegistry:
@@ -120,8 +126,7 @@ class StoreWorkSourceRegistry:
 
     def label(self, pointer: WorkRef) -> str:
         source = self.get(pointer.source)
-        rendered = source.label(pointer) if source is not None else None
-        return rendered if rendered is not None else f"{self.source_label(pointer.source)}#{pointer.ref}"
+        return label_from_binding(pointer, source, lambda: self.source_label(pointer.source))
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
         if source == RESERVED_HUB_SOURCE_NAME:
@@ -179,3 +184,25 @@ class StoreWorkSourceRegistry:
 
 
 _work_source_registry_conforms: type[IWorkSourceRegistry] = StoreWorkSourceRegistry
+
+
+class SelectedWorkSources:
+    """Request-local bindings for rendered sources, with lazy fallback slugs."""
+
+    def __init__(self, registry: IWorkSourceRegistry, names: Iterable[str]) -> None:
+        self._registry = registry
+        self._sources = {name: registry.get(name) for name in sorted(set(names))}
+        self._fallback_slugs: dict[str, str] = {}
+
+    def source(self, name: str) -> IWorkSource | None:
+        return self._sources[name]
+
+    def label(self, pointer: WorkRef) -> str:
+        source = self.source(pointer.source)
+
+        def fallback_slug() -> str:
+            if pointer.source not in self._fallback_slugs:
+                self._fallback_slugs[pointer.source] = self._registry.source_label(pointer.source)
+            return self._fallback_slugs[pointer.source]
+
+        return label_from_binding(pointer, source, fallback_slug)
