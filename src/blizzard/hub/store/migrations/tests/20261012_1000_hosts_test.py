@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
     assert_frozen_table_lacks_a_later_revisions_columns,
+    schema_snapshot,
 )
 from tests.support import default_tenant, migrate_to
 
@@ -93,26 +93,26 @@ def test_the_new_tables_match_the_declared_schema(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_a_rerun_over_a_store_already_reshaped_changes_nothing(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _HOSTS)
-    schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
     with engine.begin() as conn:
         conn.execute(sa.text(f"UPDATE alembic_version SET version_num = '{_PARENT}'"))
 
     runner.upgrade(_HOSTS)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
 
 
 @pytest.mark.component
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _PARENT)
-    before = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    before = schema_snapshot(engine, exemptions={}, name_exemptions={})
     tenant = default_tenant(engine)
     _runner(engine, tenant)
     runner.upgrade(_HOSTS)
 
     runner.downgrade(_PARENT)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
     assert not _tables(engine) & _NEW_TABLES
     with engine.connect() as conn:
         assert conn.execute(sa.text("SELECT runner_id FROM runner_registrations")).scalars().all() == ["rn_a"]

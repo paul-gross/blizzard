@@ -5,6 +5,8 @@ migration is what stamps its owner. Every operation below is driven against that
 migrated store, never a hand-stamped one, proving the backfilled ``claude_code`` owner
 is enough to keep each seam working."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import shutil

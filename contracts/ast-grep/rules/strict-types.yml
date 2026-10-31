@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:strict-types
+language: Python
+severity: error
+message: >-
+  Shipping code type-checks under strict pyright. A `# type: ignore` silences every rule on its line and a
+  `# pyright: basic` or `# pyright: standard` header takes the whole file out of strict; waive one named rule at its line
+  with `# pyright: ignore[<rule>]` and a trailing reason instead (`bzh:strict-types`,
+  blizzard-context:/standards/python.md).
+files:
+  - src/**
+  - exemplars/python/**
+ignores:
+  - "**/store/migrations/tests/**"
+rule:
+  kind: comment
+  any:
+    - regex: 'type:\s*ignore'
+    - regex: '^#\s*pyright:\s*(basic|standard)\b'

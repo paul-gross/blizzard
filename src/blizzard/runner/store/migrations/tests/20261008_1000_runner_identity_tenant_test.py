@@ -1,5 +1,7 @@
 """Tests proving the ``20261008_1000_runner_identity_tenant`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

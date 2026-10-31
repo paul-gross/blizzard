@@ -1,5 +1,7 @@
 """Tests proving the ``20261004_1000_binding_release_epoch_floor`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

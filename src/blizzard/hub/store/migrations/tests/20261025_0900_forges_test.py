@@ -8,6 +8,8 @@ as the live ones do.
 
 Seeded from the store's reflected shape at the parent revision rather than ``src/blizzard/hub/store/schema.py``."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import json
@@ -42,7 +44,7 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.tenancy import TenantId
 from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_project_columns_migration import _NOW, _insert, _query, _run_step
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.repo_files import repo_root
 from tests.support import scoped_connections
 
@@ -194,7 +196,7 @@ def _shape(engine: sa.Engine) -> tuple[object, ...]:
         )
         for table in sorted(sa.inspect(engine).get_table_names())
     }
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
+    return schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
 
 
 def _judged_by_the_check(engine: sa.Engine) -> list[tuple[str, str, tuple[str, ...]]]:
@@ -415,14 +417,14 @@ def test_the_updates_page_in_bounded_batches_and_miss_no_row(tmp_path: Path, mon
 
 def test_the_downgrade_returns_the_parent_schema_with_the_addresses_canonical(tmp_path: Path) -> None:
     with _before(tmp_path) as (runner, engine, tenant):
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         changes = _query(engine, "SELECT count(*) FROM config_changes")
 
         runner.upgrade(_FORGES)
         runner.downgrade(_PARENT)
 
         assert runner.current_revision() == _PARENT
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
         assert _query(engine, "SELECT count(*) FROM config_changes") == changes
         assert sorted(
             _query(engine, "SELECT slug, forge_api_url FROM repositories WHERE tenant_id = :t", t=tenant)

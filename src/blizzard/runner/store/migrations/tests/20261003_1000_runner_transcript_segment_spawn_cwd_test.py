@@ -1,5 +1,7 @@
 """Tests proving the ``20261003_1000_runner_transcript_segment_spawn_cwd`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -2,6 +2,8 @@
 the project-led ones and the tenant-wide listings' own indexes stay, a re-run changes nothing, and the downgrade
 restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -17,7 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -79,20 +81,20 @@ def test_the_tenant_led_garden_indexes_go_and_the_project_led_ones_stay(tmp_path
 def test_a_rerun_over_a_store_already_reshaped_changes_nothing(tmp_path: Path) -> None:
     with _at_the_projects(tmp_path) as (runner, engine):
         runner.upgrade(_READ_INDEXES)
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         with engine.begin() as conn:
             conn.execute(sa.text(f"UPDATE alembic_version SET version_num = '{_PROJECTS}'"))
 
         runner.upgrade(_READ_INDEXES)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
 
 
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_projects(tmp_path) as (runner, engine):
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         runner.upgrade(_READ_INDEXES)
 
         runner.downgrade(_PROJECTS)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema

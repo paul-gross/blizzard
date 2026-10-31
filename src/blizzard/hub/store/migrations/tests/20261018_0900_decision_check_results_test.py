@@ -1,6 +1,8 @@
 """The decision check-results revision: existing decisions read as having run no checks and existing resolutions as no
 override; a re-run changes nothing; and the downgrade restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -17,7 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -82,18 +84,18 @@ def test_a_re_run_changes_nothing(tmp_path: Path) -> None:
     with _at_the_parent(tmp_path) as (runner, engine):
         _seed(engine)
         runner.upgrade(_REVISION)
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
 
         runner.downgrade(_PARENT)
         runner.upgrade(_REVISION)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
 
 
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_parent(tmp_path) as (runner, engine):
         _seed(engine)
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
         decisions = _query(engine, "SELECT * FROM decisions")
         resolutions = _query(engine, "SELECT * FROM decision_resolutions")
 
@@ -101,6 +103,6 @@ def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
         runner.downgrade(_PARENT)
 
         assert runner.current_revision() == _PARENT
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _query(engine, "SELECT * FROM decisions") == decisions
         assert _query(engine, "SELECT * FROM decision_resolutions") == resolutions

@@ -1,5 +1,7 @@
 """Tests proving the ``20260728_1410_chunk_defaults`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

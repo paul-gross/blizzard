@@ -6,7 +6,7 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import Chunk
-from blizzard.hub.domain.config.repositories import RepositoryOutcome, resolve_chunk_repositories
+from blizzard.hub.domain.config.repositories import RepositoryId, RepositoryOutcome, resolve_chunk_repositories
 
 
 def delivery_declarations_for(
@@ -38,7 +38,7 @@ def delivery_declarations_for(
         linked = (
             frozenset(link.repository_id for link in links.get(chunk.project_id, []))
             if chunk.project_id
-            else frozenset()
+            else frozenset[RepositoryId]()
         )
         resolution = resolve_chunk_repositories(
             commits.origins(), records, forges.values(), minted_at=chunk.minted_at, linked=linked

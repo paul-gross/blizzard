@@ -13,7 +13,7 @@ from alembic.operations import Operations
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.support import migrate_to
 
 pytestmark = [pytest.mark.component]
@@ -47,7 +47,7 @@ def _shape(engine: sa.Engine, table: str) -> tuple[object, ...]:
 
 
 def _snapshot(engine: sa.Engine) -> dict[str, object]:
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    return schema_snapshot(engine, exemptions={}, name_exemptions={})
 
 
 def test_the_upgrade_creates_the_six_tables_empty(tmp_path: Path) -> None:

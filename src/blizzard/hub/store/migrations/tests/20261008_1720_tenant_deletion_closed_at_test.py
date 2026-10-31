@@ -3,6 +3,8 @@ completed, the time the migration ran when it is underway — paged in bounded b
 index becomes a unique constraint, refused while two facts name one tenant; a re-run changes nothing; and the downgrade
 refuses while a deletion is underway, else restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -24,8 +26,8 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store import schema as s
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
     assert_frozen_table_lacks_a_later_revisions_columns,
+    schema_snapshot,
 )
 
 _INVITATION = "20261008_1710_auth_state_invitation"
@@ -137,13 +139,13 @@ def test_a_rerun_over_a_store_already_reshaped_changes_nothing(tmp_path: Path) -
     with _at_the_invitation(tmp_path) as (runner, engine):
         _seed(engine, [("ten_done", _T0)])
         runner.upgrade(_CLOSED_AT)
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         with engine.begin() as conn:
             conn.execute(sa.text(f"UPDATE alembic_version SET version_num = '{_INVITATION}'"))
 
         runner.upgrade(_CLOSED_AT)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
         assert _closed_at(engine) == {"ten_done": _T0}
 
 
@@ -177,13 +179,13 @@ def test_the_downgrade_refuses_while_a_deletion_is_underway(tmp_path: Path) -> N
 @pytest.mark.component
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_invitation(tmp_path) as (runner, engine):
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         _seed(engine, [("ten_done", _T0)])
         runner.upgrade(_CLOSED_AT)
 
         runner.downgrade(_INVITATION)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
         with engine.connect() as conn:
             rows = conn.execute(sa.text("SELECT tenant_id, rows_removed FROM tenant_deletions")).all()
         assert [tuple(row) for row in rows] == [("ten_done", 3)]

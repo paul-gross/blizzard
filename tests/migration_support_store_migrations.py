@@ -18,7 +18,7 @@ def _compared_name(table_name: str, name: str | None, name_exemptions: dict[tupl
     return None if name is None or (table_name, name) in name_exemptions else name
 
 
-def _schema_snapshot(
+def schema_snapshot(
     engine: sa.engine.Engine,
     *,
     exemptions: dict[str, set[str]],

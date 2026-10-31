@@ -8,6 +8,8 @@ fills page in bounded batches; and the downgrade restores the name keys.
 Seeded from the store's reflected shape at the pinned revisions rather than ``src/blizzard/hub/store/schema.py``, whose
 tables keep changing shape after this revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +33,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_project_columns_migration import _insert, _query, _run_step
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -163,7 +165,7 @@ def _shape(engine: sa.Engine) -> tuple[object, ...]:
         table: sorted(repr(sorted((c, _labelled(v, labels)) for c, v in row.items())) for row in _rows(engine, table))
         for table in sorted(sa.inspect(engine).get_table_names())
     }
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
+    return schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
 
 
 def test_every_name_becomes_a_slug_and_a_display_name_and_none_becomes_hub(tmp_path: Path) -> None:

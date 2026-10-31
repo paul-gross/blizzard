@@ -4,6 +4,8 @@ nothing twice, while an event whose id the hub log gives another event takes a f
 batches; the downgrade, with one tenant only, moves them back exactly; and a downgrade then upgrade keeps every export
 event once."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +25,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -299,7 +301,7 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
     try:
         _seed(engine, tenant)
         rows = _event_log(engine)
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
 
         runner.upgrade(_MOVE)
         with engine.begin() as conn:
@@ -313,7 +315,7 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
 
         assert _event_log(engine) == rows
         assert [row[3] for row in _rows(engine, "hub_event_log")] == ["hub-started"]
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
     finally:
         engine.dispose()
 

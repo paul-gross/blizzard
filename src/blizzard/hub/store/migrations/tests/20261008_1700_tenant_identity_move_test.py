@@ -3,6 +3,8 @@ member and the hub administrator, a pending user nothing — ``users.role`` goes
 session stay; a re-run over a stopped move writes no fact twice; the copy pages in bounded batches; the downgrade, with
 one tenant only, restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -21,7 +23,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -217,7 +219,7 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
     try:
         _seed(engine)
         users = _rows(engine, "SELECT id, username, display_name, email, role, created_at FROM users ORDER BY id")
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
 
         runner.upgrade(_MOVE)
         runner.downgrade(_TABLES)
@@ -226,7 +228,7 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
             users
         )
         assert _memberships(engine) == [] and _hub_admins(engine) == []
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
     finally:
         engine.dispose()
 

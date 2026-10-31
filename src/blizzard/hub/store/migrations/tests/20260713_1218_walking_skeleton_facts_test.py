@@ -1,5 +1,7 @@
 """Tests proving the ``20260713_1218_walking_skeleton_facts`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

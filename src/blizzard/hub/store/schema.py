@@ -674,7 +674,7 @@ project_repository_positions = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("project_id", String, nullable=False),
     Column("repository_id", String, nullable=False),
-    Column("position", Float, nullable=True),
+    Column("position", Float(), nullable=True),
     Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),
     Column(
@@ -1591,7 +1591,7 @@ flow_submission_terms = Table(
     Column("repository_id", String, nullable=False),
     Column("landing_policy", String, nullable=False),
     Column("park_timeout_hours", Integer, nullable=True),
-    Column("landing_position", Float, nullable=True),  # null is unranked
+    Column("landing_position", Float(), nullable=True),  # null is unranked
     PrimaryKeyConstraint("submission_id", "repository_id", name="pk_flow_submission_terms"),
 )
 Index(

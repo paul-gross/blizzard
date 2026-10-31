@@ -3,6 +3,8 @@ frozen shape, the issue-URL backfill and verbatim survivors, a canonical-URL dow
 identical down-then-up round trip, and an idempotent rerun over an already reshaped store; a
 fresh store reaches the pre-reshape shape and its work-ref table keeps the ``chunk_id`` foreign key."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

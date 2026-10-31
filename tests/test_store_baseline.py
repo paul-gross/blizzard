@@ -1,7 +1,7 @@
 """A folded baseline builds exactly the store the history it replaced built.
 
 Each tree's baseline-only store is compared with the store the floor release's own history builds, on the same
-backend: the schema ``_schema_snapshot`` fingerprints, every row (minted ids and stamped instants read by
+backend: the schema ``schema_snapshot`` fingerprints, every row (minted ids and stamped instants read by
 ``blizzard.tools.store_fold.seeds.normalize``), and on SQLite each table's ``AUTOINCREMENT``. The runner history
 cannot reach head on Postgres from an empty store (``20260920_0200_usage_cost_is_share`` sets a Boolean
 ``server_default`` of ``0``, which Postgres rejects), so that leg holds the baseline's Postgres store to the floor's

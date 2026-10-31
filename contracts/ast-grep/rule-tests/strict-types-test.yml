@@ -1,0 +1,22 @@
+id: bzh:strict-types
+valid:
+  - |
+    value = row._mapping  # pyright: ignore[reportPrivateUsage]  # the row's public mapping
+  - |
+    # pyright: reportMissingTypeStubs=false
+  - |
+    # pyright: strict
+  - |
+    # a comment about types, ignoring nothing
+invalid:
+  - |
+    value: int = "s"  # type: ignore
+  - |
+    value: int = "s"  # type: ignore[assignment]
+  - |
+    def f(x):  # noqa: E501  # type:ignore[no-untyped-def]
+        return x
+  - |
+    # pyright: basic
+  - |
+    # pyright: standard

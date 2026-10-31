@@ -1,5 +1,7 @@
 """Tests proving the ``20261008_1100_tenants`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections import Counter

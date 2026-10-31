@@ -1,5 +1,7 @@
 """Tests proving the ``20261008_1500_scope_surrogate`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +25,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import MIGRATIONS_DIR
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.migration_support_tenant_carry_over_migration import (
     _BACKFILL,
     _BEFORE,
@@ -612,21 +614,21 @@ def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remai
     runner, engine = _carried_over_with_links(tmp_path, _BACKFILL)
     try:
         [first] = [tenant_id for tenant_id, *_ in _tenant_rows(engine)]
-        backfilled = _schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
+        backfilled = schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
         runner.upgrade(_SURROGATE)
         with engine.begin() as conn:
             conn.execute(
                 sa.text("INSERT INTO tenants VALUES (:tenant, 'second', :at, 'migration')"),
                 {"tenant": _CARRY_OVER_SECOND_TENANT, "at": _T0},
             )
-        tightened = _schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
+        tightened = schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)
 
         with pytest.raises(RuntimeError, match="delete every tenant but one before downgrading") as refused:
             runner.downgrade(_BACKFILL)
 
         assert first in str(refused.value) and _CARRY_OVER_SECOND_TENANT in str(refused.value)
         assert runner.current_revision() == _SURROGATE
-        assert (_schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == tightened
+        assert (schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == tightened
 
         with engine.begin() as conn:
             conn.execute(
@@ -635,6 +637,6 @@ def test_the_tightened_keys_downgrade_to_the_backfill_only_once_one_tenant_remai
         runner.downgrade(_BACKFILL)
 
         assert runner.current_revision() == _BACKFILL
-        assert (_schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == backfilled
+        assert (schema_snapshot(engine, exemptions={}, name_exemptions={}), _rows_by_column(engine)) == backfilled
     finally:
         engine.dispose()

@@ -61,8 +61,11 @@ class WorkSourceEntry:
         if gate is None:
             return kind(record, forge, secret) if instrument is None else kind(record, forge, secret, instrument)
 
+        def learn(response: httpx2.Response) -> None:
+            gate.learn(response.headers)
+
         def teach(client: httpx2.Client) -> None:
-            client.event_hooks["response"].append(lambda response: gate.learn(response.headers))
+            client.event_hooks["response"].append(learn)
             if instrument is not None:
                 instrument(client)
 

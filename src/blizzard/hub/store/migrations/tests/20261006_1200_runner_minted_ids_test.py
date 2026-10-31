@@ -3,6 +3,8 @@ registration is keyed by a minted ``rn_`` id and named after its old id, every r
 it, enrolled and revoked tokens keep resolving, the hub's own executor rows and unregistered ids stay
 put, and a downgrade restores the old ids."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import json
