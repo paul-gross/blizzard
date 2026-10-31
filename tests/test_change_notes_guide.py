@@ -30,6 +30,21 @@ def _file(kind: str, body: str, **fields: str) -> str:
     return f"---\nkind: {kind}\n{front}---\n\n{body}\n"
 
 
+def test_guide_heading_joins_wrapped_first_sentence_without_link() -> None:
+    note = Note(
+        "changes/2.0.0/wrapped.md",
+        "2.0.0",
+        "wrapped",
+        {"kind": "changed", "breaking": True, "upgrade-guide": "steps"},
+        "The first sentence spans\ntwo lines. Another sentence follows.\n\n## Upgrade\n\nSwitch.\n",
+    )
+    text = guide([note], "2", tag="v2.0.0")
+    assert "### The first sentence spans two lines.\n\n" in text
+    assert "The first sentence spans\ntwo lines. Another sentence follows." in text
+    assert "### [The first sentence spans two lines.]" in render("v2.0.0", [note], {}, "")
+    assert "### simple prose.\n\n" in guide([_note("2.0.0", "simple", "changed", breaking=True)], "2")
+
+
 def test_guide_uses_numeric_history_latest_postponement_and_only_current_removal() -> None:
     notes = [
         _note("1.10.0", "delay", "changed", postpones="old", **{"removes-in": "4"}),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from blizzard.tools.change_notes.contract import Kind, Note
-from blizzard.tools.change_notes.render import UPGRADE_DOC_URL, split
+from blizzard.tools.change_notes.render import UPGRADE_DOC_URL, first_sentence, split
 from blizzard.tools.change_notes.schedule import latest_released_schedule, release_line
 from blizzard.tools.change_notes.tree import UNRELEASED
 
@@ -23,7 +23,7 @@ def _entry(note: Note, tag: str | None, *, level: int = 3) -> str:
         if isinstance(guide, str)
         else None
     )
-    parts = [f"{'#' * level} {prose.splitlines()[0]}", "", prose]
+    parts = [f"{'#' * level} {first_sentence(prose)}", "", prose]
     if upgrade:
         parts.extend(["", f"{'#' * (level + 1)} Upgrade", "", upgrade])
     if link:
