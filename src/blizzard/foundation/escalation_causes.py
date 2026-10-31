@@ -18,4 +18,8 @@ class EscalationCause(StrEnum):
     FORGE_AUTH = "forge-auth"
     FORGE_CONFIG = "forge-config"
     FORGE_CAPABILITY_MISSING = "forge-capability-missing"
+    CHANGE_CLOSED = "change-closed"
+    BRANCH_PROTECTED = "branch-protected"
+    MERGE_METHOD_REFUSED = "merge-method-refused"
+    PARK_TIMEOUT = "park-timeout"
     ESCALATE_CHOICE = "escalate-choice"

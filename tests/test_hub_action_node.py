@@ -155,6 +155,18 @@ def test_an_earlier_next_poll_at_never_hastens_the_visit() -> None:
     assert PollPolicy(interval=timedelta(seconds=30)).due_at(row) == _AT + timedelta(seconds=30)
 
 
+def test_parked_wait_uses_latest_poll_and_two_minute_floor() -> None:
+    row = HubNodePollFact(
+        node_id="nd",
+        epoch=1,
+        polled_at=_AT,
+        kind="awaiting-merge",
+        last_polled_at=_AT + timedelta(minutes=3),
+    )
+    assert PollPolicy(interval=timedelta(seconds=30)).due_at(row) == _AT + timedelta(minutes=5)
+    assert PollPolicy(interval=timedelta(minutes=4)).due_at(row) == _AT + timedelta(minutes=7)
+
+
 # Component — hub-advance re-drives a chunk waiting at a node naming an action
 
 

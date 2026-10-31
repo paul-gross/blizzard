@@ -19,6 +19,8 @@ class LandingPolicy(StrEnum):
     """How a repository's changes land."""
 
     MERGE_ON_CHECKS = "merge-on-checks"
+    FAST_FORWARD = "fast-forward"
+    PARK = "park"
 
 
 #: The policy a repository lands by when none is stated — the store's server default too.
@@ -28,7 +30,7 @@ DEFAULT_LANDING_POLICY = LandingPolicy.MERGE_ON_CHECKS
 DEFAULT_PARK_TIMEOUT_HOURS = 168
 
 #: The policies a park timeout belongs to; a timeout on a repository landing by any other is refused.
-PARKING_POLICIES: frozenset[LandingPolicy] = frozenset()
+PARKING_POLICIES: frozenset[LandingPolicy] = frozenset({LandingPolicy.PARK})
 
 
 @domain_model
@@ -41,6 +43,13 @@ class PolicyCapabilities:
 
 
 POLICY_CAPABILITIES: Mapping[LandingPolicy, PolicyCapabilities] = {
+    LandingPolicy.PARK: PolicyCapabilities(requires=frozenset({Capability.CHANGES_OPEN, Capability.CHANGES_READ})),
+    LandingPolicy.FAST_FORWARD: PolicyCapabilities(
+        requires=frozenset({Capability.REFS_READ, Capability.COMPARE, Capability.CHECKS_READ, Capability.REFS_ADVANCE}),
+        uses=frozenset(
+            {Capability.REFS_CREATE, Capability.REFS_DELETE, Capability.BRANCHES_MERGE, Capability.CHECKS_RERUN}
+        ),
+    ),
     LandingPolicy.MERGE_ON_CHECKS: PolicyCapabilities(
         requires=frozenset(
             {

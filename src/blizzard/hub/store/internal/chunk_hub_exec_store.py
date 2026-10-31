@@ -155,10 +155,27 @@ class ChunkHubExecStore:
         at: datetime,
         next_poll_at: datetime | None = None,
     ) -> None:
-        """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``) — never a transition, no idempotency guard (an at-least-once poll attempt is
-        harmless recorded twice)."""
-        conn_of(handle).execute(
+        """Record a wait on the locked connection, coalescing consecutive parked polls."""
+        conn = conn_of(handle)
+        if kind == "awaiting-merge":
+            previous = conn.execute(
+                self._store.select(s.hub_node_poll)
+                .where(
+                    s.hub_node_poll.c.chunk_id == chunk_id,
+                    s.hub_node_poll.c.node_id == node_id,
+                    s.hub_node_poll.c.epoch == epoch,
+                )
+                .order_by(s.hub_node_poll.c.id.desc())
+                .limit(1)
+            ).first()
+            if previous is not None and previous.kind == kind:
+                conn.execute(
+                    self._store.update(s.hub_node_poll)
+                    .where(s.hub_node_poll.c.id == previous.id)
+                    .values(last_polled_at=at, next_poll_at=next_poll_at)
+                )
+                return
+        conn.execute(
             self._store.insert(s.hub_node_poll).values(
                 chunk_id=chunk_id, node_id=node_id, epoch=epoch, kind=kind, polled_at=at, next_poll_at=next_poll_at
             )

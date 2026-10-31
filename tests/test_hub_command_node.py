@@ -331,6 +331,18 @@ def test_hub_node_pending_is_none_with_no_poll_fact() -> None:
     assert _facts_at_hub_node(polls=[]).hub_node_pending() is None
 
 
+def test_pending_timeout_starts_at_the_latest_uninterrupted_pending_run() -> None:
+    at = datetime(2026, 7, 17, tzinfo=UTC)
+    polls = [
+        HubNodePollFact("nd_merge", 1, at, kind="pending"),
+        HubNodePollFact("nd_merge", 1, at + timedelta(hours=4), kind="awaiting-merge"),
+        HubNodePollFact("nd_merge", 1, at + timedelta(hours=5), kind="pending"),
+        HubNodePollFact("nd_merge", 1, at + timedelta(hours=6), kind="pending"),
+    ]
+    facts = _facts_at_hub_node(polls=polls)
+    assert facts.hub_node_pending_since(node_id="nd_merge", epoch=1) == at + timedelta(hours=5)
+
+
 def test_hub_node_pending_returns_the_newest_matching_poll_fact() -> None:
     facts = _facts_at_hub_node(
         polls=[

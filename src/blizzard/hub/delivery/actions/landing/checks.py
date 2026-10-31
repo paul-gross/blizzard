@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.delivery.actions.landing.repo import NotRecorded, RepoLanding
+from blizzard.hub.delivery.actions.landing.repo import Failure, Inherited, NotRecorded, RepoLanding, RepoState, Waiting
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.forge.landing import (
     Check,
     CheckOutcome,
@@ -155,6 +156,36 @@ async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> bool | N
     except NotRecorded as exc:
         repo.run.say(f"re-run signature marker write failed (non-fatal): {exc}")
     return True
+
+
+async def failed_checks(
+    repo: RepoLanding, head: str, failing: list[Check], checks: list[dict[str, Any]], identity: dict[str, Any]
+) -> RepoState:
+    """Route owned failures and rerun inherited failures once, independent of how the revision lands."""
+    run = repo.run
+    if not all(inherited(check["base_red"]) for check in checks):
+        return Failure(({**identity, "decision": FAILED, "checks": checks},))
+    unsigned = [
+        check
+        for check in failing
+        if Capability.CHECKS_RERUN in repo.forge.offered
+        and rerun_marker(repo.repo, check.name, head) not in run.visit.marker_names()
+    ]
+    if unsigned:
+        accepted = [await rerun_once(repo, check, head) for check in unsigned]
+        if False in accepted:
+            return Failure(({**identity, "decision": FAILED, "checks": checks},))
+        return Waiting(f"{repo.repo}'s inherited failures re-run")
+    rows = [
+        {
+            "name": check.name,
+            "conclusion": check.detail,
+            "details_url": check.details_url,
+            "signature": rerun_marker(repo.repo, check.name, head),
+        }
+        for check in failing
+    ]
+    return Inherited(({**identity, "decision": INHERITED_FAILURE, "base_branch": repo.base_branch, "checks": rows},))
 
 
 @domain_model
