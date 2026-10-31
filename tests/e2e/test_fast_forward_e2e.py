@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from tests.e2e.flow_support import _graph, flow_runner_config, flow_world, pinned_chunk, ticking_runner
-from tests.e2e.test_flow_turns_e2e import _detail
+from tests.e2e.test_flow_turns_e2e import _await, _detail
 from tests.e2e.test_landing_order_e2e import _WEB_REPO, _WEB_REPO_NAME, _add_web
 from tests.fleet_launchers import REPO, run_forge, run_hub
 from tests.fleet_world import REPO_NAME
@@ -113,3 +113,43 @@ def test_fast_forward_stands_when_second_forge_refuses_merge_method(tmp_path: Pa
         assert [row["repo"] for row in detail["landed_repos"]] == [REPO]
         assert first.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json() == []
         assert len(second.get(f"/repos/{_WEB_REPO}/pulls", params={"state": "open"}).json()) == 1
+
+
+def test_candidate_without_checks_exhausts_pending_timeout_without_advancing(tmp_path: Path) -> None:
+    bin_dir, workspace, origins = flow_world(tmp_path)
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.patch(f"/api/repositories/{REPO_NAME}", json={"landing_policy": "fast-forward"}).status_code == 200
+        graph = yaml.safe_load(_graph("NO-CHECKS.md", (REPO_NAME,), poll_interval=1, record_findings=False))
+        graph["nodes"]["deliver"]["poll_timeout"] = 2
+        graph["nodes"]["build"]["prompt"] += (
+            "import json, urllib.request\n"
+            f"url = 'http://127.0.0.1:{forge_port}/_levers/ref_checks'\n"
+            f"request = urllib.request.Request(url, data=json.dumps({{'repo': {REPO!r}, "
+            "'ref': commit, 'checks': []}).encode(), headers={'Content-Type': 'application/json'}, method='POST')\n"
+            "urllib.request.urlopen(request).close()\n"
+        )
+        minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
+        assert minted.status_code == 201, minted.text
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "NO-CHECKS.md", "body": "missing CI"})
+        assert issue.status_code == 201, issue.text
+        made = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert made.status_code == 201, made.text
+        chunk = made.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk}/promote").status_code == 202
+        original_base = forge.get(f"/repos/{REPO}/git/ref/heads/main").json()["object"]["sha"]
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+            tick_until(lambda: (_detail(hub, chunk).get("pending") or {}).get("kind") == "pending")
+            _await(
+                lambda: any(
+                    row["from_node_name"] == "deliver" and row["choice_name"] == "failure"
+                    for row in _detail(hub, chunk)["history"]
+                ),
+                "missing-check timeout",
+                timeout=30,
+            )
+        detail = _detail(hub, chunk)
+        assert any(row["from_node_name"] == "deliver" and row["choice_name"] == "failure" for row in detail["history"])
+        assert detail["landed_repos"] == []
+        assert forge.get(f"/repos/{REPO}/git/ref/heads/main").json()["object"]["sha"] == original_base
+        assert forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json() == []

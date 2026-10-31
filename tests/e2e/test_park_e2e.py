@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 import yaml
 
-from tests.e2e.flow_support import _graph, flow_runner_config, flow_world, ticking_runner
+from tests.e2e.flow_support import _graph, flow_runner_config, flow_world, pinned_chunk, ticking_runner
 from tests.e2e.test_flow_turns_e2e import _assert_flow_record_holds, _await, _detail, _turns
 from tests.e2e.test_landing_order_e2e import _WEB_REPO, _WEB_REPO_NAME, _add_web, _landed_order, _order, _terms
 from tests.fleet_launchers import REPO, run_forge, run_hub
@@ -156,4 +157,48 @@ def test_parked_repository_holds_landing_order_until_person_merges(tmp_path: Pat
             next(row for row in detail["landed_repos"] if row["repo"] == parked_path)["commit_hash"]
             == merged.json()["sha"]
         )
+        _assert_flow_record_holds(hub_dir)
+
+
+def test_park_timeout_then_person_merge_is_adopted_on_requeue(tmp_path: Path) -> None:
+    bin_dir, workspace, origins = flow_world(tmp_path)
+    hub_dir = tmp_path / "hub"
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
+        configured = hub.patch(
+            f"/api/repositories/{REPO_NAME}", json={"landing_policy": "park", "park_timeout_hours": 1}
+        )
+        assert configured.status_code == 200, configured.text
+        chunk = pinned_chunk(hub, forge, "PARK-TIMEOUT.md")
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+            tick_until(lambda: (_detail(hub, chunk).get("pending") or {}).get("kind") == "awaiting-merge")
+            first_since = _detail(hub, chunk)["pending"]["since"]
+            pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "open"}).json()
+            assert len(pulls) == 1
+            number = pulls[0]["number"]
+            # Move only the durable marker clock; the repository's one-hour review window
+            # otherwise makes this boundary impractical to exercise in an e2e run.
+            aged = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+            with sqlite3.connect(hub_dir / "data" / "hub.db") as conn:
+                conn.execute(
+                    "UPDATE artifacts SET produced_at = ? WHERE chunk_id = ? AND name LIKE 'delivery-pr/%'",
+                    (aged, chunk),
+                )
+                conn.execute(
+                    "UPDATE hub_node_poll SET last_polled_at = ? WHERE chunk_id = ? AND kind = 'awaiting-merge'",
+                    (aged, chunk),
+                )
+            _await(lambda: _detail(hub, chunk)["status"] == "needs_human", "park timeout", timeout=30)
+            detail = _detail(hub, chunk)
+            assert detail["escalation"]["cause"] == "park-timeout", detail
+            merged = forge.put(f"/repos/{REPO}/pulls/{number}/merge", json={"merge_method": "squash"})
+            assert merged.status_code == 200, merged.text
+            requeued = hub.post(f"/api/chunks/{chunk}/requeues")
+            assert requeued.status_code == 202, requeued.text
+            tick_until(lambda: _detail(hub, chunk)["status"] == "done")
+        detail = _detail(hub, chunk)
+        assert detail["landed_repos"][0]["commit_hash"] == merged.json()["sha"]
+        assert detail["pending"] is None
+        assert first_since is not None
+        assert len(forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()) == 1
         _assert_flow_record_holds(hub_dir)
