@@ -8,16 +8,16 @@ from typing import Any
 
 BASELINE = {
     "blizzard": (
-        2723,
+        2730,
         {
-            "tests/root": 16438,
-            "tests/e2e": 165,
+            "tests/root": 16486,
+            "tests/e2e": 39,
             "tests/service": 140,
             "tests/rehearsal": 40,
             "tests/crash": 19,
-            "store-migration-tests": 304,
+            "store-migration-tests": 305,
             "exemplar-tests": 1,
-            "shipping": 8,
+            "shipping": 10,
         },
     ),
     "blizzard-mock": (237, {"tests": 1302, "shipping": 331}),
