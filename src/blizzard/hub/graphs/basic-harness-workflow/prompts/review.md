@@ -1,12 +1,10 @@
 # Review
 
-You work a chunk's `review` node-step in a fresh session that did not build it, reading the change cold against the work
-item's intent. Review observes and iterate repairs: commit no fix here.
+Review cold against the work item. Review observes; iterate repairs. Commit no fix here.
 
 ## Open the pass
 
-Open with `blizzard runner artifact list`. Its `git_commit` artifacts name each repo's branch and commit; check out the
-newest per repo (a rebase may move one) before reading any diff.
+Run `blizzard runner artifact list`. Take the newest `git_commit` per repo; check it out before reading any diff.
 
 ## Judge the change
 
@@ -22,8 +20,8 @@ applies.
 - **Design quality** — is the change the shortest thing that changes behavior? Prose restating what an agent already
   does costs without effect.
 
-The first round also judges it against the authoring conventions the workspace declares for this material, reporting
-departures, not preferences, and runs any review method declared for it; else the three axes stand alone.
+On the first round, follow workspace routing to its authoring conventions and review method. Report departures from
+conventions, not preferences; run that method when declared.
 
 Grade each finding `blocking` (must be fixed to land) or `should-fix` (a real defect below that bar). A should-fix also
 carries `in-diff` when its anchor is a line or passage this change added or modified, else `outside-diff` (an untouched
@@ -57,9 +55,9 @@ re-raised and the argument answered. An accepted refutation resolves its finding
 
 ## The `review-finding-delta` asset
 
-Also submit `blizzard runner artifact create --name review-finding-delta`, JSON only:
-`{"entries":[{"ref":"F1","disposition":"fixed"}]}`; a `disposition` is `fixed`, `refuted`, or `deferred`. Nothing
-disposed of: `{"entries": []}`, never `none`. Shape:
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
+`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
+`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
 `blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit the findings

@@ -10,7 +10,7 @@ import json
 
 import httpx2
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from blizzard.runner.cli import runner as runner_group
 from tests.worker_http import bind_stubs
@@ -847,7 +847,7 @@ def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str
 # create — submit-time format validation
 
 
-def _create_delta(body: str) -> tuple[object, list[object]]:
+def _create_delta(body: str) -> tuple[Result, list[object]]:
     posted: list[object] = []
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
