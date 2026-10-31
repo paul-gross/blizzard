@@ -9644,7 +9644,7 @@ export type SidechainSegmentViewOutput = {
 /**
  * SignInRefusal
  *
- * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
+ * Why a sign-in admitted nobody — the code a refusal is reported by. Every refusal writes
  * nothing: no user, identity link, membership, invitation fact or session.
  */
 export const SignInRefusal = {
@@ -9656,7 +9656,7 @@ export const SignInRefusal = {
 /**
  * SignInRefusal
  *
- * Why a sign-in admitted nobody — the code the login page shows its text for. Every refusal writes
+ * Why a sign-in admitted nobody — the code a refusal is reported by. Every refusal writes
  * nothing: no user, identity link, membership, invitation fact or session.
  */
 export type SignInRefusal = typeof SignInRefusal[keyof typeof SignInRefusal];
