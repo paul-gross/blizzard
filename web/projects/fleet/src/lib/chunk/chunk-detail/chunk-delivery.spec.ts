@@ -24,7 +24,7 @@ describe('ChunkDelivery', () => {
     const fixture = TestBed.createComponent(ChunkDelivery);
     fixture.componentRef.setInput('detail', chunkDetail({
       awaiting_external_merge: true,
-      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: 'future-kind' },
+      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: 'future-kind', since: null },
     }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
