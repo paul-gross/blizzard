@@ -39,7 +39,7 @@ def validate_artifact_content(name: str, content: str) -> str | None:
 
 
 def _summarize(exc: ValidationError) -> str:
-    parts = []
+    parts: list[str] = []
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "<root>"
         parts.append(f"{loc}: {error['msg']}")
