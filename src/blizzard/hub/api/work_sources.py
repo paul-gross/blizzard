@@ -54,6 +54,7 @@ from blizzard.hub.domain.work_items.editing import (
 )
 from blizzard.hub.domain.work_items.model import WorkItemEdit, WorkItemFieldBlank, WorkItemNotEditable, WorkItemText
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
+from blizzard.hub.work_sources.registry import label_from_binding
 from blizzard.hub.work_sources.source import AuthorView, IWorkSource, resolve_author_view
 from blizzard.wire.forge import OldFieldWarning
 from blizzard.wire.work_source import (
@@ -387,7 +388,7 @@ def list_work_items(
                 slug=slug,
                 live_holder=holders.get(WorkRef(source=item.source, ref=item.ref)),
                 runner_names=runner_names,
-                label=services.work_sources.label(WorkRef(source=item.source, ref=item.ref)),
+                label=label_from_binding(WorkRef(source=item.source, ref=item.ref), source_obj, lambda: slug),
             )
             for item in items
         ]
