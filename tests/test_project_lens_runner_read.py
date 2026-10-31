@@ -51,8 +51,13 @@ def test_runners_serving_names_exactly_the_runners_whose_declaration_resolved_to
     _add(hub, "rn_theirs", ServedEntry("theirs", _THEIRS))
     _add(hub, "rn_unresolved", ServedEntry(_MINE, None))
     _add(hub, "rn_nothing")
+    _add(hub, "rn_retired", ServedEntry("mine", _MINE))
+    registry = hub.services.registry
+    assert isinstance(registry, RunnerRegistryStore)
+    registry.record_lifecycle("rn_retired", retired=True, at=hub.services.clock.now(), by="test")
+    assert registry.is_retired("rn_retired")
 
-    assert hub.services.registry.runners_serving(_MINE) == {"rn_slug", "rn_id", "rn_both"}
+    assert hub.services.registry.runners_serving(_MINE) == {"rn_slug", "rn_id", "rn_both", "rn_retired"}
     assert hub.services.registry.runners_serving("proj_none") == frozenset()
 
 
