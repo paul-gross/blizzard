@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 
 
@@ -50,7 +51,9 @@ class IWriteChunkLifecycleRepository(IReadChunkLifecycleRepository, Protocol):
         write, with the ``withdrawn`` flow facts it wrote."""
         ...
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    def record_completion_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> LeverWrite:
         """Append the ``chunk.completed`` fact — an operator's manual completion, including from
         ``stopped`` — and, atomically on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), release any live route and close ``completed`` each of

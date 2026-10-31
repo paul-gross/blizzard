@@ -21,6 +21,7 @@ from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, TickRe
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR, Submission
@@ -488,6 +489,7 @@ def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_u
     assert merge is not None
     cast(IWriteChunkMovementRepository, world.hub.services.chunks.movement).record_transition(
         transition_id="tr_parked",
+        close_decision=decide_close_enqueue([WorkRef("default", "42")], lambda _: True),
         chunk_id=chunk_id,
         from_node_id=build,
         to_node_id=merge.node_id,

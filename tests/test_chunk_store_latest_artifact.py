@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 import sqlalchemy as sa
 
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
@@ -38,6 +39,7 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
         content="one",
         at=at,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
     )
     _writable(hub).record_hub_artifact(
         chunk_id,
@@ -48,6 +50,7 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
         content="two",
         at=at,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
     )
 
     winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")

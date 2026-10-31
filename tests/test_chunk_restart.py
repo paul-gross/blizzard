@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Movement, MovementKind
+from blizzard.hub.domain.chunk.model import Movement, MovementKind, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
@@ -560,6 +560,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
             artifacts=[],
             release_route=False,
             admission=EpochAdmission.ABOVE,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
         )
 
     assert wrote is False
@@ -588,6 +589,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path) -> None:  # type: 
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
         )
 
     assert wrote is True

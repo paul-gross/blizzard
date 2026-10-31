@@ -14,6 +14,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.forge.landing import Mergeability
@@ -294,6 +295,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed node — never completed
@@ -326,6 +328,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=2, seq=2)  # a crash/reap at the landed (entry) node
@@ -359,6 +362,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
 
     resp = hub.client.get("/api/analytics/outcomes/nodes", headers=_cookie(token))

@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import Engine, insert
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice
+from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
@@ -46,6 +46,7 @@ def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at:
         at=at,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
 
@@ -68,6 +69,7 @@ def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transiti
         artifacts=[],
         decision_id=decision_id,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
 

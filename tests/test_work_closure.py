@@ -25,7 +25,7 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, PrMarker, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
-from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.events import IWriteChunkEventsRepository
@@ -36,6 +36,7 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
     CLOSE_DRAIN_PASS_LIMIT,
+    NO_CLOSER_REASON,
     CloseDrainSweep,
     CloseIntentDrainer,
     IReadCloseIntentCorpus,
@@ -82,6 +83,8 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     the current landing truth :func:`~blizzard.hub.domain.chunk.model.has_landed_repos` reads
     independent of any real graph/node machinery. Enqueues a pending close
     intent as a side effect of the same write."""
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
     cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
         chunk_id,
         node_id="nd_deliver",
@@ -91,6 +94,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
         content="sha",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=CloseEnqueueDecision(closable=frozenset(chunk.work_refs), skipped=frozenset()),
     )
 
 
@@ -187,7 +191,9 @@ def test_pending_close_intents_carries_each_intents_attempt_history(tmp_path: Pa
         chunk_id, pointer=fresh.ref, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=hub.clock.now()
     )
     hub.clock.advance(timedelta(seconds=10))  # a backed-off intent is still returned
-    delivery.record_close_attempt_skipped(fresh.intent_id, at=hub.clock.now())
+    delivery.record_work_item_closure(
+        chunk_id, pointer=fresh.ref, outcome=WorkItemCloseOutcome.FAILED, reason="x", at=hub.clock.now()
+    )
 
     [backed_off] = delivery.pending_close_intents()
     assert backed_off.intent_id == fresh.intent_id
@@ -350,7 +356,7 @@ class _FakeCloseChunks:
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: object
     ) -> bool:
-        if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE):
+        if outcome in (WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE, WorkItemCloseOutcome.SKIPPED):
             self.retired.append((chunk_id, pointer))
         key = (chunk_id, pointer.source, pointer.ref, outcome.value)
         if key in self._written:
@@ -632,19 +638,16 @@ def test_sweep_against_a_real_store_defers_a_turned_away_close_to_its_resume_at(
 
 
 def test_sweep_skips_an_intent_whose_source_has_no_closer_bound() -> None:
-    """An intent from a source not seated as a closer stays pending, untouched —
-    the sweep neither closes it nor retires it, and issues no forge call. It still ticks
-    the intent's own backoff clock, so a persistently source-less intent
-    is not reconsidered on every sweep forever."""
+    """A legacy intent without a closer is terminally skipped."""
     unopted_ref = WorkRef(source="unopted", ref="1")
     chunks = _FakeCloseChunks([PendingCloseIntent(chunk_id="ch_1", ref=unopted_ref, intent_id=7)])
 
     _drainer(chunks, {}).sweep()
 
-    assert chunks.closures == []
-    assert chunks.retired == []
-    assert chunks.events == []
-    assert chunks.skipped_attempts == [7]
+    assert chunks.closures == [("ch_1", unopted_ref, WorkItemCloseOutcome.SKIPPED, NO_CLOSER_REASON)]
+    assert chunks.retired == [("ch_1", unopted_ref)]
+    assert [event.kind for event in chunks.events] == ["work-item-close-skipped"]
+    assert chunks.skipped_attempts == []
 
 
 def test_sweep_over_an_empty_queue_issues_no_forge_call() -> None:
@@ -761,13 +764,13 @@ def test_sweep_reads_no_delivery_when_no_intent_is_due() -> None:
     assert chunks.record_reads == []
 
 
-def test_sweep_of_a_skipped_intent_ticks_the_same_backoff_as_a_failed_one() -> None:
+def test_sweep_of_a_skipped_intent_retires_it() -> None:
     unopted = PendingCloseIntent(chunk_id="ch_1", ref=WorkRef(source="unopted", ref="1"), intent_id=7)
     chunks = _FakeCloseChunks([unopted])
 
     _drainer(chunks, {}).sweep()
 
-    assert chunks.skipped_attempts == [7]
+    assert chunks.retired == [("ch_1", unopted.ref)]
 
 
 @pytest.mark.component
@@ -883,9 +886,8 @@ def test_sweep_over_a_repeated_failure_publishes_one_event_logged_frame(tmp_path
 
 
 @pytest.mark.component
-def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_path: Path) -> None:
-    """A source removed from config after a landing — the only way this arises —
-    leaves a stuck pending row rather than dead-lettering it."""
+def test_sweep_over_an_intent_whose_source_has_no_closer_retires_it(tmp_path: Path) -> None:
+    """A source removed after landing leaves a terminal skipped outcome."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     _land(hub, chunk_id)
@@ -905,11 +907,44 @@ def test_sweep_over_an_intent_whose_source_has_no_closer_leaves_it_pending(tmp_p
 
     drainer.sweep()
 
-    pointer = WorkRef(source="default", ref="1")
-    # Just skipped: still pending, carrying the attempt it ticked — not dead-lettered.
-    [pending] = hub.services.chunks.delivery.pending_close_intents()
-    assert (pending.ref, pending.attempt_count) == (pointer, 1)
-    assert pending.chunk_id == chunk_id
+    assert hub.services.chunks.delivery.pending_close_intents() == []
+    frames = _event_logged_frames(hub)
+    assert [frame["kind"] for frame in frames] == ["work-item-close-skipped"]
+    drainer.sweep()
+    assert len(_event_logged_frames(hub)) == 1
+
+
+@pytest.mark.component
+def test_mixed_legacy_intents_close_and_skip_once(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    bound = ingest(hub, [{"source": "default", "ref": "1"}])
+    created = hub.client.post("/api/work-sources/hub/items", json={"title": "t", "body": "b"}).json()
+    unbound = created["chunk_id"]
+    _land(hub, bound)
+    _land(hub, unbound)
+    closer = FakeCloser()
+    drainer = _sweep_over(
+        _corpus(hub),
+        CloseIntentDrainer(
+            delivery=cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery),
+            artifacts=hub.services.chunks.artifacts,
+            chunks=hub.services.chunks.record,
+            events=_event_log(hub),
+            work_sources=WorkSourceRegistry({}, closers={"default": closer}),
+            clock=hub.clock,
+        ),
+        hub.clock,
+    )
+
+    drainer.sweep()
+    drainer.sweep()
+
+    assert closer.closed == [WorkRef("default", "1")]
+    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert sorted(frame["kind"] for frame in _event_logged_frames(hub)) == [
+        "work-item-close-skipped",
+        "work-item-closed",
+    ]
 
 
 # CloseIntentDrainer.sweep() against the built-in `hub` source — always
@@ -993,6 +1028,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
         at=hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
     )
 
     facts = hub.services.chunks.facts.load_facts(chunk_id)

@@ -17,6 +17,7 @@ import pytest
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
@@ -132,6 +133,7 @@ def _deliver(
         at=hub.clock.now(),
         artifacts=rows,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
     result = _Delivered(hub.turn_outcome(chunk_id))

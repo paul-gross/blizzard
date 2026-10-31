@@ -1375,7 +1375,7 @@ delivery_landed = Table(
 Index("ix_delivery_landed_tenant_chunk_id", delivery_landed.c.tenant_id, delivery_landed.c.chunk_id)
 
 # --- Delivery closure facts (work_item_closures) -----------------
-# One row per close-attempt outcome; `closed`/`gone` are terminal, `failed` is retried.
+# One row per close outcome; `closed`/`gone`/`skipped` are terminal, `failed` is retried.
 
 work_item_closures = Table(
     "work_item_closures",
@@ -1395,7 +1395,7 @@ work_item_closures = Table(
 Index("ix_work_item_closures_tenant_id", work_item_closures.c.tenant_id)
 
 # --- Close intent outbox (close_intents) ---------------------------------------
-# One row per work ref a landing or completion owes a closure attempt; `retired_at` NULL is pending, never deleted.
+# One row per closable work ref; `retired_at` NULL is pending, never deleted.
 
 close_intents = Table(
     "close_intents",
@@ -1423,7 +1423,7 @@ close_intent_attempts = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("intent_id", Integer, ForeignKey("close_intents.id"), nullable=False),
     Column("attempted_at", UtcDateTime, nullable=False),
-    Column("outcome", String, nullable=False),  # skipped | failed | deferred
+    Column("outcome", String, nullable=False),  # failed | deferred; older rows may say skipped
     # Set only on a `deferred` row: when the forge's rate budget lets the close be tried again.
     Column("resume_at", UtcDateTime, nullable=True),
     Column(

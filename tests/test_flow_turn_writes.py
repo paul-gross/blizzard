@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import Table, func, select
 
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -169,6 +170,7 @@ def _transition(world: _World, handle: object, chunk_id: str, *, epoch: int = 0)
         admission=EpochAdmission.AT_OR_ABOVE,
         runner_id=_HUB_RUNNER,
         transition_id=f"tr_{chunk_id}",
+        close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
         at=world.hub.clock.now(),
         artifacts=[],
         release_route=False,
@@ -397,6 +399,7 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
     def record() -> LandingWrite:
         return world.flows.record_landing(
             landing,
+            close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
             node_id=_NODE,
             node_name="deliver",
             epoch=0,

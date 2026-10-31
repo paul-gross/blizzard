@@ -45,6 +45,7 @@ def test_restart_refuses_a_chunk_gone_under_the_lock_and_writes_nothing() -> Non
         graphs=cast(IReadGraphRepository, _Untouchable()),
         clock=FixedClock(_T0),
         exclusive=cast(IChunkExclusiveWrites, _FakeExclusiveWrites()),
+        closer_available=lambda source: source == "hub",
     )
 
     with pytest.raises(ChunkNotFound):

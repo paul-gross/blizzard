@@ -18,7 +18,7 @@ import pytest
 from sqlalchemy import func
 
 from blizzard.hub.delivery.hub_node import HubNodeRouter
-from blizzard.hub.domain.chunk.model import DecisionChoice
+from blizzard.hub.domain.chunk.model import DecisionChoice, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
@@ -198,6 +198,7 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
             runner_id="r1",
             at=chunk.hub.clock.now(),
             artifacts=[],
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         )
 
     result = _held_by_a_writer(chunk, lambda: chunk.complete("build", epoch=1, choice="pass"), _land_the_first)
@@ -222,6 +223,7 @@ def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: 
             at=chunk.hub.clock.now(),
             artifacts=[],
             imposed_by_runner_id="r1",
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         )
 
     result = _held_by_a_writer(chunk, lambda: chunk.decide("build", epoch=1), _open_the_first)

@@ -48,7 +48,15 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, IReadWorkItemRepository, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    CloseEnqueueDecision,
+    DecisionChoice,
+    IReadWorkItemRepository,
+    WorkItemAuthor,
+    WorkRef,
+    decide_close_enqueue,
+)
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
@@ -1278,6 +1286,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
         )
 
+    def _close_decision(chunk_id: str) -> CloseEnqueueDecision:
+        chunk = read.record.get(chunk_id)
+        assert chunk is not None
+        return decide_close_enqueue(chunk.work_refs, lambda _source: True)
+
     # --- graphs -------------------------------------------------------------------------
     default_graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
@@ -1552,6 +1565,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         ),
         at=_ht(20),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(run_chunk_1),
     )
     artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")
     assert artifact_1 is not None
@@ -1574,6 +1588,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
         at=_ht(21),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(run_chunk_1),
     )
     artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")
     assert artifact_2 is not None
@@ -1644,6 +1659,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(36),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_transition),
     )
     write.movement.record_transition(
         transition_id="tr_hub_2",
@@ -1656,6 +1672,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(37),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_transition),
     )
 
     # --- garden / review delivery markers: each store's own replay probe reads these ---------------
@@ -1727,6 +1744,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_migration),
     )
 
     # --- decisions -----------------------------------------------------------------------------
@@ -1748,6 +1766,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(44),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_decision_1),
     )
     write.decisions.record_decision(
         imposed_by_runner_id=None,
@@ -1760,6 +1779,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(45),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_decision_2),
     )
 
     # --- escalations ---------------------------------------------------------------------------
@@ -1887,6 +1907,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         write.hub_exec.record_hub_node_poll_locked(
             handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(64)
         )
+    hub_exec_close_decision = _close_decision(chunk_hub_exec_released)
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_step_transition_locked(
             handle,
@@ -1901,6 +1922,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            close_decision=hub_exec_close_decision,
         )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
@@ -1913,15 +1935,32 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_delivery_a, "1015", at=_ht(69))
     _mint(chunk_delivery_b, "1016", at=_ht(70))
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_a, repo="acme/widget", commit_hash="c1", repository_id=None, at=_ht(71)
+        chunk_delivery_a,
+        repo="acme/widget",
+        commit_hash="c1",
+        repository_id=None,
+        at=_ht(71),
+        close_decision=_close_decision(chunk_delivery_a),
     )
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_a, repo="acme/other", commit_hash="c2", repository_id=None, at=_ht(72)
+        chunk_delivery_a,
+        repo="acme/other",
+        commit_hash="c2",
+        repository_id=None,
+        at=_ht(72),
+        close_decision=_close_decision(chunk_delivery_a),
     )
     write.delivery.record_delivery_repo_landed(
-        chunk_delivery_b, repo="acme/widget", commit_hash="c3", repository_id=None, at=_ht(73)
+        chunk_delivery_b,
+        repo="acme/widget",
+        commit_hash="c3",
+        repository_id=None,
+        at=_ht(73),
+        close_decision=_close_decision(chunk_delivery_b),
     )
-    write.delivery.record_delivery_landed(chunk_delivery_a, at=_ht(74))
+    write.delivery.record_delivery_landed(
+        chunk_delivery_a, at=_ht(74), close_decision=_close_decision(chunk_delivery_a)
+    )
     write.artifacts.record_hub_artifact(
         chunk_delivery_a,
         node_id=deliver_node.node_id,
@@ -1931,6 +1970,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         content="merged",
         at=_ht(75),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_delivery_a),
     )
     write.artifacts.record_hub_artifact(
         chunk_delivery_b,
@@ -1941,6 +1981,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         content="merged",
         at=_ht(76),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_delivery_b),
     )
 
     # --- dependencies --------------------------------------------------------------------------
@@ -2014,6 +2055,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         content="c1",
         at=_ht(94),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_artifacts),
     )
     write.artifacts.record_hub_artifact(
         chunk_artifacts,
@@ -2024,6 +2066,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         content="c2",
         at=_ht(95),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_artifacts),
     )
 
     # --- extra work ref -----------------------------------------------------------------------

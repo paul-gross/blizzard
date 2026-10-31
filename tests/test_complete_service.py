@@ -22,7 +22,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteCreatedFact, TransitionFact
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, CloseEnqueueDecision, RouteCreatedFact, TransitionFact
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -41,11 +41,15 @@ class _FakeChunkRepo:
 
     completed: list[tuple[str, str]] = field(default_factory=list)
     stamps: list[datetime] = field(default_factory=list)
+    decisions: list[CloseEnqueueDecision] = field(default_factory=list)
     _next_id: int = 1
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    def record_completion_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> LeverWrite:
         self.completed.append((chunk_id, by))
         self.stamps.append(at)
+        self.decisions.append(close_decision)
         fact_id = self._next_id
         self._next_id += 1
         return LeverWrite(fact_id)
@@ -60,6 +64,9 @@ class _FakeLockedChunkRead:
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.chunk_facts
+
+    def record(self, chunk_id: str) -> Chunk | None:
+        return _CHUNK if self.chunk_facts is not None else None
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"CompleteService should not touch handle.{name!r}")
@@ -80,7 +87,12 @@ def _service(facts: ChunkFacts | None) -> tuple[CompleteService, _FakeChunkRepo]
     repo = _FakeChunkRepo()
     clock = FixedClock(_T0)
     exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(facts, clock))
-    service = CompleteService(lifecycle=cast(IWriteChunkLifecycleRepository, repo), exclusive=exclusive, clock=clock)
+    service = CompleteService(
+        lifecycle=cast(IWriteChunkLifecycleRepository, repo),
+        exclusive=exclusive,
+        clock=clock,
+        closer_available=lambda source: source == "hub",
+    )
     return service, repo
 
 
@@ -122,6 +134,7 @@ def test_complete_allows_every_non_done_status(facts_factory: object) -> None:
 
     assert written == LeverWrite(1)
     assert repo.completed == [("chk_1", "operator")]
+    assert repo.decisions == [CloseEnqueueDecision(closable=frozenset(), skipped=frozenset())]
 
 
 @pytest.mark.parametrize(

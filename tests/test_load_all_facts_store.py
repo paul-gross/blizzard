@@ -32,6 +32,7 @@ from blizzard.hub.domain.chunk.model import (
     HubNodePollFact,
     RouteTokenMintedFact,
     UsageFact,
+    decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
@@ -128,6 +129,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
     _mint(store, "ch_waiting")
@@ -182,7 +184,9 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
     store.queue.record_promote("ch_done_completed", at=_T0)
     clock.instant = _T0
     with store.exclusive.locked(["ch_done_completed"]) as handle:
-        store.lifecycle.record_completion_locked(handle, "ch_done_completed", by="op", at=_T0)
+        store.lifecycle.record_completion_locked(
+            handle, "ch_done_completed", by="op", at=_T0, close_decision=decide_close_enqueue([], lambda _: True)
+        )
 
     _mint(store, "ch_done_terminal")
     store.queue.record_promote("ch_done_terminal", at=_T0)
@@ -197,6 +201,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
     # AC4: movement facts spanning two graphs — a transition on gr_1, then a migration
@@ -215,6 +220,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     store.movement.record_migration(
         "ch_multigraph",
@@ -229,6 +235,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
     # AC4: grouped-away and deleted chunks are ephemeral — excluded from every read.
@@ -288,9 +295,16 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
             handle, "ch_kitchen_sink", node_id="nd_g1_hub", epoch=1, kind="pending", at=_T0
         )
     store.delivery.record_delivery_repo_landed(
-        "ch_kitchen_sink", repo="r1", commit_hash="c1", repository_id=None, at=_T0
+        "ch_kitchen_sink",
+        repo="r1",
+        commit_hash="c1",
+        repository_id=None,
+        at=_T0,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
-    store.delivery.record_delivery_landed("ch_kitchen_sink", at=_T0)
+    store.delivery.record_delivery_landed(
+        "ch_kitchen_sink", at=_T0, close_decision=decide_close_enqueue([], lambda _: True)
+    )
     store.decisions.record_decision(
         imposed_by_runner_id=None,
         decision_id="dec_1",
@@ -302,6 +316,7 @@ def _seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None
         at=_T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
     store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1))
     with store.exclusive.locked(["ch_kitchen_sink"]) as handle:
@@ -598,6 +613,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
         at=_T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
 

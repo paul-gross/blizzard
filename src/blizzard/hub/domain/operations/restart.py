@@ -7,6 +7,7 @@ a standing intent — rides that one store write, so nothing survives it to re-p
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from blizzard.foundation.chunk_status import ChunkStatus
@@ -14,7 +15,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, person_note
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -175,6 +176,7 @@ class RestartService:
         graphs: IReadGraphRepository,
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
+        closer_available: Callable[[str], bool],
     ) -> None:
         self._movement = movement
         self._decisions = decisions
@@ -182,6 +184,7 @@ class RestartService:
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
         self._clock = clock
+        self._closer_available = closer_available
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
@@ -242,5 +245,6 @@ class RestartService:
                 graph=to_graph if to_graph is not None else graph,
                 node_id=plan.to_node_id,
                 epoch=landed.epoch_floor(),
+                close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
             )
             return written

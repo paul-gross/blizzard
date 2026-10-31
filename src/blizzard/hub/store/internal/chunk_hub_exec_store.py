@@ -16,7 +16,7 @@ from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import WaitKind
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WaitKind
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
@@ -58,6 +58,7 @@ class ChunkHubExecStore:
         at: datetime,
         artifacts: list[StoredArtifact],
         release_route: bool,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         return self._transition_conn(
             conn_of(handle),
@@ -72,6 +73,7 @@ class ChunkHubExecStore:
             at=at,
             artifacts=artifacts,
             release_route=release_route,
+            close_decision=close_decision,
         )
 
     def _transition_conn(
@@ -89,6 +91,7 @@ class ChunkHubExecStore:
         at: datetime,
         artifacts: list[StoredArtifact],
         release_route: bool,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         lock_chunk_row(conn, chunk_id)
         already = conn.execute(
@@ -141,7 +144,7 @@ class ChunkHubExecStore:
                 )
             )
         if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         return True
 
     def record_hub_node_poll_locked(

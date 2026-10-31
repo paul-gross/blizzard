@@ -17,6 +17,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.delivery.flows import (
@@ -395,6 +396,7 @@ class FlowStore:
         repo: str,
         revision: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> LandingWrite:
         with self._store.write("record_flow_landing") as conn:
             refused, wrote = write_landing_rows(
@@ -407,6 +409,7 @@ class FlowStore:
                 repo=repo,
                 revision=revision,
                 repository_id=landing.flow.repository_id,
+                close_decision=close_decision,
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )
