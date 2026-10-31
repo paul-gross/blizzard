@@ -493,7 +493,7 @@ class ChunkView:
         :class:`Node`, not the :class:`GraphSummary`/name projection :attr:`names`
         otherwise resolves through."""
         pending = self.facts.hub_node_pending()
-        if pending is None:
+        if pending is None or self.facts.open_escalation() is not None:
             return None
         graph = self.services.graphs.get(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
