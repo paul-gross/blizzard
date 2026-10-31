@@ -19,7 +19,10 @@ import type {
   HostRunnerListResponse,
   HostRegistrationView,
   HostEnvironmentListResponse,
+  HostWorkspaceListResponse,
   HostSubscriptionListResponse,
+  WorkspacePromptResponse,
+  WorkspacePromptReplacement,
   LeaseListResponse,
   LeaseUsageResponse,
   InvocationUsagePage,
@@ -42,6 +45,8 @@ export interface RunnerClient {
   /** The outbound buffer's depth, read from the status's `hub.buffer_depth` and nothing else. */
   bufferDepth(): Promise<number>;
   leases(): Promise<ApiResponse<LeaseListResponse>>;
+  /** `GET …/api/leases?chunk_id=…`: every lease of this chunk, oldest mint first. */
+  leasesForChunk(chunkId: string): Promise<ApiResponse<LeaseListResponse>>;
   /** `GET …/api/leases/{id}/usage`: the usage facts the lease recorded, oldest first. */
   leaseUsage(leaseId: string): Promise<ApiResponse<LeaseUsageResponse>>;
   /** `GET …/api/chunks/{id}/transcripts`: the chunk's transcript segments, as the runner indexes them. */
@@ -127,6 +132,12 @@ export interface RunnerHostClient extends HostRoutes {
   runners(): Promise<ApiResponse<HostRunnerListResponse>>;
   /** `GET /api/host/environments`: held and free environments grouped by workspace. */
   environments(): Promise<ApiResponse<HostEnvironmentListResponse>>;
+  /** `GET /api/host/workspaces`: the host's configured workspace ids. */
+  workspaces(): Promise<ApiResponse<HostWorkspaceListResponse>>;
+  /** `GET /api/host/workspaces/{id}/prompt`: the effective standing policy. */
+  workspacePrompt(workspaceId: string): Promise<ApiResponse<WorkspacePromptResponse>>;
+  /** `PUT /api/host/workspaces/{id}/prompt`: replace policy for subsequent spawns. */
+  replaceWorkspacePrompt(workspaceId: string, replacement: WorkspacePromptReplacement): Promise<ApiResponse<WorkspacePromptResponse>>;
   /** `GET /api/host/subscriptions`. */
   subscriptions(): Promise<ApiResponse<HostSubscriptionListResponse>>;
   /** `POST /api/host/subscriptions/{slug}/floor/clear`. */
@@ -177,6 +188,9 @@ export function runnerHostApi(options: {
     registration: () => host.get('/api/host/registration'),
     runners: () => host.get('/api/host/runners'),
     environments: () => host.get('/api/host/environments'),
+    workspaces: () => host.get('/api/host/workspaces'),
+    workspacePrompt: (workspaceId) => host.get(`/api/host/workspaces/${encodeURIComponent(workspaceId)}/prompt`),
+    replaceWorkspacePrompt: (workspaceId, replacement) => host.put(`/api/host/workspaces/${encodeURIComponent(workspaceId)}/prompt`, { data: replacement }),
     subscriptions: () => host.get('/api/host/subscriptions'),
     clearSubscriptionFloor: (slug, by) => host.post(`/api/host/subscriptions/${encodeURIComponent(slug)}/floor/clear`, { data: by === undefined ? {} : { by } }),
     runner(runnerId) {
@@ -192,6 +206,7 @@ export function runnerHostApi(options: {
           return answer.body.hub.buffer_depth;
         },
         leases: () => raw.get('/api/leases'),
+        leasesForChunk: (chunkId) => raw.get('/api/leases', { params: { chunk_id: chunkId } }),
         leaseUsage: (leaseId) => raw.get(`/api/leases/${encodeURIComponent(leaseId)}/usage`),
         transcriptSegments: (chunkId) => raw.get(`/api/chunks/${encodeURIComponent(chunkId)}/transcripts`),
         dashboard: () => raw.get('/api/dashboard'),

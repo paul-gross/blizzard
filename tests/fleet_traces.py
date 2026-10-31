@@ -792,6 +792,29 @@ class FleetCollector:
                 return
             time.sleep(0.25)
 
+    def await_platform_nesting(self, *, roots: int, timeout: float = 60.0) -> None:
+        """Wait for the command-to-hub chain before a fleet-root read closes the collector.
+
+        Fleet roots and worker spans can arrive in the file before the CLI, runner, hub, and query
+        spans that share their trace. The final nesting assertion still checks the completed file.
+        """
+        if self._proc is None:
+            return
+        deadline = time.monotonic() + timeout
+        last: AssertionError | None = None
+        while time.monotonic() < deadline:
+            spans = self._read()
+            fleet = [span for span in spans if is_fleet(span)]
+            if self._counts(fleet)[0] >= roots and self._counts(fleet)[1] >= self._workers:
+                try:
+                    assert_platform_nesting(fleet, [span for span in spans if not is_fleet(span)])
+                except AssertionError as error:
+                    last = error
+                else:
+                    return
+            time.sleep(0.25)
+        raise AssertionError(f"platform chain did not reach the collector before its deadline: {last}")
+
     def spans(self, *, roots: int, exact: bool = True, timeout: float = 60.0) -> list[ExportedSpan]:
         """Wait until ``roots`` step roots, and the runner ``worker`` spans :meth:`await_workers` expects, are in the
         file; stop the collector so the file is complete, and parse it. Later calls read the same parse.

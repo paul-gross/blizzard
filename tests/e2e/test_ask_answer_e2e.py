@@ -242,6 +242,8 @@ def test_ask_parks_then_answer_resumes_session_to_done(
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
+        fleet_traces.await_platform_nesting(roots=3)
+
         # Fleet truth, as the trace backend sees it: the park and the answer are one build step, carrying an `ask`
         # child that ended answered — the wait never splits the step in two.
         with subtests.test(msg="fleet traces"):
