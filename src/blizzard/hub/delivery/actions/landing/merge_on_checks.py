@@ -34,6 +34,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Landed,
     LandedRevisionUnknown,
     NeedsPerson,
+    NoCode,
     Ready,
     RepoLanding,
     RepoState,
@@ -71,12 +72,7 @@ class PullRequestLookupError(Exception):
 
 
 class NothingToLand(Exception):
-    """No-op landing: the base already holds the branch's commits. :attr:`landed_sha` is the base's live
-    tip, not the submitted commit."""
-
-    def __init__(self, message: str, landed_sha: str) -> None:
-        super().__init__(message)
-        self.landed_sha = landed_sha
+    """The base already holds the submitted commit and the safe branch head."""
 
 
 class MergeDidNotLand(Exception):
@@ -128,6 +124,10 @@ class PullRequest:
         if merged is not None:
             return await cls._record(await cls(target, merged).reread())
         existing = await cls._open_for_branch(target)
+        if await cls._already_held(target):
+            raise NothingToLand(
+                f"{target.repo}:{target.branch} adds no commit {target.base_branch} does not already have"
+            )
         if existing is None:
             try:
                 existing = await target.ask(
@@ -141,17 +141,26 @@ class PullRequest:
 
     @classmethod
     async def _after_refused_open(cls, target: RepoLanding, refusal: Exception) -> Change:
-        """What a refused open leaves: nothing to land when the base holds the branch, else an open change
-        someone else opened meanwhile, else :class:`PullRequestOpenError`."""
-        if await target.base_holds(target.branch):
+        """A refused open means no code only when the base holds the submission and safe head."""
+        if await cls._already_held(target):
             raise NothingToLand(
-                f"{target.repo}:{target.branch} adds no commit {target.base_branch} does not already have",
-                await target.base_tip(),
+                f"{target.repo}:{target.branch} adds no commit {target.base_branch} does not already have"
             )
         adopted = await cls._open_for_branch(target)
         if adopted is None:
             raise PullRequestOpenError(f"could not open a PR for {target.repo}:{target.branch}: {refusal}")
         return adopted
+
+    @staticmethod
+    async def _already_held(target: RepoLanding) -> bool:
+        """Only affirmative containment of the submission and a safe live head proves no code is needed."""
+        if not await target.base_holds(target.commit) or not await target.base_holds(target.branch):
+            return False
+        try:
+            head = await target.ask(target.forge.refs.branch_tip(target.branch))
+        except ForgeRejected:
+            return False
+        return head is not None and (await gate_head(target, head)).admitted()
 
     @classmethod
     async def _record(cls, pull: PullRequest) -> PullRequest:
@@ -269,9 +278,10 @@ class MergeOnChecks:
         try:
             pull = await PullRequest.of(repo)
         except NothingToLand as exc:
-            # Nothing to merge, and no poll changes that: the landing stops this repo being pending.
-            run.say(f"{exc} — nothing to land")
-            return Landed(exc.landed_sha)
+            run.say(f"{exc} — no code to land")
+            name, content = run.visit.no_code_marker(repo.repo)
+            await run.post(name, content)
+            return NoCode()
         except (LandedRevisionUnknown, PullRequestOpenError, PullRequestLookupError) as exc:
             # A degraded read or a create hiccup is worth another poll — never "not merged".
             run.say(str(exc))
