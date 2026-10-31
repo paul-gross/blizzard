@@ -9,11 +9,14 @@ from blizzard.hub.delivery.actions.landing.combine import (
     in_landing_order,
     refuses_before_checks,
 )
+from blizzard.hub.delivery.actions.landing.park import Park, latest_marker
 from blizzard.hub.delivery.actions.landing.policy import POLICIES
 from blizzard.hub.delivery.actions.landing.repo import (
     PENDING,
     Admitted,
     ForgeEscalation,
+    Held,
+    Landed,
     LandingFenced,
     LandingRun,
     NotRecorded,
@@ -23,6 +26,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
 )
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.graph.actions import LAND
 from blizzard.hub.forge.landing import ForgeUnavailable, VisitForges
@@ -64,6 +68,7 @@ class Land:
                 forge_label=resolution.forge_of(resolution.targets[index]).label,
             )
             for index, row in enumerate(rows)
+            if RepositoryId(resolution.targets[index].record) in forges
         ]
 
     async def _land(self, run: LandingRun, forges: VisitForges) -> Pass:
@@ -79,7 +84,29 @@ class Land:
             if no_code:
                 run.say(f"no code to land: {', '.join(sorted(no_code))} already resolved")
             return run.answer(LANDED)
-        gated = [(repo, await POLICIES[repo.record.landing_policy].step(repo)) for repo in unlanded]
+        first = unlanded[0]
+        if run.visit.parked_watch() == RepositoryId(first.record.record):
+            state = await Park().step(first, watch=True)
+            if isinstance(state, Held):
+                marker = latest_marker(first)
+                assert marker is not None
+                await run.post(f"park-reopen/{first.repo}/{marker.name.rsplit('/', 1)[1]}", "")
+                return run.answer(PENDING)
+            if not isinstance(state, Landed):
+                return await combine(run, [(first, state)])
+            await run.landed(first, state.revision)
+            unlanded = unlanded[1:]
+            if len(forges) < len(run.visit.resolution.targets):
+                return run.answer(PENDING)
+        gated = [
+            (
+                repo,
+                Held()
+                if repo.record.landing_policy is LandingPolicy.PARK
+                else await POLICIES[repo.record.landing_policy].step(repo),
+            )
+            for repo in unlanded
+        ]
         # A head refused anywhere fires nothing in any other repository.
         refused = any(refuses_before_checks(state) for _, state in gated)
         stepped: list[tuple[RepoLanding, RepoState]] = []

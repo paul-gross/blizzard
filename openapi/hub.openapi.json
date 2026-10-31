@@ -5154,6 +5154,10 @@
           "forge-auth",
           "forge-config",
           "forge-capability-missing",
+          "change-closed",
+          "branch-protected",
+          "merge-method-refused",
+          "park-timeout",
           "escalate-choice"
         ],
         "title": "EscalationCause",
@@ -6499,6 +6503,7 @@
           "next",
           "waiting",
           "polling",
+          "awaiting-merge",
           "passed-over"
         ],
         "title": "FlowPlaceState",
@@ -9929,7 +9934,9 @@
       "LandingPolicyName": {
         "description": "A landing policy a write may name \u2014 how a repository's changes land.",
         "enum": [
-          "merge-on-checks"
+          "merge-on-checks",
+          "fast-forward",
+          "park"
         ],
         "title": "LandingPolicyName",
         "type": "string"
@@ -10779,6 +10786,11 @@
       "PendingView": {
         "description": "A hub node's in-progress poll \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
         "properties": {
+          "kind": {
+            "default": "pending",
+            "title": "Kind",
+            "type": "string"
+          },
           "next_poll_at": {
             "title": "Next Poll At",
             "type": "string"
@@ -10786,6 +10798,17 @@
           "node_name": {
             "title": "Node Name",
             "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
           }
         },
         "required": [

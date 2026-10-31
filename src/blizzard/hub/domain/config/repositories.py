@@ -289,6 +289,7 @@ class ResolvedRepository:
     slug: str = ""
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     landing_position: float | None = None
+    park_timeout_hours: int | None = None
 
 
 @domain_model

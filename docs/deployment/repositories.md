@@ -60,8 +60,8 @@ Name such a repository by its new slug.
 
 Every field but the deprecated `forge_api_url`, `landing_policy` and `park_timeout_hours` is required. `landing_policy`
 defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the one field that can, with
-`edit --clear park-timeout` or a `PATCH` sending `null`. `merge-on-checks` opens a pull request for the change, keeps it
-up to date with the base branch, and merges it once its checks are green. A policy is refused
+`edit --clear park-timeout` or a `PATCH` sending `null`. [Delivery policy](./delivery-policy.md) helps choose and operate
+each policy. A policy is refused
 `422 forge_capability_missing` when the repository's forge does not offer every capability it needs, naming each one;
 `GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge get`
 lists the capabilities a forge offers. Each `(forge, owner, repo)` belongs to one record. `create` takes exactly one of

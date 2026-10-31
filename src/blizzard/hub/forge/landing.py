@@ -146,6 +146,7 @@ class Change:
     mergeability: Mergeability
     web_url: str
     merged_revision: str | None
+    closed_at: datetime | None = None
 
 
 @domain_model

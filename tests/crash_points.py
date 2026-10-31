@@ -30,6 +30,8 @@ _INSTRUMENTED_MODULES = (
     "blizzard.hub.delivery.flow_driver",
     "blizzard.hub.delivery.flow_turn",
     "blizzard.hub.delivery.action_pass",
+    "blizzard.hub.delivery.actions.landing.fast_forward",
+    "blizzard.hub.delivery.actions.landing.park",
     "blizzard.hub.domain.execution.claim",
     "blizzard.hub.domain.execution.apply",
     "blizzard.hub.domain.work_items.closure",

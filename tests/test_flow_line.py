@@ -226,6 +226,15 @@ def test_a_visit_waiting_on_its_poll_is_polling_until_due_with_its_due_instant()
     assert _places(line, polled, now=due) == [("flw_main", "waiting", 2)]
 
 
+def test_a_parked_visit_has_its_own_place_state_and_due_instant() -> None:
+    parked = _submission("ch_parked", 1, _MAIN)
+    poll = HubNodePollFact(_DELIVER, 1, _AT, kind="awaiting-merge")
+    line = _line((parked, _at_node(hub_node_polls=[poll])))
+
+    [place] = line.places_of(parked, now=_AT)
+    assert (place.state, place.due_at) == ("awaiting-merge", _AT + timedelta(minutes=2))
+
+
 def test_the_lines_places_run_in_arrival_order() -> None:
     first, second = _submission("ch_1", 1, _MAIN, _OTHER), _submission("ch_2", 2, _MAIN)
     line = _line((first, _at_node()), (second, _at_node()))

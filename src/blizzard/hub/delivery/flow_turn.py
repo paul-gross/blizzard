@@ -87,7 +87,7 @@ from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
 from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
 from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
-from blizzard.hub.domain.graph.actions import RESERVED_WAITS, ActionSpec
+from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import HUB_DEFAULT_FAILURE_CHOICE, Graph, IReadManyGraphs, Node
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
@@ -112,8 +112,7 @@ _CP_FLOW_AFTER_POLL_BEFORE_TURN_END = crashpoint(
 _EVENT_ACTION_OVERRAN: EventLogKind = "hub-action-overran"
 _EVENT_TURN_INTERRUPTED: EventLogKind = "turn-interrupted"
 _FLOW_LANDED: EventLogKind = "flow-landed"
-# The one reserved wait a pass answers.
-(_PENDING,) = RESERVED_WAITS
+_PENDING = "pending"
 # Why a fenced write answers `fenced`; a landing record, written regardless, answers the reason alone.
 _PAST_FENCE = "the chunk is terminal or has moved past this visit"
 _FENCED_DETAIL = f"not recorded: {_PAST_FENCE}"
@@ -306,8 +305,8 @@ class TurnRunner:
         if is_stuck(outcomes):
             self._router.escalate(chunk, self._stuck(node), epoch=epoch, ending=ending)
             return None
-        polls = facts.hub_node_poll_history(node_id=node.node_id, epoch=epoch)
-        if polls and self._clock.now() - polls[0].polled_at >= PollPolicy.of(node).timeout:
+        pending_since = facts.hub_node_pending_since(node_id=node.node_id, epoch=epoch)
+        if pending_since is not None and self._clock.now() - pending_since >= PollPolicy.of(node).timeout:
             self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
             return None
         action = self._actions.action(node.action) if node.action is not None else None
@@ -350,32 +349,6 @@ class TurnRunner:
         if resources_moved(held, held_resources(resolution, frozenset(), spec), [f.resource for f in submission.flows]):
             self._end(submission, ending, outcome=TURN_SUPERSEDED, closure=TURN_SUPERSEDED)
             return None
-        if (missing := self._missing_capability(spec.name, resolution)) is not None:
-            target, capability = missing
-            self._router.escalate_capability_missing(
-                chunk,
-                node,
-                spec.name,
-                target,
-                capability,
-                forge=resolution.forge_of(target),
-                epoch=epoch,
-                ending=ending,
-            )
-            return None
-        forges: dict[RepositoryId, RepositoryForge] = {}
-        if spec.lands:
-            for target in resolution.targets:
-                repository = RepositoryId(target.record)
-                try:
-                    forges[repository] = self._forges.repository_forge(
-                        repository, cut_off=cut_off, priority=ForgePriority.LANDING
-                    )
-                except RepositorySecretUnavailable as exc:
-                    detail = f"repository {target.slug}: {exc}"
-                    step = "repository-secret-unavailable"
-                    self._router.refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail, ending=ending)
-                    return None
         visit = Visit(
             chunk=VisitChunk(
                 chunk_id=chunk.chunk_id,
@@ -402,6 +375,35 @@ class TurnRunner:
             first_turn_at=self._first_turn_at(submission),
             now=self._clock.now(),
         )
+        watch = visit.parked_watch() if spec.name == "land" else None
+        if (missing := self._missing_capability(spec.name, resolution, only=watch)) is not None:
+            target, capability = missing
+            self._router.escalate_capability_missing(
+                chunk,
+                node,
+                spec.name,
+                target,
+                capability,
+                forge=resolution.forge_of(target),
+                epoch=epoch,
+                ending=ending,
+            )
+            return None
+        forges: dict[RepositoryId, RepositoryForge] = {}
+        if spec.lands:
+            for target in resolution.targets:
+                repository = RepositoryId(target.record)
+                if watch is not None and repository != watch:
+                    continue
+                try:
+                    forges[repository] = self._forges.repository_forge(
+                        repository, cut_off=cut_off, priority=ForgePriority.LANDING
+                    )
+                except RepositorySecretUnavailable as exc:
+                    detail = f"repository {target.slug}: {exc}"
+                    step = "repository-secret-unavailable"
+                    self._router.refuse(chunk, graph, node, epoch=epoch, step=step, detail=detail, ending=ending)
+                    return None
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
 
@@ -420,7 +422,7 @@ class TurnRunner:
         return _Visit(chunk, graph, node, submission.epoch)
 
     def _missing_capability(
-        self, action_name: str, resolution: RepositoryResolution
+        self, action_name: str, resolution: RepositoryResolution, *, only: RepositoryId | None = None
     ) -> tuple[ResolvedRepository, Capability] | None:
         """The first resolved repository whose forge lacks a capability ``action_name`` requires of it, and that
         capability; ``None`` when every forge offers what the action needs."""
@@ -428,6 +430,8 @@ class TurnRunner:
         if requirement is None:
             return None
         for target in resolution.targets:
+            if only is not None and target.record != only:
+                continue
             offered = self._forges.offered(resolution.forge_of(target), RepositoryId(target.record))
             missing = sorted(requirement(target) - offered)
             if missing:
@@ -600,7 +604,7 @@ class TurnRunner:
                 chunk,
                 node,
                 epoch=epoch,
-                kind="pending",
+                kind="awaiting-merge" if answer.choice == "awaiting-merge" else "pending",
                 next_poll_at=answer.next_poll_at,
                 ending=ending,
                 reached=_CP_FLOW_AFTER_POLL_BEFORE_TURN_END.reached,

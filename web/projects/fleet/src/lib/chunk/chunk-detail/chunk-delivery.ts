@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import type { ChunkDetail, LandedRepoView, PrView } from '../../api/hub';
 import { shortCommitHash } from '../../core/commit-hash';
+import { FleetWhen } from '../../core/when-display/fleet-when';
 
 /** One repo's delivery: its PR (open or closed) and its landed commit, either of which may be absent. */
 interface DeliveryRow {
@@ -15,6 +16,7 @@ interface DeliveryRow {
 @Component({
   selector: 'fleet-chunk-delivery',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FleetWhen],
   templateUrl: './chunk-delivery.html',
   styleUrl: './chunk-delivery.css',
 })

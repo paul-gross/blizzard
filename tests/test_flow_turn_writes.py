@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -275,6 +276,22 @@ def test_a_wait_commits_its_poll_row_with_the_turns_end(world: _World) -> None:
     assert world.count(s.hub_node_poll) == 1
     assert world.flows.turn_outcomes(submission.chunk_id, node_id=_NODE, epoch=0) == ["pending"]
     assert world.closed(submission) is None
+
+
+def test_consecutive_parked_polls_keep_first_instant_and_advance_latest(world: _World) -> None:
+    chunk = world.chunk()
+    first = world.hub.clock.now()
+    with world.chunks.exclusive.locked([chunk]) as handle:
+        for at in (first, first + timedelta(minutes=2), first + timedelta(minutes=4)):
+            world.chunks.hub_exec.record_hub_node_poll_locked(
+                handle, chunk, node_id=_NODE, epoch=0, kind="awaiting-merge", at=at
+            )
+
+    with world.chunks.exclusive.locked([chunk]) as handle:
+        facts = handle.facts(chunk)
+        assert facts is not None
+        [poll] = facts.hub_node_poll_history(node_id=_NODE, epoch=0)
+        assert (poll.polled_at, poll.last_polled_at) == (first, first + timedelta(minutes=4))
 
 
 def test_a_fenced_exit_still_ends_the_turn_with_the_closure_withdrawal_for_answers(world: _World) -> None:

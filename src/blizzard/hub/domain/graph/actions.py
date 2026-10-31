@@ -14,7 +14,7 @@ from blizzard.foundation.roles import domain_model
 
 # Answers that end a pass without moving the chunk: never authored, never routed, never a
 # verdict. A later reserved wait joins this set rather than adding a second rule.
-RESERVED_WAITS: frozenset[str] = frozenset({"pending"})
+RESERVED_WAITS: frozenset[str] = frozenset({"pending", "awaiting-merge"})
 
 
 @domain_model
@@ -72,7 +72,7 @@ LAND = ActionSpec(
     name="land",
     args=frozenset(),
     required_args=frozenset(),
-    answers=frozenset({"landed", "conflict", "failure", "inherited-failure", "pending"}),
+    answers=frozenset({"landed", "conflict", "failure", "inherited-failure", "pending", "awaiting-merge"}),
     answers_from_arg=None,
     lands=True,
 )

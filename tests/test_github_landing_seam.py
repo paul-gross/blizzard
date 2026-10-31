@@ -22,6 +22,21 @@ _REF = f"{_REPO}/git/ref/heads/main"
 _REFS = f"{_REPO}/git/refs/heads/main"
 
 
+def test_branch_tip_distinguishes_the_mock_missing_ref_from_other_422s() -> None:
+    missing = "ref does not resolve in acme/widget: main"
+    harness = _Harness({("GET", _REF): [_reply(422, {"message": missing}), _reply(422, {"message": "other"})]})
+    assert harness.run(lambda forge: forge.branch_tip("main")) is None
+    with pytest.raises(ForgeRejected):
+        harness.run(lambda forge: forge.branch_tip("main"))
+
+
+@pytest.mark.parametrize("message", ["ref does not resolve in acme/widget: other", "ref does not resolve in x/y: main"])
+def test_branch_tip_does_not_hide_a_different_missing_ref(message: str) -> None:
+    harness = _Harness({("GET", _REF): [_reply(422, {"message": message})]})
+    with pytest.raises(ForgeRejected):
+        harness.run(lambda forge: forge.branch_tip("main"))
+
+
 def test_github_offers_the_four_new_capabilities() -> None:
     new = {Capability.REFS_ADVANCE, Capability.BRANCHES_MERGE, Capability.REFS_CREATE, Capability.REFS_DELETE}
     assert new <= GitHubLanding.OFFERED == FORGE_KIND_CAPABILITIES["github"]

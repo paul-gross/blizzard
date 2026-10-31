@@ -416,6 +416,8 @@ class PendingView(BaseModel):
 
     node_name: str
     next_poll_at: str
+    kind: str = "pending"
+    since: str | None = None
 
 
 class HubMarkerRequest(BaseModel):

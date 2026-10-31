@@ -82,6 +82,7 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
+from tests.e2e.flow_support import _graph
 from tests.fleet_world import BUILD_BRANCH, scripted_build, world_repos
 from tests.host_files import load_runner_config, with_runner
 from tests.otlp_sink import OtlpSink, otlp_sink
@@ -125,6 +126,7 @@ _DEDICATED_PREFIXES = (
     "teardown.",
     "ingest.",
     "release.",
+    "policy.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -178,6 +180,7 @@ _TEARDOWN_POINTS = [p for p in _ALL_POINTS if p.startswith("teardown.")]
 _INGEST_POINTS = [p for p in _ALL_POINTS if p.startswith("ingest.")]
 # `release.*` fires once the hub accepts a gate-parked chunk back, between steps or from a usage-limited park.
 _RELEASE_POINTS = [p for p in _ALL_POINTS if p.startswith("release.")]
+_POLICY_POINTS = [p for p in _ALL_POINTS if p.startswith("policy.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset, one point per family, run as a bounded-runtime gate under
@@ -269,6 +272,7 @@ _INGEST_CI_SUBSET = ("ingest.after-config.before-removal",)
 
 # The release CI subset: the between-steps window; the full sweep runs the usage-limited one too.
 _RELEASE_CI_SUBSET = ("release.after-hub.before-environments",)
+_POLICY_CI_SUBSET = ("policy.after-advance.before-marker", "policy.after-open-change.before-marker")
 
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
@@ -304,6 +308,19 @@ _EGRESS_SWEEP = _select(_EGRESS_POINTS, _EGRESS_CI_SUBSET)
 _TEARDOWN_SWEEP = _select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET)
 _INGEST_SWEEP = _select(_INGEST_POINTS, _INGEST_CI_SUBSET)
 _RELEASE_SWEEP = _select(_RELEASE_POINTS, _RELEASE_CI_SUBSET)
+_POLICY_SWEEP = _select(_POLICY_POINTS, _POLICY_CI_SUBSET)
+
+
+def test_policy_sweep_covers_all_six_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BLIZZARD_CRASH_SWEEP_CI", raising=False)
+    assert set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET)) == {
+        "policy.after-create-ref.before-merge-into",
+        "policy.after-merge-into.before-advance",
+        "policy.after-advance.before-marker",
+        "policy.after-marker.before-delete-ref",
+        "policy.after-open-change.before-marker",
+        "policy.after-merged-read.before-marker",
+    }
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -334,6 +351,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_TEARDOWN_POINTS, _TEARDOWN_CI_SUBSET))
         | set(_select(_INGEST_POINTS, _INGEST_CI_SUBSET))
         | set(_select(_RELEASE_POINTS, _RELEASE_CI_SUBSET))
+        | set(_select(_POLICY_POINTS, _POLICY_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -2978,6 +2996,96 @@ def test_kill9_between_land_repositories(crash_env: CrashEnv, tmp_path: Path) ->
     """A two-repository ``land`` killed between its repositories — the first landing record durable, the second
     repository not yet merged — lands the second on restart without merging the first twice."""
     _kill_two_repo_land(crash_env, tmp_path, _BETWEEN_REPOSITORIES_POINT, merged_at_kill=1)
+
+
+@pytest.mark.parametrize("point", _POLICY_SWEEP)
+def test_kill9_at_policy_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """Recover each policy boundary without duplicating a landing or a parked PR."""
+    import yaml
+
+    park = point in {"policy.after-open-change.before-marker", "policy.after-merged-read.before-marker"}
+    landed_file = f"POLICY-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    runner_proc = None
+    hub = httpx2.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        configured = hub.patch(
+            f"/api/repositories/{REPO_NAME}", json={"landing_policy": "park" if park else "fast-forward"}
+        )
+        assert configured.status_code == 200, configured.text
+        pulls_before = _repo_pull_count(crash_env.forge, REPO_NAME)
+        graph = yaml.safe_load(_graph(landed_file, (REPO_NAME,), poll_interval=1, record_findings=False))
+        if not park:
+            # Move main after the worker's commit so candidate creation is unavoidable.
+            graph["nodes"]["build"]["prompt"] += (
+                f"path = str(root / {REPO_NAME!r})\n"
+                "subprocess.run(['git', '-C', path, 'fetch', 'origin', 'main'], check=True)\n"
+                "subprocess.run(['git', '-C', path, 'switch', '-C', 'base-update', 'origin/main'], check=True)\n"
+                f"(pathlib.Path(path) / {('BASE-' + landed_file)!r}).write_text('base moved\\n')\n"
+                "subprocess.run(['git', '-C', path, 'add', '-A'], check=True)\n"
+                "subprocess.run(['git', '-C', path, '-c', 'user.email=mock@blizzard.local', "
+                "'-c', 'user.name=Mock Harness', 'commit', '-m', 'base update'], check=True)\n"
+                "subprocess.run(['git', '-C', path, 'push', 'origin', 'HEAD:main'], check=True)\n"
+            )
+        minted = hub.post("/api/graphs", json={"definition_yaml": yaml.safe_dump(graph, sort_keys=False)})
+        assert minted.status_code == 201, minted.text
+        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "policy sweep"})
+        assert issue.status_code == 201, issue.text
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        def merge_open_pr() -> None:
+            deadline = time.monotonic() + 120
+            while time.monotonic() < deadline:
+                pulls = crash_env.forge.get(f"/repos/{REPO}/pulls", params={"state": "open"})
+                assert pulls.status_code == 200, pulls.text
+                matching = [p for p in pulls.json() if p["title"].find(landed_file) >= 0]
+                if matching:
+                    merged = crash_env.forge.put(f"/repos/{REPO}/pulls/{matching[0]['number']}/merge", json={})
+                    assert merged.status_code == 200, merged.text
+                    return
+                time.sleep(0.5)
+            pytest.fail(f"parked PR not opened for {point}")
+
+        if point == "policy.after-merged-read.before-marker":
+            merge_open_pr()
+        code = wait_death(hub_proc, timeout=180.0)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}", after_recovery=False)
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+        if point == "policy.after-open-change.before-marker":
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                detail = hub.get(f"/api/chunks/{chunk_id}")
+                if detail.status_code == 200 and (detail.json().get("pending") or {}).get("kind") == "awaiting-merge":
+                    break
+                time.sleep(0.25)
+            else:
+                pytest.fail("recovery did not record the parked PR")
+            merge_open_pr()
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=180.0)
+        assert status == "done", f"chunk did not converge after {point}: {status}"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        assert _open_turns(hub_dir) == 0
+        assert _landed_repos(hub_dir, chunk_id) == [REPO]
+        assert _merged_markers(hub, chunk_id) == [f"merged/{OWNER}/{REPO_NAME}"]
+        tree = git_bare(crash_env.origins / f"{REPO_NAME}.git", "log", "--oneline", "--", landed_file)
+        assert len(tree.splitlines()) == 1, tree
+        assert _repo_pull_count(crash_env.forge, REPO_NAME) - pulls_before == int(park)
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
 
 
 # --- Operator chunk restart (#370) — the preempt kill→closure crash point ---
