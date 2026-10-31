@@ -23,18 +23,25 @@ test('test_a_legacy_pending_close_intent_is_terminally_skipped_after_its_closer_
   expect((await api.get('/api/admin/invariants')).body.violations).toEqual([]);
 });
 
-test('test_completion_without_a_closer_skips_once_and_a_bound_closer_still_closes', async ({ api, issue, freshHub, forge, cli, repository }) => {
+test('test_completion_without_a_closer_skips_once_and_a_bound_closer_still_closes', async ({ api, issue, freshHub, forge, cli, repository, events }) => {
   const repo = await repository();
   const skipped = await issue('skip at completion', { repository: repo });
   await freshHub.stop();
   await freshHub.start({ close_forge_writes_enabled: false });
   const id = skipped.chunk.chunk_id;
+  const subscription = await events.open({ barrier: true });
   expect((await cli(['hub', 'chunk', 'done', id])).code).toBe(0);
   expect((await api.get(`/api/chunks/${id}`)).body.status).toBe('done');
   expect((await api.post(`/api/chunks/${id}/complete`, { data: { by: 'replay' } })).status).toBe(202);
+  const frames = await subscription.barrier();
+  const skips = frames.filter((frame) => frame.event === 'event-logged' && frame.data?.kind === 'work-item-close-skipped');
+  expect(skips).toHaveLength(1);
+  expect(skips[0]?.data).toMatchObject({ chunk_id: id, severity: 'warning', project_id: skipped.chunk.project_id });
   await api.sweep('close_drain');
-  const events = (await api.get('/api/events', { params: { chunk_id: id } })).body.events;
-  expect(events.filter((event: { kind: string }) => event.kind === 'work-item-close-skipped')).toHaveLength(1);
+  const recorded = (await api.get('/api/events', { params: { chunk_id: id } })).body.events;
+  const skip = recorded.filter((event: { kind: string }) => event.kind === 'work-item-close-skipped');
+  expect(skip).toHaveLength(1);
+  expect(skips[0]?.data.key).toBe(`event_log:${skip[0].id}`);
   await freshHub.stop();
   await freshHub.start({ close_forge_writes_enabled: true });
   const bound = await issue('bound closer', { repository: repo });
