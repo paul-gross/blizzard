@@ -278,6 +278,7 @@ class Visit:
             row for row in self.git_commits.payload(self.resolution.qualified, self.resolution) if row["repo"] == repo
         )
         return no_code_marker(declaration)
+
     def parked_watch(self) -> RepositoryId | None:
         """The first unlanded parked repository with an existing change, unless it needs a fresh review."""
         names = self.marker_names()
