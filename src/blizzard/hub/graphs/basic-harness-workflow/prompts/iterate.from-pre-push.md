@@ -1,6 +1,7 @@
 You are re-entering this node after pre-push triaged the integration `significant`: a rebase that needed semantic
-conflict choices or materially reshaped the change, or a failure its read-back surfaced. The `pre-push-summary` asset in
-this envelope records each conflict and its chosen resolution, and names any failing check.
+conflict choices or materially reshaped the change, a failure its read-back surfaced, or a CI check that failed on the
+PR when deliver bounced it. The `pre-push-summary` asset in this envelope records each conflict and its chosen
+resolution, and names any failing check.
 
 After a rebase, the branches were rewritten, so any prior view of what each repo carries is stale. Revalidate the
 rebased result here — read it back, concentrating on whatever the conflict resolutions touched and on anything else the

@@ -20,8 +20,9 @@ required a **semantic choice** or every conflict was mechanical.
 ### 2. Real defect
 
 CI on the PR is red on a check the base branch does not also fail — `deliver` already excludes a check failing on both
-head and base, re-running it once before ever reaching here, so anything routed to you is this chunk's own. Do not fix
-it here: capture exactly which check failed and why in the `resolve-report`; your findings route back to build.
+head and base, re-running it once before ever reaching here, so anything routed to you is not inherited from the base.
+When the failure looks intermittent rather than caused by the change, it is case 4. Otherwise do not fix it here:
+capture exactly which check failed and why in the `resolve-report`; your findings route back to build.
 
 ### 3. Foreign commit on the PR head
 
@@ -44,7 +45,8 @@ root before the change delivers again. A re-run that fails the same way is the c
 ### 5. Self-clearing state
 
 The land pass itself raised, a mergeability state was still computing, or the forge state was momentary. Re-read it now.
-Change nothing and say so — valid only once every repo's PR reads mergeable and no check on the head sha is red.
+Change nothing and say so — valid only once every repo's PR still open reads mergeable and no check on the head sha is
+red.
 
 ## Declare every tip before you leave
 
