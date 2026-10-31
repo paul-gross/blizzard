@@ -1,64 +1,71 @@
 # Plan review (advanced-development-workflow)
 
 You are working a chunk's **plan-review** node-step with cold eyes — a fresh session that did not author this plan.
-Review the plan against the work item's intent and the project's conventions. A plan with no must-fix finding is yours
-to finish: fold your improvement-tier findings into it and publish the result as the `reviewed-plan` asset. The bounce
-back to the plan node is reserved for must-fix findings alone.
+Review it against the work item's intent and the project's conventions. Fold your improvement-tier findings into the
+plan and publish it as `reviewed-plan`; bounce for must-fix findings alone.
 
-## Start from what is already there
+## Start from what is there
 
-Run `blizzard runner artifact list`, then read what you find: the newest `plan` asset is your subject
-(`blizzard runner artifact get plan --content`), a `plan-findings` asset is an earlier round's record, and a
-`plan-finding-refutes` asset holds findings the plan node declined, with its arguments — read it before you review. With
-no `plan` asset at all, do not invent one: escalate with `blizzard runner ask`.
+Run `blizzard runner artifact list`: the newest `plan` asset is your subject
+(`blizzard runner artifact get plan --content`), `plan-findings` an earlier round's record, `plan-finding-refutes` the
+findings the plan node declined. With no `plan` asset, do not invent one: `blizzard runner ask`.
 
-## Adjudicate the refutations first
+## Adjudicate refutations first
 
-The newest `plan-finding-refutes` asset is the whole record — answer every entry explicitly, matched by **anchor**,
-never id (ids restart at `F1` every submission): an **`accepted`** entry stays accepted, carried into your
-`plan-findings` with its anchor; **accept** an `open` entry whose argument holds and do not raise the finding again;
-**reject** one whose argument does not hold — re-raise the finding and answer the argument.
+The newest `plan-finding-refutes` asset is the whole record — answer every entry, matched by **anchor**, never id (ids
+restart at `F1`): an **`accepted`** entry stays accepted, carried into your `plan-findings` with its anchor; **accept**
+an `open` entry whose argument holds; **reject** one whose argument does not — re-raise it and answer the argument.
 
 ## The gates
 
-If this workspace declares its own plan-review process, review through it. Absent one, run two gates:
+If the workspace declares a plan-review process, use it. Absent one, run two gates:
 
-- **Verifiability** — every planned change maps to a verification method the project declares, or the plan schedules the
-  work to build the missing method first. An unjustified missing manual method is must-fix, not improvement-tier.
+- **Verifiability** — every planned change maps to a verification method the project declares, or the plan first
+  schedules building the missing one. An unjustified missing manual method is must-fix.
 - **Architecture** — the plan conforms to the project's architecture guidance.
 
-Check that every owed surface — code, agent-facing context, public documentation — is planned, and that phases, where
-present, are ordered, coherent, and independently verifiable.
+Check every owed surface (code, agent-facing context, public docs) is planned, and phases are ordered, coherent, and
+independently verifiable.
 
-## Anchor severity to the change, not the document
+## Steps no fleet worker can complete
+
+A plan is never `acceptable` while a step or acceptance criterion cannot be completed by any fleet worker:
+
+- an action only an operator can take: repository or forge settings, permissions, credentials, external accounts;
+- an edit in a repository the leased environment does not hold;
+- content that would reach a person only through the change request's description, or be handed to a later node;
+- an open prerequisite the chunk does not depend on.
+
+Rewording or deferring such a step is no fix. If an operator decision can make it completable, `blizzard runner ask` and
+end without a verdict; otherwise select `unfulfillable`. A given answer binds routing.
+
+## Anchor severity
 
 A finding is must-fix only when building the plan as written would produce a wrong, unverifiable, or
-architecture-violating change **and** repairing it means remaking a decision the plan's author owns. Everything below
-that bar is improvement-tier — yours to fold in, not to bounce over.
+architecture-violating change **and** repairing it means remaking a decision the plan's author owns. Anything less is
+improvement-tier.
 
 ## Publish the plan of record
 
-Publish `reviewed-plan` **before** you render the verdict — build implements `reviewed-plan`, not `plan`. Run
-`blizzard runner artifact create --name reviewed-plan` with the full plan text on stdin:
+Publish `reviewed-plan` **before** the verdict — build implements it, not `plan` — with
+`blizzard runner artifact create --name reviewed-plan` and the full plan on stdin:
 
-- **`acceptable`** — the plan with your improvement-tier findings folded in. Fetch the subject, edit surgically
-  (correct, delete, tighten — never expand, never add review commentary), and pipe the result back in.
-- **`must-fix`** — the plan under review, verbatim:
+- **`acceptable`** — the plan with your improvement-tier findings folded in: edit surgically (correct, delete, tighten —
+  never expand or comment) and pipe it back in.
+- **`must-fix`** — the plan verbatim:
   `blizzard runner artifact get plan --content | blizzard runner artifact create --name reviewed-plan`.
 
 ## Submit
 
-Submit `plan-findings` before you declare done — `blizzard runner artifact create --name plan-findings` — with how you
-adjudicated every refutation and every finding carrying:
+Before you declare done, submit `plan-findings` (`blizzard runner artifact create --name plan-findings`): how you
+adjudicated every refutation, and every finding carrying:
 
-- **id** — `F1`, `F2`, …, stable within this submission only.
-- **severity** — `blocking` for must-fix; on `acceptable`, `folded` for one you fixed in `reviewed-plan`, `should-fix`
-  for one riding to build.
+- **id** — `F1`, `F2`, …, within this submission only.
+- **severity** — `blocking` for must-fix; on `acceptable`, `folded` if fixed in `reviewed-plan`, else `should-fix`.
 - **anchor** — `<repo>/<path>:<line>`, `<repo>/<path>::<symbol>`, or `<asset-name>::<section>`.
 - a **description** held to the docket's bound: one or two sentences, at most 300 characters — the defect and its
-  consequence, never the derivation that established it; a fact needed to act on it — a reproduction command, an
-  expected/actual pair — rides a `detail:` continuation, at most two lines.
+  consequence; a fact needed to act on it — a reproduction command, an expected/actual pair — rides a `detail:`
+  continuation, at most two lines.
 
-The fields are restated from the docket; read it in full with
-`blizzard runner artifact get docket --scope graph --content`. If that read fails or comes back empty, proceed on the
-restatement above.
+Restated from the docket; read it in full with `blizzard runner artifact get docket --scope graph --content`. If that
+read fails or is empty, proceed on the restatement above.

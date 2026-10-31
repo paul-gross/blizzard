@@ -62,3 +62,10 @@ surface = "http-api"
 where = "RepositoryDocument.park_timeout_hours"
 reason = "property added to a forbid schema a response reaches"
 because = "0.2's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.2.0:src/blizzard/hub/cli/config.py:137-138), so the new park_timeout_hours reaches the printed document as data; no 0.2 runner or board code reads the export (the board names RepositoryDocument only as a request body type, v0.2.0:web/projects/hub/src/app/admin/repositories/repositories.mutations.ts:39, and the board is served by the hub it calls)."
+
+[[allowance]]
+line = "0.2"
+surface = "http-api"
+where = "ChoiceTargetKind"
+reason = "response enum gained value(s) ['escalate']"
+because = "0.2's only consumer of a choice's target_kind is the hub board's graph diagram, served by that same hub: its resolveEdges falls through to the node lookup for a kind it does not list (v0.2.0:web/projects/hub/src/app/graphs/graph-edge-target.ts:66-67), finds no node named escalate, and returns null, so layoutGraph reports not-ok (v0.2.0:web/projects/hub/src/app/graphs/graph-layout.ts:185-186) and the diagram is not drawn for a graph carrying the edge; a tab loaded before its hub upgraded recovers on reload, which loads the new board. 0.2's hub CLI prints the edge's to_node_name as text (v0.2.0:src/blizzard/hub/cli/graph.py:68), and neither its runner nor its fleet board reads target_kind."

@@ -192,6 +192,14 @@ def test_the_hubs_own_unresolvable_target_escalation_parks_all_but_a_re_escalati
         refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1)
 
 
+def test_the_hubs_own_escalate_choice_escalation_parks_all_but_a_re_escalation() -> None:
+    chosen = EscalationFact(epoch=1, recorded_at=_T1, cause=EscalationCause.ESCALATE_CHOICE)
+    escalated = replace(_AT_BUILD, escalations=[chosen])
+    refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1, re_escalating=True)
+    with pytest.raises(ChunkEscalated):
+        refuse_incoherent_attempt(escalated, _GRAPH, from_node=_BUILD, epoch=1)
+
+
 def test_a_runner_escalation_parks_even_a_re_escalation() -> None:
     escalated = replace(_AT_BUILD, escalations=[EscalationFact(epoch=1, recorded_at=_T1)])
     with pytest.raises(ChunkEscalated):

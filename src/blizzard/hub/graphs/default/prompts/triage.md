@@ -9,6 +9,19 @@ A chunk wraps one or more work items; read them with `blizzard runner work-items
 work items routes by its heaviest item. `blizzard runner artifact list` on entry surfaces any `triage-findings` asset
 left by an earlier attempt; re-verify its conclusions against the code rather than adopting them.
 
+## Test fulfillability first
+
+Before any route, check each work item's acceptance criteria for a step no fleet worker can complete:
+
+- an action only an operator can take: repository or forge settings, permissions, credentials, external accounts;
+- an edit in a repository the leased environment does not hold;
+- content that would reach a person only through the change request's description, or be handed to a later node;
+- an open prerequisite the chunk does not depend on.
+
+When an operator decision can make the item completable — drop the criterion, split it out, or supply what is missing —
+ask with `blizzard runner ask` and end without a verdict. Otherwise select `unfulfillable`, recording the reason in
+`triage-findings`. An answer already given binds the routing.
+
 ## Test the routes in order
 
 1. `already-done` — take this route only on positive evidence: every work item's acceptance criteria or stated behavior

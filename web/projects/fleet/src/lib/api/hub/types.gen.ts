@@ -983,18 +983,21 @@ export type CheckResult = {
 /**
  * ChoiceTargetKind
  *
- * A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.
+ * A same-graph ``node``, the reserved terminal ``done``, the reserved ``escalate``, or a
+ * cross-graph ``graph``.
  */
 export const ChoiceTargetKind = {
     NODE: 'node',
     DONE: 'done',
-    GRAPH: 'graph'
+    GRAPH: 'graph',
+    ESCALATE: 'escalate'
 } as const;
 
 /**
  * ChoiceTargetKind
  *
- * A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.
+ * A same-graph ``node``, the reserved terminal ``done``, the reserved ``escalate``, or a
+ * cross-graph ``graph``.
  */
 export type ChoiceTargetKind = typeof ChoiceTargetKind[keyof typeof ChoiceTargetKind];
 
@@ -3025,7 +3028,8 @@ export const EscalationCause = {
     UNROUTABLE_OUTCOME: 'unroutable-outcome',
     FORGE_AUTH: 'forge-auth',
     FORGE_CONFIG: 'forge-config',
-    FORGE_CAPABILITY_MISSING: 'forge-capability-missing'
+    FORGE_CAPABILITY_MISSING: 'forge-capability-missing',
+    ESCALATE_CHOICE: 'escalate-choice'
 } as const;
 
 /**

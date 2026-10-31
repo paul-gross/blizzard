@@ -19,6 +19,7 @@ from blizzard.hub.domain.graph.actions import RESERVED_WAITS, HubActionCatalogue
 from blizzard.hub.domain.graph.harnesses import harness_problems
 from blizzard.hub.domain.graph.model import (
     HUB_DEFAULT_FAILURE_CHOICE,
+    RESERVED_ESCALATE,
     RESERVED_TERMINAL,
     SESSION_LEGAL_FORMS,
     ChoiceTarget,
@@ -101,6 +102,7 @@ class Validator:
 
     def _check(self) -> None:
         self._check_entry()
+        self._check_reserved_names()
         self._check_sessions()
         self._check_artifacts()
         for node in self.doc.nodes:
@@ -109,6 +111,10 @@ class Validator:
             )
             self.errors.extend(check.errors)
         self.warnings.extend(Reachability.of(self.doc).warnings)
+
+    def _check_reserved_names(self) -> None:
+        if RESERVED_ESCALATE in self.node_names:
+            self.errors.append(f"node `{RESERVED_ESCALATE}`: the name is reserved for the escalation target")
 
     def _check_entry(self) -> None:
         if self.doc.entry not in self.node_names:
@@ -380,10 +386,17 @@ class NodeCheck:
                     f"node `{node.name}` choice `{choice.name}`: malformed cross-graph target "
                     f"`to: {choice.to}` — expected `graph:<name>`"
                 )
+            elif target.node == RESERVED_ESCALATE:
+                if node.executor is Executor.HUB:
+                    self.errors.append(
+                        f"hub node `{node.name}` choice `{choice.name}`: `to: {RESERVED_ESCALATE}` is only legal on a "
+                        f"runner node — a hub node's outcomes route through the hub's own causes"
+                    )
             elif target.node is not None and target.node != RESERVED_TERMINAL and target.node not in self.node_names:
                 self.errors.append(
                     f"node `{node.name}` choice `{choice.name}`: `to: {choice.to}` resolves to no node "
-                    f"(and is not the reserved terminal `{RESERVED_TERMINAL}`)"
+                    f"(and is not the reserved terminal `{RESERVED_TERMINAL}` or the reserved "
+                    f"escalation `{RESERVED_ESCALATE}`)"
                 )
 
     def _check_session_ref(self) -> None:
@@ -430,7 +443,8 @@ class Reachability:
     """What the entry reaches over the adjacency every node's authored choices imply.
 
     No node name is privileged (#67); a cross-graph target is an exit *out*
-    of this graph, so like the terminal it contributes no intra-graph adjacency."""
+    of this graph, so like the terminal it contributes no intra-graph adjacency; an escalation
+    reaches no node and satisfies no path to the terminal."""
 
     entry: str
     node_names: set[str]
@@ -443,7 +457,7 @@ class Reachability:
             if node.judgement is None:
                 continue
             for choice in node.judgement.choices:
-                if choice.to is not None and ChoiceTarget.of(choice.to).node is not None:
+                if choice.to is not None and ChoiceTarget.of(choice.to).node not in (None, RESERVED_ESCALATE):
                     edges[node.name].add(choice.to)
         return cls(doc.entry, set(edges), edges)
 

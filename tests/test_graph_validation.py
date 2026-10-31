@@ -253,6 +253,47 @@ def test_entry_reaching_no_terminal_is_a_warning_not_an_error() -> None:
     assert any("no path from entry" in w and "terminal" in w for w in result.warnings)
 
 
+# --- The reserved escalation target -------------------------------------------
+
+
+def test_choice_to_escalate_on_a_runner_node_mints_with_no_errors_or_warnings() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["judgement"]["choices"]["unfulfillable"] = {  # type: ignore[index]
+        "description": "no worker can complete a step",
+        "to": "escalate",
+    }
+    result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
+    assert result.ok
+    assert result.warnings == []
+
+
+def test_choice_to_escalate_on_a_hub_node_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["deliver"]["judgement"]["choices"]["failure"]["to"] = "escalate"  # type: ignore[index]
+    result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
+    assert any("`to: escalate` is only legal on a runner node" in e for e in result.errors)
+
+
+def test_a_node_named_escalate_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["escalate"] = doc["nodes"].pop("deliver")  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "escalate"  # type: ignore[index]
+    result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
+    assert any("name is reserved" in e for e in result.errors)
+
+
+def test_an_escalate_edge_does_not_satisfy_the_path_to_the_terminal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["deliver"] = {  # type: ignore[index]
+        "executor": "runner",
+        "prompt": "p",
+        "judgement": {"prompt": "j", "choices": {"stuck": {"description": "x", "to": "escalate"}}},
+    }
+    result = Validator.of(GraphDoc.of(doc), TEST_CATALOGUE).result
+    assert result.ok
+    assert any("no path from entry" in w for w in result.warnings)
+
+
 # --- Checks gating ------------------------------------------------
 
 

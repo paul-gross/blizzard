@@ -10,10 +10,11 @@
 # fits, or straight to the `done` terminal when the work is already satisfied. Nothing
 # is built, committed, or delivered from this graph itself.
 #
-# Routing is authored as graph content, on the two primitives the engine already has:
+# Routing is authored as graph content, on the primitives the engine already has:
 # a judgement choice whose `to:` names `graph:<name>` (a cross-graph MIGRATION target,
-# late-bound by name when taken, `bzh:ids-exact-names-correlate`), and the
-# reserved `done` terminal. No lane declares a `triage` node, so a migration lands
+# late-bound by name when taken, `bzh:ids-exact-names-correlate`), the
+# reserved `done` terminal, and the reserved `escalate` target, which parks the chunk
+# `needs_human` for work no lane can complete. No lane declares a `triage` node, so a migration lands
 # at the target's entry — `bas-dwf`'s `build`, `adv-dwf`'s `plan`, `bas-hwf`'s `build`
 # — per the landing rule in `blizzard-context:/domain/graphs.md`. The choice table is
 # the extension point: a future lane is a new choice row and a re-mint, never an engine
@@ -66,6 +67,9 @@ nodes:
         harness:
           description: EVERY work item in the chunk is purely a change to agent-facing context — refining, changing, or adding prose an agent reads, such as an agent skill, a convention rule the project holds its agents to, a graph prompt, or agent-facing documentation. Disqualified by any coding or development at all, however small a fraction of the chunk it is; migrates to the bas-hwf lane regardless of complexity, whose build node authors on the frontier tier.
           to: graph:bas-hwf
+        unfulfillable:
+          description: A work item carries a step or acceptance criterion no fleet worker can complete, and no operator answer can make it completable; the chunk escalates to a person, with the reason recorded in the triage-findings asset.
+          to: escalate
     retries:
       max: 2
       exhausted: escalate

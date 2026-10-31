@@ -18,3 +18,4 @@ class EscalationCause(StrEnum):
     FORGE_AUTH = "forge-auth"
     FORGE_CONFIG = "forge-config"
     FORGE_CAPABILITY_MISSING = "forge-capability-missing"
+    ESCALATE_CHOICE = "escalate-choice"

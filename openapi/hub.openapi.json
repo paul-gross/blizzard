@@ -1518,11 +1518,12 @@
         "type": "object"
       },
       "ChoiceTargetKind": {
-        "description": "A same-graph ``node``, the reserved terminal ``done``, or a cross-graph ``graph``.",
+        "description": "A same-graph ``node``, the reserved terminal ``done``, the reserved ``escalate``, or a\ncross-graph ``graph``.",
         "enum": [
           "node",
           "done",
-          "graph"
+          "graph",
+          "escalate"
         ],
         "title": "ChoiceTargetKind",
         "type": "string"
@@ -5152,7 +5153,8 @@
           "unroutable-outcome",
           "forge-auth",
           "forge-config",
-          "forge-capability-missing"
+          "forge-capability-missing",
+          "escalate-choice"
         ],
         "title": "EscalationCause",
         "type": "string"

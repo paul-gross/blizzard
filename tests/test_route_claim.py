@@ -57,7 +57,13 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["prompt"]
     assert env["judgement_prompt"]
     assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
-    assert {c["name"] for c in env["node"]["choices"]} == {"already-done", "basic", "advanced", "harness"}
+    assert {c["name"] for c in env["node"]["choices"]} == {
+        "already-done",
+        "basic",
+        "advanced",
+        "harness",
+        "unfulfillable",
+    }
     assert env["work_refs"] == [{**_POINTER, "label": "default#7"}]
 
 

@@ -538,6 +538,31 @@
           "role": "owner"
         }
       ]
+    },
+    {
+      "id": "fleet-unfulfillable-step-cases",
+      "statement": "A step or acceptance criterion no fleet worker can complete is one of four cases: an action only an operator can take, an edit in a repository the leased environment does not hold, content that reaches a person only through the change request's description or a later node, or an open prerequisite the chunk does not depend on.",
+      "owner": "src/blizzard/hub/graphs/default/prompts/triage.md#test-fulfillability-first",
+      "owner_kind": "doc-section",
+      "owner_assert": {
+        "quote": "an open prerequisite the chunk does not depend on"
+      },
+      "markers": [
+        "an open prerequisite the chunk does not depend on"
+      ],
+      "sites": [
+        {
+          "file": "src/blizzard/hub/graphs/default/prompts/triage.md",
+          "symbol": "test-fulfillability-first",
+          "role": "owner"
+        },
+        {
+          "file": "src/blizzard/hub/graphs/advanced-development-workflow/prompts/plan-review.md",
+          "symbol": "steps-no-fleet-worker-can-complete",
+          "role": "allowed",
+          "reason": "Published rendered surface: this node prompt is injected verbatim into a fleet worker's turn, and the two graphs are minted separately, so a graph cannot read another graph's graph-scope artifacts to share the list; each prompt states it where the worker applies it."
+        }
+      ]
     }
   ]
 }
