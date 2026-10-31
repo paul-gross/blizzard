@@ -26,6 +26,7 @@ _REF = WorkRef(source="forge", ref="12")
     [
         (WorkItemCloseOutcome.CLOSED, CloseIntentState.RETIRED),
         (WorkItemCloseOutcome.GONE, CloseIntentState.RETIRED),
+        (WorkItemCloseOutcome.SKIPPED, CloseIntentState.RETIRED),
         (WorkItemCloseOutcome.FAILED, CloseIntentState.BACKING_OFF),
     ],
 )
@@ -35,8 +36,11 @@ def test_each_outcome_leaves_its_intent_in_one_declared_state(
     assert CloseIntentState.after(outcome) is state
 
 
-def test_closed_and_gone_are_the_terminal_outcomes() -> None:
-    assert frozenset({WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE}) == TERMINAL_CLOSE_OUTCOMES
+def test_closed_gone_and_skipped_are_the_terminal_outcomes() -> None:
+    assert (
+        frozenset({WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE, WorkItemCloseOutcome.SKIPPED})
+        == TERMINAL_CLOSE_OUTCOMES
+    )
 
 
 def test_a_closed_ref_announces_work_item_closed() -> None:

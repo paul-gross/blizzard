@@ -1,4 +1,8 @@
+import pytest
+
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef, decide_close_enqueue
+
+pytestmark = pytest.mark.unit
 
 
 def test_close_enqueue_partitions_refs_by_source() -> None:
