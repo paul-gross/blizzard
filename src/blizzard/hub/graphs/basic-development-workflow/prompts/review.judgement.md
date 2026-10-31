@@ -4,9 +4,9 @@ You are closing a review node-step: record the review verdict.
 
 Submit your findings as the `review-findings` asset with `blizzard runner artifact create --name review-findings`,
 content on stdin, before you record the verdict. Record in that asset the tip you judged per repo, this round's scope,
-every finding with its severity (and, on a should-fix, its `in-diff` / `outside-diff` tag), and how you adjudicated
-every entry in `review-finding-refutes`, accepted and rejected alike. A finding whose refutation you accepted is
-resolved, and does not block `pass`.
+the path of each criteria document read per axis, every finding with its severity (and, on a should-fix, its `in-diff` /
+`outside-diff` tag), and how you adjudicated every entry in `review-finding-refutes`, accepted and rejected alike. A
+finding whose refutation you accepted is resolved, and does not block `pass`.
 
 ## What blocks depends on the round
 

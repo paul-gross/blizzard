@@ -19,9 +19,9 @@ one whose argument fails — re-raise the finding and answer the argument.
 
 ## The axes
 
-Judge each axis against the project's review criteria, naming the criterion a finding violates when one applies.
-Navigate the project's documentation and agent-facing context rigorously to learn every expectation it holds along these
-axes, down to the rules binding the code this change touches.
+Before judging, open the project's review criteria and, per axis, the documents they route this change's code to, until
+you reach the rules themselves. Judge each axis from what you read, not memory, naming the criterion a finding violates
+when one applies.
 
 - **Correctness** — behavior, edge cases, failure modes.
 - **Architecture** — conformance to the project's architecture guidance.
@@ -32,7 +32,7 @@ Use the workspace's review tooling where it has one; exercise the change's end-t
 ### A re-visit reviews the delta
 
 A first round — no prior `review-findings` asset — reviews the whole change at full width: one isolated pass per axis,
-aggregated by you. A later round takes one pass carrying all three axes over the delta since the tip the newest
+aggregated by you. A later round takes one pass over all three axes on the delta since the tip the newest
 `review-findings` recorded per repo (none recorded: the whole change): confirm every prior finding fixed or refuted and
 accepted, re-reporting any that is not under a fresh id, and judge the delta sound on every axis, a repair's blast
 radius included.
@@ -46,7 +46,8 @@ the last round's findings, or an amended plan.
 
 Before declaring done, run `blizzard runner artifact create --name review-findings`, content on stdin — the tip you
 judged per repo (`<repo> <branch> <full-sha>`, the next round's diff base), this round's scope (whole change, or the
-delta and what it resolved), what you checked per axis, how you adjudicated each refutation, and every finding with:
+delta and what it resolved), what you checked per axis and the path of each criteria document read for it, how you
+adjudicated each refutation, and every finding with:
 
 - **id** — `F1`, `F2`, …, stable within a submission.
 - **severity** — `blocking` for what must be fixed before landing, `should-fix` for a real defect below that bar; a
@@ -54,7 +55,7 @@ delta and what it resolved), what you checked per axis, how you adjudicated each
   `outside-diff` (untouched code, an exposed defect, a chunk asset) — the round decides if it blocks.
 - **anchor** — `<repo>/<path>:<line>`, `<repo>/<path>::<symbol>`, or `<asset-name>::<section>`.
 - a **description** — at most 300 characters: the defect and its consequence, never the derivation; a fact needed to act
-  on it (a repro command, expected/actual) rides a `detail:` continuation of at most two lines.
+  on it (a repro, expected/actual) rides a `detail:` continuation of at most two lines.
 
 The fields restate the docket; read it in full with `blizzard runner artifact get docket --scope graph --content`, or
 proceed on them if it is unreadable or empty.

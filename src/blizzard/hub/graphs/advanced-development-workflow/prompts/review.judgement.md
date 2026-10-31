@@ -1,8 +1,9 @@
 # Review — judgement
 
 Render your review verdict. The `review-findings` asset must be published before it — the tip you judged per repo, this
-round's scope, what you reviewed per axis, every finding with its severity (and, on a should-fix, its `in-diff` /
-`outside-diff` tag), and how you adjudicated every entry in `review-finding-refutes`.
+round's scope, what you reviewed per axis and the path of each criteria document read for it, every finding with its
+severity (and, on a should-fix, its `in-diff` / `outside-diff` tag), and how you adjudicated every entry in
+`review-finding-refutes`.
 
 A finding whose refutation you accepted is resolved, exactly as if it had been fixed — it does not block `pass`.
 

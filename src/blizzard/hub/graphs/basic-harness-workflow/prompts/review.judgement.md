@@ -2,8 +2,8 @@
 
 Before recording the verdict, run `blizzard runner artifact create --name review-findings` with the findings on stdin,
 unless this attempt already has. The `review-findings` asset must record the tip judged per repo, this round's scope,
-every finding with its severity (and, on a should-fix, its `in-diff` / `outside-diff` tag), and how every entry in
-`review-finding-refutes` was adjudicated, accepted and rejected alike.
+the path of each criteria document read per axis, every finding with its severity (and, on a should-fix, its `in-diff` /
+`outside-diff` tag), and how every entry in `review-finding-refutes` was adjudicated, accepted and rejected alike.
 
 ## What blocks depends on the round
 
