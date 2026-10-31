@@ -34,6 +34,8 @@ from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, content_with_snapshot_references
 from blizzard.runner.harness.opencode.command import OpenCodeCommand, OpenCodeInvocationKind
+from blizzard.runner.harness.opencode.compaction_window import compose_window
+from blizzard.runner.harness.opencode.model_limits import IOpenCodeModelLimitsCatalog
 from blizzard.runner.harness.opencode.permissions.permission_compose import (
     compose_ask_denials,
     merge_overrides,
@@ -236,6 +238,7 @@ class OpenCodeAdapter:
         autonomy: Autonomy = Autonomy.Dangerous,
         transcript_source: IHarnessTranscriptSource | None = None,
         price_catalog: IOpenCodePriceCatalog | None = None,
+        limits_catalog: IOpenCodeModelLimitsCatalog | None = None,
         descendant_usage: OpenCodeDescendantUsage | None = None,
         permission_resolver: IOpenCodePermissionResolver | None = None,
         process: IProcessProbe,
@@ -253,6 +256,8 @@ class OpenCodeAdapter:
         self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         self._unrecognized_efforts: set[str] = set()
         self._unrecognized_compaction_windows: set[str] = set()
+        self._unavailable_compaction_windows: set[tuple[str | None, str]] = set()
+        self._limits_catalog = limits_catalog
         # The one allowlisted env (``bzh:worker-env-allowlist``) every child this adapter
         # launches is built from — the declared passthrough plus any `PATH` prepend.
         self._worker_env = worker_env
@@ -335,14 +340,14 @@ class OpenCodeAdapter:
         return self._supported_models
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        """Always unsupported: OpenCode's compaction reserve and automatic-compaction
-        switch do not represent Claude Code's numeric threshold, so no value here is ever
-        translated — only ever dropped and logged once."""
+        """Numeric windows map to a model input limit accounting for OpenCode's reserve."""
         if value is None:
             return None
+        if re.fullmatch(r"auto|[0-9]+[kK]?", value):
+            return value
         if value not in self._unrecognized_compaction_windows:
             self._unrecognized_compaction_windows.add(value)
-            _log.info("compaction window is unsupported by the OpenCode binding; ignoring", compaction_window=value)
+            _log.info("unrecognized compaction window; ignoring", compaction_window=value)
         return None
 
     def spawn(
@@ -376,6 +381,7 @@ class OpenCodeAdapter:
         env = self._spawn_env(envelope, preamble, resume_from or "")
         if workdir:
             self._check_plugins(workdir, env)
+        env = self._compose_compaction(workdir, env, model if resume_from else model or self._model, compaction_window)
         env = self._deny_unanswerable_asks(workdir, env)
         # Both go through `harness_shared.stdout_target`, empty meaning DEVNULL — the same
         # idiom Claude Code's `spawn` honors `preamble.stderr_path` with.
@@ -451,6 +457,7 @@ class OpenCodeAdapter:
             else self._config_env()
         )
         self._check_plugins(session_cwd, env)
+        env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self._deny_unanswerable_asks(session_cwd, env)
         try:
             with harness_shared.stdout_target(output_path, mode="wb") as stdout_file:
@@ -491,7 +498,6 @@ class OpenCodeAdapter:
         effort: str | None = None,
         compaction_window: str | None = None,
     ) -> ResumeHandle:
-        del model  # OpenCode's session selects its own model on resume.
         cmd = self._command.build(
             OpenCodeInvocationKind.NUDGE,
             prompt=message,
@@ -501,6 +507,7 @@ class OpenCodeAdapter:
         )
         env = self.identity_env(preamble, chunk_id, session_id) if preamble is not None else self._config_env()
         self._check_plugins(session_cwd, env)
+        env = self._compose_compaction(session_cwd, env, model, compaction_window)
         env = self._deny_unanswerable_asks(session_cwd, env)
         # Deferred: a resume gets spawn/judge's ownership.
         with harness_shared.stdout_target(stdout_path) as stdout_file:
@@ -567,6 +574,36 @@ class OpenCodeAdapter:
     def _check_plugins(self, cwd: str, env: dict[str, str]) -> None:
         if self._effective_config_dir:
             check_ambient_plugins(Path(self._effective_config_dir), Path(cwd), env)
+
+    def _compose_compaction(
+        self, cwd: str | None, env: dict[str, str], model: str | None, window: str | None
+    ) -> dict[str, str]:
+        if window is None or window == "auto":
+            return env
+        try:
+            if not cwd or not model or not self._limits_catalog or not self._permission_resolver:
+                raise ValueError("model, catalog or effective configuration unavailable")
+            reference = parse_model_reference(model)
+            limits = self._limits_catalog.limits_for(reference.provider, reference.model)
+            if limits is None:
+                raise ValueError("model limits unavailable")
+            effective = self._permission_resolver.resolve(cwd=cwd, env=self._worker_env.worker(env)).merged_config
+            content = env.get("OPENCODE_CONFIG_CONTENT")
+            base = decode_json(content) if content else {}
+            if not isinstance(base, dict):
+                raise ValueError("inline config is not an object")
+            document = compose_window(base, effective, reference.provider, reference.model, window, limits)
+            if document is None:
+                raise ValueError("effective compaction configuration unavailable")
+            return {**env, "OPENCODE_CONFIG_CONTENT": json.dumps(document, indent=2) + "\n"}
+        except (ValueError, OpenCodeShapeError, OpenCodePermissionResolveError) as exc:
+            key = (model, window)
+            if key not in self._unavailable_compaction_windows:
+                self._unavailable_compaction_windows.add(key)
+                _log.warning(
+                    "cannot apply OpenCode compaction window; launching unchanged", model=model, detail=str(exc)
+                )
+            return env
 
     def _deny_unanswerable_asks(self, cwd: str | None, env: dict[str, str]) -> dict[str, str]:
         """``Normal``'s guarantee: no permission rule of an unattended launch can resolve to ``ask``.

@@ -63,6 +63,10 @@ from `PATH` implicitly; the command receives the path supplied by `--binary`.
 
 ## Offline rehearsal
 
+The compatibility diagnostic checks configuration acceptance, not whether a numeric compaction window causes a session
+to compact at its intended threshold. That separate behavioral proof is `blizzard:manual-autocompact-window` in
+blizzard-context's verification matrix; retain its evidence independently of this diagnostic's report.
+
 Exercise this diagnostic's own process, allowlist, disposable-git, parser, report, and evidence machinery with no
 provider quota spent, using a CLI-surface artifact the mock fleet emits in place of a live OpenCode binary. This
 rehearses the procedure on this page and the diagnostic's machinery; it is not a live pass against real OpenCode and a

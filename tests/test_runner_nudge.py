@@ -166,7 +166,15 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
 
 
 def _seed_exited_lease(
-    store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int, resolved_model: str | None = None
+    store,
+    *,
+    lease_id: str,
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    resolved_model: str | None = None,
+    resolved_effort: str | None = None,
+    resolved_compaction_window: str | None = None,
 ) -> None:
     store.record_lease(
         NewLease(
@@ -178,6 +186,8 @@ def _seed_exited_lease(
             epoch=epoch,
             retries_max=2,
             resolved_model=resolved_model,
+            resolved_effort=resolved_effort,
+            resolved_compaction_window=resolved_compaction_window,
             created_at=_NOW,
         )
     )
@@ -254,7 +264,14 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(
-        store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1, resolved_model="sonnet"
+        store,
+        lease_id="lease_r",
+        chunk_id="ch_1",
+        node_id="nd_review",
+        epoch=1,
+        resolved_model="sonnet",
+        resolved_effort="medium",
+        resolved_compaction_window="150000",
     )
 
     hub = FakeHub()
@@ -275,6 +292,7 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
         verdict="fail",
         assessment="the shared assessment",
     )
+    harness.resolved_model = "opus"  # current default differs from the recorded session
     ctx = make_context(
         store,
         hub=hub,
@@ -292,8 +310,11 @@ def test_unmet_produces_resume_picks_up_the_attach_on_the_next_exit(tmp_path: Pa
 
     assert len(harness.resumed) == 1, "exactly one resume — the attach closed the gap"
     assert harness.resume_models == ["sonnet"]
+    assert harness.resume_efforts == ["medium"]
+    assert harness.resume_compaction_windows == ["150000"]
     assert len(harness.judged) == 1, "exactly one verdict elicited, on the second exit"
-    assert harness.judge_model_effort == [("sonnet", None)]
+    assert harness.judge_model_effort == [("sonnet", "medium")]
+    assert harness.judge_compaction_windows == ["150000"]
 
     _, submission = hub.completions[0]
     by_name = {a.name: a for a in submission.artifacts}

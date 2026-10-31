@@ -73,6 +73,7 @@ from blizzard.runner.harness.opencode.compatibility.proof_script import (
     TOOL_AGENT,
 )
 from blizzard.runner.harness.opencode.compatibility.scratch_config import (
+    COMPACTION_INPUT,
     COMPACTION_TAIL_TURNS,
     ISOLATION_EVIDENCE,
     PROJECT_CONFIG_SENTINEL,
@@ -927,6 +928,22 @@ class OpenCodeCompatibilityProbe:
                 "OpenCode did not resolve the runner-owned compaction tail bound",
                 "config/effective-compaction",
             )
+        value: JsonValue = effective
+        for key in (
+            "provider",
+            self._model_reference.provider,
+            "models",
+            self._model_reference.model,
+            "limit",
+            "input",
+        ):
+            value = value.get(key) if isinstance(value, dict) else None
+        if type(value) is not int or value != COMPACTION_INPUT:
+            return ProbeObservation.failed(
+                CompatibilityProbe.CONFIGURATION_ISOLATION,
+                "OpenCode did not resolve the runner-owned model input limit",
+                "config/effective-input",
+            )
         denial = self._command_denial_observation(
             CompatibilityProbe.CONFIGURATION_ISOLATION,
             "configuration_effect",
@@ -953,6 +970,7 @@ class OpenCodeCompatibilityProbe:
             "and left all config files unchanged",
             "config/effective",
             "config/effective-shell",
+            "config/effective-input",
             "config/effect",
             "config/nonmutation",
         )

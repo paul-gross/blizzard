@@ -64,9 +64,11 @@ from blizzard.runner.harness.opencode.compatibility.process import (
     SubprocessOpenCodeProcess,
 )
 from blizzard.runner.harness.opencode.compatibility.scratch_config import (
+    COMPACTION_INPUT,
     child_env,
     prepare_isolation,
     provision_disposable_auth,
+    write_runner_config,
 )
 from blizzard.runner.harness.opencode.compatibility.scratch_git import SubprocessOpenCodeScratchGit
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
@@ -135,6 +137,38 @@ def _probe(
         auth_source=None,
         allow_live_provider=True,
     )
+
+
+@pytest.mark.parametrize("input_value", [COMPACTION_INPUT, None, 42, True, "1020000"])
+def test_effective_config_requires_selected_model_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, input_value: object
+) -> None:
+    probe = _probe(tmp_path)
+    roots = prepare_isolation(tmp_path / "isolation")
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    written = write_runner_config(workdir, roots, model=MODEL, variant=VARIANT)
+    env = child_env(written.path, roots)
+    payload = json.loads(written.path.read_text())
+    limit = payload["provider"]["openai"]["models"]["gpt-5.6-luna"]["limit"]
+    assert limit == {"context": 2000000, "output": 32000, "input": COMPACTION_INPUT}
+    if input_value is None:
+        del limit["input"]
+    else:
+        limit["input"] = input_value
+    monkeypatch.setattr(probe, "_invoke", lambda *args, **kwargs: OpenCodeProcessResult(0, json.dumps(payload), ""))
+    monkeypatch.setattr(
+        probe,
+        "_command_denial_observation",
+        lambda *args, **kwargs: ProbeObservation.observed(CompatibilityProbe.CONFIGURATION_ISOLATION, "denied"),
+    )
+    probe._config_snapshots = written.snapshots
+
+    observation = probe._configuration_observation(workdir, written.path, env, roots)
+
+    assert observation.state is (EvidenceState.OBSERVED if input_value == COMPACTION_INPUT else EvidenceState.FAILED)
+    if input_value != COMPACTION_INPUT:
+        assert "input limit" in observation.summary
 
 
 @requires_landlock
