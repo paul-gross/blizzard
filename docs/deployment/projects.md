@@ -108,7 +108,7 @@ linking the same repositories keep separate orders.
 blizzard hub project order blizzard blizzard-lib blizzard-app
 blizzard hub project position blizzard blizzard-docs --after blizzard-lib
 blizzard hub project position blizzard blizzard-docs --unranked
-blizzard hub project show blizzard
+blizzard hub project get blizzard
 ```
 
 `order` sets the whole order: the repositories it names rank `1`, `2`, … in the order given, and every other linked

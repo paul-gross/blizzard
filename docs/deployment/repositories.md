@@ -63,7 +63,7 @@ defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the
 `edit --clear park-timeout` or a `PATCH` sending `null`. `merge-on-checks` opens a pull request for the change, keeps it
 up to date with the base branch, and merges it once its checks are green. A policy is refused
 `422 forge_capability_missing` when the repository's forge does not offer every capability it needs, naming each one;
-`GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge show`
+`GET /api/config/schema/repositories` lists each policy with the capabilities it requires, and `blizzard hub forge get`
 lists the capabilities a forge offers. Each `(forge, owner, repo)` belongs to one record. `create` takes exactly one of
 `forge` and `forge_api_url`; the old field is accepted with a warning until a later release retires it, and
 [forges.md](./forges.md#the-old-address-fields) owns how it resolves.

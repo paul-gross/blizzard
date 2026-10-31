@@ -18,7 +18,7 @@ writes need the config-edit permission and refuse a repository the project does 
 
 A repository carries a `landing_policy`, `merge-on-checks` by default, and an optional `park_timeout_hours`.
 `blizzard hub repo create` and `edit` take `--policy` and `--park-timeout`, `edit` takes `--clear park-timeout`, and
-`repo show` prints the policy. A `PATCH` may send `null` for `park_timeout_hours` to clear it; `null` on any other field
+`repo get` prints the policy. A `PATCH` may send `null` for `park_timeout_hours` to clear it; `null` on any other field
 is still refused. `GET /api/config/schema/repositories` lists each policy with the forge capabilities it requires, and
 `blizzard hub forge get` and a forge's detail list the capabilities the forge offers. The configuration document carries
 `landing_policy` and `park_timeout_hours` on a repository entry and `landing_order` on a project entry; export writes
