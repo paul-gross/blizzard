@@ -69,7 +69,14 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import IReadConfigImports
 from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
-from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId, ForgeSlug, IReadForgeRepository
+from blizzard.hub.domain.config.forges import (
+    ForgeEdit,
+    ForgeFields,
+    ForgeId,
+    ForgeKindOffers,
+    ForgeSlug,
+    IReadForgeRepository,
+)
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
     RepositoryEdit,
@@ -140,6 +147,7 @@ from blizzard.hub.domain.observability.tracing.repository import (
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
+from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
@@ -1383,6 +1391,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         work_sources=WorkSourceRecordStore(store_connections),
         repositories=RepositoryRecordStore(store_connections),
         forges=ForgeRecordStore(store_connections),
+        offers=ForgeKindOffers(),
         secrets=secret_store,
         cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
         apply_writer=ConfigApplyStore(store_connections),
@@ -1876,7 +1885,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_hub_exec_released, "1014", at=_ht(62))
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, at=_ht(64)
+            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(64)
         )
     with write.exclusive.locked([chunk_hub_exec_released]) as handle:
         write.hub_exec.record_hub_step_transition_locked(
@@ -1895,7 +1904,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
         write.hub_exec.record_hub_node_poll_locked(
-            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, at=_ht(68)
+            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(68)
         )
 
     # --- delivery + close intents -----------------------------------------------------------------
@@ -2133,6 +2142,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub.services.project_authoring.unlink_source(source_link, operator)
     hub.services.project_authoring.link_source(project, census_source, operator)
     hub.services.project_authoring.link_repository(project, census_repo, operator)
+    hub.services.project_authoring.position_repository(project, census_repo, operator)
     hub.services.config_authoring.edit_repository(census_repo, RepositoryEdit(slug="census-repository"), operator)
     hub.services.config_authoring.edit_work_source(census_source, WorkSourceEdit(slug="census-work-source"), operator)
     project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
@@ -2440,6 +2450,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
     (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
     (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
+    (IReadFlows, "terms_of"): lambda w: w.hub.services.flows.terms_of(w.flow_submission_id),
+    (IReadFlows, "first_turn_at"): lambda w: w.hub.services.flows.first_turn_at(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
     (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
     (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
         w.chunk_transition, from_node_id=w.build_node_id, epoch=2
@@ -2743,6 +2757,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadProjectLinks, "projects_linking_sources"): lambda w: w.hub.services.project_links.projects_linking_sources(
         [w.work_source_id]
     ),
+    (IReadProjectPositions, "landing_links"): lambda w: w.hub.services.project_positions.landing_links(w.project_id),
     (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
         w.project_id, w.work_source_id, w.clock.now()
     ),

@@ -36,11 +36,13 @@ repositories:
     repo: blizzard
     base_branch: master
     secret_name: gh-token
+    landing_policy: merge-on-checks
 projects:
   - slug: blizzard
     name: Blizzard
     sources: [blizzard]
     repositories: [blizzard]
+    landing_order: [blizzard]
 scopes:
   - slug: blizzard
     project: blizzard
@@ -73,7 +75,9 @@ new record's entry leaves it out and as stored when an existing record's does. A
 `422` naming the field: the key that was a work source's or a repository's `name` is its `slug` now. A slug a record of
 the same kind has left is refused `422`, naming that record: name it by its current slug
 ([work-sources.md](./work-sources.md#naming-a-work-source), [repositories.md](./repositories.md#naming-a-repository)). A
-work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`.
+work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`. A repository entry may
+carry `landing_policy` and `park_timeout_hours` ([repositories.md](./repositories.md#fields)); an unknown policy, or one
+the repository's forge cannot honour, is refused `422` at the entry's `landing_policy`.
 
 A version-1 entry that carries an address (`forge_api_url`, `api_base`, or `web_base`) applies as it always did, but
 each address resolves to the forge with that origin, created when none exists, and the apply result lists a warning for
@@ -90,9 +94,12 @@ it leaves out keeps the stored color, or gives a created project the tenant's le
 whole set of links of that kind, so a name it leaves out is unlinked; a list it leaves out keeps the stored links
 ([projects.md](./projects.md#links)). A project names a work source or a repository by its id, its slug, or a slug the
 record left, among the records of that kind the apply leaves — those stored and those the document declares. A slug a
-project has left is refused `422`, naming that project: name it by its current slug. A scope or routine entry names its
-project with `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused
-`project_required` when the tenant holds several.
+project has left is refused `422`, naming that project: name it by its current slug. A `landing_order` lists the
+repositories the project ranks, first to land first, and leaves every other linked repository unranked
+([projects.md](./projects.md#landing-order)); it applies after the entry's links, so one entry may link a repository and
+rank it, and an entry that leaves it out keeps the stored order. A scope or routine entry names its project with
+`project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused `project_required`
+when the tenant holds several.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
@@ -134,8 +141,9 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 `config export` prints every active forge, work source, repository, scope, and routine with every field, and every
 active secret name, as a document that applies back as a no-op. `--format` is `yaml` (the default) or `json`. Retired
 records are left out, because applying one would enable it again. Each work source and repository is written with its
-`slug` and `name`, and each project's `color`, `sources` and `repositories` as slugs. The built-in `hub` work source is
-never exported.
+`slug` and `name`, each repository with its `landing_policy` and any `park_timeout_hours`, and each project's `color`,
+`sources` and `repositories` as slugs. A project that ranks a repository also gets its `landing_order`; one that ranks
+nothing gets none. The built-in `hub` work source is never exported.
 
 The CLI exports version 2 by default; `--version 1` exports the old address-based shape. `GET /api/config/export`
 defaults to version 1 for existing clients; pass `?version=2` for the forge-based shape. In version 2, `forges` follows

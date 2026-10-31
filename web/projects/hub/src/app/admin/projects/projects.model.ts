@@ -209,7 +209,7 @@ export function sourceLinkRows(
     .sort((a, b) => Number(b.builtIn) - Number(a.builtIn) || a.name.localeCompare(b.name));
 }
 
-/** The repository links in force, by slug. */
+/** The repository links in force, in the project's landing order as the hub lists them. */
 export function repositoryLinkRows(
   links: readonly RepositoryLinkView[],
   repositories: readonly RepositorySummary[],
@@ -223,8 +223,7 @@ export function repositoryLinkRows(
       detail: repositoryDetail(byId.get(link.repository_id)),
       builtIn: false,
       revision: link.revision,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    }));
 }
 
 /** One record a link dialog offers. */

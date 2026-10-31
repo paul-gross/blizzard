@@ -12,6 +12,22 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.forge_warnings import echo_warnings
 from blizzard.hub.cli.views import Listing
 
+_CLEARABLE = click.Choice(["park-timeout"])
+_POLICY = click.option(
+    "--policy",
+    "policy",
+    default=None,
+    metavar="POLICY",
+    help="How the repository's changes land: merge-on-checks (the default for a new repository).",
+)
+_PARK_TIMEOUT = click.option(
+    "--park-timeout",
+    "park_timeout",
+    type=int,
+    default=None,
+    metavar="HOURS",
+    help="How long a parked change may wait, in hours; only a parked repository takes one.",
+)
 _IF_MATCH = click.option(
     "--if-match",
     "if_match",
@@ -62,6 +78,8 @@ def repo_group() -> None:
 @click.option("--repo", "repo", required=True, help="The repository's name on the forge.")
 @click.option("--base-branch", "base_branch", required=True, help="The branch work lands on.")
 @click.option("--secret", "secret", required=True, help="The stored secret holding the forge token.")
+@_POLICY
+@_PARK_TIMEOUT
 def repo_create(
     cli: CliContext,
     slug: str,
@@ -72,6 +90,8 @@ def repo_create(
     repo: str,
     base_branch: str,
     secret: str,
+    policy: str | None,
+    park_timeout: int | None,
 ) -> None:
     """Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.
 
@@ -79,8 +99,8 @@ def repo_create(
     holding that origin — made when none does — and warned about.
 
     Refused when SLUG is another repository's current slug, when the forge, owner and repo are already taken — a
-    retired repository keeps its claim — or when the secret is missing or retired. The hub resolves a chunk's
-    commits against the record on its next deliver."""
+    retired repository keeps its claim — when the secret is missing or retired, or when the forge cannot honour
+    --policy. The hub resolves a chunk's commits against the record on its next deliver."""
     if (forge is None) == (forge_api_url is None):
         raise click.UsageError("name the forge with exactly one of --forge and --forge-api-url")
     named = {"forge": forge} if forge is not None else {"forge_api_url": forge_api_url}
@@ -92,6 +112,7 @@ def repo_create(
         "repo": repo,
         "base_branch": base_branch,
         "secret_name": secret,
+        **_landing(policy, park_timeout),
     }
     resp = cli.post("/api/repositories", "POST /repositories", json_body=body, on_status=_refusals(slug), door=True)
     out = resp.json()
@@ -126,6 +147,7 @@ def repo_show(cli: CliContext, repository: str) -> None:
         f"id {body['repository_id']}",
         f"forge {body['forge_slug']}  {body['forge_api_url']}  {body['owner']}/{body['repo']}",
         f"base_branch {body['base_branch']}  secret {body['secret_name']}",
+        f"policy {body['landing_policy']}{_timeout(body)}",
         f"created {body['created_at']} by {body['created_by']}",
     )
 
@@ -142,6 +164,15 @@ def repo_show(cli: CliContext, repository: str) -> None:
 @click.option("--repo", "repo", default=None, help="The new repository name on the forge.")
 @click.option("--base-branch", "base_branch", default=None, help="The new base branch.")
 @click.option("--secret", "secret", default=None, help="The new forge-token secret.")
+@_POLICY
+@_PARK_TIMEOUT
+@click.option(
+    "--clear",
+    "clear",
+    multiple=True,
+    type=_CLEARABLE,
+    help="Clear a field; repeatable. Clearing park-timeout sets it back to its default.",
+)
 @_IF_MATCH
 def repo_edit(
     cli: CliContext,
@@ -154,13 +185,16 @@ def repo_edit(
     repo: str | None,
     base_branch: str | None,
     secret: str | None,
+    policy: str | None,
+    park_timeout: int | None,
+    clear: tuple[str, ...],
     if_match: int | None,
 ) -> None:
     """Change only the fields given on REPOSITORY; every other field keeps its value.
 
     A slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field
-    as it is writes nothing and keeps the revision. Refused when the new slug is another repository's, or --if-match
-    names a stale revision."""
+    as it is writes nothing and keeps the revision. Refused when the new slug is another repository's, a field is
+    given both a value and --clear, or --if-match names a stale revision."""
     given = {
         "slug": slug,
         "name": name,
@@ -170,10 +204,16 @@ def repo_edit(
         "repo": repo,
         "base_branch": base_branch,
         "secret_name": secret,
+        **_landing(policy, park_timeout),
     }
-    body = {k: v for k, v in given.items() if v is not None}
+    body: dict[str, Any] = {k: v for k, v in given.items() if v is not None}
+    for field in clear:
+        key = field.replace("-", "_") + "_hours"
+        if key in body:
+            raise click.UsageError(f"--{field} and --clear {field} contradict each other")
+        body[key] = None
     if not body:
-        raise click.UsageError("nothing to change — give a field to set")
+        raise click.UsageError("nothing to change — give a field to set or --clear")
     resp = cli.patch(
         f"/api/repositories/{repository}",
         "PATCH /repositories/{repository}",
@@ -185,6 +225,21 @@ def repo_edit(
     out = resp.json()
     echo_warnings(out)
     cli.show_lines(out, f"repository {out['slug']} is at revision {out['revision']}")
+
+
+def _landing(policy: str | None, park_timeout: int | None) -> dict[str, Any]:
+    """The landing fields of a write body, for the options given."""
+    stated: dict[str, Any] = {}
+    if policy is not None:
+        stated["landing_policy"] = policy
+    if park_timeout is not None:
+        stated["park_timeout_hours"] = park_timeout
+    return stated
+
+
+def _timeout(body: Any) -> str:
+    hours = body.get("park_timeout_hours")
+    return "" if hours is None else f"  park timeout {hours}h"
 
 
 @repo_group.command("retire", cls=FleetCommand)

@@ -4,6 +4,7 @@ import type {
   ConfigChangeView,
   FieldChangeView,
   ProjectView,
+  RepositoryLinkView,
   RepositorySummary,
   RunnerRegistryView,
   SourceLinkView,
@@ -95,6 +96,7 @@ const REPO_LINK = {
   name: 'Blizzard',
   linked: true,
   revision: 1,
+  position: null,
 };
 const GONE_LINK = sourceLink({ name: 'old', linked: false, revision: 2 });
 
@@ -232,12 +234,26 @@ describe('projects model', () => {
     ] as RepositorySummary[];
     expect(
       repositoryLinkRows(
-        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3 }],
+        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3, position: null }],
         repositories,
       ),
     ).toEqual([
       { key: 'repo_b', name: 'blizzard', detail: 'Blizzard · acme/blizzard · main', builtIn: false, revision: 3 },
     ]);
+  });
+
+  it('keeps the repository links in the landing order the hub lists them in', () => {
+    const link = (repository_id: string, slug: string, position: number | null): RepositoryLinkView => ({
+      project_id: 'proj_b',
+      repository_id,
+      slug,
+      name: slug,
+      linked: true,
+      revision: 1,
+      position,
+    });
+    const rows = repositoryLinkRows([link('repo_w', 'web', 1), link('repo_a', 'api', 2), link('repo_c', 'cli', null)], []);
+    expect(rows.map((row) => row.name)).toEqual(['web', 'api', 'cli']);
   });
 
   it('offers only the live records the project does not link yet', () => {
@@ -287,7 +303,7 @@ describe('projects model', () => {
     expect(wiringCallout(['repository'], 4)).toBe('This project has no repository yet.');
     const wired = missingWiring(
       [sourceLink({ name: 'jira', linked: true, revision: 1 })],
-      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1 }],
+      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1, position: null }],
       true,
     );
     expect(wiringCallout(wired)).toBeNull();

@@ -1,6 +1,6 @@
-"""``blizzard hub project create|list|get|edit|link|unlink`` against a real hub: a project is named by its id, its
+"""``blizzard hub project create|list|get|edit|link|unlink|order|position`` against a real hub: a project is named by its id, its
 slug or a slug it left; its work-source and repository links are linked, shown and unlinked, each change carrying the
-CLI's door; a call that needs a project and names none, on a tenant holding several, prints the tenant's projects and
+CLI's door; its repositories are shown, ordered and moved in its landing order; a call that needs a project and names none, on a tenant holding several, prints the tenant's projects and
 asks for ``--project``; ``--tenant`` names the tenant a project verb acts in; and ``--project`` is offered optional
 on the command line, its help stating what it does."""
 
@@ -173,7 +173,7 @@ def test_link_and_unlink_a_work_source_and_a_repository_by_slug_and_by_id(hub: H
 
     assert _said(source) == ["project widgets is linked to work source acme"]
     assert _said(repository) == [f"project {project_id} is linked to repository acme-repo"]
-    assert shown[-2:] == ["sources acme, hub (built in)", "repositories acme-repo"]
+    assert shown[-3:] == ["sources acme, hub (built in)", "repositories, in landing order:", "  acme-repo  unranked"]
     assert _said(unlinked_source) == [f"project {project_id} is unlinked from work source acme"]
     assert (unlinked_repository["name"], unlinked_repository["linked"]) == ("acme-repo", False)
     assert [row["name"] for row in after["source_links"]] == ["hub"]
@@ -239,10 +239,12 @@ def test_tenant_names_the_tenant_a_project_verb_acts_in(hub: HubHarness, sent: l
     [
         ("create", "Create project SLUG at revision 1"),
         ("list", "List the tenant's projects"),
-        ("get", "with the work sources and repositories"),
+        ("get", "repositories linked to it, in landing order"),
         ("edit", "Change only the fields given on PROJECT"),
         ("link", "work ingested from that source can belong to"),
         ("unlink", "no longer goes to PROJECT"),
+        ("order", "Set PROJECT's whole landing order"),
+        ("position", "Move REPOSITORY in PROJECT's landing order"),
     ],
 )
 def test_each_project_verbs_help_states_its_effect(verb: str, effect: str) -> None:
@@ -289,3 +291,70 @@ def test_a_hex_color_is_stated_on_create_and_edit_and_a_malformed_one_is_refused
     assert (created["color"], edited["color"], edited["revision"]) == ("#14b8a6", "#ff8800", 2)
     assert refused.exit_code != 0
     assert "#rrggbb" in refused.output and "teal" in refused.output
+
+
+def _seed_second_repository(client: TestClient) -> None:
+    repository = {
+        "slug": "acme-lib",
+        "forge_api_url": "https://forge.example",
+        "owner": "acme",
+        "repo": "lib",
+        "base_branch": "main",
+        "secret_name": "token",
+    }
+    _ok(client.post("/api/repositories", json=repository))
+
+
+@pytest.mark.usefixtures("sent")
+def test_show_lists_the_repositories_unranked_by_slug_until_order_ranks_them(hub: HubHarness) -> None:
+    _seed_second_repository(hub.client)
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-repo")
+    _cli("link", "widgets", "--repository", "acme-lib")
+
+    unranked = _said(_cli("show", "widgets"))[-2:]
+    ordered = _cli("order", "widgets", "acme-repo", "acme-lib")
+    shown = _said(_cli("show", "widgets"))[-2:]
+
+    assert unranked == ["  acme-lib  unranked", "  acme-repo  unranked"]
+    assert ordered.exit_code == 0, ordered.output
+    assert _said(ordered)[-2:] == ["  acme-repo  1", "  acme-lib  2"]
+    assert shown == ["  acme-repo  1", "  acme-lib  2"]
+
+
+@pytest.mark.usefixtures("sent")
+def test_position_moves_one_repository_first_after_another_or_out_of_the_ranking(hub: HubHarness) -> None:
+    _seed_second_repository(hub.client)
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-repo")
+    _cli("link", "widgets", "--repository", "acme-lib")
+    _cli("order", "widgets", "acme-repo", "acme-lib")
+
+    first = _said(_cli("position", "widgets", "acme-lib", "--first"))[-2:]
+    after = _said(_cli("position", "widgets", "acme-lib", "--after", "acme-repo"))[-2:]
+    unranked = _said(_cli("position", "widgets", "acme-lib", "--unranked"))[-2:]
+
+    assert first == ["  acme-lib  0", "  acme-repo  1"]
+    assert after == ["  acme-repo  1", "  acme-lib  2"]
+    assert unranked == ["  acme-repo  1", "  acme-lib  unranked"]
+
+
+@pytest.mark.usefixtures("sent")
+@pytest.mark.parametrize(
+    ("argv", "said"),
+    [
+        (("position", "widgets", "acme-repo"), "exactly one of --after, --first or --unranked"),
+        (("position", "widgets", "acme-repo", "--first", "--unranked"), "exactly one of"),
+        (("position", "widgets", "acme-repo", "--first"), "doesn't link repository"),
+        (("order", "widgets", "acme-repo"), "doesn't link repository"),
+    ],
+)
+def test_a_landing_order_write_on_a_repository_the_project_does_not_link_is_refused(
+    argv: tuple[str, ...], said: str
+) -> None:
+    _cli("create", "widgets")
+
+    result = _cli(*argv)
+
+    assert result.exit_code != 0
+    assert said in result.output

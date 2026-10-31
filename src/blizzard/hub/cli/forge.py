@@ -61,7 +61,8 @@ def forge_list(cli: CliContext, include_retired: bool) -> None:
 @forge_group.command("get", cls=FleetCommand)
 @click.argument("forge")
 def forge_show(cli: CliContext, forge: str) -> None:
-    """Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."""
+    """Show FORGE by id, current slug or former slug, with the capabilities it offers, its linked records and each rate
+    budget's last reading."""
     row = cli.get(f"/api/forges/{forge}", "GET /forges/{forge}", on_status=_refusals(forge)).json()
     cli.show_lines(
         row,
@@ -69,6 +70,7 @@ def forge_show(cli: CliContext, forge: str) -> None:
         f"id {row['forge_id']}  kind {row['kind']}",
         f"api_base {row['api_base']}  web_base {row['web_base']}  web_origin {row['web_origin']}",
         f"created {row['created_at']} by {row['created_by']}",
+        f"offers {', '.join(row.get('offered', [])) or '-'}",
         *(f"repository {r['label']}  {r['key']}" for r in row["repositories"]),
         *(f"work source {s['label']}  {s['key']}" for s in row["work_sources"]),
         *(

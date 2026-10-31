@@ -294,6 +294,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/projects/{project}/repository-links"): Permission.FLEET_VIEW,
     ("PUT", "/api/projects/{project}/repository-links/{repository}"): Permission.CONFIG_EDIT,
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"): Permission.CONFIG_EDIT,
+    ("PUT", "/api/projects/{project}/landing-order"): Permission.CONFIG_EDIT,
+    ("POST", "/api/projects/{project}/landing-order/position"): Permission.CONFIG_EDIT,
     ("POST", "/api/projects/{project}/scopes"): Permission.GRAPH_EDIT,
     ("GET", "/api/projects/{project}/scopes"): Permission.FLEET_VIEW,
     ("GET", "/api/projects/{project}/scopes/{slug}"): Permission.FLEET_VIEW,

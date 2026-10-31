@@ -146,3 +146,59 @@ def test_create_names_its_forge_by_exactly_one_flag_and_warns_on_the_old_one(cli
     neither = _repo(["create", "third", *named])
     assert (both.exit_code, neither.exit_code) == (2, 2)
     assert "exactly one of --forge and --forge-api-url" in neither.output
+
+
+def test_show_prints_the_policy_and_a_forge_its_capabilities(client: TestClient) -> None:
+    _seed()
+
+    shown = _repo(["show", "blizzard"])
+    forge = json.loads(_repo(["show", "blizzard", "--json"]).stdout)["forge_slug"]
+    offers = _cli("forge", ["show", forge])
+
+    assert "policy merge-on-checks" in shown.output
+    assert offers.exit_code == 0, offers.output
+    assert "offers " in offers.output
+    assert "checks.read" in offers.output
+
+
+@pytest.mark.parametrize(
+    ("args", "said"),
+    [
+        (["--policy", "park"], "landing_policy"),
+        (["--park-timeout", "5"], "park_timeout_hours"),
+        (["--park-timeout", "5", "--clear", "park-timeout"], "--park-timeout and --clear park-timeout contradict"),
+    ],
+)
+def test_edit_refuses_an_unknown_policy_a_timeout_off_park_and_a_value_beside_its_clear(
+    client: TestClient, args: list[str], said: str
+) -> None:
+    _seed()
+
+    refused = _repo(["edit", "blizzard", *args])
+
+    assert refused.exit_code != 0
+    assert said in refused.output
+    assert client.get("/api/repositories/blizzard").json()["revision"] == 1
+
+
+def test_create_takes_a_policy_and_clearing_the_timeout_on_edit_is_accepted(client: TestClient) -> None:
+    assert _cli("secret", ["create", "gh-test"], stdin=_SENTINEL).exit_code == 0
+    created = _repo(
+        [
+            "create",
+            "blizzard",
+            *_COORDINATE,
+            "--base-branch",
+            "master",
+            "--secret",
+            "gh-test",
+            "--policy",
+            "merge-on-checks",
+        ]
+    )
+
+    cleared = _repo(["edit", "blizzard", "--clear", "park-timeout"])
+
+    assert created.exit_code == 0, created.output
+    assert cleared.exit_code == 0, cleared.output
+    assert "revision 1" in cleared.output

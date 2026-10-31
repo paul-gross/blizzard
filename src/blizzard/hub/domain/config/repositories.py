@@ -1,7 +1,8 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-A repository has the slugged configured-record shape (``bzh:configured-record``). Every field is required,
-so an edit carrying ``None`` on any field is refused naming it."""
+A repository has the slugged configured-record shape (``bzh:configured-record``). Every field is required but the
+park timeout, so an edit carrying ``None`` on any other field is refused naming it; ``None`` on the timeout clears
+it."""
 
 from __future__ import annotations
 
@@ -28,6 +29,12 @@ from blizzard.hub.domain.config.changes import (
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId, NewForge
+from blizzard.hub.domain.config.landing_policies import (
+    DEFAULT_LANDING_POLICY,
+    PARKING_POLICIES,
+    LandingPolicy,
+    parse_policy,
+)
 from blizzard.hub.domain.kernel.id_or_slug import IIdOrSlugLookup, SluggedKind
 from blizzard.hub.domain.kernel.id_or_slug import resolve as resolve_reference
 from blizzard.hub.domain.kernel.slugs import NAME_MAX, SLUG_MAX, DisplayName, Slug
@@ -35,11 +42,13 @@ from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
 RepositoryId = NewType("RepositoryId", str)
 
-#: The mutable fields, in the order a diff lists them.
+#: The mutable text fields, in the order a diff lists them; none may be blank.
 _FIELDS = ("forge_id", "owner", "repo", "base_branch", "secret_name")
+#: The landing fields, listed after the text fields.
+_LANDING_FIELDS = ("landing_policy", "park_timeout_hours")
 #: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
 #: recorded by its id under ``forge``, as every reference is held.
-_DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:])
+_DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:], *_LANDING_FIELDS)
 #: The wire name a field's change is listed under, where it differs from the field's own.
 _DIFF_NAMES = {"forge": "forge_id"}
 
@@ -109,13 +118,16 @@ type IRepositoryLookup = IIdOrSlugLookup[RepositoryId, RepositorySlug, Configure
 @domain_model
 @dataclass(frozen=True)
 class RepositoryFields:
-    """The mutable fields of a repository: the forge it lives on, by id, and its coordinate and credential there."""
+    """The mutable fields of a repository: the forge it lives on, by id, its coordinate and credential there, and how
+    work lands into it. ``park_timeout_hours`` of ``None`` is unset, read as the default."""
 
     forge_id: ForgeId
     owner: str
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
+    park_timeout_hours: int | None = None
 
 
 @domain_model
@@ -127,10 +139,20 @@ class RepositoryDraft:
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
+    park_timeout_hours: int | None = None
 
     def on(self, forge_id: ForgeId) -> RepositoryFields:
         """The fields of a repository on the forge ``forge_id``."""
-        return RepositoryFields(forge_id, self.owner, self.repo, self.base_branch, self.secret_name)
+        return RepositoryFields(
+            forge_id,
+            self.owner,
+            self.repo,
+            self.base_branch,
+            self.secret_name,
+            self.landing_policy,
+            self.park_timeout_hours,
+        )
 
 
 @domain_model
@@ -237,7 +259,8 @@ class RepositoryRef:
 @domain_model
 @dataclass(frozen=True)
 class RepositoryEdit:
-    """A sparse edit: :data:`UNSET` leaves a field; ``None`` is refused on every field."""
+    """A sparse edit: :data:`UNSET` leaves a field; ``None`` clears ``park_timeout_hours`` and is refused on every
+    other field."""
 
     slug: str | None | UnsetType = UNSET
     name: str | None | UnsetType = UNSET
@@ -246,13 +269,17 @@ class RepositoryEdit:
     repo: str | None | UnsetType = UNSET
     base_branch: str | None | UnsetType = UNSET
     secret_name: str | None | UnsetType = UNSET
+    landing_policy: LandingPolicy | None | UnsetType = UNSET
+    park_timeout_hours: int | None | UnsetType = UNSET
 
 
 @domain_model
 @dataclass(frozen=True)
 class ResolvedRepository:
     """The repository record one commit pointer resolved to — its forge's id, owner, base branch and
-    secret, and the record's own id and current slug."""
+    secret, the record's own id and current slug, the policy work lands into it by, and its position in its
+    project's landing order — ``None`` when unranked. A visit's driver stamps both from the terms its first turn
+    took."""
 
     forge_id: ForgeId
     owner: str
@@ -260,6 +287,8 @@ class ResolvedRepository:
     secret_name: str
     record: str = ""
     slug: str = ""
+    landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
+    landing_position: float | None = None
 
 
 @domain_model
@@ -427,6 +456,7 @@ def resolve_chunk_repositories(
                 row.fields.secret_name,
                 row.repository_id,
                 row.slug,
+                row.fields.landing_policy,
             )
             for row in picked
         ),
@@ -466,14 +496,29 @@ def resolve_repository(
 
 
 def validate_fields(fields: RepositoryFields) -> None:
+    """:class:`ConfigFieldError` naming the first invalid field: a blank text field, an unknown policy, a timeout below
+    one hour, or a timeout on a repository whose policy does not park."""
     for name in _FIELDS:
         value = getattr(fields, name)
         if not value or not value.strip():
             raise ConfigFieldError("forge" if name == "forge_id" else name, "must not be blank")
+    policy = parse_policy(fields.landing_policy)
+    timeout = fields.park_timeout_hours
+    if timeout is None:
+        return
+    if timeout < 1:
+        raise ConfigFieldError("park_timeout_hours", f"must be at least 1, got {timeout}")
+    if policy not in PARKING_POLICIES:
+        raise ConfigFieldError("park_timeout_hours", f"belongs only to a parked repository; this one is {policy}")
 
 
 def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
-    """``current`` with every set field of ``edit`` applied; ``None`` is refused naming the field."""
+    """``current`` with every set field of ``edit`` applied; ``None`` clears the park timeout and is refused naming any
+    other field. An edit that moves the repository off a parking policy drops its timeout in the same revision."""
+    policy = _merged_required("landing_policy", current.landing_policy, edit.landing_policy)
+    timeout = current.park_timeout_hours if isinstance(edit.park_timeout_hours, UnsetType) else edit.park_timeout_hours
+    if isinstance(edit.park_timeout_hours, UnsetType) and policy not in PARKING_POLICIES:
+        timeout = None
     return replace(
         current,
         forge_id=_merged_required("forge", current.forge_id, edit.forge_id),
@@ -481,6 +526,8 @@ def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
         repo=_merged_required("repo", current.repo, edit.repo),
         base_branch=_merged_required("base_branch", current.base_branch, edit.base_branch),
         secret_name=_merged_required("secret_name", current.secret_name, edit.secret_name),
+        landing_policy=policy,
+        park_timeout_hours=timeout,
     )
 
 
@@ -523,7 +570,7 @@ def diff(old: ConfiguredRepository | None, new: ConfiguredRepository) -> tuple[F
     return tuple(changes)
 
 
-def _field(record: ConfiguredRepository, name: str) -> str:
+def _field(record: ConfiguredRepository, name: str) -> object:
     return getattr(record if name in ("slug", "name") else record.fields, _DIFF_NAMES.get(name, name))
 
 

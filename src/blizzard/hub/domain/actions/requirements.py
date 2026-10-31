@@ -8,27 +8,17 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES
 from blizzard.hub.domain.config.repositories import ResolvedRepository
 
 Requirement = Callable[[ResolvedRepository], frozenset[Capability]]
 
-_LAND = frozenset(
-    {
-        Capability.REFS_READ,
-        Capability.COMPARE,
-        Capability.CHANGES_OPEN,
-        Capability.CHANGES_READ,
-        Capability.CHANGES_UPDATE_FROM_BASE,
-        Capability.CHANGES_MERGE_MERGE,
-        Capability.CHECKS_READ,
-    }
-)
-
 _NONE: frozenset[Capability] = frozenset()
 
 
-def _land(_repository: ResolvedRepository) -> frozenset[Capability]:
-    return _LAND
+def _land(repository: ResolvedRepository) -> frozenset[Capability]:
+    """What the policy the repository lands by cannot do without."""
+    return POLICY_CAPABILITIES[repository.landing_policy].requires
 
 
 def _nothing(_repository: ResolvedRepository) -> frozenset[Capability]:

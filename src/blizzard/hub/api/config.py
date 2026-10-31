@@ -7,6 +7,7 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -29,6 +30,12 @@ from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import ForgeEdit, ForgeFields, ForgeId
+from blizzard.hub.domain.config.landing_policies import (
+    DEFAULT_LANDING_POLICY,
+    POLICY_CAPABILITIES,
+    LandingPolicy,
+    landing_sort_key,
+)
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit, WorkSourceId
 from blizzard.hub.domain.config_apply.entries import (
@@ -43,6 +50,7 @@ from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.declarations import EntryProjectRequired, ProjectDeclaration
+from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.wire.config import (
     ConfigApplyOutcome,
@@ -59,7 +67,7 @@ from blizzard.wire.config import (
     ScopeEntry,
     WorkSourceEntry,
 )
-from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.repository import LandingPolicyName, RepositoryDocument
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.work_source import WorkSourceDocument
@@ -178,13 +186,25 @@ def _view(
     )
 
 
+#: The schema extension listing each landing policy with the forge capabilities it requires and the ones it uses.
+LANDING_POLICIES_KEY = "x-blizzard-landing-policies"
+
+
 @router.get("/schema/{kind}", dependencies=[_VIEW])
 def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = 1) -> dict[str, object]:
-    """The JSON Schema of a record kind's document model; 404 for a kind with none yet."""
+    """The JSON Schema of a record kind's document model; 404 for a kind with none yet. The `repositories` schema
+    lists, under `x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer
+    (`requires`) and the ones it uses when offered (`uses`)."""
     model = (_SCHEMAS if version == 1 else _SCHEMAS_V2).get(kind)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no document schema for {kind!r}")
-    return model.model_json_schema()
+    schema = model.model_json_schema()
+    if kind == "repositories":
+        schema[LANDING_POLICIES_KEY] = [
+            {"policy": policy.value, "requires": sorted(needs.requires), "uses": sorted(needs.uses)}
+            for policy, needs in POLICY_CAPABILITIES.items()
+        ]
+    return schema
 
 
 @router.get("/changes", response_model=ConfigChangesPage, dependencies=[_VIEW])
@@ -264,12 +284,20 @@ def _entries(document: ConfigDocument | ConfigDocumentV2) -> DocumentEntries:
         stated = {name: getattr(repo, name) for name in repo.model_fields_set if name != "slug"}
         address = stated.pop(_REPOSITORY_ADDRESS, UNSET)
         reference = stated.pop("forge", UNSET)
+        policy = None if repo.landing_policy is None else LandingPolicy(repo.landing_policy.value)
+        if "landing_policy" in stated:
+            stated["landing_policy"] = policy
         repositories.append(
             DeclaredRepository(
                 slug=repo.slug,
                 name=repo.name,
                 draft=RepositoryDraft(
-                    owner=repo.owner, repo=repo.repo, base_branch=repo.base_branch, secret_name=repo.secret_name
+                    owner=repo.owner,
+                    repo=repo.repo,
+                    base_branch=repo.base_branch,
+                    secret_name=repo.secret_name,
+                    landing_policy=policy or DEFAULT_LANDING_POLICY,
+                    park_timeout_hours=repo.park_timeout_hours,
                 ),
                 edit=RepositoryEdit(**stated),
                 forge=ForgeChoice(forge=reference, api_base=address),
@@ -340,6 +368,7 @@ def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
         edit=ProjectEdit(**edit),
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,
+        landing_order=tuple(entry.landing_order) if entry.landing_order is not None else None,
     )
 
 
@@ -507,6 +536,7 @@ def export_config(
                 repositories=sorted(
                     repository_slugs[link.repository_id] for link in repository_links.get(project.project_id, [])
                 ),
+                landing_order=_landing_order(repository_links.get(project.project_id, []), repository_slugs),
             )
             for project in projects
         ],
@@ -533,6 +563,8 @@ def export_config(
                 repo=r.fields.repo,
                 base_branch=r.fields.base_branch,
                 secret_name=r.fields.secret_name,
+                landing_policy=LandingPolicyName(r.fields.landing_policy),
+                park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories
         ],
@@ -588,7 +620,18 @@ def export_config(
                 repo=r.fields.repo,
                 base_branch=r.fields.base_branch,
                 secret_name=r.fields.secret_name,
+                landing_policy=LandingPolicyName(r.fields.landing_policy),
+                park_timeout_hours=r.fields.park_timeout_hours,
             )
             for r in repositories
         ],
     )
+
+
+def _landing_order(links: list[RepositoryLink], slugs: Mapping[RepositoryId, str]) -> list[str] | None:
+    """The slugs of the repositories ``links`` rank, in landing order; ``None`` when they rank none."""
+    ranked = sorted(
+        (link for link in links if link.position is not None),
+        key=lambda link: landing_sort_key(link.position, slugs[link.repository_id]),
+    )
+    return [slugs[link.repository_id] for link in ranked] or None

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import WaitKind
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
@@ -48,11 +49,13 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         *,
         node_id: str,
         epoch: int,
+        kind: WaitKind,
         at: datetime,
         next_poll_at: datetime | None = None,
     ) -> None:
         """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — a turn's wait, committed with the turn's end, never a transition.
-        ``next_poll_at`` is the earliest moment the waiting pass asked to be polled again. Append-only, with no
+        ``kind`` is what the wait waits on; ``next_poll_at`` is the earliest moment the waiting pass asked to be polled
+        again. Append-only, with no
         idempotency guard: a poll attempt recorded twice only widens the gating's read."""
         ...

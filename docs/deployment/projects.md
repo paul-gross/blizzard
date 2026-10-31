@@ -66,6 +66,8 @@ projects and their links takes `fleet:view`.
 | `blizzard hub project link <project> --repository <repository>`                                          | `PUT /api/projects/{project}/repository-links/{repository}`         |
 | `blizzard hub project unlink <project> --source <source>`                                                | `POST /api/projects/{project}/source-links/{source}/retire`         |
 | `blizzard hub project unlink <project> --repository <repository>`                                        | `POST /api/projects/{project}/repository-links/{repository}/retire` |
+| `blizzard hub project order <project> <repository>…`                                                     | `PUT /api/projects/{project}/landing-order`                         |
+| `blizzard hub project position <project> <repository> (--after <repository> \| --first \| --unranked)`   | `POST /api/projects/{project}/landing-order/position`               |
 
 `create` names the project after its slug unless `--name` is given. A slug that is another project's current slug
 answers `409`; a malformed slug, or a blank or padded name, answers `422` naming the field. A project cannot be retired.
@@ -94,6 +96,32 @@ work is ingested from it, or when work lands in it.
 
 Unlinking retires the link: no new work is ingested through it, and the next `deliver` step no longer lands there. A
 step already running finishes. `link` relinks a link unlinked earlier.
+
+### Landing order
+
+A project orders the repositories it links, and a chunk whose work reaches several of them lands them in that order.
+Each link is either ranked, with a position, or unranked. Ranked repositories land first, lowest position first; every
+unranked one lands after them, in slug order. A project that ranks nothing lands its repositories by slug. Two projects
+linking the same repositories keep separate orders.
+
+```bash
+blizzard hub project order blizzard blizzard-lib blizzard-app
+blizzard hub project position blizzard blizzard-docs --after blizzard-lib
+blizzard hub project position blizzard blizzard-docs --unranked
+blizzard hub project get blizzard
+```
+
+`order` sets the whole order: the repositories it names rank `1`, `2`, … in the order given, and every other linked
+repository becomes unranked. Setting the order the project already has writes nothing. `position` moves one repository
+just after a ranked one (`--after`), to the front (`--first`), or out of the ranking (`--unranked`); give exactly one.
+Both take each repository by id or slug, print the project's repositories in their new order, and are refused
+`422 repository_not_linked` for a repository the project does not link. `show` lists the repositories in landing order,
+each with its position or `unranked`, and `GET /api/projects/{project}/repository-links` returns them in that order with
+each link's `position`, `null` when unranked.
+
+Unlinking a repository takes it out of the order; linking it again restores its position. A reorder reaches the next
+`deliver` step: a step that has taken its first turn keeps the order it took
+([repositories.md](./repositories.md#how-delivery-uses-a-record)).
 
 ## A call that names no project
 

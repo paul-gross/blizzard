@@ -118,6 +118,7 @@ from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUr
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
+from blizzard.hub.domain.config.forges import ForgeKindOffers
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
@@ -323,7 +324,10 @@ def import_legacy_config(
         target = _legacy_import_tenant(core.open_tenants(), named=tenant)
         stores = core.open(StoreScope(target))
         authoring = build_config_authoring(
-            stores, cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)), events=None
+            stores,
+            cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
+            events=None,
+            offers=ForgeKindOffers(),
         )
         existing = ExistingConfig(
             secrets=frozenset(secret.name for secret in stores.secrets.list_all()),

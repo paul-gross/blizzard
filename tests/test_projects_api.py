@@ -320,6 +320,7 @@ def test_a_repository_link_is_linked_listed_unlinked_and_relinked(hub: HubHarnes
         "name": "acme-repo",
         "linked": True,
         "revision": 1,
+        "position": None,
     }
     assert (unlinked["linked"], unlinked["revision"]) == (False, 2)
     assert after == []
@@ -362,6 +363,8 @@ _WRITES = [
     ("PATCH", "/api/projects/default", {"description": "d"}),
     ("PUT", "/api/projects/default/source-links/hub", None),
     ("POST", "/api/projects/default/repository-links/nope/retire", None),
+    ("PUT", "/api/projects/default/landing-order", {"repositories": []}),
+    ("POST", "/api/projects/default/landing-order/position", {"repository": "nope", "unranked": True}),
 ]
 
 

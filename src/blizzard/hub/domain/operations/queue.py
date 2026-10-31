@@ -7,8 +7,6 @@ differ: grouping needs only an unheld chunk, while reordering ranks the
 
 from __future__ import annotations
 
-import math
-
 # The residual cycle-check lock — recorded debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
@@ -31,6 +29,7 @@ from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import Graph
+from blizzard.hub.domain.kernel import float_slots
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.runners.registration import RunnerCapability
 
@@ -403,28 +402,24 @@ class QueueRanking:
         """The fractional position landing a chunk right after ``after`` in ``ordered`` (the
         list without the moving chunk) — at the top when ``after`` is ``None``. ``None`` when
         the gap to the next member is exhausted in doubles: the list must be renormalized."""
-        if after is None:
-            return self.effective_position(ordered[0]) - 1.0 if ordered else 0.0
-        after_index = next(i for i, c in enumerate(ordered) if c.chunk_id == after.chunk_id)
-        after_pos = self.effective_position(after)
-        if after_index == len(ordered) - 1:
-            return after_pos + 1.0
-        next_pos = self.effective_position(ordered[after_index + 1])
-        if math.nextafter(after_pos, next_pos) >= next_pos:
-            return None
-        return (after_pos + next_pos) / 2
+        return float_slots.slot_after(self._positions_of(ordered), self._index_of(ordered, after), start=0.0)
 
     def land_after(self, ordered: Sequence[Chunk], after: Chunk | None) -> Landing:
         """The :class:`Landing` right after ``after`` in ``ordered`` (the list without the moving chunk) —
         at the top when ``after`` is ``None``. An exhausted gap renormalizes ``ordered`` to whole numbers
         and lands in the gap that leaves."""
-        position = self.slot_after(ordered, after)
-        if position is not None:
-            return Landing(position)
-        renormalized = tuple((c.chunk_id, float(i)) for i, c in enumerate(ordered))
-        position = QueueRanking(positions=dict(renormalized), promoted_ats=self.promoted_ats).slot_after(ordered, after)
-        assert position is not None  # whole-number positions always leave a gap
-        return Landing(position, renormalized)
+        slot = float_slots.land_after(self._positions_of(ordered), self._index_of(ordered, after), start=0.0)
+        renormalized = tuple((c.chunk_id, position) for c, position in zip(ordered, slot.renumbered, strict=False))
+        return Landing(slot.position, renormalized)
+
+    def _positions_of(self, ordered: Sequence[Chunk]) -> list[float]:
+        return [self.effective_position(c) for c in ordered]
+
+    @staticmethod
+    def _index_of(ordered: Sequence[Chunk], after: Chunk | None) -> int | None:
+        if after is None:
+            return None
+        return next(i for i, c in enumerate(ordered) if c.chunk_id == after.chunk_id)
 
 
 def resolve_landing(

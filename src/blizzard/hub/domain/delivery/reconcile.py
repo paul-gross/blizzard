@@ -25,11 +25,12 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
-from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
 from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
     TURN_SUPERSEDED,
     AdmittedTurn,
+    LandingTerms,
     Submission,
     Turn,
     TurnEvent,
@@ -218,14 +219,40 @@ class FlowLineReconciler:
             return []
         line = self._lines.line(subs, turning=frozenset(turn.submission_id for turn in self._flows.open_turns()))
         passed_over = frozenset(sub.submission_id for sub in subs if not line.eligible(sub, now=now))
+        nexts = [sub for sub in subs if line.is_next(sub, now=now)]
+        terms = self._candidate_terms(nexts)
         admitted: list[AdmittedTurn] = []
-        for sub in subs:
-            if not line.is_next(sub, now=now):
-                continue
-            turn: Turn | None = self._flows.take_turn(sub.submission_id, passed_over=passed_over, at=self._clock.now())
+        for sub in nexts:
+            turn: Turn | None = self._flows.take_turn(
+                sub.submission_id, passed_over=passed_over, terms=terms[sub.submission_id], at=self._clock.now()
+            )
             if turn is not None:
                 admitted.append(AdmittedTurn(turn, sub))
         return admitted
+
+    def _candidate_terms(self, subs: Sequence[Submission]) -> dict[str, tuple[LandingTerms, ...]]:
+        """The terms each submission's repositories would take now, by submission: each held repository's record
+        and its position in the chunk's project's order, read fresh. The store writes one only where the visit has
+        taken none."""
+        if not subs:
+            return {}
+        records: dict[str, ConfiguredRepository] = {
+            record.repository_id: record for record in self._repositories.list_all(include_retired=True)
+        }
+        chunks = self._record.get_many(sorted({sub.chunk_id for sub in subs}))
+        projects: dict[str | None, LandingProject] = {}
+        candidates: dict[str, tuple[LandingTerms, ...]] = {}
+        for sub in subs:
+            chunk = chunks.get(sub.chunk_id)
+            project_id = chunk.project_id if chunk is not None else None
+            if project_id not in projects:
+                projects[project_id] = LandingProject.read(project_id, projects=self._projects, links=self._links)
+            positions = projects[project_id].positions
+            candidates[sub.submission_id] = tuple(
+                LandingTerms.candidate(repository_id, records.get(repository_id), position=positions.get(repository_id))
+                for repository_id in sorted({flow.repository_id for flow in sub.flows})
+            )
+        return candidates
 
     def escalate_actionless(self) -> int:
         """Escalate every chunk of this tenant standing at a hub node that names no action — the boot step run

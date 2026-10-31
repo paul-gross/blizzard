@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
@@ -415,6 +415,10 @@ class BounceFact:
     recorded_at: datetime
 
 
+#: What a recorded wait waits on.
+type WaitKind = Literal["pending"]
+
+
 @domain_model
 @dataclass(frozen=True)
 class HubNodePollFact:
@@ -428,6 +432,10 @@ class HubNodePollFact:
     polled_at: datetime
     # The earliest moment the waiting pass asked to be polled again — it only postpones.
     next_poll_at: datetime | None = None
+    # What the pass waits on, read open: every row the hub writes is ``pending``.
+    kind: str = "pending"
+    # The newest poll a coalesced row stands for; ``None`` on a row that stands for one poll.
+    last_polled_at: datetime | None = None
 
 
 @domain_model

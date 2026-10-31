@@ -19,6 +19,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowLanding,
     FlowOverview,
     FlowResource,
+    LandingTerms,
     LandingWrite,
     Submission,
     SubmissionRecord,
@@ -64,6 +65,15 @@ class IReadFlows(Protocol):
     def visit_standing(self, chunk_id: str, *, node_id: str, epoch: int) -> VisitStanding | None:
         """Where the visit's newest submission stands in the flows it holds, or ``None`` when it has no open
         submission."""
+        ...
+
+    def terms_of(self, submission_id: str) -> dict[str, LandingTerms]:
+        """The landing terms the submission took, by repository id; empty before its first turn."""
+        ...
+
+    def first_turn_at(self, chunk_id: str, *, node_id: str, epoch: int) -> datetime | None:
+        """When the visit's first turn started — the earliest across every generation of its submissions — or
+        ``None`` before any."""
         ...
 
 
@@ -136,11 +146,22 @@ class IWriteFlows(IReadFlows, Protocol):
         writes the closure."""
         ...
 
-    def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
+    def take_turn(
+        self,
+        submission_id: str,
+        *,
+        passed_over: frozenset[str],
+        terms: Sequence[LandingTerms],
+        at: datetime,
+    ) -> Turn | None:
         """Start a turn of the submission with a ``turn-started`` fact per flow it holds, in one transaction under the
         tenant row lock and each held resource's lock. Returns ``None``, writing nothing, unless the submission is open
         with no open turn, no flow it holds has an open turn, and every open submission ahead of it on those flows is
-        in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at all."""
+        in ``passed_over``, the ones the caller judged ineligible — so its flows are taken together or not at all.
+
+        The same transaction gives the submission terms for each repository it holds and has none for: those an
+        earlier generation of the visit took, else the candidate in ``terms`` — so a retried turn keeps what its first
+        took, and a resubmission keeps what the visit took."""
         ...
 
     def end_turn_locked(

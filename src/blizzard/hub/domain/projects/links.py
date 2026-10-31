@@ -109,12 +109,14 @@ class SourceLink(_Link):
 @domain_model
 @dataclass(frozen=True, kw_only=True)
 class RepositoryLink(_Link):
-    """A project's chunks may land in ``repository_id``; it grants nothing else."""
+    """A project's chunks may land in ``repository_id``; it grants nothing else. ``position`` is the link's place in
+    the project's landing order as a read found it — ``None`` when unranked — and is no field of the link's revision."""
 
     KIND: ClassVar[RecordKind] = RecordKind.PROJECT_REPOSITORY_LINK
     LABEL: ClassVar[str] = "repository link"
 
     repository_id: RepositoryId
+    position: float | None = None
 
     def target(self) -> str:
         return self.repository_id

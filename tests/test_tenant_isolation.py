@@ -515,6 +515,8 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/projects/{project}/repository-links"): _f(),
     ("PUT", "/api/projects/{project}/repository-links/{repository}"): _f(),
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"): _f(),
+    ("PUT", "/api/projects/{project}/landing-order"): _f({"repositories": ["{repository}"]}),
+    ("POST", "/api/projects/{project}/landing-order/position"): _f({"repository": "{repository}", "unranked": True}),
 }
 
 
@@ -967,7 +969,11 @@ def test_a_tenants_projects_and_links_answer_only_in_their_own_tenant(two: _Two)
     for t in two.both():
         own = stores[t.label]
         authoring = ProjectAuthoring(
-            projects=own.projects, links=own.project_links, pick=first_color, clock=two.hub.clock
+            projects=own.projects,
+            links=own.project_links,
+            positions=own.project_positions,
+            pick=first_color,
+            clock=two.hub.clock,
         )
         [project] = own.projects.list_all()
         source, repository = (

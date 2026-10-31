@@ -16,6 +16,8 @@ const BLIZZARD: RepositorySummary = {
   base_branch: 'master',
   forge_api_url: 'https://api.github.com',
   secret_name: 'gh-blizzard',
+  landing_policy: 'merge-on-checks',
+  park_timeout_hours: null,
   revision: 2,
   created_at: '2026-01-01T00:00:00Z',
   created_by: 'pgross',

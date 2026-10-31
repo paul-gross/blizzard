@@ -64,7 +64,9 @@ class _World:
         return submission
 
     def take(self, submission: Submission, *, passed_over: frozenset[str] = frozenset()) -> str | None:
-        turn = self.flows.take_turn(submission.submission_id, passed_over=passed_over, at=self.hub.clock.now())
+        turn = self.flows.take_turn(
+            submission.submission_id, passed_over=passed_over, terms=(), at=self.hub.clock.now()
+        )
         return None if turn is None else turn.turn_id
 
     def count(self, table: Table) -> int:
@@ -262,7 +264,7 @@ def test_a_wait_commits_its_poll_row_with_the_turns_end(world: _World) -> None:
 
     with world.chunks.exclusive.locked([submission.chunk_id]) as handle:
         world.chunks.hub_exec.record_hub_node_poll_locked(
-            handle, submission.chunk_id, node_id=_NODE, epoch=0, at=world.hub.clock.now()
+            handle, submission.chunk_id, node_id=_NODE, epoch=0, kind="pending", at=world.hub.clock.now()
         )
         world.flows.end_turn_locked(
             handle, turn_id, outcome="pending", closure=None, event=None, at=world.hub.clock.now()

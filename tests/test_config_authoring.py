@@ -368,6 +368,7 @@ def test_a_repository_create_records_the_diff_and_revision_one(world: _World) ->
         "repo": (None, "demo"),
         "base_branch": (None, "master"),
         "secret_name": (None, "gh"),
+        "landing_policy": (None, "merge-on-checks"),
     }
 
 

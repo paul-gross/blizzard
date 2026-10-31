@@ -141,6 +141,7 @@ class ChunkArtifactsStore:
                     node_id=a.node_id,
                     node_name=a.node_name,
                     epoch=a.epoch,
+                    produced_at=a.produced_at,
                 )
                 for a in conn.execute(
                     self._store.select(s.artifacts)

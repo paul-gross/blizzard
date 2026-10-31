@@ -11,6 +11,7 @@ import asyncio
 import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from types import MappingProxyType
 from typing import Protocol
@@ -74,6 +75,7 @@ from blizzard.hub.domain.delivery.flows import (
     is_stuck,
     may_pass,
     resources_moved,
+    stamp_terms,
     withdrawal_for,
 )
 from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IWriteFlows
@@ -338,7 +340,8 @@ class TurnRunner:
             )
             return None
         assert action is not None  # resolved, so its spec was found
-        spec, git_commits, resolution = resolved.spec, resolved.git_commits, resolved.resolution
+        spec, git_commits = resolved.spec, resolved.git_commits
+        resolution = stamp_terms(resolved.resolution, self._flows.terms_of(submission.submission_id), project.positions)
         held = held_resources(resolution, LandedRepos.of(artifacts).names, spec)
         if resources_moved(held, held_resources(resolution, frozenset(), spec), [f.resource for f in submission.flows]):
             self._end(submission, ending, outcome=TURN_SUPERSEDED, closure=TURN_SUPERSEDED)
@@ -392,9 +395,17 @@ class TurnRunner:
             feature_title=self._resolve_feature_title(chunk),
             public_url=self._public_url,
             project=project,
+            first_turn_at=self._first_turn_at(submission),
+            now=self._clock.now(),
         )
         commits = [{k: v or "" for k, v in c.items()} for c in git_commits.payload(resolution.qualified, resolution)]
         return _Ready(at, action, visit, MappingProxyType(forges), resolution, commits)
+
+    def _first_turn_at(self, submission: Submission) -> datetime:
+        """When the visit's first turn started; the visit is built inside a turn, so one has."""
+        started = self._flows.first_turn_at(submission.chunk_id, node_id=submission.node_id, epoch=submission.epoch)
+        assert started is not None, "a visit is built inside one of its turns"
+        return started
 
     def _visit_of(self, submission: Submission) -> _Visit | None:
         chunk = self._record.get(submission.chunk_id)
@@ -573,6 +584,7 @@ class TurnRunner:
                 chunk,
                 node,
                 epoch=epoch,
+                kind="pending",
                 next_poll_at=answer.next_poll_at,
                 ending=ending,
                 reached=_CP_FLOW_AFTER_POLL_BEFORE_TURN_END.reached,

@@ -79,6 +79,7 @@ from blizzard.hub.domain.chunk.ingest import IngestService
 from blizzard.hub.domain.chunk.model import WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.forge_resolution import IEventRecorder
 from blizzard.hub.domain.config.forges import IReadForgeRepository
@@ -180,6 +181,7 @@ from blizzard.hub.domain.projects.bulk_resolve import BulkProjectResolver
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
+from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
@@ -235,6 +237,7 @@ from blizzard.hub.store.internal.hub_scoped_reads import HubScopedReads, build_h
 from blizzard.hub.store.internal.invariants import HubInvariants, TenantReads
 from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
+from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
@@ -380,6 +383,8 @@ class TenantServices:
     projects: IReadProjectRepository
     #: Each project's links to the tenant's work sources and repositories (the read half).
     project_links: IReadProjectLinks
+    #: Each project's landing order over the repositories it links (the read half).
+    project_positions: IReadProjectPositions
     #: The one writer of projects and their links, each write with its change row.
     project_authoring: ProjectAuthoring
     #: Picks among equally least-used colors for a project created with none — the apply edge's seam.
@@ -572,6 +577,8 @@ class TenantStores:
     projects: ProjectStore
     #: Project links — composition-only write half; ``HubServices`` carries the read half.
     project_links: ProjectLinkStore
+    #: Landing positions — composition-only write half; ``HubServices`` carries the read half.
+    project_positions: ProjectPositionStore
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
     invitations: InvitationStore
@@ -599,6 +606,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
     garden_proposal_store = GardenProposalStore(connections)
     garden_proposal_closure_store = GardenProposalClosureStore(connections)
+    project_links = ProjectLinkStore(connections)
     return TenantStores(
         connections=connections,
         registry=registry,
@@ -619,7 +627,8 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         secret_referrers=SecretReferrersStore(connections),
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
-        project_links=ProjectLinkStore(connections),
+        project_links=project_links,
+        project_positions=ProjectPositionStore(connections, links=project_links),
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
         invitations=InvitationStore(connections),
@@ -840,14 +849,16 @@ def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveCon
 
 
 def build_config_authoring(
-    stores: TenantStores, *, cipher: ISecretCipher, events: IEventRecorder | None
+    stores: TenantStores, *, cipher: ISecretCipher, events: IEventRecorder | None, offers: IForgeOffers
 ) -> ConfigAuthoring:
-    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and recording the old
-    address fields a door's write used through ``events`` — ``None`` where no door writes."""
+    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher``, recording the old
+    address fields a door's write used through ``events`` — ``None`` where no door writes — and checking a repository's
+    landing policy against what ``offers`` says its forge offers."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
         forges=stores.forge_records,
+        offers=offers,
         secrets=stores.secrets,
         cipher=cipher,
         apply_writer=stores.config_apply,
@@ -1035,7 +1046,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, events=event_log)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, events=event_log, offers=forges)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)
@@ -1291,8 +1302,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
+        project_positions=stores.project_positions,
         project_authoring=ProjectAuthoring(
-            projects=stores.projects, links=stores.project_links, pick=parts.color_pick, clock=clock
+            projects=stores.projects,
+            links=stores.project_links,
+            positions=stores.project_positions,
+            pick=parts.color_pick,
+            clock=clock,
         ),
         color_pick=parts.color_pick,
         routines=routine_store,

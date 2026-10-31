@@ -236,7 +236,9 @@ class ConfigApplication:
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
         stored = {r.slug: r for r in self._repositories.list_all(include_retired=True)}
         named = {entry.slug for entry in entries.repositories} | {
-            reference for entry in entries.projects for reference in entry.repositories or ()
+            reference
+            for entry in entries.projects
+            for reference in (*(entry.repositories or ()), *(entry.landing_order or ()))
         }
         former: dict[str, ConfiguredRepository] = {}
         for value in sorted(named - stored.keys()):
@@ -314,6 +316,8 @@ class ConfigApplication:
                     for reference in entry.sources
                     if (ref := source_lookup.resolve(reference)) is not None
                 )
+            if entry.repositories is None and entry.landing_order is not None:
+                repository_projects.append(held)
             if entry.repositories is not None:
                 repository_projects.append(held)
                 listed_repositories.extend(

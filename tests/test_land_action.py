@@ -180,6 +180,8 @@ def _visit(
         feature_title=feature_title,
         public_url=public_url,
         project=LandingProject(),
+        first_turn_at=datetime(2026, 10, 24, tzinfo=UTC),
+        now=datetime(2026, 10, 24, tzinfo=UTC),
     )
 
 
@@ -948,7 +950,7 @@ def test_a_chunk_stopped_while_land_merges_its_first_repository_keeps_that_landi
         assert chunk is not None
         hub.services.stop.stop(chunk, by="operator")
 
-    first = next(iter(double.repos))
+    first = min(double.repos)  # both unranked, so they land in slug order
     double.repos[first].on_merge = stop
 
     assert _take(hub, chunk_id) == "failure"

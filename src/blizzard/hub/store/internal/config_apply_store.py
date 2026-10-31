@@ -16,6 +16,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     IConfigApplyWriter,
     LinkRecord,
+    PlannedPosition,
     PlannedWrite,
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
@@ -38,7 +39,8 @@ from blizzard.hub.store.internal import repository_record_store as repository_wr
 from blizzard.hub.store.internal import routine_store as routine_writes
 from blizzard.hub.store.internal import scope_store as scope_writes
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
-from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.schema import project_repository_positions
+from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 #: What a write's in-transaction checks raise; each is located at its document entry.
 _REFUSALS = (
@@ -82,7 +84,9 @@ class ConfigApplyStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def apply(self, writes: Sequence[PlannedWrite], *, dry_run: bool) -> None:
+    def apply(
+        self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
+    ) -> None:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
                 for write in writes:
@@ -93,6 +97,7 @@ class ConfigApplyStore:
                         raise ApplyEntryRefused(write.section, write.index, cause) from exc
                     except _REFUSALS as exc:
                         raise ApplyEntryRefused(write.section, write.index, exc) from exc
+                _append_positions(conn, positions)
                 if dry_run:
                     raise _DryRunRollback
         except _DryRunRollback:
@@ -170,6 +175,27 @@ class ConfigApplyStore:
             )
         else:
             repository_writes.update_record(conn, record, from_revision, None, change)
+
+
+def _append_positions(conn: Connection, positions: Sequence[PlannedPosition]) -> None:
+    """One landing-order fact per planned position, in order — the facts the position store's own write appends."""
+    if not positions:
+        return
+    conn.execute(
+        statements_of(conn).insert_rows(
+            project_repository_positions,
+            [
+                {
+                    "project_id": planned.project_id,
+                    "repository_id": planned.repository_id,
+                    "position": planned.position,
+                    "set_at": planned.at,
+                    "set_by": planned.by,
+                }
+                for planned in positions
+            ],
+        )
+    )
 
 
 def _run_scope(

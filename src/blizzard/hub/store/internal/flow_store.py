@@ -27,6 +27,7 @@ from blizzard.hub.domain.delivery.flows import (
     FlowLanding,
     FlowOverview,
     FlowResource,
+    LandingTerms,
     LandingWrite,
     Submission,
     SubmissionClosure,
@@ -58,6 +59,7 @@ _held = s.flow_submission_flows
 _closures = s.flow_submission_closures
 _turns = s.hub_turns
 _facts = s.flow_facts
+_terms = s.flow_submission_terms
 #: The ``keyed_locks`` namespace a turn takes its flows' resources under.
 _FLOW_LOCK_NAMESPACE = "flow"
 
@@ -245,6 +247,31 @@ class FlowStore:
                 records.setdefault(fact.chunk_id, []).append(fact)
             return records
 
+    def terms_of(self, submission_id: str) -> dict[str, LandingTerms]:
+        with self._store.read("terms_of") as conn:
+            rows = conn.execute(
+                self._store.select(_terms)
+                .where(_terms.c.submission_id == submission_id)
+                .order_by(_terms.c.repository_id)
+            ).all()
+            return {r.repository_id: _terms_of(r) for r in rows}
+
+    def first_turn_at(self, chunk_id: str, *, node_id: str, epoch: int) -> datetime | None:
+        with self._store.read("first_turn_at") as conn:
+            submissions = list(
+                conn.execute(
+                    self._store.select(_sub, _sub.c.submission_id).where(
+                        _sub.c.chunk_id == chunk_id, _sub.c.node_id == node_id, _sub.c.epoch == epoch
+                    )
+                ).scalars()
+            )
+            if not submissions:
+                return None
+            started: datetime | None = conn.execute(
+                self._store.select(_turns, func.min(_turns.c.started_at)).where(_turns.c.submission_id.in_(submissions))
+            ).scalar()
+            return started
+
     def submit(
         self,
         chunk_id: str,
@@ -301,7 +328,14 @@ class FlowStore:
                 return None
             return close_submission(conn, submission_id, outcome=outcome, at=at)
 
-    def take_turn(self, submission_id: str, *, passed_over: frozenset[str], at: datetime) -> Turn | None:
+    def take_turn(
+        self,
+        submission_id: str,
+        *,
+        passed_over: frozenset[str],
+        terms: Sequence[LandingTerms],
+        at: datetime,
+    ) -> Turn | None:
         with self._store.write("take_turn") as conn:
             row = conn.execute(self._store.select(_sub).where(_sub.c.submission_id == submission_id)).first()
             if row is None:
@@ -326,6 +360,7 @@ class FlowStore:
                 self._store.insert(_turns).values(turn_id=turn.turn_id, submission_id=submission_id, started_at=at)
             )
             write_facts(conn, flows, submission_id, row.chunk_id, kind="turn-started", outcome=None, at=at)
+            self._take_terms(conn, row, flows, terms)
             return turn
 
     def end_turn_locked(
@@ -446,6 +481,50 @@ class FlowStore:
         )
         return [fact_of(r) for r in conn.execute(self._store.select(_facts).join(newest, _facts.c.id == newest.c.id))]
 
+    def _take_terms(
+        self, conn: Connection, row: Row[Any], flows: Sequence[Flow], candidates: Sequence[LandingTerms]
+    ) -> None:
+        """Give the submission terms for each repository it holds and has none for: what the visit's newest earlier
+        generation took, else its candidate. A repository with neither takes none."""
+        held = sorted({flow.repository_id for flow in flows})
+        if not held:
+            return
+        taken = set(
+            conn.execute(
+                self._store.select(_terms, _terms.c.repository_id).where(_terms.c.submission_id == row.submission_id)
+            ).scalars()
+        )
+        earlier: dict[str, LandingTerms] = {}
+        if row.generation > 0:
+            joined = self._store.scope_join(_terms, _sub, _terms.c.submission_id == _sub.c.submission_id)
+            for prior in conn.execute(
+                self._store.select(joined, *_terms.c)
+                .where(
+                    _sub.c.chunk_id == row.chunk_id,
+                    _sub.c.node_id == row.node_id,
+                    _sub.c.epoch == row.epoch,
+                    _sub.c.generation < row.generation,
+                )
+                .order_by(_sub.c.generation.desc())
+            ):
+                earlier.setdefault(prior.repository_id, _terms_of(prior))
+        fresh = {candidate.repository_id: candidate for candidate in candidates}
+        for repository_id in held:
+            if repository_id in taken:
+                continue
+            chosen = earlier.get(repository_id) or fresh.get(repository_id)
+            if chosen is None:
+                continue
+            conn.execute(
+                self._store.insert(_terms).values(
+                    submission_id=row.submission_id,
+                    repository_id=repository_id,
+                    landing_policy=chosen.landing_policy,
+                    park_timeout_hours=chosen.park_timeout_hours,
+                    landing_position=chosen.landing_position,
+                )
+            )
+
     def _busy(self, conn: Connection, flows: Sequence[Flow]) -> bool:
         """Whether any of ``flows`` has an open turn — of any submission holding it, open or closed."""
         joined = self._store.scope_join(_turns, _held, _turns.c.submission_id == _held.c.submission_id)
@@ -511,6 +590,15 @@ class FlowStore:
             )
             for r in rows
         ]
+
+
+def _terms_of(row: Row[Any]) -> LandingTerms:
+    return LandingTerms(
+        repository_id=row.repository_id,
+        landing_policy=row.landing_policy,
+        park_timeout_hours=row.park_timeout_hours,
+        landing_position=row.landing_position,
+    )
 
 
 _flows_conforms: type[IWriteFlows] = FlowStore

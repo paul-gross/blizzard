@@ -21,6 +21,8 @@ const CORE: RepositorySummary = {
   base_branch: 'main',
   forge_api_url: 'https://api.github.com',
   secret_name: 'gh',
+  landing_policy: 'merge-on-checks',
+  park_timeout_hours: null,
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
   created_by: 'ada',

@@ -90,7 +90,8 @@ class SourceLinksView(WireModel):
 
 class RepositoryLinkView(BaseModel):
     """A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
-    ``linked`` is false once the link is retired (unlinked)."""
+    ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
+    order, lower landing first — ``null`` when unranked."""
 
     project_id: str
     repository_id: str
@@ -98,12 +99,34 @@ class RepositoryLinkView(BaseModel):
     name: str
     linked: bool
     revision: int
+    position: float | None
 
 
 class RepositoryLinksView(WireModel):
-    """A project's standing repository links by repository id — ``GET /api/projects/{project}/repository-links``."""
+    """A project's standing repository links in landing order — ranked ones by position, then the unranked, each tie
+    by slug — ``GET /api/projects/{project}/repository-links``."""
 
     repository_links: list[RepositoryLinkView] = []
+
+
+class LandingOrderRequest(BaseModel):
+    """A project's whole landing order: ``repositories``, each an id or a slug, ranked ``1.0``, ``2.0``, … in the
+    list's order; a linked repository the list leaves out becomes unranked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repositories: list[str]
+
+
+class LandingPositionRequest(BaseModel):
+    """One move in a project's landing order: ``repository`` to just after ``after_repository``, to the front when
+    that is ``null``, or to unranked with ``unranked``. Each repository is an id or a slug."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repository: str
+    after_repository: str | None = None
+    unranked: bool = False
 
 
 class ProjectRequiredBody(WireModel):

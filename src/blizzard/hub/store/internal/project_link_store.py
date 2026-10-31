@@ -25,6 +25,7 @@ from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLin
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_rows import lock_keys
 from blizzard.hub.store.internal.config_change_store import append_change
+from blizzard.hub.store.internal.project_position_store import newest_positions
 from blizzard.hub.store.schema import (
     project_repository_link_facts,
     project_repository_links,
@@ -323,13 +324,17 @@ class ProjectLinkStore:
     def repository_links_for(
         self, pairs: Sequence[tuple[ProjectId, RepositoryId]]
     ) -> dict[tuple[ProjectId, RepositoryId], RepositoryLink]:
+        stored = self._stored("repository_links_for", _REPOSITORIES, pairs)
+        positions = self._positions("repository_links_for", set(stored))
         return {
             (ProjectId(project_id), RepositoryId(name)): RepositoryLink(
-                project_id=ProjectId(project_id), repository_id=RepositoryId(name), revision=revision, linked=linked
+                project_id=ProjectId(project_id),
+                repository_id=RepositoryId(name),
+                revision=revision,
+                linked=linked,
+                position=positions.get((project_id, name)),
             )
-            for (project_id, name), (revision, linked) in self._stored(
-                "repository_links_for", _REPOSITORIES, pairs
-            ).items()
+            for (project_id, name), (revision, linked) in stored.items()
         }
 
     def sources_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[SourceLink]]:
@@ -342,14 +347,22 @@ class ProjectLinkStore:
         }
 
     def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        standing_of = self._standing_of("repositories_of_projects", _REPOSITORIES, project_ids)
+        positions = self._positions(
+            "repositories_of_projects",
+            {(project_id, name) for project_id, standing in standing_of.items() for name, _ in standing},
+        )
         return {
             ProjectId(project_id): [
-                RepositoryLink(project_id=ProjectId(project_id), repository_id=RepositoryId(name), revision=revision)
+                RepositoryLink(
+                    project_id=ProjectId(project_id),
+                    repository_id=RepositoryId(name),
+                    revision=revision,
+                    position=positions.get((project_id, name)),
+                )
                 for name, revision in standing
             ]
-            for project_id, standing in self._standing_of(
-                "repositories_of_projects", _REPOSITORIES, project_ids
-            ).items()
+            for project_id, standing in standing_of.items()
         }
 
     def projects_linking_sources(self, work_source_ids: Sequence[str]) -> dict[str, list[ProjectId]]:
@@ -383,6 +396,13 @@ class ProjectLinkStore:
                 standing_only=False,
             )
         return {pair: (revision, linked.get(pair, False)) for pair, revision in revisions.items()}
+
+    def _positions(self, operation: str, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], float | None]:
+        """The newest landing position of each repository link of ``pairs`` that has one."""
+        if not pairs:
+            return {}
+        with self._store.read(operation) as conn:
+            return newest_positions(conn, pairs)
 
     def _standing_of(
         self, operation: str, kind: LinkKind, project_ids: Sequence[str]

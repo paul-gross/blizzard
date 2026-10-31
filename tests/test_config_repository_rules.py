@@ -10,6 +10,7 @@ import pytest
 from blizzard.hub.domain.config.changes import ChangeContext, Door, FieldChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.landing_policies import LandingPolicy
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryEdit,
@@ -155,4 +156,65 @@ def test_a_create_diff_lists_every_field_against_none() -> None:
         FieldChange("repo", None, "demo"),
         FieldChange("base_branch", None, "master"),
         FieldChange("secret_name", None, "gh"),
+        FieldChange("landing_policy", None, LandingPolicy.MERGE_ON_CHECKS),
     )
+
+
+def test_a_repository_lands_by_merge_on_checks_with_no_timeout_unless_stated() -> None:
+    assert (_FIELDS.landing_policy, _FIELDS.park_timeout_hours) == (LandingPolicy.MERGE_ON_CHECKS, None)
+
+
+def test_an_unknown_policy_is_refused_naming_the_field() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        validate_fields(replace(_FIELDS, landing_policy="park"))  # pyright: ignore[reportArgumentType]
+    assert refused.value.field == "landing_policy"
+    assert "park" in refused.value.message
+
+
+@pytest.mark.parametrize("hours", [0, -1])
+def test_a_park_timeout_below_one_hour_is_refused(hours: int) -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        validate_fields(replace(_FIELDS, park_timeout_hours=hours))
+    assert refused.value.field == "park_timeout_hours"
+    assert "at least 1" in refused.value.message
+
+
+def test_a_park_timeout_on_a_repository_that_does_not_park_is_refused() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        validate_fields(replace(_FIELDS, park_timeout_hours=5))
+    assert refused.value.field == "park_timeout_hours"
+    assert "parked" in refused.value.message
+
+
+def test_merge_sets_the_policy_and_leaves_it_when_unset() -> None:
+    assert merge(_FIELDS, RepositoryEdit(landing_policy=LandingPolicy.MERGE_ON_CHECKS)) == _FIELDS
+    assert merge(_FIELDS, RepositoryEdit(owner="other")).landing_policy is LandingPolicy.MERGE_ON_CHECKS
+
+
+def test_merge_refuses_clearing_the_policy() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        merge(_FIELDS, RepositoryEdit(landing_policy=None))
+    assert refused.value.field == "landing_policy"
+
+
+def test_merge_clears_the_timeout_on_none() -> None:
+    timed = replace(_FIELDS, park_timeout_hours=24)
+    assert merge(timed, RepositoryEdit(park_timeout_hours=None)).park_timeout_hours is None
+
+
+def test_merge_takes_a_stated_timeout_for_validation_to_judge() -> None:
+    merged = merge(_FIELDS, RepositoryEdit(park_timeout_hours=5))
+    assert merged.park_timeout_hours == 5
+    with pytest.raises(ConfigFieldError):
+        validate_fields(merged)
+
+
+def test_merge_drops_a_held_timeout_once_the_policy_does_not_park() -> None:
+    timed = replace(_FIELDS, park_timeout_hours=24)
+    assert merge(timed, RepositoryEdit(landing_policy=LandingPolicy.MERGE_ON_CHECKS)).park_timeout_hours is None
+
+
+def test_a_policy_or_timeout_edit_is_listed_in_the_diff() -> None:
+    record = _record()
+    timed = replace(record, fields=replace(record.fields, park_timeout_hours=24))
+    assert diff(timed, record) == (FieldChange("park_timeout_hours", 24, None),)

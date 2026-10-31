@@ -1033,8 +1033,9 @@ class SlugNotCurrentAndFormer(HubQueryCheck):
 
 class RepositoryReferencesInTenant(HubQueryCheck):
     """``hub:repository-references-in-tenant`` — every stored reference to a repository names one of the reference's
-    own tenant: its lifecycle facts, its links and their facts, the landings that name one, and the change rows keyed
-    by a repository id (a repository's and a project link's). The foreign keys say only that the repository exists,
+    own tenant: its lifecycle facts, its links and their facts and landing positions, the landings that name one, the
+    terms a submission lands it by, and the change rows keyed by a repository id (a repository's and a project
+    link's). The foreign keys say only that the repository exists,
     not whose it is, so only a read can show a row filed under another tenant's repository."""
 
     #: Each referring table, its key column for a message, and its column naming the repository.
@@ -1042,7 +1043,9 @@ class RepositoryReferencesInTenant(HubQueryCheck):
         (hub.repository_lifecycle_facts, "id", "repository_id"),
         (hub.project_repository_links, "project_id", "repository_id"),
         (hub.project_repository_link_facts, "id", "repository_id"),
+        (hub.project_repository_positions, "id", "repository_id"),
         (hub.delivery_repo_landed, "id", "repository_id"),
+        (hub.flow_submission_terms, "submission_id", "repository_id"),
     )
 
     def run(self) -> list[Violation]:
@@ -1359,6 +1362,72 @@ class LandedRepositoryLinked(HubQueryCheck):
         return violations
 
 
+class LandingPositionOnLink(HubQueryCheck):
+    """``hub:landing-position-on-link`` — every landing position names a link of its own tenant. The foreign key
+    says only that the link exists, not whose it is, so only a read can show a position filed under another
+    tenant's link. An unlinked link's positions stand: relinking brings them back."""
+
+    def run(self) -> list[Violation]:
+        links, positions = hub.project_repository_links, hub.project_repository_positions
+        tenant_of = {
+            (row.project_id, row.repository_id): row.tenant_id
+            for row in self.rows(select(links.c.project_id, links.c.repository_id, links.c.tenant_id))
+        }
+        return [
+            Violation(
+                "hub:landing-position-on-link",
+                f"project_repository_positions row {row.id} of tenant {row.tenant_id} names the link of project "
+                f"{row.project_id} to repository {row.repository_id}, not a link of its tenant",
+            )
+            for row in self.rows(
+                select(
+                    positions.c.id, positions.c.tenant_id, positions.c.project_id, positions.c.repository_id
+                ).order_by(positions.c.id)
+            )
+            if tenant_of.get((row.project_id, row.repository_id)) != row.tenant_id
+        ]
+
+
+class SubmissionTermsStanding(HubQueryCheck):
+    """``hub:submission-terms-standing`` — every submission's terms name a repository the submission holds a flow
+    for, and a submission with an open turn has terms for every repository it holds. Open rather than started: a
+    submission in flight when the terms arrived has turns from before them and takes its terms at its next turn."""
+
+    def run(self) -> list[Violation]:
+        held, flows, terms, turns = hub.flow_submission_flows, hub.flows, hub.flow_submission_terms, hub.hub_turns
+        holds: dict[str, set[str]] = {}
+        for row in self.rows(
+            select(held.c.submission_id, flows.c.repository_id)
+            .join(flows, flows.c.flow_id == held.c.flow_id)
+            .order_by(held.c.submission_id, flows.c.repository_id)
+        ):
+            holds.setdefault(row.submission_id, set()).add(row.repository_id)
+        taken: dict[str, set[str]] = {}
+        violations: list[Violation] = []
+        for row in self.rows(
+            select(terms.c.submission_id, terms.c.repository_id).order_by(terms.c.submission_id, terms.c.repository_id)
+        ):
+            taken.setdefault(row.submission_id, set()).add(row.repository_id)
+            if row.repository_id not in holds.get(row.submission_id, set()):
+                violations.append(
+                    Violation(
+                        "hub:submission-terms-standing",
+                        f"submission {row.submission_id} has terms for repository {row.repository_id}, "
+                        "which it holds no flow for",
+                    )
+                )
+        open_turns = select(turns.c.submission_id).where(turns.c.ended_at.is_(None)).distinct()
+        for submission_id in sorted(self.rows(open_turns).scalars()):
+            violations.extend(
+                Violation(
+                    "hub:submission-terms-standing",
+                    f"submission {submission_id} has an open turn but no terms for repository {repository_id}",
+                )
+                for repository_id in sorted(holds.get(submission_id, set()) - taken.get(submission_id, set()))
+            )
+        return violations
+
+
 @dataclass(frozen=True)
 class TenantReads:
     """One tenant's read repositories, the facts checks' view of its chunks."""
@@ -1421,6 +1490,8 @@ class HubInvariants:
                     ForgeReferencesInTenant(conn),
                     ChunkSourcesLinked(conn),
                     LandedRepositoryLinked(conn),
+                    LandingPositionOnLink(conn),
+                    SubmissionTermsStanding(conn),
                 )
                 for check in checks:
                     violations.extend(check.run())

@@ -3874,7 +3874,7 @@
           "short_help": "Re-enable FORGE."
         },
         "get": {
-          "help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading.",
+          "help": "Show FORGE by id, current slug or former slug, with the capabilities it offers, its linked records and each rate\nbudget's last reading.",
           "params": [
             {
               "hidden": false,
@@ -3925,7 +3925,7 @@
             }
           ],
           "path": "hub forge get",
-          "short_help": "Show FORGE by id, current slug or former slug, with its linked records and each rate budget's last reading."
+          "short_help": "Show FORGE by id, current slug or former slug, with the capabilities it offers, its linked records and each rate budget's last reading."
         },
         "list": {
           "help": "List forges by slug with their id, revision, state and API origin.",
@@ -6102,7 +6102,7 @@
           "short_help": "Change only the fields given on PROJECT; every other field keeps its value."
         },
         "get": {
-          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories\nlinked to it.",
+          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the\nrepositories linked to it, in landing order, each with its position or \"unranked\".",
           "params": [
             {
               "hidden": false,
@@ -6153,7 +6153,7 @@
             }
           ],
           "path": "hub project get",
-          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources and repositories linked to it."
+          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the repositories linked to it, in landing order, each with its position or \"unranked\"."
         },
         "link": {
           "help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source\ncan belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link\nalready standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again.",
@@ -6287,6 +6287,172 @@
           ],
           "path": "hub project list",
           "short_help": "List the tenant's projects \u2014 slug, name, color, id, revision."
+        },
+        "order": {
+          "help": "Set PROJECT's whole landing order: REPOSITORIES, each by id or slug, land first to last, and every other\nrepository PROJECT links becomes unranked, landing after them by slug. Setting the order PROJECT already has\nwrites nothing. Refused for a repository PROJECT does not link.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "repositories",
+              "opts": [
+                "repositories"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project order",
+          "short_help": "Set PROJECT's whole landing order: REPOSITORIES, each by id or slug, land first to last, and every other repository PROJECT links becomes unranked, landing after them by slug."
+        },
+        "position": {
+          "help": "Move REPOSITORY in PROJECT's landing order: just after a ranked repository (--after), to the front (--first),\nor out of the ranking (--unranked). Refused for a repository PROJECT does not link.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "repository",
+              "opts": [
+                "repository"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Land just after this ranked repository.",
+              "hidden": false,
+              "kind": "option",
+              "name": "after",
+              "opts": [
+                "--after"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Land before every other repository.",
+              "hidden": false,
+              "kind": "option",
+              "name": "first",
+              "opts": [
+                "--first"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Rank it no longer; it lands by slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "unranked",
+              "opts": [
+                "--unranked"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project position",
+          "short_help": "Move REPOSITORY in PROJECT's landing order: just after a ranked repository (--after), to the front (--first), or out of the ranking (--unranked)."
         },
         "unlink": {
           "help": "Unlink PROJECT from one work source (--source) or one repository (--repository): new work from that source\nno longer goes to PROJECT, and PROJECT's work no longer lands in that repository. Unlinking an unlinked link\nchanges nothing; link it again to restore it. Refused for the built-in hub source, which every project draws\nfrom.",
@@ -6746,7 +6912,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 or when the secret is missing or retired. The hub resolves a chunk's\ncommits against the record on its next deliver.",
+          "help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 when the secret is missing or retired, or when the forge cannot honour\n--policy. The hub resolves a chunk's commits against the record on its next deliver.",
           "params": [
             {
               "hidden": false,
@@ -6844,6 +7010,30 @@
               "type": "text"
             },
             {
+              "help": "How the repository's changes land: merge-on-checks (the default for a new repository).",
+              "hidden": false,
+              "kind": "option",
+              "name": "policy",
+              "opts": [
+                "--policy"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "How long a parked change may wait, in hours; only a parked repository takes one.",
+              "hidden": false,
+              "kind": "option",
+              "name": "park_timeout",
+              "opts": [
+                "--park-timeout"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -6884,7 +7074,7 @@
           "short_help": "Add repository SLUG at revision 1, named NAME (default: SLUG), on the forge --forge names."
         },
         "edit": {
-          "help": "Change only the fields given on REPOSITORY; every other field keeps its value.\n\nA slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field\nas it is writes nothing and keeps the revision. Refused when the new slug is another repository's, or --if-match\nnames a stale revision.",
+          "help": "Change only the fields given on REPOSITORY; every other field keeps its value.\n\nA slug the repository leaves keeps naming it until another repository takes it. A change that leaves every field\nas it is writes nothing and keeps the revision. Refused when the new slug is another repository's, a field is\ngiven both a value and --clear, or --if-match names a stale revision.",
           "params": [
             {
               "hidden": false,
@@ -6992,6 +7182,42 @@
               "required": false,
               "secondary_opts": [],
               "type": "text"
+            },
+            {
+              "help": "How the repository's changes land: merge-on-checks (the default for a new repository).",
+              "hidden": false,
+              "kind": "option",
+              "name": "policy",
+              "opts": [
+                "--policy"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "How long a parked change may wait, in hours; only a parked repository takes one.",
+              "hidden": false,
+              "kind": "option",
+              "name": "park_timeout",
+              "opts": [
+                "--park-timeout"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Clear a field; repeatable. Clearing park-timeout sets it back to its default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear",
+              "opts": [
+                "--clear"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "choice"
             },
             {
               "help": "Refuse the change unless the repository is still at this revision.",

@@ -3238,3 +3238,128 @@ def test_an_open_submission_whose_chunk_left_is_exempt_while_its_turn_is_open(tm
         _open_turn(conn, "htn_1", "fsub_1")
 
     assert _flow_line_breaches(engine) == []
+
+
+def _other_tenant(conn: sa.Connection) -> None:
+    """A second tenant, inserted after every row ``stamp`` files under the store's only one."""
+    conn.execute(
+        hub_scoped(insert(hub.tenants)).values(tenant_id="tnt_other", name="other", created_at=_NOW, created_by="test")
+    )
+
+
+def _link(conn: sa.Connection, project_id: str, repository_id: str, *, tenant: str) -> None:
+    conn.execute(
+        insert(hub.project_repository_links).values(
+            tenant_id=tenant, project_id=project_id, repository_id=repository_id, revision=1
+        )
+    )
+
+
+def _position(conn: sa.Connection, project_id: str, repository_id: str, position: float | None = 1.0) -> int:
+    inserted = conn.execute(
+        insert(hub.project_repository_positions).values(
+            stamp(
+                hub.project_repository_positions,
+                project_id=project_id,
+                repository_id=repository_id,
+                position=position,
+                set_at=_NOW,
+                set_by="op",
+            )
+        )
+    ).inserted_primary_key
+    assert inserted is not None
+    return int(inserted[0])
+
+
+def _terms(conn: sa.Connection, submission_id: str, repository_id: str) -> None:
+    conn.execute(
+        insert(hub.flow_submission_terms).values(
+            stamp(
+                hub.flow_submission_terms,
+                submission_id=submission_id,
+                repository_id=repository_id,
+                landing_policy="merge-on-checks",
+            )
+        )
+    )
+
+
+def test_a_landing_position_or_terms_naming_another_tenants_repository_is_a_violation(tmp_path: Path) -> None:
+    """The repository-reference check reads landing positions and submission terms too: one naming a repository of
+    another tenant, or none stored, is a breach; one naming the tenant's own is not."""
+    engine = _hub_engine(tmp_path)
+    tenant, home = default_tenant(engine), default_project(engine)
+    with engine.begin() as conn:
+        _forge_repository(conn, "repo_home", tenant=tenant, forge_id=None, forge_api_url="https://a.example")
+        kept = _position(conn, home, "repo_home")
+        stray = _position(conn, home, "repo_other")
+        _terms(conn, "fsub_1", "repo_home")
+        _terms(conn, "fsub_1", "repo_gone")
+        _other_tenant(conn)
+        _forge_repository(conn, "repo_other", tenant="tnt_other", forge_id=None, forge_api_url="https://b.example")
+
+    assert kept != stray
+    assert _project_breaches(engine, "hub:repository-references-in-tenant") == [
+        f"project_repository_positions row {stray} of tenant {tenant} names repository repo_other, not a repository "
+        "of its tenant",
+        f"flow_submission_terms row fsub_1 of tenant {tenant} names repository repo_gone, not a repository of its "
+        "tenant",
+    ]
+
+
+def test_a_landing_position_off_its_tenants_links_is_a_violation(tmp_path: Path) -> None:
+    """A position must name a link of its own tenant: one naming another tenant's link, or no link at all, is a
+    breach; one on an unlinked link stands, since relinking brings it back."""
+    engine = _hub_engine(tmp_path)
+    tenant, home = default_tenant(engine), default_project(engine)
+    with engine.begin() as conn:
+        _link(conn, home, "repo_a", tenant=tenant)
+        _repository_fact(conn, "repo_a", linked=False, at=_NOW, project_id=home)
+        _position(conn, home, "repo_a")
+        _position(conn, home, "repo_a", position=None)
+        foreign = _position(conn, "proj_other", "repo_b")
+        missing = _position(conn, home, "repo_c")
+        _other_tenant(conn)
+        _link(conn, "proj_other", "repo_b", tenant="tnt_other")
+
+    assert _project_breaches(engine, "hub:landing-position-on-link") == [
+        f"project_repository_positions row {foreign} of tenant {tenant} names the link of project proj_other to "
+        "repository repo_b, not a link of its tenant",
+        f"project_repository_positions row {missing} of tenant {tenant} names the link of project {home} to "
+        "repository repo_c, not a link of its tenant",
+    ]
+
+
+def test_submission_terms_must_stand_on_what_the_submission_holds(tmp_path: Path) -> None:
+    """Terms must name a repository the submission holds a flow for, and a submission with an open turn must have
+    terms for each repository it holds; one whose turns have all ended, as at the upgrade, need not."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _flow(conn)
+        for chunk_id in ("ch_1", "ch_2", "ch_3"):
+            _seed_at_deliver(conn, chunk_id)
+        _submit(conn, "fsub_1", chunk_id="ch_1", node_id="nd_deliver", arrival=1, flow_id="flw_main")
+        _submit(conn, "fsub_2", chunk_id="ch_2", node_id="nd_deliver", arrival=2, flow_id="flw_main")
+        _submit(conn, "fsub_3", chunk_id="ch_3", node_id="nd_deliver", arrival=3, flow_id="flw_main")
+        _terms(conn, "fsub_1", "repo_a")
+        _terms(conn, "fsub_1", "repo_b")
+        _open_turn(conn, "htn_1", "fsub_1")
+        _open_turn(conn, "htn_2", "fsub_2")
+        conn.execute(
+            insert(hub.hub_turns).values(
+                stamp(
+                    hub.hub_turns,
+                    turn_id="htn_3",
+                    submission_id="fsub_3",
+                    started_at=_NOW,
+                    ended_at=_NOW,
+                    outcome="interrupted",
+                )
+            )
+        )
+
+    assert _project_breaches(engine, "hub:submission-terms-standing") == [
+        "submission fsub_1 has terms for repository repo_b, which it holds no flow for",
+        "submission fsub_2 has an open turn but no terms for repository repo_a",
+    ]

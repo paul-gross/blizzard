@@ -22,14 +22,19 @@ from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.work_source_params import path_work_source, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
+from blizzard.hub.domain.config.landing_policies import landing_sort_key
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, is_built_in
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectSlugTaken
+from blizzard.hub.domain.projects.order import RepositoryNotLinked
 from blizzard.wire.project import (
+    LandingOrderRequest,
+    LandingPositionRequest,
     ProjectCreateRequest,
     ProjectPatchRequest,
     ProjectsListView,
@@ -89,6 +94,7 @@ def _repository_view(link: RepositoryLink, repository: ConfiguredRepository) -> 
         name=repository.name,
         linked=link.linked,
         revision=link.revision,
+        position=link.position,
     )
 
 
@@ -242,10 +248,19 @@ def unlink_source(
 
 @router.get("/projects/{project}/repository-links", response_model=RepositoryLinksView, dependencies=[_VIEW])
 def list_repository_links(project: PathProject, services: Services) -> RepositoryLinksView:
-    """The project's standing repository links by repository id. 404 when the project is unknown."""
+    """The project's standing repository links in landing order, each with its `position` — null when unranked.
+    404 when the project is unknown."""
+    return _repository_links(project, services)
+
+
+def _repository_links(project: Project, services: TenantServices) -> RepositoryLinksView:
+    """The project's standing repository links, in landing order."""
     links = services.project_links.repositories_of(project.project_id)
     held = services.repository_records.get_many([link.repository_id for link in links])
-    return RepositoryLinksView(repository_links=[_repository_view(link, held[link.repository_id]) for link in links])
+    views = [_repository_view(link, held[link.repository_id]) for link in links]
+    return RepositoryLinksView(
+        repository_links=sorted(views, key=lambda view: landing_sort_key(view.position, view.slug))
+    )
 
 
 @router.put("/projects/{project}/repository-links/{repository}", response_model=RepositoryLinkView)
@@ -288,3 +303,63 @@ def unlink_repository(
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _repository_view(unlinked, repository)
+
+
+# --- Landing order -----------------------------------------------------------------------------------------------
+
+
+def _linked_repository(reference: str, field: str, project: Project, services: TenantServices) -> ConfiguredRepository:
+    """The repository ``reference`` names, by id, slug or former slug; a reference naming none names no repository the
+    project links."""
+    found = services.repository_records.resolve(reference)
+    if found is None:
+        raise RepositoryNotLinked(field, reference, project.slug)
+    return found
+
+
+@router.put("/projects/{project}/landing-order", response_model=RepositoryLinksView)
+def put_landing_order(
+    project: PathProject,
+    request: LandingOrderRequest,
+    identity: Editor,
+    door: RequestDoor,
+    services: Services,
+) -> RepositoryLinksView:
+    """Rank `repositories` `1.0`, `2.0`, … in the list's order and leave every other linked repository unranked,
+    writing a fact only for a link whose position changes — putting the order the project has writes nothing.
+    Answers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a
+    repository the project does not link, and 422 for one named twice."""
+    try:
+        repositories = [_linked_repository(ref, "repositories", project, services) for ref in request.repositories]
+        services.project_authoring.order_repositories(project, repositories, change_context(identity, door))
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc.field, exc.message, exc.code) from exc
+    return _repository_links(project, services)
+
+
+@router.post("/projects/{project}/landing-order/position", response_model=RepositoryLinksView)
+def position_repository(
+    project: PathProject,
+    request: LandingPositionRequest,
+    identity: Editor,
+    door: RequestDoor,
+    services: Services,
+) -> RepositoryLinksView:
+    """Move `repository` to just after `after_repository`, to the front when that is null, or to unranked with
+    `unranked: true`, writing one fact at the midpoint between its new neighbours — after renumbering the ranked
+    repositories `1.0`, `2.0`, … when no midpoint is left. Answers the project's links in their new order. 404 unknown
+    project; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`
+    for a move both unranked and after a repository, after itself, or after an unranked repository."""
+    try:
+        repository = _linked_repository(request.repository, "repository", project, services)
+        after = (
+            None
+            if request.after_repository is None
+            else _linked_repository(request.after_repository, "after_repository", project, services)
+        )
+        services.project_authoring.position_repository(
+            project, repository, change_context(identity, door), after=after, unranked=request.unranked
+        )
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc.field, exc.message, exc.code) from exc
+    return _repository_links(project, services)

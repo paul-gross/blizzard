@@ -52,7 +52,7 @@ class _Line:
     def take_turn(self, chunk_id: str) -> None:
         store = FlowStore(hub_store_connections(self.world.hub.engine), self.world.hub.clock)
         turn = store.take_turn(
-            self.submission(chunk_id).submission_id, passed_over=frozenset(), at=self.world.hub.clock.now()
+            self.submission(chunk_id).submission_id, passed_over=frozenset(), terms=(), at=self.world.hub.clock.now()
         )
         assert turn is not None
 

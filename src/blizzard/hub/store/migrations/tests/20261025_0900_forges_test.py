@@ -326,7 +326,8 @@ def test_a_chunks_commits_resolve_to_the_same_repositories_after_carry_over(tmp_
         "https://ghe.acme.internal/acme/ghe-app.git": "ghe-app",
     }
     with _before(tmp_path) as (runner, engine, tenant):
-        runner.upgrade(_FORGES)
+        # The record stores read every column the live schema declares, so the store walks on to head.
+        runner.upgrade("head")
         connections = scoped_connections(engine, TenantId(tenant))
         records = RepositoryRecordStore(connections).list_all(include_retired=True)
         forges = ForgeRecordStore(connections).list_all(include_retired=True)

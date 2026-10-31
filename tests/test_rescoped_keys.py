@@ -26,6 +26,7 @@ from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
+from blizzard.hub.domain.config.forges import ForgeKindOffers
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
@@ -177,6 +178,7 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         work_sources=WorkSourceRecordStore(store),
         repositories=RepositoryRecordStore(store),
         forges=ForgeRecordStore(store),
+        offers=ForgeKindOffers(),
         secrets=SecretStore(store),
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),

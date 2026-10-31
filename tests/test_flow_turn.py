@@ -1,7 +1,8 @@
 """A turn's task (component tier), driven through real ticks and real ``ActionLoop`` passes on a hub whose pass bound
 is short: a pass that never returns to an ``await`` is cut off and routes nothing, three in a row go to a person, a
 build that raises or hangs ends its turn, an end that fails to write is swept, a lever mid-turn waits for the turn's
-end, and ground moved under a submission supersedes it."""
+end, and ground moved under a submission supersedes it. A visit lands by the terms its first turn took, keeps the
+moment that turn started, and a pass that waits records a ``pending`` wait."""
 
 from __future__ import annotations
 
@@ -25,12 +26,24 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryEdit
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import BudgetKey, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.forge.registry import ForgeCallRefused, TurnCutOff, _BudgetGate, _RefsHandle
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import OP, TEST_HUB_ACTIONS, HubHarness, build_hub, hub_scoped, pointer_token, report_lease, stamp
+from blizzard.tools.invariants import hub_invariants
+from tests.support import (
+    OP,
+    TEST_HUB_ACTIONS,
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_scoped,
+    pointer_token,
+    report_lease,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
@@ -493,3 +506,62 @@ def test_a_base_branch_edited_while_waiting_supersedes_the_submission_and_resubm
     assert old is not None and old.generation == 1
     assert [f.branch for f in old.flows] == ["trunk"]
     assert world.outcomes(chunk_id) == ["pending", "superseded", "pending"]
+
+
+def test_a_resubmitted_visit_keeps_the_moment_its_first_turn_started(world: _World) -> None:
+    visits: list[Visit] = []
+    world.hooked.hook = visits.append
+    chunk_id = world.at_step("test.hooked")
+    first_started = world.hub.clock.now()
+    world.tick()
+    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
+    world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
+    world.hub.clock.advance(timedelta(seconds=31))
+
+    world.tick()
+    world.hub.flow_driver.wake()
+    world.tick()
+
+    assert world.submission(chunk_id).generation == 1
+    assert [visit.first_turn_at for visit in visits] == [first_started, first_started]
+    assert visits[-1].now > first_started
+
+
+# --- the terms a visit lands by -----------------------------------------------------------------------------------
+
+
+def test_a_visit_built_after_an_edit_lands_by_the_terms_its_first_turn_took(world: _World) -> None:
+    visits: list[Visit] = []
+    world.hooked.hook = visits.append
+    chunk_id = world.at_step("test.hooked")
+    world.tick()
+    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
+    project = world.hub.services.projects.get(ProjectId(default_project(world.hub.engine)))
+    assert project is not None
+    world.hub.services.project_authoring.order_repositories(project, [record], OP)
+    world.hub.clock.advance(timedelta(seconds=31))
+
+    world.tick()
+
+    assert len(visits) == 2
+    terms = world.hub.services.flows.terms_of(world.submission(chunk_id).submission_id)
+    assert set(terms) == {record.repository_id}
+    taken = terms[record.repository_id]
+    assert (taken.landing_policy, taken.landing_position) == ("merge-on-checks", None)
+    assert visits[-1].project.positions[record.repository_id] == 1.0
+    assert [target.landing_policy for target in visits[-1].resolution.targets] == [taken.landing_policy]
+    assert [target.landing_position for target in visits[-1].resolution.targets] == [None]
+    assert visits[-1].now == world.hub.clock.now() - timedelta(seconds=1)  # the tick steps the clock after its pass
+    assert all(row.produced_at is not None for row in visits[-1].artifacts)
+    standing = [v for v in hub_invariants(world.hub.engine).run() if v.invariant == "hub:submission-terms-standing"]
+    assert standing == []
+
+
+def test_a_pass_that_waits_records_a_pending_wait(world: _World) -> None:
+    chunk_id = world.at_step("test.hooked")
+
+    world.tick()
+
+    facts = world.hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert [(poll.kind, poll.last_polled_at) for poll in facts.hub_node_polls] == [("pending", None)]

@@ -6892,6 +6892,14 @@
             "title": "Name",
             "type": "string"
           },
+          "offered": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Offered",
+            "type": "array"
+          },
           "repositories": {
             "items": {
               "$ref": "#/components/schemas/ForgeReferenceView"
@@ -6949,6 +6957,7 @@
           "retired",
           "repositories",
           "work_sources",
+          "offered",
           "budgets"
         ],
         "title": "ForgeDetail",
@@ -9897,6 +9906,63 @@
         "title": "LandedRepoView",
         "type": "object"
       },
+      "LandingOrderRequest": {
+        "additionalProperties": false,
+        "description": "A project's whole landing order: ``repositories``, each an id or a slug, ranked ``1.0``, ``2.0``, \u2026 in the\nlist's order; a linked repository the list leaves out becomes unranked.",
+        "properties": {
+          "repositories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Repositories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repositories"
+        ],
+        "title": "LandingOrderRequest",
+        "type": "object"
+      },
+      "LandingPolicyName": {
+        "description": "A landing policy a write may name \u2014 how a repository's changes land.",
+        "enum": [
+          "merge-on-checks"
+        ],
+        "title": "LandingPolicyName",
+        "type": "string"
+      },
+      "LandingPositionRequest": {
+        "additionalProperties": false,
+        "description": "One move in a project's landing order: ``repository`` to just after ``after_repository``, to the front when\nthat is ``null``, or to unranked with ``unranked``. Each repository is an id or a slug.",
+        "properties": {
+          "after_repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Repository"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "unranked": {
+            "default": false,
+            "title": "Unranked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "repository"
+        ],
+        "title": "LandingPositionRequest",
+        "type": "object"
+      },
       "LeaseTranscriptView": {
         "description": "A lease's transcript, concatenated across every segment stored under its\n``(chunk_id, node_id, epoch)`` \u2014 every spawn generation, not one. No ``final``: a\nsegment's own closes only *that* segment.",
         "properties": {
@@ -10852,7 +10918,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug.",
+        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories\nthe project ranks, first to land first, and leaves every other linked one unranked; it is applied after the\nentry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it\nstands. Export writes it only for a project that ranks a repository.",
         "properties": {
           "color": {
             "anyOf": [
@@ -10869,6 +10935,20 @@
             "default": "",
             "title": "Description",
             "type": "string"
+          },
+          "landing_order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Order"
           },
           "name": {
             "anyOf": [
@@ -12011,6 +12091,10 @@
             "deprecated": true,
             "title": "Forge Api Url"
           },
+          "landing_policy": {
+            "$ref": "#/components/schemas/LandingPolicyName",
+            "default": "merge-on-checks"
+          },
           "name": {
             "anyOf": [
               {
@@ -12025,6 +12109,17 @@
           "owner": {
             "title": "Owner",
             "type": "string"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
           },
           "repo": {
             "title": "Repo",
@@ -12051,7 +12146,7 @@
       },
       "RepositoryDocument": {
         "additionalProperties": false,
-        "description": "A repository as a document \u2014 an entry of the version-1 configuration document, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label \u2014\nthe slug when omitted on create, left as stored on an edit. ``secret_name`` names a stored secret.",
+        "description": "A repository as a document \u2014 an entry of the version-1 configuration document, and the model whose JSON Schema\n``GET /api/config/schema/repositories`` serves. ``slug`` names the repository and ``name`` is its display label \u2014\nthe slug when omitted on create, left as stored on an edit, as is an omitted ``landing_policy`` (a new repository's\nis ``merge-on-checks``). ``secret_name`` names a stored secret.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
@@ -12060,6 +12155,16 @@
           "forge_api_url": {
             "title": "Forge Api Url",
             "type": "string"
+          },
+          "landing_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandingPolicyName"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "anyOf": [
@@ -12075,6 +12180,17 @@
           "owner": {
             "title": "Owner",
             "type": "string"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
           },
           "repo": {
             "title": "Repo",
@@ -12112,6 +12228,16 @@
             "title": "Forge",
             "type": "string"
           },
+          "landing_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandingPolicyName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "anyOf": [
               {
@@ -12126,6 +12252,17 @@
           "owner": {
             "title": "Owner",
             "type": "string"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
           },
           "repo": {
             "title": "Repo",
@@ -12152,7 +12289,7 @@
         "type": "object"
       },
       "RepositoryLinkView": {
-        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked).",
+        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing\norder, lower landing first \u2014 ``null`` when unranked.",
         "properties": {
           "linked": {
             "title": "Linked",
@@ -12161,6 +12298,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
           },
           "project_id": {
             "title": "Project Id",
@@ -12185,13 +12333,14 @@
           "slug",
           "name",
           "linked",
-          "revision"
+          "revision",
+          "position"
         ],
         "title": "RepositoryLinkView",
         "type": "object"
       },
       "RepositoryLinksView": {
-        "description": "A project's standing repository links by repository id \u2014 ``GET /api/projects/{project}/repository-links``.",
+        "description": "A project's standing repository links in landing order \u2014 ranked ones by position, then the unranked, each tie\nby slug \u2014 ``GET /api/projects/{project}/repository-links``.",
         "properties": {
           "repository_links": {
             "default": [],
@@ -12210,7 +12359,7 @@
       },
       "RepositoryPatchRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit\n``null`` is refused on every field. ``forge`` re-points the repository at a forge by id or slug; ``forge_api_url``\ndoes so the old way, with a warning. A slug that changes keeps resolving to the repository until another claims\nit.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield but ``park_timeout_hours``, where it clears the timeout back to its default. ``forge`` re-points the\nrepository at a forge by id or slug; ``forge_api_url`` does so the old way, with a warning. A slug that changes\nkeeps resolving to the repository until another claims it.",
         "properties": {
           "base_branch": {
             "anyOf": [
@@ -12246,6 +12395,16 @@
             "deprecated": true,
             "title": "Forge Api Url"
           },
+          "landing_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandingPolicyName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "anyOf": [
               {
@@ -12267,6 +12426,17 @@
               }
             ],
             "title": "Owner"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
           },
           "repo": {
             "anyOf": [
@@ -12348,6 +12518,10 @@
             "title": "Forge Slug",
             "type": "string"
           },
+          "landing_policy": {
+            "title": "Landing Policy",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -12355,6 +12529,17 @@
           "owner": {
             "title": "Owner",
             "type": "string"
+          },
+          "park_timeout_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Timeout Hours"
           },
           "repo": {
             "title": "Repo",
@@ -12402,6 +12587,8 @@
           "repo",
           "base_branch",
           "secret_name",
+          "landing_policy",
+          "park_timeout_hours",
           "revision",
           "created_at",
           "created_by",
@@ -24170,7 +24357,7 @@
     },
     "/api/config/schema/{kind}": {
       "get": {
-        "description": "The JSON Schema of a record kind's document model; 404 for a kind with none yet.",
+        "description": "The JSON Schema of a record kind's document model; 404 for a kind with none yet. The `repositories` schema\nlists, under `x-blizzard-landing-policies`, every landing policy with the capabilities its forge must offer\n(`requires`) and the ones it uses when offered (`uses`).",
         "operationId": "get_schema_api_config_schema__kind__get",
         "parameters": [
           {
@@ -29846,9 +30033,147 @@
         ]
       }
     },
+    "/api/projects/{project}/landing-order": {
+      "put": {
+        "description": "Rank `repositories` `1.0`, `2.0`, \u2026 in the list's order and leave every other linked repository unranked,\nwriting a fact only for a link whose position changes \u2014 putting the order the project has writes nothing.\nAnswers the project's links in their new order. 404 unknown project; 422 `repository_not_linked` for a\nrepository the project does not link, and 422 for one named twice.",
+        "operationId": "put_landing_order_api_projects__project__landing_order_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LandingOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinksView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Landing Order",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project}/landing-order/position": {
+      "post": {
+        "description": "Move `repository` to just after `after_repository`, to the front when that is null, or to unranked with\n`unranked: true`, writing one fact at the midpoint between its new neighbours \u2014 after renumbering the ranked\nrepositories `1.0`, `2.0`, \u2026 when no midpoint is left. Answers the project's links in their new order. 404 unknown\nproject; 422 `repository_not_linked` for a repository the project does not link, and 422 on `after_repository`\nfor a move both unranked and after a repository, after itself, or after an unranked repository.",
+        "operationId": "position_repository_api_projects__project__landing_order_position_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LandingPositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinksView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Position Repository",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/projects/{project}/repository-links": {
       "get": {
-        "description": "The project's standing repository links by repository id. 404 when the project is unknown.",
+        "description": "The project's standing repository links in landing order, each with its `position` \u2014 null when unranked.\n404 when the project is unknown.",
         "operationId": "list_repository_links_api_projects__project__repository_links_get",
         "parameters": [
           {
@@ -31502,7 +31827,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present; an explicit `null` is refused naming the field. A patch\nthat changes nothing writes nothing. A slug that changes keeps resolving to the repository until another claims\nit. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository holds, or a\ntaken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the repository at\na forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry.",
+        "description": "Apply only the fields present; an explicit `null` clears `park_timeout_hours` and is refused naming any other\nfield. A patch that changes nothing writes nothing. A slug that changes keeps resolving to the repository until\nanother claims it. 404 unknown; 409 for a stale `If-Match` (naming the current revision), a slug some repository\nholds, or a taken `(forge_api_url, owner, repo)`; 422 naming the field, coded as on create. `forge` re-points the\nrepository at a forge; `forge_api_url` does so the old way, with a `Deprecation` header and a `warnings` entry.",
         "operationId": "patch_repository_api_repositories__repository__patch",
         "parameters": [
           {
