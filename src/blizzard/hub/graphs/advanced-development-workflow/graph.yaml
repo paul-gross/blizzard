@@ -327,7 +327,7 @@ nodes:
   resolve:
     executor: runner
     prompt: ./prompts/resolve.md
-    session: resume:integration  # mechanical (base-merge, transient CI/forge blip),
+    session: resume:integration  # mechanical (base-merge, self-clearing forge state),
       # not a judgement call — deliver is a hub node with no session, so the
       # `integration` lineage, pre-push's, is the closest context holding the
       # branch/rebase history
@@ -342,13 +342,13 @@ nodes:
       prompt: ./prompts/resolve.judgement.md
       choices:
         resolved:
-          description: The blocker was mechanical — a base-merge with no semantic choices, a transient forge/CI state, or an infra crash; the change's semantics are untouched and delivery retries.
+          description: The blocker was mechanical — a base-merge with no semantic choices, a self-clearing forge state that now reads mergeable with no red check on the head, or an infra crash; the change's semantics are untouched and delivery retries.
           to: deliver
         substantive:
           description: Resolving the conflict required semantic choices, or a foreign commit on the PR head was adopted as part of the change; the change re-earns its verification before delivering again.
           to: verify
         broken:
-          description: The PR never went clean because CI exposed a real defect in the change itself; kicked back to build with the resolve-report findings.
+          description: The PR never went clean because CI exposed a defect — in the change itself, or a flaky test the re-run cleared; kicked back to build with the resolve-report findings.
           to: build
           prompt_addendum: ./prompts/build.from-resolve.md
     retries:
