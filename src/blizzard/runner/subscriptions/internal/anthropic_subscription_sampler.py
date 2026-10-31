@@ -103,7 +103,15 @@ class AnthropicSubscriptionSampler:
         if not windows:
             _log.warning("external subscription usage sample failed: no parseable windows in response")
             return SampleMiss(SampleMissReason.RESPONSE_UNPARSEABLE)
-        return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
+        return ExternalSubscriptionUsageSnapshot(
+            sampled_at=self._clock.now(), windows=tuple(windows), unlimited=self._unlimited_windows(body)
+        )
+
+    @staticmethod
+    def _unlimited_windows(body: dict[str, object]) -> tuple[str, ...]:
+        """The label of every window ``body`` carries as an explicit ``null`` — the plan imposes no such limit, as the
+        top plan reports ``five_hour: null``. An absent key is not one: it says nothing about the plan."""
+        return tuple(label for key, label, _ in _USAGE_WINDOW_SPECS if key in body and body[key] is None)
 
     def _read_access_token(self) -> str | SampleMiss:
         """The OAuth bearer token from the credential file, or the reason it could not be read.

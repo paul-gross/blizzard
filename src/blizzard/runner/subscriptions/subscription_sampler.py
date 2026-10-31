@@ -68,13 +68,13 @@ class ExternalSubscriptionUsageWindow:
 @domain_model
 @dataclass(frozen=True)
 class ExternalSubscriptionUsageSnapshot:
-    """One sample of every window a declared subscription's account reported at ``sampled_at``.
-
-    ``sampled_at`` is the injected clock's instant, never a provider-reported time.
-    ``windows`` holds one entry per window with usable data — never a fabricated zero."""
+    """One sample of every window a declared subscription's account reported at ``sampled_at``, the injected clock's
+    instant. ``windows`` holds one entry per window with usable data — never a fabricated zero; ``unlimited``, each
+    window the provider explicitly reported as imposing no limit, never inferred from an absent one."""
 
     sampled_at: datetime
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
+    unlimited: tuple[str, ...] = ()
 
 
 # Operator-facing text per closed-set miss reason — what the miss was, not the machine word.

@@ -59,6 +59,16 @@ def _decode_windows(payload: str | None) -> tuple[ExternalSubscriptionUsageWindo
     )
 
 
+def _sample_summary(slug: str, row: Row[Any]) -> ExternalUsageSampleSummary:
+    decoded = json.loads(row.payload) if row.payload else {}
+    return ExternalUsageSampleSummary(
+        slug=slug,
+        sampled_at=as_utc(row.sampled_at),
+        windows=_decode_windows(row.payload),
+        unlimited=tuple(str(label) for label in decoded.get("unlimited", [])),
+    )
+
+
 def _attempt_summary(slug: str, row: Row[Any]) -> ExternalUsageAttemptSummary:
     return ExternalUsageAttemptSummary(
         slug=slug,
@@ -111,12 +121,7 @@ class ExternalUsageStore:
 
     def latest_external_usage_samples_by_slug(self, slugs: Sequence[str]) -> dict[str, ExternalUsageSampleSummary]:
         newest = self._newest_rows_by_slug(slugs, external_usage_samples.c.payload.is_not(None))
-        return {
-            slug: ExternalUsageSampleSummary(
-                slug=slug, sampled_at=as_utc(row.sampled_at), windows=_decode_windows(row.payload)
-            )
-            for slug, row in newest.items()
-        }
+        return {slug: _sample_summary(slug, row) for slug, row in newest.items()}
 
     def external_usage_sample_at(self, slug: str, at: datetime) -> ExternalUsageSampleSummary | None:
         # Served by `ix_external_usage_samples_slug_sampled_at`: one range-bounded seek, newest first.
@@ -131,9 +136,7 @@ class ExternalUsageStore:
             row = conn.execute(stmt).one_or_none()
         if row is None:
             return None
-        return ExternalUsageSampleSummary(
-            slug=slug, sampled_at=as_utc(row.sampled_at), windows=_decode_windows(row.payload)
-        )
+        return _sample_summary(slug, row)
 
     def latest_external_usage_attempt(self, slug: str) -> ExternalUsageAttemptSummary | None:
         stmt = (

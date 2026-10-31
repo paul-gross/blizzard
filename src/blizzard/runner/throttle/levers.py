@@ -76,7 +76,8 @@ def pace_answer(
     sample_interval_seconds: int,
     now: datetime,
 ) -> LeverAnswer:
-    """Whether the spent share of the paced window is within its elapsed share plus the effective lead."""
+    """Whether the spent share of the paced window is within its elapsed share plus the effective lead. A named window
+    on the sample's ``unlimited`` list has nothing to pace, and admits, read as ``no limit``."""
     setting = _pace_setting(settings)
     unread = _unread(sample, slug, sample_interval_seconds, now)
     if unread is not None:
@@ -84,6 +85,8 @@ def pace_answer(
     assert sample is not None
     window = _paced_window(settings, sample)
     if window is None:
+        if settings.window is not None and settings.window in sample.unlimited:
+            return LeverAnswer(LeverName.PACE, True, f"{settings.window}: no limit", setting)
         return LeverAnswer(LeverName.PACE, False, _not_reported(settings.window), setting)
     if window.resets_at <= now:
         return LeverAnswer(LeverName.PACE, False, _turned_over(window.window), setting)
@@ -112,33 +115,45 @@ def utilization_answer(
     sample_interval_seconds: int,
     now: datetime,
 ) -> LeverAnswer:
-    """Whether every named window (every reported one when none is named) stands under the line."""
+    """Whether every named window (every reported one when none is named) stands under the line. A named window on the
+    sample's ``unlimited`` list stands under it, read as ``no limit``; one the sample merely lacks says no."""
     setting = _utilization_setting(settings)
     in_force = f"line {settings.below_pct:g}%"
     unread = _unread(sample, slug, sample_interval_seconds, now)
     if unread is not None:
         return LeverAnswer(LeverName.UTILIZATION, False, unread, setting)
     assert sample is not None
-    windows: list[ExternalSubscriptionUsageWindow] = []
+    judged: list[ExternalSubscriptionUsageWindow | str] = []
     if settings.windows is None:
-        windows = list(sample.windows)
-        if not windows:
+        judged = list(sample.windows)
+        if not judged:
             return LeverAnswer(LeverName.UTILIZATION, False, "no window reported", setting)
     else:
         for label in settings.windows:
             found = next((w for w in sample.windows if w.window == label), None)
-            if found is None:
+            if found is not None:
+                judged.append(found)
+            elif label in sample.unlimited:
+                judged.append(label)
+            else:
                 return LeverAnswer(LeverName.UTILIZATION, False, _not_reported(label), setting)
-            windows.append(found)
+    windows = [w for w in judged if isinstance(w, ExternalSubscriptionUsageWindow)]
     for window in windows:
         if window.resets_at <= now:
             return LeverAnswer(LeverName.UTILIZATION, False, _turned_over(window.window), setting)
     over = [w for w in windows if w.utilization_pct >= settings.below_pct]
     if not over:
-        reading = ", ".join(f"{w.window}: {w.utilization_pct:.0f}%" for w in windows)
+        reading = ", ".join(_line_reading(w) for w in judged)
         return LeverAnswer(LeverName.UTILIZATION, True, reading, setting, in_force)
-    reading = ", ".join(f"{w.window}: {w.utilization_pct:.0f}%" for w in over)
+    reading = ", ".join(_line_reading(w) for w in over)
     return LeverAnswer(LeverName.UTILIZATION, False, reading, setting, in_force, min(w.resets_at for w in over))
+
+
+def _line_reading(judged: ExternalSubscriptionUsageWindow | str) -> str:
+    """One judged window's figure, or ``<label>: no limit`` for a window the plan does not impose."""
+    if isinstance(judged, str):
+        return f"{judged}: no limit"
+    return f"{judged.window}: {judged.utilization_pct:.0f}%"
 
 
 def budget_answer(settings: BudgetSettings, *, spend: UsageTotals) -> LeverAnswer:

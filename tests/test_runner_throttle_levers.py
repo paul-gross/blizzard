@@ -42,9 +42,9 @@ def _week(pct: float, *, elapsed_days: float = 5.0) -> ExternalSubscriptionUsage
 
 
 def _sample(
-    *windows: ExternalSubscriptionUsageWindow, age: timedelta = timedelta(minutes=1)
+    *windows: ExternalSubscriptionUsageWindow, unlimited: tuple[str, ...] = (), age: timedelta = timedelta(minutes=1)
 ) -> ExternalUsageSampleSummary:
-    return ExternalUsageSampleSummary(slug=_SLUG, sampled_at=_NOW - age, windows=windows)
+    return ExternalUsageSampleSummary(slug=_SLUG, sampled_at=_NOW - age, windows=windows, unlimited=unlimited)
 
 
 def _pace(settings: PaceSettings, sample: ExternalUsageSampleSummary | None):
@@ -124,6 +124,14 @@ def test_a_named_window_the_sample_lacks_says_no_naming_it_and_gives_no_until() 
     assert answer.until is None
 
 
+def test_a_paced_window_the_plan_imposes_no_limit_on_admits() -> None:
+    answer = _pace(PaceSettings(window="5h"), _sample(_week(99.0), unlimited=("5h",)))
+
+    assert answer.admits
+    assert answer.reading == "5h: no limit"
+    assert answer.until is None
+
+
 def test_a_window_whose_reset_has_passed_is_unread_not_a_zero() -> None:
     gone = _window("7d", 99.0, -timedelta(minutes=1), seconds=_WEEK)
 
@@ -186,11 +194,45 @@ def test_utilization_judges_only_the_windows_it_names() -> None:
     assert answer.reading == "7d: 10%"
 
 
-def test_a_named_utilization_window_missing_says_no() -> None:
+def test_a_named_utilization_window_the_sample_merely_lacks_says_no() -> None:
     answer = _line(UtilizationSettings(below_pct=95.0, windows=("7d", "1d")), _sample(_week(10.0)))
 
     assert not answer.admits
     assert answer.reading == "window 1d not reported"
+
+
+def test_a_named_window_the_plan_imposes_no_limit_on_admits_however_spent_the_rest_is() -> None:
+    answer = _line(UtilizationSettings(below_pct=75.0, windows=("5h",)), _sample(_week(99.0), unlimited=("5h",)))
+
+    assert answer.admits
+    assert answer.reading == "5h: no limit"
+    assert answer.until is None
+
+
+def test_a_no_limit_window_reads_in_the_order_the_line_names_it() -> None:
+    answer = _line(UtilizationSettings(below_pct=95.0, windows=("5h", "7d")), _sample(_week(10.0), unlimited=("5h",)))
+
+    assert answer.admits
+    assert answer.reading == "5h: no limit, 7d: 10%"
+
+
+def test_a_no_limit_window_does_not_lift_a_named_window_over_the_line() -> None:
+    week = _week(96.0)
+
+    answer = _line(UtilizationSettings(below_pct=95.0, windows=("5h", "7d")), _sample(week, unlimited=("5h",)))
+
+    assert not answer.admits
+    assert answer.reading == "7d: 96%"
+    assert answer.until == week.resets_at
+
+
+def test_a_stale_sample_holds_a_line_on_a_no_limit_window() -> None:
+    stale = _sample(_week(1.0), unlimited=("5h",), age=timedelta(hours=1))
+
+    answer = _line(UtilizationSettings(below_pct=75.0, windows=("5h",)), stale)
+
+    assert not answer.admits
+    assert answer.reading.startswith("no fresh sample of anthropic")
 
 
 def test_an_unnamed_utilization_line_treats_a_turned_over_window_as_unread() -> None:

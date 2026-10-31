@@ -151,6 +151,46 @@ def test_a_window_absent_from_the_response_is_an_absent_entry_not_a_fabricated_z
     assert [w.window for w in snapshot.windows] == ["5h"]
 
 
+@pytest.mark.unit
+def test_a_window_reported_as_null_is_a_limit_the_plan_does_not_impose(tmp_path: Path) -> None:
+    clock = FixedClock(_NOW)
+    creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200, json={"five_hour": None, "seven_day": {"utilization": 87.0, "resets_at": "2026-08-01T18:00:00Z"}}
+        )
+
+    snapshot = _sampler(creds, handler, clock=clock).sample()
+
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
+    assert [w.window for w in snapshot.windows] == ["7d"]
+    assert snapshot.unlimited == ("5h",)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "five_hour",
+    [{"utilization": None, "resets_at": "2026-08-01T18:00:00Z"}, {"utilization": 5.0, "resets_at": "soon"}],
+)
+def test_an_unparseable_or_absent_window_says_nothing_about_the_plan(tmp_path: Path, five_hour: object) -> None:
+    clock = FixedClock(_NOW)
+    creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))
+    seven_day = {"utilization": 87.0, "resets_at": "2026-08-01T18:00:00Z"}
+
+    def unparseable(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"five_hour": five_hour, "seven_day": seven_day})
+
+    def absent(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"seven_day": seven_day})
+
+    for handler in (unparseable, absent):
+        snapshot = _sampler(creds, handler, clock=clock).sample()
+        assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
+        assert [w.window for w in snapshot.windows] == ["7d"]
+        assert snapshot.unlimited == ()
+
+
 # resets_at: epoch seconds and ISO-8601 coerce to the same instant.
 
 

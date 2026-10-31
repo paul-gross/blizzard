@@ -93,11 +93,13 @@ class ExternalUsageAttemptSummary:
 @domain_model
 @dataclass(frozen=True)
 class ExternalUsageSampleSummary:
-    """This ``slug``'s own newest sampled snapshot: when it was sampled, and its windows."""
+    """This ``slug``'s own newest sampled snapshot: when it was sampled, its windows, and the labels of the windows its
+    provider reported as imposing no limit."""
 
     slug: str
     sampled_at: datetime
     windows: tuple[ExternalSubscriptionUsageWindow, ...]
+    unlimited: tuple[str, ...] = ()
 
 
 @domain_model

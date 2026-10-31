@@ -156,9 +156,13 @@ hours = ["19:00-08:00"]
 
 - **Pace** admits while the window's spent share is at most its elapsed share plus the lead. Five days into a seven-day
   window the elapsed share is 71, so a window 86 percent spent declines under the default lead of 5. Each taper step
-  narrows the lead from its `from_pct` of spend onward.
+  narrows the lead from its `from_pct` of spend onward. A window the provider reports as null has nothing to pace, and
+  admits.
 - **Utilization** admits while every named window, or every window the sample reports when none is named, is under
-  `below_pct`. It waits for the soonest reset among the windows over the line.
+  `below_pct`. It waits for the soonest reset among the windows over the line. A named window the provider reports as
+  null is a limit the plan does not impose: it stands under the line and reads `<window>: no limit`. Anthropic's top
+  plan reports `five_hour: null`, so a `5h` line on that plan never holds. A named window the sample does not carry at
+  all still holds.
 - **Budget** admits while the runner's spend over the trailing `window_hours` is under `usd`. The spend is the one
   figure every dollar line reads, billed plus estimated. It gives no `until`: the runner waits for its oldest spend to
   age out of the window, then carries on. Unlike the ceiling, which trips and stays tripped until a person clears it,

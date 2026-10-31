@@ -227,6 +227,26 @@ def test_an_empty_sample_is_persisted_and_buffered_as_an_empty_windows_collectio
     assert payload["windows"] == []
 
 
+def test_a_no_limit_window_reaches_the_levers_sample_and_never_the_hubs_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    week = _snapshot().windows[1]
+    sampler = FakeSubscriptionSampler(
+        snapshot=ExternalSubscriptionUsageSnapshot(sampled_at=_NOW, windows=(week,), unlimited=("5h",))
+    )
+    ctx = _ctx(store, sampler=sampler, clock=FixedClock(_NOW))
+
+    ctx.run()
+
+    sample = store.latest_external_usage_samples_by_slug((_SLUG,))[_SLUG]
+    assert sample.windows == (week,)
+    assert sample.unlimited == ("5h",)
+    at_now = store.external_usage_sample_at(_SLUG, _NOW)
+    assert at_now is not None
+    assert at_now.unlimited == ("5h",)
+    report = json.loads(next(f.payload for f in store.pending_outbound() if f.kind == _SAMPLED_KIND))
+    assert set(report) == {"slug", "name", "sampled_at", "windows"}
+
+
 # AC 3 — a miss writes a NULL-payload attempt row and enqueues a `missed` report, never a `sampled` one.
 # --------------------------------------------------------------------------- #
 

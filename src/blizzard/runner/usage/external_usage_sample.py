@@ -217,7 +217,13 @@ class ExternalUsageSamplePass:
             payload = None
             report_payload = json.dumps(_miss_payload(subscription, result, missed_at=attempt.sampled_at))
         else:
-            payload = report_payload = json.dumps(_sampled_payload(subscription, result))
+            sampled = _sampled_payload(subscription, result)
+            report_payload = json.dumps(sampled)
+            # The no-limit labels stay on the host: the levers read them from the stored attempt, and the hub's report
+            # keeps its shape.
+            payload = (
+                json.dumps({**sampled, "unlimited": list(result.unlimited)}) if result.unlimited else report_payload
+            )
         self._sink.record(
             slug=attempt.slug,
             sampled_at=attempt.sampled_at,
@@ -245,9 +251,10 @@ def _sampled_payload(
     subscription: SampledSubscription, snapshot: ExternalSubscriptionUsageSnapshot
 ) -> dict[str, object]:
     """The stable JSON shape for a sampled snapshot — both this attempt's stored ``payload`` and its buffered
-    outbound report use this exact shape. ``slug`` and ``name`` name the declared subscription and its
-    operator-facing label. A window the hub's own fact model would refuse is dropped here rather than sent, so the
-    persisted attempt and the outbound report carry the same complete windows."""
+    outbound report use this exact shape, the stored one adding the snapshot's ``unlimited`` labels when it has any.
+    ``slug`` and ``name`` name the declared subscription and its operator-facing label. A window the hub's own fact
+    model would refuse is dropped here rather than sent, so the persisted attempt and the outbound report carry the
+    same complete windows."""
     windows: list[dict[str, object]] = []
     for window in snapshot.windows:
         payload: dict[str, object] = {
