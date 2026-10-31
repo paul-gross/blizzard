@@ -903,6 +903,7 @@ def test_create_without_a_registered_validator_stores_prose_as_given() -> None:
     assert result.exit_code == 0, result.output
 
 
+@pytest.mark.unit
 def test_artifact_validators_load_no_wire_model_until_a_registered_asset_is_submitted() -> None:
     import subprocess
     import sys
