@@ -16,7 +16,13 @@ from sqlalchemy import ColumnElement, Connection, Row, Select, and_
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision, GateResolution
+from blizzard.hub.domain.chunk.model import (
+    CloseEnqueueDecision,
+    DecisionCheck,
+    DecisionChoice,
+    GateDecision,
+    GateResolution,
+)
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -212,6 +218,7 @@ class ChunkDecisionsStore:
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
+        close_decision: CloseEnqueueDecision,
     ) -> FenceRefusal | None:
         with self._store.write("record_decision") as conn:
             lock_chunk_row(conn, chunk_id)
@@ -229,6 +236,7 @@ class ChunkDecisionsStore:
                 at=at,
                 artifacts=artifacts,
                 imposed_by_runner_id=imposed_by_runner_id,
+                close_decision=close_decision,
             )
 
     def record_decision_locked(
@@ -247,6 +255,7 @@ class ChunkDecisionsStore:
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
+        close_decision: CloseEnqueueDecision,
     ) -> bool | FenceRefusal:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
@@ -268,6 +277,7 @@ class ChunkDecisionsStore:
             at=at,
             artifacts=artifacts,
             imposed_by_runner_id=imposed_by_runner_id,
+            close_decision=close_decision,
         )
         return refusal if refusal is not None else True
 
@@ -287,6 +297,7 @@ class ChunkDecisionsStore:
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
+        close_decision: CloseEnqueueDecision,
     ) -> FenceRefusal | None:
         payload = json.dumps(
             [{"name": c.name, "description": c.description, "requires_checks": c.requires_checks} for c in choices]
@@ -330,7 +341,7 @@ class ChunkDecisionsStore:
                 )
             )
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         return None
 
     @staticmethod

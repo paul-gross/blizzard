@@ -19,7 +19,7 @@ from structlog.testing import capture_logs
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationReconciler,
@@ -111,6 +111,7 @@ class _Fixture:
         seed_chunk_record(self.chunks, Chunk(chunk_id="ch_1", graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id="tr_1",
+            close_decision=decide_close_enqueue([], lambda _: True),
             chunk_id="ch_1",
             from_node_id=None,
             to_node_id="nd_build",
@@ -140,6 +141,7 @@ class _Fixture:
         seed_chunk_record(self.chunks, Chunk(chunk_id=chunk_id, graph_id="gr_mint", work_refs=[], minted_at=_NOW))
         self.chunks.movement.record_transition(
             transition_id=f"tr_{chunk_id}",
+            close_decision=decide_close_enqueue([], lambda _: True),
             chunk_id=chunk_id,
             from_node_id=None,
             to_node_id=node_id,

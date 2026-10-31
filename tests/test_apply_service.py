@@ -28,6 +28,7 @@ from blizzard.hub.domain.chunk.model import (
     IntendedMigration,
     QuestionFact,
     TransitionFact,
+    decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
@@ -182,6 +183,7 @@ def _apply_service(under_lock: ChunkFacts | None) -> tuple[ApplyService, _Ports,
         clock=clock,
         hub_step_wake=ports,
         label=lambda _ref: None,
+        closer_available=lambda source: source == "hub",
     )
     return service, ports, clock
 
@@ -195,6 +197,7 @@ def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, 
         exclusive=exclusive,
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
+        closer_available=lambda source: source == "hub",
     )
     return service, ports, clock
 
@@ -263,6 +266,7 @@ def test_a_fresh_cross_graph_migration_records_once_with_the_landing_and_the_cla
             "claimant": Claimant("runner-a", "lease_1"),
             "at": clock.now(),
             "artifacts": [],
+            "close_decision": decide_close_enqueue([], lambda _: True),
             "release_route": True,
             "clear_intent": False,
             "migration_id": ports.migrations[0]["migration_id"],

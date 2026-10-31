@@ -12,7 +12,7 @@ from typing import cast
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.domain.chunk.model import ChunkVerb, verb_legal_from
+from blizzard.hub.domain.chunk.model import ChunkVerb, WorkRef, decide_close_enqueue, verb_legal_from
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from tests.support import (
@@ -453,6 +453,7 @@ def test_detail_lists_every_epoch_of_a_series_that_spans_node_ids(tmp_path: Path
             content=f"v{epoch}",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         )
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()

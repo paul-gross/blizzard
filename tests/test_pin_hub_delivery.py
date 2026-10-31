@@ -17,6 +17,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.graphs import PACKAGED
@@ -72,6 +73,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
     ]
     _writable(hub).record_transition(
         transition_id="tr_seed_deliver",
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         chunk_id=chunk_id,
         from_node_id=None,
         to_node_id=nodes["deliver"],

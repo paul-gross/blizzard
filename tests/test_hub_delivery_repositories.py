@@ -18,6 +18,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.composition import LiveConfig, TenantStores
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
@@ -88,8 +89,11 @@ def _seed_at_deliver(
         )
         for repo, origin in repos
     ]
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
     cast(IWriteChunkMovementRepository, hub.services.chunks.movement).record_transition(
         transition_id=f"tr_seed_{chunk_id}",
+        close_decision=decide_close_enqueue(chunk.work_refs, lambda _: True),
         chunk_id=chunk_id,
         from_node_id=None,
         to_node_id=nodes[at],

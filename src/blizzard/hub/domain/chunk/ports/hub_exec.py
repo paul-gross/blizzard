@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import WaitKind
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WaitKind
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
@@ -34,6 +34,7 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         at: datetime,
         artifacts: list[StoredArtifact],
         release_route: bool,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """Record a hub command node's exit transition on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — a turn's verdict, committed with the turn's end. ``release_route`` is True

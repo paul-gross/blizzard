@@ -20,6 +20,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
@@ -240,6 +241,7 @@ class ChunkArtifactsStore:
         name: str,
         content: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
@@ -274,7 +276,7 @@ class ChunkArtifactsStore:
                 )
             )
             if is_landing_marker(name, content):
-                enqueue_close_intents(conn, chunk_id, at=at)
+                enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
             return True
 
     def record_landing(
@@ -289,6 +291,7 @@ class ChunkArtifactsStore:
         revision: str,
         repository_id: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_landing``."""
@@ -303,6 +306,7 @@ class ChunkArtifactsStore:
                 repo=repo,
                 revision=revision,
                 repository_id=repository_id,
+                close_decision=close_decision,
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )

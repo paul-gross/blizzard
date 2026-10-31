@@ -10,6 +10,7 @@ from typing import Protocol
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 
@@ -47,6 +48,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """One node-step's transition and its artifacts, written atomically
@@ -70,6 +72,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -97,6 +100,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """:meth:`record_transition` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
@@ -120,6 +124,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,

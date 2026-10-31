@@ -21,6 +21,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -80,6 +81,7 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         with self._store.write("record_transition") as conn:
@@ -97,6 +99,7 @@ class ChunkMovementStore:
                 runner_id=runner_id,
                 at=at,
                 artifacts=artifacts,
+                close_decision=close_decision,
                 decision_id=decision_id,
             )
 
@@ -115,6 +118,7 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         """:meth:`record_transition` on ``handle``'s already-locked connection
@@ -132,6 +136,7 @@ class ChunkMovementStore:
             runner_id=runner_id,
             at=at,
             artifacts=artifacts,
+            close_decision=close_decision,
             decision_id=decision_id,
         )
 
@@ -150,6 +155,7 @@ class ChunkMovementStore:
         runner_id: str,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> FenceRefusal | None:
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
@@ -187,7 +193,7 @@ class ChunkMovementStore:
                 )
             )
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         return None
 
     def record_migration(
@@ -206,6 +212,7 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -230,6 +237,7 @@ class ChunkMovementStore:
                 claimant=claimant,
                 at=at,
                 artifacts=artifacts,
+                close_decision=close_decision,
                 source=source,
                 release_route=release_route,
                 clear_intent=clear_intent,
@@ -253,6 +261,7 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -275,6 +284,7 @@ class ChunkMovementStore:
             claimant=claimant,
             at=at,
             artifacts=artifacts,
+            close_decision=close_decision,
             source=source,
             release_route=release_route,
             clear_intent=clear_intent,
@@ -298,6 +308,7 @@ class ChunkMovementStore:
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
+        close_decision: CloseEnqueueDecision,
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
@@ -359,7 +370,7 @@ class ChunkMovementStore:
                 )
             )
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at)
+            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         return resolved_migration_id
 
     def record_restart_locked(

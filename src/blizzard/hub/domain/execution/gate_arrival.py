@@ -2,6 +2,7 @@
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -18,6 +19,7 @@ def open_graph_gate_on_arrival(
     graph: Graph,
     node_id: str,
     epoch: int,
+    close_decision: CloseEnqueueDecision,
     claimant: Claimant | None = None,
 ) -> None:
     """Join the landing write's lock and transaction; hub-owned restarts have no claimant."""
@@ -37,6 +39,7 @@ def open_graph_gate_on_arrival(
         at=clock.now(),
         artifacts=[],
         imposed_by_runner_id=None,
+        close_decision=close_decision,
     )
     if isinstance(result, FenceRefusal):
         raise RuntimeError(f"gate arrival refused after movement: {result.detail}")

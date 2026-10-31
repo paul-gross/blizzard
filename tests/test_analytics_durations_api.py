@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from tests.support import (
@@ -483,6 +484,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
     report_lease(hub, chunk_id, epoch=3, seq=2)

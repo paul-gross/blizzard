@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionChoice, verb_legal_from
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DecisionChoice,
+    decide_close_enqueue,
+    verb_legal_from,
+)
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -37,6 +44,7 @@ def _store_with_gate(tmp_path: Path, chunk_id: str = "ch_1") -> ChunkStores:
         choices=[DecisionChoice(name="ok", description="d")],
         at=_T0,
         artifacts=[],
+        close_decision=decide_close_enqueue([], lambda _: True),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
     return store
@@ -53,6 +61,7 @@ def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None)
         runner_id="r1",
         at=_T0,
         artifacts=[],
+        close_decision=decide_close_enqueue([], lambda _: True),
         decision_id=decision_id,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

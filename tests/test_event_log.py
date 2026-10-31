@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EventLogSeverity
-from blizzard.hub.domain.chunk.model import EscalationOpen, EventFeed, OperationalEvent
+from blizzard.hub.domain.chunk.model import EscalationOpen, EventFeed, OperationalEvent, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -268,6 +268,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         at=_at(20),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([], lambda _: True),
     )
 
     # ch_f drops because it DERIVES done, not incidentally — pin the mechanism, not the count.

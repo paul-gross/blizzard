@@ -7,7 +7,7 @@ node and resolves first-write-wins; :class:`RequeueService` closes an escalation
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -16,7 +16,15 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DecisionCheck, GateDecision, person_note
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    ChunkFacts,
+    ChunkVerb,
+    DecisionCheck,
+    GateDecision,
+    decide_close_enqueue,
+    person_note,
+)
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -89,6 +97,7 @@ class DecisionService:
         exclusive: IChunkExclusiveWrites,
         retired: RetiredRunnerGuard,
         clock: IClock,
+        closer_available: Callable[[str], bool],
     ) -> None:
         self._facts = facts
         self._route = route
@@ -97,6 +106,7 @@ class DecisionService:
         self._exclusive = exclusive
         self._retired = retired
         self._clock = clock
+        self._closer_available = closer_available
 
     def submit(
         self,
@@ -176,6 +186,7 @@ class DecisionService:
                 at=self._clock.now(),
                 artifacts=artifact_rows,
                 imposed_by_runner_id=submission.runner_id,
+                close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
             )
         if isinstance(recorded, FenceRefusal):
             return DecisionSubmitResult.failure(recorded.detail)

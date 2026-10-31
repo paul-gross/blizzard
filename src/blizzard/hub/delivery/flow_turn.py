@@ -46,7 +46,7 @@ from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requir
 from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -214,7 +214,7 @@ class TurnRunner:
         run_context: IReadRunContextRepository,
         requirements: Mapping[str, Requirement] = ACTION_REQUIREMENTS,
         public_url: str | None = None,
-        work_sources: IWorkSourceRegistry | None = None,
+        work_sources: IWorkSourceRegistry,
         tracer: IPlatformTracer | None = None,
         build_bound_seconds: float = BUILD_BOUND_SECONDS,
     ) -> None:
@@ -453,6 +453,9 @@ class TurnRunner:
             name=f"{HUB_LOG_PREFIX}{at.node.action or 'build'}",
             content=log,
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                at.chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         self._router.route(
             at.chunk, at.graph, at.node, epoch=at.epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, ending=ending
@@ -484,6 +487,9 @@ class TurnRunner:
                     name=name,
                     content=content,
                     at=self._clock.now(),
+                    close_decision=decide_close_enqueue(
+                        chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+                    ),
                 )
                 if wrote or self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=name
@@ -545,6 +551,9 @@ class TurnRunner:
                 revision=revision,
                 repository_id=repository,
                 at=at,
+                close_decision=decide_close_enqueue(
+                    chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+                ),
             )
         landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
         written = self._flows.record_landing(
@@ -556,6 +565,9 @@ class TurnRunner:
             repo=repo,
             revision=revision,
             at=at,
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         publish_flow_facts(self._publisher, written.written)
         if written.event_id is not None:
@@ -670,6 +682,9 @@ class TurnRunner:
             name=name,
             content="\n".join(answer.log) + "\n",
             at=self._clock.now(),
+            close_decision=decide_close_enqueue(
+                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+            ),
         )
         return name
 

@@ -1088,6 +1088,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         forge_records=stores.forge_records,
         links=stores.project_links,
         projects=stores.projects,
+        work_sources=work_sources,
     )
     turns = TurnRunner(
         flows=stores.flows,
@@ -1176,6 +1177,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
             hub_step_wake=parts.step_wake,
             label=work_ref_label,
+            closer_available=lambda source: work_sources.closer(source) is not None,
         ),
         decisions=DecisionService(
             facts=chunk_facts,
@@ -1184,6 +1186,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             exclusive=chunk_exclusive,
             retired=retired,
             clock=clock,
+            closer_available=lambda source: work_sources.closer(source) is not None,
         ),
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(
@@ -1192,12 +1195,18 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             graphs=graph_store,
             clock=clock,
             exclusive=chunk_exclusive,
+            closer_available=lambda source: work_sources.closer(source) is not None,
         ),
         detach=detach,
         release=ReleaseService(route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         pause=PauseService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
         stop=StopService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
-        complete=CompleteService(lifecycle=chunk_lifecycle, exclusive=chunk_exclusive, clock=clock),
+        complete=CompleteService(
+            lifecycle=chunk_lifecycle,
+            exclusive=chunk_exclusive,
+            clock=clock,
+            closer_available=lambda source: work_sources.closer(source) is not None,
+        ),
         edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,
@@ -1241,7 +1250,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         host_enrollment=host_enrollment,
         host_report=host_report,
         host_retirement=host_retirement,
-        hub_markers=HubMarkerWriter(artifacts=chunk_artifacts, delivery=chunk_delivery, clock=clock),
+        hub_markers=HubMarkerWriter(
+            artifacts=chunk_artifacts,
+            delivery=chunk_delivery,
+            clock=clock,
+            record=chunk_record,
+            work_sources=work_sources,
+        ),
         hub_step_wake=parts.step_wake,
         events=events,
         event_log=event_log,

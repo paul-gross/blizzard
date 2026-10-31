@@ -1,5 +1,5 @@
 """The close-intent outbox's enqueue side: every chunk-seam adapter
-transaction that lands or completes a chunk folds an intent per still-open work ref into
+transaction that lands or completes a chunk accounts for each still-open work ref in
 that same transaction — real adapters, real migrations."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from typing import cast
 import pytest
 from sqlalchemy import select
 
-from blizzard.hub.domain.chunk.model import WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -31,6 +31,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
         content="sha",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
     )
 
 
@@ -69,6 +70,7 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
         content="sha",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
     )  # the same (node_id, epoch, name) — record_hub_artifact's own idempotency guard no-ops it
 
     with hub.engine.connect() as conn:
@@ -95,7 +97,7 @@ def test_a_stop_with_no_landing_enqueues_nothing(tmp_path: Path) -> None:
     assert _pending_intents(hub) == set()
 
 
-def test_operator_completion_enqueues_even_with_no_landed_repos(tmp_path: Path) -> None:
+def test_operator_completion_skips_an_unbound_ref_even_with_no_landed_repos(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     chunk = hub.services.chunks.record.get(chunk_id)
@@ -103,7 +105,40 @@ def test_operator_completion_enqueues_even_with_no_landed_repos(tmp_path: Path) 
 
     hub.services.complete.complete(chunk, by="test")
 
+    assert _pending_intents(hub) == set()
+    with hub.engine.connect() as conn:
+        outcomes = conn.execute(hub_scoped(select(s.work_item_closures.c.outcome))).scalars().all()
+    assert outcomes == ["skipped"]
+
+
+def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_replay(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}, {"source": "default", "ref": "2"}])
+    decision = CloseEnqueueDecision(
+        closable=frozenset({WorkRef("default", "1")}), skipped=frozenset({WorkRef("default", "2")})
+    )
+    artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    for repo in ("widget", "gadget"):
+        artifacts.record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name=f"merged/{repo}",
+            content="sha",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=decision,
+        )
+
     assert _pending_intents(hub) == {(chunk_id, "default", "1")}
+    with hub.engine.connect() as conn:
+        outcomes = conn.execute(hub_scoped(select(s.work_item_closures.c.ref, s.work_item_closures.c.outcome))).all()
+        events = conn.execute(
+            hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.kind == "work-item-close-skipped"))
+        ).all()
+    assert outcomes == [("2", "skipped")]
+    assert len(events) == 1
 
 
 def test_a_grouped_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> None:
@@ -128,13 +163,18 @@ def test_a_deleted_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> Non
     assert _pending_intents(hub) == set()
 
 
-def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "outcome", [WorkItemCloseOutcome.CLOSED, WorkItemCloseOutcome.GONE, WorkItemCloseOutcome.SKIPPED]
+)
+def test_a_ref_already_carrying_a_terminal_outcome_enqueues_nothing(
+    tmp_path: Path, outcome: WorkItemCloseOutcome
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     cast(IWriteChunkDeliveryRepository, hub.services.chunks.delivery).record_work_item_closure(
         chunk_id,
         pointer=WorkRef(source="default", ref="1"),
-        outcome=WorkItemCloseOutcome.CLOSED,
+        outcome=outcome,
         reason=None,
         at=hub.clock.now(),
     )

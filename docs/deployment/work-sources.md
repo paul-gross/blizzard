@@ -190,26 +190,27 @@ closer and records each outcome. A PR opened before an upgrade keeps the body it
 ## Delivery closure
 
 Closure is unconditional per source — there is no per-source `close` flag to set. The transaction that lands a chunk (or
-completes it by hand) enqueues one durable close intent per still-open work ref, through whichever source owns that ref;
-a fixed drain sweep (the hub's `close_drain` sweep, [The hub's sweeps](./observability.md#the-hubs-sweeps)), on its own
-short interval and independent of `annotation_interval_seconds`, then attempts up to a fixed number of due intents per
-pass through that source's binding, shared fairly among the tenants with due intents (one tenant's backlog never takes
-another's turn) and leaving the rest to the next pass, and a failed attempt stays pending under backoff. A close the
-forge's [rate budget](./forges.md#the-rate-budget) turns away, or the forge refuses for its rate, is not a failure: the
-intent waits for the reset without spending its backoff, and is attempted on the first pass after it — the guarantee
-half of closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the
-drain. Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so
-more than one hub pointed at the same repo closing the same item is not a race to coordinate around.
+completes it by hand) enqueues one durable close intent per still-open work ref with a bound closer; a fixed drain sweep
+(the hub's `close_drain` sweep, [The hub's sweeps](./observability.md#the-hubs-sweeps)), on its own short interval and
+independent of `annotation_interval_seconds`, then attempts up to a fixed number of due intents per pass through that
+source's binding, shared fairly among the tenants with due intents (one tenant's backlog never takes another's turn) and
+leaving the rest to the next pass, and a failed attempt stays pending under backoff. A close the forge's
+[rate budget](./forges.md#the-rate-budget) turns away, or the forge refuses for its rate, is not a failure: the intent
+waits for the reset without spending its backoff, and is attempted on the first pass after it — the guarantee half of
+closing delivered work, where a worker's own commit metadata is only an opportunistic hint that may beat the drain.
+Unlike `annotate`, closing carries no *multi-writer* canonical constraint: a close is idempotent at the forge, so more
+than one hub pointed at the same repo closing the same item is not a race to coordinate around.
 
 It does carry an instance-level one: `close_forge_writes_enabled` (default `true`) gates whether *this hub* writes to
 any configured source's forge at all. A non-canonical hub — dev, staging, or a restored snapshot — set it `false`; the
 built-in `hub` source is unaffected (it writes no forge, so there is no live item to close in error), but every
-configured source's closer is seated nowhere, and its pending intents stay pending, logged, exactly like an intent for a
-source removed from config — never dropped, never retried against the forge. This is the knob `annotate`'s own
-canonical-instance discipline three paragraphs up has no equivalent for on the closing side: closing still needs no
-per-repo single-writer coordination, but it does need a way for a hub that should never touch a live forge to decline
-writing to one at all — creating a source record for label rendering (the next section) would otherwise also silently
-grant close authority.
+configured source's closer is seated nowhere. A ref with no bound closer records a terminal `skipped` closure with
+reason `no closer`, not a pending intent; a legacy pending intent found due without a closer is likewise skipped and
+retired. Binding a closer later, including by turning this setting on, does not automatically resurrect skipped
+closures. This is the knob `annotate`'s own canonical-instance discipline three paragraphs up has no equivalent for on
+the closing side: closing still needs no per-repo single-writer coordination, but it does need a way for a hub that
+should never touch a live forge to decline writing to one at all — creating a source record for label rendering (the
+next section) would otherwise also silently grant close authority.
 
 Before closing a GitHub issue the closer leaves one comment naming the merged PR and landed commit of each repo the
 chunk landed, carrying a hidden per-chunk marker. The comment is posted only when no comment on the issue has that
@@ -221,13 +222,13 @@ it never places a closing keyword before a reference.
 A stopped chunk that never landed closes nothing; a chunk that landed and was later stopped still closes — landing, not
 chunk status, is what the drain gates on. Closing is best-effort and non-atomic: each ref is attempted independently,
 one failure never blocks another, and a failed attempt retries on the next pass — no bound on how many passes a
-transient forge outage costs, only eventual convergence. An intent whose source record no longer resolves stays pending
-rather than failing or being dropped; a pending intent with no matching source is the operator-visible sign of a source
-removed too early.
+transient forge outage costs, only eventual convergence while a closer remains bound. A source that cannot resolve a
+closer is skipped as described above; a source whose secret cannot be revealed is an error, not an absent source.
 
-Each ref's outcome (closed, gone, or failed) is recorded as a durable fact and, the first time recorded, one
-chunk-visible event: work-item-closed at info, or work-item-close-failed at warning, the latter covering both a retried
-failed attempt and a terminal gone one.
+Each ref's outcome (closed, gone, failed, or skipped) is recorded as a durable fact and announced by a chunk-linked
+event: `work-item-closed` at info, `work-item-close-failed` at warning for a retried failure or terminal gone item, or
+`work-item-close-skipped` at warning for no closer. Events are best-effort across a crash; the outcome is the durable
+record.
 
 ## Upgrading a hub with existing external chunks
 

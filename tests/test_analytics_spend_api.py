@@ -15,7 +15,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.api.analytics import chunk_spend_ndjson_lines
-from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal
+from blizzard.hub.domain.chunk.model import UsageFact, UsageTotal, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
@@ -243,6 +243,7 @@ def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
 
     resp = hub.client.get("/api/analytics/spend/graphs", headers=_cookie(token))

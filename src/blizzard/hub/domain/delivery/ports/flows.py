@@ -9,7 +9,7 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.repositories import RepositoryResolution
@@ -192,6 +192,7 @@ class IWriteFlows(IReadFlows, Protocol):
         repo: str,
         revision: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> LandingWrite:
         """A turn's merge in one transaction admitted past the fence: the ``merged/<repo>`` marker, its
         ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the landing's flow and its

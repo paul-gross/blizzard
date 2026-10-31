@@ -17,7 +17,7 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, PendingCloseIntent, WorkItemAuthor, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
@@ -78,6 +78,7 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
         content="sha",
         at=_T0,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([pointer], lambda _: True),
     )
     # Sanity: landed and carrying a pending intent *before* the delete — proves the
     # post-delete emptiness below is the ephemeral exclusion at work, not a
@@ -108,6 +109,7 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
         content="sha",
         at=_T0,
         admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=decide_close_enqueue([pointer], lambda _: True),
     )
     assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_2", ref=pointer)]
 
@@ -168,7 +170,9 @@ def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
 
 def _make_done(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.lifecycle.record_completion_locked(handle, chunk_id, by="alice", at=_at(0))
+        chunks.lifecycle.record_completion_locked(
+            handle, chunk_id, by="alice", at=_at(0), close_decision=decide_close_enqueue([], lambda _: True)
+        )
 
 
 @pytest.mark.parametrize(

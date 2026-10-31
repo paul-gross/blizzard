@@ -18,6 +18,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
@@ -105,6 +106,7 @@ def _seed_at_deliver_with_an_unlanded_commit(
         runner_id="r1",
         at=hub.clock.now(),
         artifacts=commit_artifacts,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         admission=EpochAdmission.AT_OR_ABOVE,
     )
 
@@ -257,5 +259,6 @@ def _record(hub: HubHarness, chunk_id: str, nodes: dict[str, str], name: str, co
         admission=EpochAdmission.AT_OR_ABOVE,
         name=name,
         content=content,
+        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         at=hub.clock.now(),
     )

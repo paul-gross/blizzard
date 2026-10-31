@@ -27,6 +27,8 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     HubNodePollFact,
     TransitionFact,
+    WorkRef,
+    decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -546,10 +548,23 @@ def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path)
     assert "merged/acme-blank" in names
     assert hub.services.chunks.delivery.count_landed_since("acme-blank", before) == 0
     assert intents() == intents_before
+    assert not [
+        e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == "work-item-close-skipped"
+    ]
 
     assert record("merged/acme-widget", "sha:abc123") is True
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 1
-    assert len(intents()) > len(intents_before)
+    assert intents() == intents_before
+    assert (
+        len(
+            [
+                e
+                for e in hub.services.chunks.events.list_events(chunk_id=chunk_id)
+                if e.kind == "work-item-close-skipped"
+            ]
+        )
+        == 1
+    )
 
 
 @pytest.mark.component
@@ -603,6 +618,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             epoch=1,  # the run's own epoch — a stop mints no fresher one to fence it out
             runner_id="r1",
             transition_id="tr_stale",
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
             at=hub.clock.now(),
             artifacts=[],
             release_route=True,
@@ -843,6 +859,7 @@ nodes:
         node_name="merge",
         epoch=1,
         name="merged/acme/widget",
+        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
         content="c",
         at=hub.clock.now(),
         admission=EpochAdmission.AT_OR_ABOVE,

@@ -10,7 +10,13 @@ from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import DecisionCheck, DecisionChoice, GateDecision, GateResolution
+from blizzard.hub.domain.chunk.model import (
+    CloseEnqueueDecision,
+    DecisionCheck,
+    DecisionChoice,
+    GateDecision,
+    GateResolution,
+)
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
@@ -77,6 +83,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
+        close_decision: CloseEnqueueDecision,
     ) -> FenceRefusal | None:
         """Open a gate decision, committing any step artifacts atomically, behind
         the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is returned.
@@ -101,6 +108,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         at: datetime,
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
+        close_decision: CloseEnqueueDecision,
     ) -> bool | FenceRefusal:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), so the caller's guard reads and this write share one

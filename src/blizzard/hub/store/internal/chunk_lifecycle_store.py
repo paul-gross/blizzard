@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
@@ -70,7 +71,9 @@ class ChunkLifecycleStore:
         key = result.inserted_primary_key
         return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 
-    def record_completion_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> LeverWrite:
+    def record_completion_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> LeverWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/lifecycle.py``'s
         ``IWriteChunkLifecycleRepository.record_completion_locked``.
 
@@ -86,7 +89,7 @@ class ChunkLifecycleStore:
                 )
             )
         withdrawn = withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
-        enqueue_close_intents(conn, chunk_id, at=at)
+        enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         key = result.inserted_primary_key
         return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
 

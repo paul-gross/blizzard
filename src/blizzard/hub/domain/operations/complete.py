@@ -6,11 +6,13 @@ chunk writes no second fact and is never refused."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 
@@ -24,10 +26,16 @@ class CompleteService:
     """Manually complete a chunk, from any non-``done`` status — ``blizzard hub chunk done``."""
 
     def __init__(
-        self, *, lifecycle: IWriteChunkLifecycleRepository, exclusive: IChunkExclusiveWrites, clock: IClock
+        self,
+        *,
+        lifecycle: IWriteChunkLifecycleRepository,
+        exclusive: IChunkExclusiveWrites,
+        clock: IClock,
+        closer_available: Callable[[str], bool],
     ) -> None:
         self._lifecycle = lifecycle
         self._clock = clock
+        self._closer_available = closer_available
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
@@ -45,4 +53,13 @@ class CompleteService:
                 raise ChunkNotFound(chunk.chunk_id)
             if is_completion_replay(facts):
                 return None
-            return self._lifecycle.record_completion_locked(handle, chunk.chunk_id, by=by, at=self._clock.now())
+            current = handle.record(chunk.chunk_id)
+            if current is None:
+                raise ChunkNotFound(chunk.chunk_id)
+            return self._lifecycle.record_completion_locked(
+                handle,
+                chunk.chunk_id,
+                by=by,
+                at=self._clock.now(),
+                close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
+            )

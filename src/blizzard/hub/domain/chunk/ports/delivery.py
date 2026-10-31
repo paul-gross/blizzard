@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 
 
 class IReadChunkDeliveryRepository(Protocol):
@@ -33,13 +33,20 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
     """Read-write chunk-delivery access."""
 
     def record_delivery_repo_landed(
-        self, chunk_id: str, *, repo: str, commit_hash: str, repository_id: str | None, at: datetime
+        self,
+        chunk_id: str,
+        *,
+        repo: str,
+        commit_hash: str,
+        repository_id: str | None,
+        at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> None:
         """Record ``repo`` landed at ``commit_hash``; ``repository_id`` is the repository
         record the landing resolved to, ``None`` when no record is known for it."""
         ...
 
-    def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...
+    def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None: ...
 
     def finalize_delivery(
         self,
@@ -52,6 +59,7 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         runner_id: str,
         transition_id: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """Land the terminal delivery atomically and idempotently — one transaction, a
         no-op if already landed (crash recovery). Returns True iff it wrote."""
@@ -62,20 +70,13 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
     ) -> bool:
         """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
         pointer.source, pointer.ref, outcome)``. ``reason`` carries the failure/gone
-        detail; ``None`` for ``closed``. A ``closed``/``gone`` outcome also retires the
+        detail; ``None`` for ``closed``. A ``closed``/``gone``/``skipped`` outcome also retires the
         matching pending ``close_intents`` row, in the same transaction, whether or not
         this call wrote a fresh outcome row — a replay finishes an interrupted retirement;
         never a ``failed`` one's. A ``failed`` outcome instead appends a
         ``close_intent_attempts`` row for its matching intent, in the same transaction, on
         every call (replays included) — the backoff clock's own tick; a pointer with no matching pending intent (never
         enqueued) records none. Returns True iff it wrote a fresh outcome row."""
-        ...
-
-    def record_close_attempt_skipped(self, intent_id: int, *, at: datetime) -> None:
-        """Append one ``close_intent_attempts`` row for ``intent_id`` —
-        the backoff clock's own tick for an intent no bound closer answered this pass.
-        A single insert, its own transaction: unlike a failed close, there is no outcome
-        fact or retirement to fold it alongside."""
         ...
 
     def record_close_attempt_deferred(self, intent_id: int, *, at: datetime, resume_at: datetime) -> None:

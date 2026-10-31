@@ -9,6 +9,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 
 
@@ -55,6 +56,7 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         name: str,
         content: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """Append one hub-node progress artifact OUTSIDE a transition.
 
@@ -76,6 +78,7 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         revision: str,
         repository_id: str,
         at: datetime,
+        close_decision: CloseEnqueueDecision,
     ) -> bool:
         """Record a merge that has happened in one transaction: the ``merged/<repo>`` marker at ``revision``,
         its ``delivery_repo_landed`` row stamped with ``repository_id``, and the chunk's close intents.

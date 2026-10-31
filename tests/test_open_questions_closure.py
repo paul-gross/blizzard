@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, verb_legal_from
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, verb_legal_from
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -62,6 +62,7 @@ def _finish(store: ChunkStores) -> None:
         runner_id="r1",
         at=_T0,
         artifacts=[],
+        close_decision=decide_close_enqueue([], lambda _: True),
         decision_id=None,
         admission=EpochAdmission.AT_OR_ABOVE,
     )

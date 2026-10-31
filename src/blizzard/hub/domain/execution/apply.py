@@ -7,7 +7,7 @@ only as the resolving transition."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -17,7 +17,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import ApplyOutcome, JudgedBy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
@@ -198,6 +198,7 @@ class ApplyService:
         clock: IClock,
         hub_step_wake: IHubStepWake,
         label: WorkRefLabel,
+        closer_available: Callable[[str], bool],
     ) -> None:
         self._facts = facts
         self._movement = movement
@@ -211,6 +212,7 @@ class ApplyService:
         self._clock = clock
         self._hub_step_wake = hub_step_wake
         self._label = label
+        self._closer_available = closer_available
 
     def apply(
         self,
@@ -354,6 +356,7 @@ class ApplyService:
                     runner_id=submission.runner_id,
                     at=self._clock.now(),
                     artifacts=artifact_rows,
+                    close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
                 )
                 if refusal is not None:
@@ -367,6 +370,7 @@ class ApplyService:
                     node_id=plan.to_node_id,
                     epoch=submission.epoch,
                     claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
+                    close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                 )
         if raced is not None:
             return self._answer_raced(chunk, graph, from_node, submission, raced)
@@ -484,6 +488,7 @@ class ApplyService:
                     claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     at=self._clock.now(),
                     artifacts=artifact_rows,
+                    close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     release_route=landing.releases_route,
                     clear_intent=landing.clear_intent,
                     migration_id=migration_id,
@@ -499,6 +504,7 @@ class ApplyService:
                     graph=landing.graph,
                     node_id=landing.node_id,
                     epoch=submission.epoch,
+                    close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                 )
         if isinstance(landed, _Raced):
             return self._answer_raced(chunk, graph, from_node, submission, landed)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice
+from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import (
@@ -68,6 +68,7 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
         stores.decisions.record_decision(
             imposed_by_runner_id=None,
             decision_id=f"dec_{chunk_id}",
+            close_decision=decide_close_enqueue([], lambda _: True),
             chunk_id=chunk_id,
             node_id="nd_1",
             node_name="n",
