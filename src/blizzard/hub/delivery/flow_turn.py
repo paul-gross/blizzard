@@ -700,7 +700,7 @@ class TurnRunner:
             label = self._work_sources.label(pointer) if self._work_sources is not None else None
             items.append(
                 {
-                    "label": label or f"{pointer.source}:{pointer.ref}",
+                    "label": label if label is not None else f"{pointer.source}:{pointer.ref}",
                     "reference": source.forge_reference(pointer) if source is not None else None,
                 }
             )

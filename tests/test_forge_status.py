@@ -22,6 +22,7 @@ from blizzard.hub.domain.observability.forge_status import AnnotationReconciler,
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import hub_scoped_read
+from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from tests.config_inputs import build_hosted_hub_app, init_hub
 from tests.support import (
@@ -400,7 +401,7 @@ def test_a_sweep_with_unchanged_facts_before_the_floor_reads_neither_the_forge_n
     live_reads = count_queries(hub.engine, reconciler.sweep)
 
     assert annotator.read_calls == 1
-    assert live_reads == 1  # the signature statement alone
+    assert live_reads == 2  # work-ref and configuration signatures, no tenant reads
 
 
 @pytest.mark.component
@@ -430,10 +431,62 @@ def test_a_change_to_the_annotating_set_runs_a_full_pass(tmp_path: Path) -> None
     reconciler.sweep()
 
     registry.joined = True
+    changed = hub.client.patch("/api/work-sources/default", json={"annotate": True})
+    assert changed.status_code == 200, changed.text
     reconciler.sweep()
 
     assert other.read_calls == 1
     assert annotator.read_calls == 2
+
+
+@pytest.mark.component
+def test_work_source_config_probe_tracks_edits_without_tenant_scoped_listing(tmp_path: Path) -> None:
+    hub, _annotator, reconciler = _gated(tmp_path)
+    corpus = SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine)))
+    tenant = default_tenant(hub.engine)
+    before = corpus.work_source_changes_signature()
+    assert count_queries(hub.engine, corpus.work_source_changes_signature) == 1
+    reconciler.sweep()
+
+    edited = hub.client.patch("/api/work-sources/default", json={"annotate": True})
+    assert edited.status_code == 200, edited.text
+    after = corpus.work_source_changes_signature()
+    assert after[tenant] > before.get(tenant, 0)
+    assert count_queries(hub.engine, reconciler.sweep) > 2  # selected for reconciliation
+    assert count_queries(hub.engine, reconciler.sweep) == 2  # converged, now probe-only
+
+
+@pytest.mark.component
+def test_unchanged_annotation_pass_has_two_hub_reads_and_no_tenant_opens_as_tenants_grow(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    tenants = [default_tenant(hub.engine)]
+    opened: list[TenantId] = []
+
+    def open_tenant(tenant: TenantId) -> TenantAnnotation:
+        opened.append(tenant)
+        services = hub.hub_services.tenants.open_services(StoreScope(tenant))
+        return TenantAnnotation(
+            facts=services.chunks.facts,
+            work_sources=services.work_sources,
+            memory=ForgeAnnotationStore(scoped_connections(hub.engine, tenant)),
+            events=services.event_log,
+            clock=hub.clock,
+        )
+
+    reconciler = AnnotationReconciler(
+        corpus=SweepCorpusReads(partial(hub_scoped_read, hub_level_connections(hub.engine))),
+        tenants=lambda: tenants,
+        tenant=open_tenant,
+        clock=hub.clock,
+        full_pass_floor=_FLOOR,
+    )
+    for count in (1, 8):
+        for index in range(len(tenants), count):
+            tenants.append(hub.add_tenant(f"tenant-{index}").tenant)
+        reconciler.sweep()  # first pass for newly added tenants
+        opened.clear()
+        assert count_queries(hub.engine, reconciler.sweep) == 2
+        assert opened == []
 
 
 @pytest.mark.component

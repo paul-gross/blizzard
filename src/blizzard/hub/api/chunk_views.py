@@ -42,8 +42,8 @@ from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
-from blizzard.hub.forge.web import branch_url as forge_branch_url
-from blizzard.hub.work_sources.source import IWorkSource
+from blizzard.hub.forge.web import web_links
+from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     ArtifactView,
     BlockedView,
@@ -178,7 +178,7 @@ class ChunkView:
     #: Projects by id — the caller's own batched read; ``None`` makes each render read the chunk's own project.
     projects: Mapping[ProjectId, Project] | None = None
     #: Request-scoped source resolution; absent on the single-chunk lazy path.
-    sources: Mapping[str, IWorkSource | None] | None = None
+    sources: SelectedWorkSources | None = None
     #: Flow places by chunk id — the caller's own read; ``None`` makes each render read the chunk's own.
     flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
 
@@ -220,7 +220,7 @@ class ChunkView:
         delivery: DeliveryRead | None = None,
         runner_names: Mapping[str, str] | None = None,
         projects: Mapping[ProjectId, Project] | None = None,
-        sources: Mapping[str, IWorkSource | None] | None = None,
+        sources: SelectedWorkSources | None = None,
         flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
@@ -352,16 +352,17 @@ class ChunkView:
         resolves to its own binding by key, so a chunk's pointers need not all share one source. Liveness resolves
         via :meth:`_resolved_live_holders`'s one bulk call."""
         holders = self._resolved_live_holders()
+        sources = self.sources or SelectedWorkSources(
+            self.services.work_sources, (p.source for p in self.chunk.work_refs)
+        )
         views: list[WorkRefView] = []
         for p in self.chunk.work_refs:
-            source = (
-                self.sources.get(p.source) if self.sources is not None else self.services.work_sources.get(p.source)
-            )
+            source = sources.source(p.source)
             views.append(
                 WorkRefView(
                     source=p.source,
                     ref=p.ref,
-                    label=(source.label(p) if source is not None else None) or self.services.work_sources.label(p),
+                    label=sources.label(p),
                     web_url=source.web_url(p, live_holder=holders.get(p)) if source is not None else None,
                 )
             )
@@ -566,7 +567,8 @@ class ChunkView:
             record = resolve_origin_record(origin, records, forges.values(), minted_at=minted_at, linked=linked)
             if record is None:
                 return None
-            return forge_branch_url(forges[record.fields.forge_id], record.fields, commit.branch_name)
+            links = web_links(forges[record.fields.forge_id])
+            return links.branch_url(record.fields, commit.branch_name) if links is not None else None
 
         return link
 

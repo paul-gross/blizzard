@@ -764,4 +764,5 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         ),
         _SIGNATURE_REASON,
     ),
+    IndexWalkAllowance(IReadWorkRefsCorpus, "work_source_changes_signature", ("config_changes",), _SIGNATURE_REASON),
 ]

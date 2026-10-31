@@ -164,6 +164,52 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
     assert revisions.calls[-2:] == ["default", "other"]
 
 
+def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, work_sources={"default": FakeWorkSource()})
+    for n in range(9):
+        ingest(hub, [{"source": "default", "ref": str(n)}])
+
+    class FallbackSource(FakeWorkSource):
+        def label(self, pointer: WorkRef) -> None:
+            return None
+
+    class CountingRevisions(ConfigRevisionsStore):
+        def __init__(self, store: ScopedConnections) -> None:
+            super().__init__(store)
+            self.calls: list[str] = []
+
+        def revisions(self, kind: RecordKind, key: str):  # type: ignore[no-untyped-def]
+            self.calls.append(key)
+            return super().revisions(kind, key)
+
+    revisions = CountingRevisions(hub_store_connections(hub.engine))
+    registry = StoreWorkSourceRegistry(
+        records=hub.services.work_source_records,
+        objects=ConfigObjectCache(revisions),
+        build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
+        built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+    )
+    serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+
+    def page(limit: int) -> None:
+        response = hub.client.get("/api/chunks", params={"limit": limit})
+        assert response.status_code == 200, response.text
+        assert len(response.json()["chunks"]) == limit
+        for row in response.json()["chunks"]:
+            for pointer in row["work_refs"]:
+                assert pointer["label"] == f"default#{pointer['ref']}"
+                assert pointer["web_url"] == f"http://forge.local/acme/widget/issues/{pointer['ref']}"
+
+    page(3)  # warm the adapter before counting
+    revisions.calls.clear()
+    small = count_queries(hub.engine, lambda: page(3))
+    assert revisions.calls == ["default"]
+    revisions.calls.clear()
+    large = count_queries(hub.engine, lambda: page(9))
+    assert revisions.calls == ["default"]
+    assert small == large
+
+
 class _CountingFactsStore(ChunkFactsStore):
     """Counts calls to the bulk and per-chunk facts reads, so a test can pin which shape
     `list_chunks` actually reaches — mirrors `test_load_all_facts_store`'s own

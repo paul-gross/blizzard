@@ -60,11 +60,10 @@ def departed(previous: Iterable[str], annotating: Iterable[str]) -> list[str]:
 @dataclass(frozen=True)
 class AnnotationProbe:
     """Everything that can move what the sweep writes for one tenant without a floor elapsing: the
-    tenant's live work-ref inputs and the sources annotating now (read from its config on every
-    call)."""
+    tenant's live work-ref inputs and its latest work-source configuration change."""
 
     work_refs: WorkRefsSignature
-    annotating: frozenset[str]
+    source_change: int | None
 
 
 #: A tenant holding none of the rows the work-refs probe counts.
@@ -257,9 +256,22 @@ class AnnotationReconciler:
         changed); the corpus is read once, only when some tenant is due. A closed tenant is skipped and
         a fault in one tenant's half is caught at that tenant; only a converged tenant records its
         probe, so any other is retried alone next pass."""
-        opened: dict[TenantId, _Opened] = {}
+        tenants = sorted(self._tenants())
+        signatures = self._corpus.live_work_refs_signature()
+        changes = self._corpus.work_source_changes_signature()
+        probes = {tenant: _probe(tenant, signatures, changes) for tenant in tenants}
+        now = self._clock.now()
+        self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in probes}
+        self._outages = {tenant: names for tenant, names in self._outages.items() if tenant in probes}
+        due = [tenant for tenant in tenants if self._is_due(tenant, probes[tenant], now)]
+        if not due:
+            _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=len(tenants))
+            return
         unconverged: list[TenantId] = []
-        for tenant in sorted(self._tenants()):
+        corpus = _PassCorpus(self._corpus)
+        tally = AnnotationTally()
+        reconciled = 0
+        for tenant in due:
             with bound_contextvars(tenant_id=tenant):
                 try:
                     half = self._open(tenant)
@@ -268,36 +280,15 @@ class AnnotationReconciler:
                 if isinstance(half, TenantFault):
                     unconverged.append(tenant)
                 else:
-                    opened[tenant] = half
-        self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in opened}
-        known = {*opened, *unconverged}
-        self._outages = {tenant: names for tenant, names in self._outages.items() if tenant in known}
-        signatures = self._corpus.live_work_refs_signature()
-        probes = {tenant: _probe(tenant, opened[tenant], signatures) for tenant in opened}
-        now = self._clock.now()
-        due = [tenant for tenant in opened if self._is_due(tenant, probes[tenant], now)]
-        if not due:
-            _log.info(
-                "forge-status sweep skipped",
-                reason="probe unchanged",
-                tenants_skipped=len(opened),
-                tenants_unconverged=unconverged,
-            )
-            return
-        corpus = _PassCorpus(self._corpus)
-        tally = AnnotationTally()
-        reconciled = 0
-        for tenant in due:
-            with bound_contextvars(tenant_id=tenant):
-                try:
-                    converged = self._converge(tenant, opened[tenant], probes[tenant], now, corpus, tally)
-                except (TenantClosed, UnknownTenant):
-                    _log.info("forge-status sweep skipped a closed tenant")
-                    continue
-                if converged is True:
-                    reconciled += 1
-                else:
-                    unconverged.append(tenant)
+                    try:
+                        converged = self._converge(tenant, half, probes[tenant], now, corpus, tally)
+                    except (TenantClosed, UnknownTenant):
+                        _log.info("forge-status sweep skipped a closed tenant")
+                        continue
+                    if converged is True:
+                        reconciled += 1
+                    else:
+                        unconverged.append(tenant)
         _log.info(
             "forge-status sweep completed",
             written=tally.written,
@@ -306,7 +297,7 @@ class AnnotationReconciler:
             failed=tally.failed,
             sources_skipped=tally.sources_skipped,
             tenants_reconciled=reconciled,
-            tenants_skipped=len(opened) - len(due),
+            tenants_skipped=len(tenants) - len(due),
             tenants_unconverged=sorted(unconverged),
         )
 
@@ -315,14 +306,16 @@ class AnnotationReconciler:
         and only ``tenant``'s convergence entry touched; a tenant not due is skipped. Its fault is
         returned; a closed tenant's refusal propagates."""
         with bound_contextvars(tenant_id=tenant):
-            half = self._open(tenant)
-            if isinstance(half, TenantFault):
-                return half
-            probe = _probe(tenant, half, self._corpus.live_work_refs_signature())
+            probe = _probe(
+                tenant, self._corpus.live_work_refs_signature(), self._corpus.work_source_changes_signature()
+            )
             now = self._clock.now()
             if not self._is_due(tenant, probe, now):
                 _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=1)
                 return None
+            half = self._open(tenant)
+            if isinstance(half, TenantFault):
+                return half
             tally = AnnotationTally()
             converged = self._converge(tenant, half, probe, now, _PassCorpus(self._corpus), tally)
             _log.info(
@@ -380,9 +373,11 @@ class AnnotationReconciler:
 _Opened = tuple[TenantAnnotation, Sequence[str]]
 
 
-def _probe(tenant: TenantId, opened: _Opened, signatures: Mapping[TenantId, WorkRefsSignature]) -> AnnotationProbe:
+def _probe(
+    tenant: TenantId, signatures: Mapping[TenantId, WorkRefsSignature], changes: Mapping[TenantId, int]
+) -> AnnotationProbe:
     """``tenant``'s probe, from a pass's hub-wide signature read."""
-    return AnnotationProbe(work_refs=signatures.get(tenant, _NO_ROWS), annotating=frozenset(opened[1]))
+    return AnnotationProbe(work_refs=signatures.get(tenant, _NO_ROWS), source_change=changes.get(tenant))
 
 
 class _PassCorpus:

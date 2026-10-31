@@ -199,13 +199,20 @@ class _WorkRefs:
     def __init__(self, rows: Sequence[TenantWorkRef]) -> None:
         self.rows = list(rows)
         self.reads = 0
+        self.changes: dict[TenantId, int] = {}
 
     def live_work_refs(self) -> list[TenantWorkRef]:
         self.reads += 1
         return self.rows
 
     def live_work_refs_signature(self) -> dict[TenantId, WorkRefsSignature]:
-        return {row.tenant: WorkRefsSignature(marks=()) for row in self.rows}
+        counts: dict[TenantId, int] = {}
+        for row in self.rows:
+            counts[row.tenant] = counts.get(row.tenant, 0) + 1
+        return {tenant: WorkRefsSignature(marks=(("refs", count, count),)) for tenant, count in counts.items()}
+
+    def work_source_changes_signature(self) -> dict[TenantId, int]:
+        return self.changes
 
 
 class _TenantAnnotation:
@@ -251,6 +258,50 @@ def test_an_annotation_pass_reconciles_each_tenants_rows_against_its_own_sources
     assert corpus.reads == 1
     assert units[_A].reconciled == [(_A, ["forge-a"], ["ch_a"])]
     assert units[_B].reconciled == [(_B, ["forge-b"], ["ch_b"])]
+
+
+@pytest.mark.unit
+def test_unchanged_annotation_probes_open_no_tenants_and_a_config_edit_selects_only_its_tenant() -> None:
+    tenants = [_A, _B, *(TenantId(f"ten_{n}") for n in range(8))]
+    corpus = _WorkRefs([_work_ref(tenant, f"ch_{tenant}") for tenant in tenants])
+    units = {tenant: _TenantAnnotation("forge") for tenant in tenants}
+    opened: list[TenantId] = []
+
+    def open_tenant(tenant: TenantId) -> TenantAnnotation:
+        opened.append(tenant)
+        return cast(TenantAnnotation, units[tenant])
+
+    clock = FixedClock(_NOW)
+    reconciler = AnnotationReconciler(
+        corpus=corpus,
+        tenants=lambda: tenants,
+        tenant=open_tenant,
+        clock=clock,
+        full_pass_floor=timedelta(minutes=10),
+    )
+    reconciler.sweep()
+    assert opened == sorted(tenants)
+    opened.clear()
+    reconciler.sweep()
+    assert opened == []
+    assert corpus.reads == 1
+
+    corpus.changes[_B] = 1
+    reconciler.sweep()
+    assert opened == [_B]
+    assert len(units[_B].reconciled) == 2
+    assert len(units[_A].reconciled) == 1
+
+    opened.clear()
+    corpus.rows.append(_work_ref(_A, "ch_new"))
+    reconciler.sweep()
+    assert opened == [_A]
+    assert units[_A].reconciled[-1] == (_A, ["forge"], [f"ch_{_A}", "ch_new"])
+
+    opened.clear()
+    clock.advance(timedelta(minutes=10))
+    reconciler.sweep()
+    assert opened == sorted(tenants)
 
 
 @pytest.mark.unit

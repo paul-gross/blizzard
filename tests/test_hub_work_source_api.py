@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -176,6 +177,26 @@ def test_list_work_items_resolves_liveness_with_one_bulk_call_regardless_of_item
     assert {item["web_url"] for item in listed} == {f"/board/chunk/{c['chunk_id']}" for c in created}
     assert counting_work_refs.live_holders_calls == 1
     assert counting_work_refs.find_live_holder_calls == 0
+
+
+def test_editor_listing_resolves_its_source_label_once_only_when_nonempty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    label = Mock(wraps=hub.services.work_sources.source_label)
+    monkeypatch.setattr(hub.services.work_sources, "source_label", label)
+
+    empty = hub.client.get("/api/work-sources/hub/items")
+    assert empty.status_code == 200 and empty.json()["items"] == []
+    assert label.call_count == 0
+
+    for size in (1, 4):
+        hub.client.post("/api/work-sources/hub/items", json={"title": f"t{size}", "body": "b"})
+        label.reset_mock()
+        listed = hub.client.get("/api/work-sources/hub/items")
+        assert listed.status_code == 200
+        assert len(listed.json()["items"]) == (1 if size == 1 else 2)
+        label.assert_called_once_with("hub")
 
 
 def _seed_authored_items(hub, n: int) -> str:  # type: ignore[no-untyped-def]
