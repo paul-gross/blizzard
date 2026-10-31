@@ -901,3 +901,18 @@ def test_create_without_a_registered_validator_stores_prose_as_given() -> None:
     )
 
     assert result.exit_code == 0, result.output
+
+
+def test_artifact_validators_load_no_wire_model_until_a_registered_asset_is_submitted() -> None:
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys; import blizzard.runner.cli.artifact_validators as v; "
+        "assert 'blizzard.wire.finding' not in sys.modules; "
+        "assert v.validate_artifact_content('other-asset', 'prose') is None; "
+        "assert 'blizzard.wire.finding' not in sys.modules; "
+        "assert v.validate_artifact_content('review-finding-delta', 'none') is not None; "
+        "assert 'blizzard.wire.finding' in sys.modules"
+    )
+    subprocess.run([sys.executable, "-c", probe], check=True)

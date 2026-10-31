@@ -4,12 +4,20 @@ An asset with no registered validator is stored as given."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import BaseModel, ValidationError
 
-from blizzard.wire.finding import ReviewFindingDelta
 
-_FORMATS: dict[str, tuple[type[BaseModel], str]] = {
-    "review-finding-delta": (ReviewFindingDelta, "review/finding-format"),
+def _review_finding_delta() -> type[BaseModel]:
+    # Imported on use: every worker CLI call loads this module, and only a submission of this asset needs the model.
+    from blizzard.wire.finding import ReviewFindingDelta
+
+    return ReviewFindingDelta
+
+
+_FORMATS: dict[str, tuple[Callable[[], type[BaseModel]], str]] = {
+    "review-finding-delta": (_review_finding_delta, "review/finding-format"),
 }
 
 
@@ -19,9 +27,9 @@ def validate_artifact_content(name: str, content: str) -> str | None:
     registered = _FORMATS.get(name)
     if registered is None:
         return None
-    model, system_artifact = registered
+    load_model, system_artifact = registered
     try:
-        model.model_validate_json(content)
+        load_model().model_validate_json(content)
     except ValidationError as exc:
         return (
             f"{name!r} does not match its format: {_summarize(exc)} "
