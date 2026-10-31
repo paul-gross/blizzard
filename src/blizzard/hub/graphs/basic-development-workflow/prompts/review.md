@@ -15,7 +15,7 @@ Judge each axis — correctness, architecture (conformance to the project's arch
 and, per axis, the documents they route this change's code to, until you reach the rules themselves. Judge from what you
 read, not memory, naming the criterion a finding violates when one applies.
 
-Use workspace review tooling and exercise end-to-end flows in the chunk's environment. Commit no fix; build repairs.
+Use workspace review tooling; exercise end-to-end flows in the chunk's environment. Build repairs; commit no fix.
 
 Anchor findings at `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` so they can be acted on and refuted.
 

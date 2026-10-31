@@ -8,11 +8,9 @@ Run `blizzard runner artifact list`. Take the newest `git_commit` per repo; chec
 
 ## Judge the change
 
-Judge the change across correctness, architecture, and design quality, each against the project's review criteria,
-weighed for prose and convention as well as code: this lane's subject is harness work — agent-facing conventions,
-skills, prompts, docs. Before judging, open those criteria and, per axis, the documents they route this change to, until
-you reach the rules themselves. Judge from what you read, not memory, naming the criterion a finding violates when one
-applies.
+Judge correctness, architecture, and design quality against project review criteria, for prose and convention as well as
+code. Before judging, open the criteria and, per axis, the documents they route this change to, down to the rules. Judge
+from what you read, not memory; name the violated criterion when one applies.
 
 - **Correctness** — does the text say what it means? Follow each instruction literally; one that only works when read
   charitably is a defect.
@@ -42,8 +40,8 @@ only when it moved rather than was repaired: a new repo, or commits that reshape
 
 ## Adjudicate refutations
 
-The `review-finding-refutes` asset holds findings a prior `iterate` visit declined, with its arguments; absent on a
-first pass, else its newest submission is the whole record.
+`review-finding-refutes` holds findings a prior `iterate` declined and its arguments; absent on a first pass, else its
+newest submission is the whole record.
 
 Match a refutation to its finding by anchor, never id; every pass renumbers. A refutation is a claim to adjudicate,
 never a veto; good-faith disagreement over prose is ordinary; neither reflexive deference nor re-raising is review.
