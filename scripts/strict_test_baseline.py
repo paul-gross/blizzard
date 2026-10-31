@@ -6,7 +6,23 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-MIN_FILES = {"blizzard": 2000, "blizzard-mock": 200, "blizzard-infra": 3}
+BASELINE = {
+    "blizzard": (
+        2723,
+        {
+            "tests/root": 16438,
+            "tests/e2e": 165,
+            "tests/service": 140,
+            "tests/rehearsal": 40,
+            "tests/crash": 19,
+            "store-migration-tests": 304,
+            "exemplar-tests": 1,
+            "shipping": 8,
+        },
+    ),
+    "blizzard-mock": (237, {"tests": 1302, "shipping": 331}),
+    "blizzard-infra": (3, {"tests": 96}),
+}
 
 
 def area(repo: str, path: Path) -> str:
@@ -45,11 +61,17 @@ def cause(rule: str) -> str:
     return "other rule-specific root to inspect"
 
 
-def reconcile(repo: str, root: Path, report: dict[str, Any]) -> tuple[Counter[str], dict[str, set[str]], Counter[str]]:
+def reconcile(
+    repo: str,
+    root: Path,
+    report: dict[str, Any],
+    expected: tuple[int, dict[str, int]] | None = None,
+) -> tuple[Counter[str], dict[str, set[str]], Counter[str]]:
     """Assign every error once to an area, rule and cause; reject empty reports."""
     summary = report["summary"]
     diagnostics = report["generalDiagnostics"]
-    if summary["filesAnalyzed"] < MIN_FILES[repo] or not isinstance(diagnostics, list):
+    expected_files, expected_areas = expected if expected is not None else BASELINE[repo]
+    if summary["filesAnalyzed"] != expected_files or not isinstance(diagnostics, list):
         raise ValueError(f"{repo}: vacuous report ({summary['filesAnalyzed']} analyzed files)")
     if summary["errorCount"] != len(diagnostics) or not diagnostics:
         raise ValueError(f"{repo}: error summary does not match nonempty diagnostic list")
@@ -66,16 +88,18 @@ def reconcile(repo: str, root: Path, report: dict[str, Any]) -> tuple[Counter[st
         causes[cause(diagnostic["rule"])] += 1
     if sum(counts.values()) != summary["errorCount"] or sum(causes.values()) != summary["errorCount"]:
         raise ValueError(f"{repo}: unreconciled diagnostics")
+    if counts != expected_areas:
+        raise ValueError(f"{repo}: diagnostic areas differ from the measured baseline: {counts}")
     return counts, files, causes
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=Path.cwd().parent)
-    for repo in MIN_FILES:
+    for repo in BASELINE:
         parser.add_argument(f"--{repo}", type=Path, required=True, metavar="PYRIGHT_JSON")
     args = parser.parse_args()
-    for repo in MIN_FILES:
+    for repo in BASELINE:
         report = json.loads(getattr(args, repo.replace("-", "_")).read_text())
         counts, files, causes = reconcile(repo, args.workspace / repo, report)
         print(f"{repo}: {sum(counts.values())} errors, {report['summary']['filesAnalyzed']} files analyzed")

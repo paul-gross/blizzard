@@ -36,9 +36,10 @@ Infra has no standing Pyright method; its pytest/shellcheck static-contract gate
 
 `blizzard:strict-test-baseline` reconciles the three captured JSON reports. Run
 `uv run python scripts/strict_test_baseline.py --blizzard <blizzard.json> --blizzard-mock <mock.json> --blizzard-infra <infra.json>`
-from the blizzard root with the sibling worktrees present. The method rejects a zero-file or partial report and checks
-every error's project, area, named rule, and cause category against the report summary. Its cause categories distinguish
-diagnostic symptoms from root causes; the latter need investigation before a slice can promise a reduction.
+from the blizzard root with the sibling worktrees present. The method holds this pinned snapshot to 2,723, 237 and 3
+analyzed files respectively and the area totals in the table above, rejecting even a summary-consistent truncated
+report. It checks every error's project, area, named rule, and cause category against the report summary. Its categories
+distinguish diagnostic symptoms from root causes; the latter need investigation before a slice can promise a reduction.
 
 The highest single-file budgets are `blizzard/tests/test_compat_wire.py` (460, untyped OpenAPI fixture-spec
 dictionaries), `blizzard/tests/test_release_workflow.py` (347, parsed workflow/job dictionaries),
