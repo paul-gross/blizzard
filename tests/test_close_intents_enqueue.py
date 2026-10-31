@@ -4,18 +4,21 @@ that same transaction — real adapters, real migrations."""
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Connection, select
 
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, chunk_stores, hub_scoped, ingest
+from blizzard.hub.store.internal import chunk_lifecycle_store
+from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, ingest
 
 pytestmark = pytest.mark.component
 
@@ -103,12 +106,17 @@ def test_operator_completion_skips_an_unbound_ref_even_with_no_landed_repos(tmp_
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
 
+    since = hub.events.latest_id()
     hub.services.complete.complete(chunk, by="test")
 
     assert _pending_intents(hub) == set()
     with hub.engine.connect() as conn:
         outcomes = conn.execute(hub_scoped(select(s.work_item_closures.c.outcome))).scalars().all()
     assert outcomes == ["skipped"]
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "event-logged"]
+    skipped = [frame for frame in frames if frame["kind"] == "work-item-close-skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["project_id"] == chunk.project_id
 
 
 def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_replay(tmp_path: Path) -> None:
@@ -118,6 +126,7 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
         closable=frozenset({WorkRef("default", "1")}), skipped=frozenset({WorkRef("default", "2")})
     )
     artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+    since = hub.events.latest_id()
     for repo in ("widget", "gadget"):
         artifacts.record_hub_artifact(
             chunk_id,
@@ -135,10 +144,67 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
     with hub.engine.connect() as conn:
         outcomes = conn.execute(hub_scoped(select(s.work_item_closures.c.ref, s.work_item_closures.c.outcome))).all()
         events = conn.execute(
-            hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.kind == "work-item-close-skipped"))
+            hub_scoped(select(s.event_log.c.id).where(s.event_log.c.kind == "work-item-close-skipped"))
         ).all()
     assert outcomes == [("2", "skipped")]
     assert len(events) == 1
+    frames = [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == "event-logged"]
+    skipped = [frame for frame in frames if frame["kind"] == "work-item-close-skipped"]
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    assert len(skipped) == 1
+    assert skipped[0]["key"] == f"event_log:{events[0].id}"
+    assert skipped[0]["chunk_id"] == chunk_id
+    assert skipped[0]["project_id"] == chunk.project_id
+
+
+def test_completion_rollback_does_not_publish_skipped_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    since = hub.events.latest_id()
+    enqueue = chunk_lifecycle_store.enqueue_close_intents
+
+    def fail_after_enqueue(
+        conn: Connection, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> None:
+        enqueue(conn, chunk_id, at=at, close_decision=close_decision)
+        raise RuntimeError("rollback")
+
+    monkeypatch.setattr(chunk_lifecycle_store, "enqueue_close_intents", fail_after_enqueue)
+    with pytest.raises(RuntimeError, match="rollback"):
+        hub.services.complete.complete(chunk, by="test")
+    with hub.engine.connect() as conn:
+        assert (
+            conn.execute(
+                hub_scoped(select(s.event_log.c.id).where(s.event_log.c.kind == "work-item-close-skipped"))
+            ).all()
+            == []
+        )
+    assert not [e for e in emitted_events(hub, since=since) if e["event"] == "event-logged"]
+
+
+def test_skip_is_committed_before_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    publish = hub.events.publish_event_logged
+
+    def check_committed(**kwargs: Any) -> int:
+        if kwargs["kind"] == "work-item-close-skipped":
+            with hub.engine.connect() as conn:
+                assert (
+                    conn.execute(
+                        hub_scoped(select(s.event_log.c.id).where(s.event_log.c.kind == "work-item-close-skipped"))
+                    ).first()
+                    is not None
+                )
+        return publish(**kwargs)
+
+    monkeypatch.setattr(hub.events, "publish_event_logged", check_committed)
+    hub.services.complete.complete(chunk, by="test")
 
 
 def test_a_grouped_chunks_landing_marker_enqueues_nothing(tmp_path: Path) -> None:

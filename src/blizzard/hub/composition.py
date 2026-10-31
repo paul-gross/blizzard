@@ -970,6 +970,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     :class:`TenantStores`, publishing to ``events`` — the tenant's broker."""
     clock = parts.clock
     tenant_connections = stores.connections
+    tenant_connections.event_publisher = events
     chunk_stores = stores.chunk_stores
     work_item_store = stores.work_item_store
     finding_store = stores.finding_store

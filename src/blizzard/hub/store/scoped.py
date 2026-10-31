@@ -51,7 +51,7 @@ deletion fact instead, on the condition that the deletion is still underway."""
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -67,6 +67,7 @@ from blizzard.foundation.store.key_scoping import (
     execute_time_rows,
     key_name,
 )
+from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.tenancy import StoreScope, TenantClosed, UnknownTenant
@@ -76,6 +77,17 @@ PROJECT_COLUMN = "project_id"
 
 # The execution-option key a scoped ``read``/``write`` sets on the ``Connection`` it yields.
 _SCOPE_OPTION = "blizzard_store_scope"
+_AFTER_COMMIT_OPTION = "blizzard_after_commit"
+_EVENT_PUBLISHER_OPTION = "blizzard_event_publisher"
+
+
+def after_commit(conn: Connection, callback: Callable[[], object]) -> None:
+    """Queue a notification on the transaction that owns this scoped connection."""
+    conn.get_execution_options()[_AFTER_COMMIT_OPTION].append(callback)
+
+
+def event_publisher(conn: Connection) -> IEventLogPublisher | None:
+    return conn.get_execution_options().get(_EVENT_PUBLISHER_OPTION)
 
 
 class UnscopedConnection(RuntimeError):
@@ -226,6 +238,7 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
     def __init__(self, engine: Engine, errors: HubStoreErrorFactory, scope: StoreScope) -> None:
         HubStoreConnections.__init__(self, engine, errors)
         ScopedStatements.__init__(self, scope)
+        self.event_publisher: IEventLogPublisher | None = None
 
     def scoped(self, scope: StoreScope) -> ScopedConnections:
         """This object for its own scope; a scoped seam is never widened or moved to another
@@ -251,9 +264,13 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
     ) -> Generator[Connection, None, None]:
         """Like :meth:`HubStoreConnections.write`, opened by :meth:`_lock_open_tenant`, so the
         whole transaction runs under the tenant's lock and a closed tenant writes nothing."""
+        callbacks: list[Callable[[], object]] = []
         with super().write(operation, expect=expect) as conn:
             self._lock_open_tenant(conn)
+            conn.execution_options(**{_AFTER_COMMIT_OPTION: callbacks, _EVENT_PUBLISHER_OPTION: self.event_publisher})
             yield self._bind(conn)
+        for callback in callbacks:
+            callback()
 
     @contextmanager
     def founding(

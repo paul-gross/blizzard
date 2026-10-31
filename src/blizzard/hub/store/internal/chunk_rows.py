@@ -17,6 +17,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Any, Protocol, cast
 
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
@@ -45,7 +46,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.scoped import ScopedStatements, statements_of
+from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
 
 
 @adapter_model
@@ -667,7 +668,7 @@ def enqueue_close_intents(
                 .values(retired_at=at)
             )
             kind: EventLogKind = "work-item-close-skipped"
-            conn.execute(
+            result = conn.execute(
                 stmts.insert(s.event_log).values(
                     severity=EVENT_LOG_SEVERITY[kind],
                     kind=kind,
@@ -682,6 +683,26 @@ def enqueue_close_intents(
                     recorded_at=at,
                 )
             )
+            publisher = event_publisher(conn)
+            if publisher is not None:
+                project_id = conn.execute(
+                    stmts.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+                ).scalar_one()
+                primary_key = result.inserted_primary_key
+                assert primary_key is not None
+                key = f"event_log:{primary_key[0]}"
+                after_commit(
+                    conn,
+                    partial(
+                        publisher.publish_event_logged,
+                        severity=EVENT_LOG_SEVERITY[kind],
+                        kind=kind,
+                        chunk_id=chunk_id,
+                        runner_id=None,
+                        key=key,
+                        project_id=project_id,
+                    ),
+                )
         elif (row.source, row.ref) not in already:
             conn.execute(
                 stmts.insert(s.close_intents).values(
