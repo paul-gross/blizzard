@@ -12,8 +12,10 @@ means a first draft.
 
 ## What the plan must contain
 
-- **The feature branch**, named at the top: `feat/<slug>`, a short kebab-case description of the change. Every repo the
-  build touches uses this one branch.
+- **The branch**, named at the top. Read triage's declaration with
+  `blizzard runner artifact get branch --node triage --content` and keep it, or revise it when the work's scope changed
+  it, under the project's guidance. With no declaration to read — the chunk skipped triage — derive the name from that
+  guidance. Every repo the build touches uses this one branch.
 - **How each change is verified** — every planned change maps to a verification method the project already declares;
   where none covers it, the plan schedules building that method first. Every surface the change reaches that a person
   can drive earns the manual method the project's verifiability matrix declares for that surface, with the concrete
@@ -31,6 +33,8 @@ increments earns numbered **phases**. If this workspace declares its own plannin
 Before declaring done:
 
 - The plan: run `blizzard runner artifact create --name plan` with the content on stdin.
+- The branch: run `blizzard runner artifact create --name branch` with the bare name on one line on stdin, whether kept
+  or revised.
 - The refutation channel: run `blizzard runner artifact create --name plan-finding-refutes` with the content on stdin.
   Your newest submission is the entire record, so restate every refutation still standing — not just this round's. The
   full docket this restates is retrievable directly: `blizzard runner artifact get docket --scope graph --content`. If

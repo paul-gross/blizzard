@@ -48,6 +48,12 @@ ask with `blizzard runner ask` and end without a verdict. Otherwise select `unfu
    changes spanning repos or schemas, vague or conflicting acceptance criteria, or anything a reviewer would expect a
    plan for.
 
+## Declare the branch
+
+Declare the chunk's branch name based on the project's guidance, assuming no prefix or pattern: one name, used in every
+repo the work touches. On every route, `already-done` included, run `blizzard runner artifact create --name branch` with
+the bare name on one line and no prose on stdin.
+
 ## Record the decision
 
 Before declaring done, record the decision with `blizzard runner artifact create --name triage-findings`, rationale on

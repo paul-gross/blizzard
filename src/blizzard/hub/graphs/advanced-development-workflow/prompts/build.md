@@ -20,13 +20,16 @@ Continue from what you find.
 
 ## What must be true when you finish
 
-1. **One branch, the one the plan names.** Your work exists as commits on `feat/<slug>` in every repo you changed.
+1. **One branch, the declared one.** Read it with `blizzard runner artifact get branch --node plan --content`. Create or
+   switch to it in every repo before the first commit, and connect it with the environment's connect step so its
+   upstream is that branch on origin, never the base branch. Your work exists as commits on it in every repo you
+   changed. Never commit on, push to, or declare the base branch.
 
 2. **The mechanical checks are green.** Before you push, run the project's linter-class checks — formatter, linters,
    generated-output drift — and the unit tests covering what the change touched. Targeted, not the entire suite: CI owns
    the full suite.
 
-3. **The branch is pushed** to each repo's origin.
+3. **The branch is pushed** to each repo's origin. Confirm the current branch and its upstream first.
 
 4. **Every repo you touched is declared.** For each one, run
    `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `--env <id>` is added if the chunk

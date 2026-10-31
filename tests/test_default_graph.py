@@ -63,6 +63,14 @@ def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
     assert doc.sessions["gate"].model == ["blizzard:advanced", "blizzard:frontier"]
     # The routing rationale rides out as the triage-findings asset.
     assert "triage-findings" in [p.name for p in triage.produces]
+    # The chunk's branch name is declared once here and read by every lane.
+    assert "branch" in [p.name for p in triage.produces]
+
+
+def test_adv_dwf_plan_republishes_the_branch() -> None:
+    plan = next(f.doc for f in PACKAGED.files if f.doc.name == "adv-dwf").node("plan")
+    assert plan is not None
+    assert "branch" in [p.name for p in plan.produces]
 
 
 def test_default_graph_lane_targets_are_packaged_and_land_at_their_entries() -> None:

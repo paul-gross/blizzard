@@ -51,7 +51,10 @@ def _route(hub, chunk_id: str, node_id: str, choice: str) -> httpx2.Response:  #
             "epoch": 1,
             "runner_id": "r1",
             "from_node_id": node_id,
-            "artifacts": [{"name": "triage-findings", "kind": "asset", "content": "routing rationale"}],
+            "artifacts": [
+                {"name": "triage-findings", "kind": "asset", "content": "routing rationale"},
+                {"name": "branch", "kind": "asset", "content": "fix/some-slug"},
+            ],
         },
     )
 
@@ -126,3 +129,20 @@ def test_the_already_done_choice_closes_the_chunk_without_entering_a_lane(tmp_pa
     kinds = {a["name"]: a["kind"] for a in detail["artifacts"]}
     assert kinds.get("triage-findings") == "asset"
     assert "git_commit" not in kinds.values()
+
+
+@pytest.mark.parametrize(("choice", "node_name"), [("advanced", "plan"), ("basic", "build")])
+def test_the_declared_branch_is_readable_from_the_landing_node_envelope(
+    tmp_path: Path, choice: str, node_name: str
+) -> None:
+    hub = _reconciled_hub(tmp_path)
+    chunk_id, node_id = _claimed_triage_chunk(hub, ref="5")
+    assert _route(hub, chunk_id, node_id, choice).status_code == 200
+    envelope = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]
+    assert envelope["node"]["node_name"] == node_name
+    artifacts = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope").json()["artifacts"]
+    declared = [a for a in artifacts if a["name"] == "branch"]
+    assert [(a["node_name"], a["content"]) for a in declared] == [("triage", "fix/some-slug")]

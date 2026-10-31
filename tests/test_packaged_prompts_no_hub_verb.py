@@ -40,6 +40,13 @@ def test_packaged_graphs_are_discovered() -> None:
     assert _packaged_graphs(), "no packaged graphs found — PACKAGED.files is empty"
 
 
+def test_no_packaged_prompt_assumes_a_feat_branch_prefix() -> None:
+    """The branch name is declared from the project's guidance, so no packaged prompt
+    hard-codes a `feat/` prefix."""
+    offenders = [str(p) for p in PACKAGED.root.glob("*/prompts/*.md") if "feat/" in p.read_text(encoding="utf-8")]
+    assert not offenders, offenders
+
+
 @pytest.mark.parametrize(
     ("graph_name", "doc"),
     [pytest.param(g, doc, id=g) for g, doc in _packaged_graphs()],

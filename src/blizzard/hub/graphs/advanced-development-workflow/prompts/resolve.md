@@ -14,7 +14,7 @@ repaired a repo. Then establish which case you are in:
 
 The base branch advanced under the feature branch and the PR reads dirty. Fetch, then **merge the base branch into the
 feature branch** — do not rebase, do not force-push, never touch the base branch from a node. Name the merge commit
-explicitly (`Merge <base-branch> into feat/<slug>`), resolve the conflicts, push, and track honestly whether any hunk
+explicitly (`Merge <base-branch> into <branch>`), resolve the conflicts, push, and track honestly whether any hunk
 required a **semantic choice** or every conflict was mechanical.
 
 ### 2. Real defect
