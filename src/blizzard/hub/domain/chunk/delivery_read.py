@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from urllib.parse import quote, urlsplit
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
+from blizzard.hub.domain.chunk.no_code import no_code_repos
 
 
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
@@ -37,6 +39,7 @@ class DeliverySources:
     markers: list[StoredArtifact] = field(default_factory=list[StoredArtifact])
     pr_markers: list[PrMarker] = field(default_factory=list[PrMarker])
     legacy_landed: dict[str, str] = field(default_factory=dict[str, str])
+    commits: list[StoredArtifact] = field(default_factory=list[StoredArtifact])
 
 
 @domain_model
@@ -83,10 +86,16 @@ class DeliveryRead:
     landed: bool
 
     @classmethod
-    def of(cls, facts: ChunkFacts, sources: DeliverySources) -> DeliveryRead:
+    def of(
+        cls, facts: ChunkFacts, sources: DeliverySources, declarations: Sequence[Mapping[str, str | None]] = ()
+    ) -> DeliveryRead:
         prs: dict[tuple[str, int], DeliveryPr] = {}
         legacy = {repo: sha for repo, sha in sources.legacy_landed.items() if is_landed_revision(sha)}
         landed = {**legacy, **LandedRepos.of(sources.markers).shas}
+        resolved_no_code: dict[str, int] = {}
+        for row in sources.markers:
+            for repo in no_code_repos([row], declarations):
+                resolved_no_code[repo] = max(resolved_no_code.get(repo, -1), row.epoch)
         script_prs: dict[str, tuple[str, int]] = {}
         script_epochs: dict[tuple[str, int], int] = {}
         external_epochs: set[int] = set()
@@ -104,6 +113,7 @@ class DeliveryRead:
             p
             for p in prs.values()
             if p.repo not in landed
+            and script_epochs.get((p.repo, p.number), 0) > resolved_no_code.get(p.repo, -1)
             and ((p.repo, p.number) not in script_epochs or script_prs[p.repo] == (p.repo, p.number))
         ]
         # A script-created PR is reviewable, not an external merge wait. Only the

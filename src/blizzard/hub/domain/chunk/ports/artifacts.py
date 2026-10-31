@@ -20,7 +20,7 @@ class IReadChunkArtifactsRepository(Protocol):
         ...
 
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
-        """Narrowed plural: only merged/PR/external-merge markers and historical
+        """Narrowed plural: git commits, merged/no-code/PR/external-merge markers and historical
         per-repo landing hashes and PR closures, batched by caller-supplied ids."""
         ...
 

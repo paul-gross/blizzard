@@ -1,8 +1,4 @@
-"""``land`` — a runner of landing policies. Each pass steps every repository its visit resolved and has not yet
-landed, in its project's landing order, through that repository's policy, then folds their states into the pass's one
-answer (:mod:`~blizzard.hub.delivery.actions.landing.combine`). A pass skips what its node's markers say earlier
-passes landed, and speaks to each repository only through its :class:`RepositoryForge`; a forge fault no worker can
-repair escalates to a person."""
+"""Run each repository's landing policy in its project's landing order and combine their answers."""
 
 from __future__ import annotations
 
@@ -71,17 +67,17 @@ class Land:
         ]
 
     async def _land(self, run: LandingRun, forges: VisitForges) -> Pass:
-        if not run.visit.git_commits.rows and run.visit.node.expects_git_commits:
-            run.say(
-                "no git commits to deliver: this chunk submitted no git_commit artifact, so there is nothing to "
-                "open a PR for. A delivery node reached with an empty commit set is a failure, not a landing — "
-                "check that the nodes before this one declared their commits (`blizzard runner artifact "
-                "commit`) and that each verified."
-            )
-            return run.answer(FAILURE)
+        if not run.visit.git_commits.rows:
+            run.say("no code to land: this chunk submitted no git commits")
+            return run.answer(LANDED)
         already = run.visit.marker_names()
-        unlanded = in_landing_order(repo for repo in self._repos(run, forges) if repo.marker() not in already)
+        no_code = run.visit.no_code_repos()
+        unlanded = in_landing_order(
+            repo for repo in self._repos(run, forges) if repo.marker() not in already and repo.repo not in no_code
+        )
         if not unlanded:
+            if no_code:
+                run.say(f"no code to land: {', '.join(sorted(no_code))} already resolved")
             return run.answer(LANDED)
         gated = [(repo, await POLICIES[repo.record.landing_policy].step(repo)) for repo in unlanded]
         # A head refused anywhere fires nothing in any other repository.

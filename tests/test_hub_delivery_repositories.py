@@ -378,12 +378,12 @@ def test_one_owner_and_name_on_two_forge_hosts_is_refused_before_land_naming_bot
     assert "merged/acme/widget" not in _artifact_names(hub, chunk_id)
 
 
-def test_a_chunk_with_no_commits_reaches_no_forge_and_fails(tmp_path: Path) -> None:
+def test_a_chunk_with_no_commits_reaches_no_forge_and_completes(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [])
 
-    assert _visit(hub, chunk_id, nodes).outcome_choice == "failure"
+    assert _visit(hub, chunk_id, nodes).outcome_choice == "landed"
 
     assert forge.built == [] and forge.double.calls == []
 

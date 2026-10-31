@@ -2055,6 +2055,36 @@ def test_a_hand_completed_refs_missing_intent_is_a_violation(tmp_path: Path) -> 
     assert "hub:no-unenqueued-closable-ref" in slugs
 
 
+def test_a_terminal_transition_without_intent_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.chunks).values(
+                stamp(hub.chunks, chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m")
+            )
+        )
+        conn.execute(
+            insert(hub.chunk_work_refs).values(stamp(hub.chunk_work_refs, chunk_id="ch_1", source="default", ref="1"))
+        )
+        conn.execute(
+            insert(hub.transitions).values(
+                stamp(
+                    hub.transitions,
+                    transition_id="tr_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_triage",
+                    from_node_id="build",
+                    to_node_id="done",
+                    choice_name="success",
+                    epoch=1,
+                    runner_id="r1",
+                    recorded_at=_NOW,
+                )
+            )
+        )
+    assert "hub:no-unenqueued-closable-ref" in {v.invariant for v in hub_invariants(engine).run()}
+
+
 def test_a_grouped_chunks_missing_intent_is_not_a_violation(tmp_path: Path) -> None:
     """An ephemeral (grouped-away) chunk enqueues nothing by design; it owes
     no coverage either."""

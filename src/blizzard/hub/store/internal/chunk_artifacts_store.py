@@ -66,23 +66,44 @@ class ChunkArtifactsStore:
         markers: dict[str, list[StoredArtifact]] = defaultdict(list)
         pr_markers: dict[str, list[PrMarker]] = defaultdict(list)
         landed: dict[str, dict[str, str]] = defaultdict(dict)
+        commits: dict[str, list[StoredArtifact]] = defaultdict(list)
         with self._store.read("delivery_sources_for") as conn:
             for batch in id_batches(chunk_ids):
                 for a in conn.execute(
                     self._store.select(s.artifacts)
                     .where(
                         s.artifacts.c.chunk_id.in_(batch),
-                        s.artifacts.c.kind == ArtifactKind.ASSET.value,
                         or_(
-                            s.artifacts.c.name.like("merged/%"),
-                            s.artifacts.c.name.like("delivery-pr/%"),
-                            s.artifacts.c.name == "awaiting-external-merge",
+                            s.artifacts.c.kind == ArtifactKind.GIT_COMMIT.value,
+                            (s.artifacts.c.kind == ArtifactKind.ASSET.value)
+                            & or_(
+                                s.artifacts.c.name.like("merged/%"),
+                                s.artifacts.c.name.like("no-code/%"),
+                                s.artifacts.c.name.like("delivery-pr/%"),
+                                s.artifacts.c.name == "awaiting-external-merge",
+                            ),
                         ),
                     )
                     # seq is per-chunk and not unique; chunk_id and artifact_id make the
                     # order total without backend-dependent row order (`bzh:sql-portable`).
                     .order_by(s.artifacts.c.chunk_id, s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ):
+                    if a.kind == ArtifactKind.GIT_COMMIT.value:
+                        commits[a.chunk_id].append(
+                            StoredArtifact(
+                                ArtifactKind.GIT_COMMIT,
+                                a.name,
+                                a.data,
+                                a.repo,
+                                a.forge,
+                                a.artifact_id,
+                                a.chunk_id,
+                                a.node_id,
+                                a.node_name,
+                                a.epoch,
+                            )
+                        )
+                        continue
                     if a.name.startswith("delivery-pr/"):
                         # A payload that is not a PR reference is skipped here, so the domain only ever
                         # folds well-formed markers.
@@ -123,7 +144,7 @@ class ChunkArtifactsStore:
                 ):
                     landed[row.chunk_id][row.repo] = row.commit_hash
         return {
-            chunk_id: DeliverySources(markers[chunk_id], pr_markers[chunk_id], landed[chunk_id])
+            chunk_id: DeliverySources(markers[chunk_id], pr_markers[chunk_id], landed[chunk_id], commits[chunk_id])
             for chunk_id in chunk_ids
         }
 

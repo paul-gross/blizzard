@@ -189,6 +189,12 @@ class Landed:
 
 @domain_model
 @dataclass(frozen=True)
+class NoCode:
+    """The declaration needs no merge, recorded without a landing revision."""
+
+
+@domain_model
+@dataclass(frozen=True)
 class Waiting:
     """Something unsettled — checks running, a forge still deciding, an update in flight. ``findings`` is the
     record a substantive wait hands on, ``None`` when the wait says nothing worth writing."""
@@ -254,7 +260,7 @@ class NeedsPerson:
     escalation: ActionEscalation
 
 
-type RepoState = Landed | Ready | Waiting | Held | AwaitingMerge | Conflict | Failure | Inherited | NeedsPerson
+type RepoState = Landed | NoCode | Ready | Waiting | Held | AwaitingMerge | Conflict | Failure | Inherited | NeedsPerson
 
 
 @domain_model

@@ -954,8 +954,7 @@ def test_sweep_replayed_over_an_already_delivered_hub_item_is_a_clean_no_op(tmp_
     )
 
 
-# chunk.md — Work refs' closure keys on landing (or a by-hand done), independent of what
-# happens to the chunk afterwards, and never on reaching the reserved terminal alone.
+# Work refs close on a landing or completion, including a terminal transition without a merge.
 
 
 @pytest.mark.component
@@ -979,7 +978,7 @@ def test_a_chunk_stopped_after_landing_still_closes_its_work_item(tmp_path: Path
 
 
 @pytest.mark.component
-def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: Path) -> None:
+def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
@@ -999,7 +998,9 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_closes_no_ref(tmp_path: P
     facts = hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert facts.newest_transition_is_terminal()
-    assert hub.services.chunks.delivery.pending_close_intents() == []
+    assert hub.services.chunks.delivery.pending_close_intents() == [
+        PendingCloseIntent(chunk_id=chunk_id, ref=WorkRef(source="default", ref="1"))
+    ]
 
 
 def test_sweep_attempts_at_most_the_pass_limit_and_the_rest_drain_on_later_passes() -> None:

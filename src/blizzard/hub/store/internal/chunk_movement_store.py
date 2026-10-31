@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_MODEL,
@@ -186,7 +187,7 @@ class ChunkMovementStore:
                     seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-        if any(is_landing_marker(row.name, row.data) for row in artifacts):
+        if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
             enqueue_close_intents(conn, chunk_id, at=at)
         return None
 

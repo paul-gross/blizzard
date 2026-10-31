@@ -24,6 +24,7 @@ from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStat
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
+from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
@@ -219,6 +220,8 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
             body = _pending_pull()
         elif path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
             body = {"check_runs": [{"id": 1, "name": "ci", "status": "in_progress", "conclusion": None}]}
+        elif path == f"/repos/{_WIDGET}/compare/main...{_SUBMITTED}":
+            body = {"status": "ahead", "ahead_by": 1, "behind_by": 0, "commits": [], "files": []}
         else:
             raise AssertionError(f"unexpected landing read: {request.url}")
         etag = f'"{request.url}"'
@@ -257,7 +260,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
             await asyncio.sleep(0)
 
     asyncio.run(polls())
-    assert len(answers) == 40
+    assert len(answers) == 50
     assert all(status == 304 and request.headers.get("if-none-match") for request, status in answers)
     lookups = [request for request, _ in answers if request.url.path.endswith("/pulls")]
     assert len([request for request in lookups if request.url.params["state"] == "closed"]) == 10
@@ -499,10 +502,10 @@ def test_two_repos_one_failing_names_only_the_failing_one_and_merges_neither() -
     assert double.named("merge") == []
 
 
-def test_an_empty_commit_set_fails_where_the_graph_expects_commits_and_lands_where_it_does_not() -> None:
+def test_an_empty_commit_set_completes_with_no_code_even_when_the_graph_expects_commits() -> None:
     answer, _ = _land(GitHubDouble(), _visit(()))
-    assert answer.choice == "failure"
-    assert "no git commits to deliver" in answer.log[0]
+    assert answer.choice == "landed"
+    assert "no code to land" in answer.log[0]
 
     answer, _ = _land(GitHubDouble(), _visit((), expects=False))
     assert answer.choice == "landed"
@@ -515,16 +518,85 @@ def test_a_fully_marked_commit_set_lands_without_a_forge_call() -> None:
     assert double.calls == []
 
 
-def test_a_branch_adding_no_commit_lands_as_a_no_op_at_the_base_tip() -> None:
+def test_a_base_held_submission_records_no_code_only_for_that_repo() -> None:
     double = _forge(_WIDGET, _GADGET)
-    double.repos[_WIDGET].heads = {}
-    double.repos[_WIDGET].compares = {("main", "feat/x"): comparison(ComparisonStatus.BEHIND)}
+    double.repos[_WIDGET].compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+    }
+    double.repos[_WIDGET].replies["open_change"] = [ForgeRejected("No commits between main and feat/x")]
 
     answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
 
     assert answer.choice == "landed"
-    assert sink.landings()[0] == LandingRecord(repository="re_widget", repo=_WIDGET, revision="base-tip")
+    assert sink.landings() == [LandingRecord(repository="re_gadget", repo=_GADGET, revision=f"merge-{_GADGET}-1")]
+    name, data = no_code_marker(
+        {"repo": _WIDGET, "record": "re_widget", "base_branch": "main", "branch": "feat/x", "commit": _SUBMITTED}
+    )
+    assert sink.markers()[name] == data
+    assert any("no code to land" in line for line in answer.log)
     assert [args["number"] for _, args in double.named("merge")] == [1]
+
+
+def test_all_base_held_repositories_resolve_without_opening_a_pr() -> None:
+    double = _forge(_WIDGET, _GADGET)
+    for repo in (_WIDGET, _GADGET):
+        double.repos[repo].compares = {
+            ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+            ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+        }
+
+    answer, sink = _land(double, _visit((_WIDGET, _GADGET)))
+    assert answer.choice == "landed"
+    assert len([name for name in sink.markers() if name.startswith("no-code/")]) == 2
+    assert sink.landings() == []
+    assert double.named("open_change") == [] and double.named("merge") == []
+
+
+def test_a_preexisting_open_pr_whose_commit_the_base_now_holds_is_history() -> None:
+    double = _forge()
+    double.repos[_WIDGET].changes[7] = change(_WIDGET, 7, branch="feat/x", sha=_SUBMITTED, base="main")
+    double.repos[_WIDGET].compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+    }
+    answer, sink = _land(double)
+    assert answer.choice == "landed"
+    assert sink.landings() == []
+    assert any(name.startswith("no-code/") for name in sink.markers())
+    assert double.named("merge") == []
+
+
+def test_a_no_code_marker_replays_only_for_its_exact_declaration() -> None:
+    double = _forge()
+    double.repos[_WIDGET].compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+    }
+    double.repos[_WIDGET].replies["open_change"] = [ForgeRejected("No commits between main and feat/x")]
+    visit = _visit()
+    answer, sink = _land(double, visit)
+    assert answer.choice == "landed"
+    name, data = next((n, v) for n, v in sink.markers().items() if n.startswith("no-code/"))
+    marked = _row(ArtifactKind.ASSET, name, data)
+    replay = replace(visit, markers=(marked,), artifacts=(*visit.artifacts, marked))
+    double.calls.clear()
+    assert _land(double, replay)[0].choice == "landed"
+    assert double.calls == []
+    changed = replace(
+        replay, git_commits=GitCommits.of([_row(ArtifactKind.GIT_COMMIT, "w0", f"feat/x:{'d' * 40}", repo=_WIDGET)])
+    )
+    answer, _ = _land(double, changed)
+    assert answer.choice != "landed" or double.calls
+
+
+def test_a_base_held_branch_without_proof_of_the_submitted_commit_waits() -> None:
+    double = _forge(compares={("main", "feat/x"): comparison(ComparisonStatus.BEHIND)})
+    double.repos[_WIDGET].replies["open_change"] = [ForgeRejected("No commits between main and feat/x")]
+    answer, sink = _land(double)
+    assert answer.choice == "pending"
+    assert sink.landings() == []
+    assert not any(name.startswith("no-code/") for name in sink.markers())
 
 
 def test_a_missing_base_branch_writes_no_landing_and_waits() -> None:

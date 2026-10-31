@@ -47,6 +47,7 @@ from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk,
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
+from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -342,7 +343,10 @@ class TurnRunner:
         assert action is not None  # resolved, so its spec was found
         spec, git_commits = resolved.spec, resolved.git_commits
         resolution = stamp_terms(resolved.resolution, self._flows.terms_of(submission.submission_id), project.positions)
-        held = held_resources(resolution, LandedRepos.of(artifacts).names, spec)
+        finished = LandedRepos.of(artifacts).names | no_code_repos(
+            artifacts, git_commits.payload(resolution.qualified, resolution)
+        )
+        held = held_resources(resolution, finished, spec)
         if resources_moved(held, held_resources(resolution, frozenset(), spec), [f.resource for f in submission.flows]):
             self._end(submission, ending, outcome=TURN_SUPERSEDED, closure=TURN_SUPERSEDED)
             return None
