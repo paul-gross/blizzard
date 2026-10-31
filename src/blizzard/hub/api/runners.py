@@ -397,7 +397,8 @@ def list_runners(
     include_retired: Annotated[bool, Query()] = False,
 ) -> RunnerRegistryListResponse:
     """The fleet registry — every added runner, oldest first, with its connection condition and
-    paused state; a retired runner excluded by default, included and marked when ``include_retired``."""
+    paused state; a retired runner excluded by default, included and marked when ``include_retired``. Not paged: a
+    tenant has tens of runners and the board renders the whole roster."""
     now = services.clock.now()
     listed = services.fleet.list_with_liveness(now=now, include_retired=include_retired)
     projects = served_projects(services, (e for item in listed for e in item.registration.served))
