@@ -2590,7 +2590,7 @@ export type LeaseClosureReason = 'transitioned' | 'reaped' | 'failed' | 'escalat
 /**
  * LeaseDisplayStatus
  *
- * What the panel shows for a lease: a takeover, escalation, or ask open on its chunk
+ * What a lease displays as: a takeover, escalation, or ask open on its chunk
  * outranks the lease's own state, which shows otherwise. Derived at read time, never stored.
  */
 export type LeaseDisplayStatus = 'human-in-session' | 'needs-human' | 'waiting-ask' | 'running' | 'stale' | 'parked' | 'backing-off' | 'spawning' | 'exited' | 'closed';

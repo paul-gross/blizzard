@@ -4717,7 +4717,7 @@
         "type": "string"
       },
       "LeaseDisplayStatus": {
-        "description": "What the panel shows for a lease: a takeover, escalation, or ask open on its chunk\noutranks the lease's own state, which shows otherwise. Derived at read time, never stored.",
+        "description": "What a lease displays as: a takeover, escalation, or ask open on its chunk\noutranks the lease's own state, which shows otherwise. Derived at read time, never stored.",
         "enum": [
           "human-in-session",
           "needs-human",

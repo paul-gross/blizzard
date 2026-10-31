@@ -1,0 +1,1 @@
+"""What the panel shows, as a badge on a card, a tooltip, the login page and the board."""

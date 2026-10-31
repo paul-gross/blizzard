@@ -15832,7 +15832,7 @@
         "type": "object"
       },
       "SignInRefusal": {
-        "description": "Why a sign-in admitted nobody \u2014 the code the login page shows its text for. Every refusal writes\nnothing: no user, identity link, membership, invitation fact or session.",
+        "description": "Why a sign-in admitted nobody \u2014 the code a refusal is reported by. Every refusal writes\nnothing: no user, identity link, membership, invitation fact or session.",
         "enum": [
           "invite_only",
           "invitation_unusable",
