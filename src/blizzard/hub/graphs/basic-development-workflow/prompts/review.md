@@ -12,9 +12,9 @@ repo out to the newest (a rebase may have moved it) in the leased environment(s)
 ## Review the work
 
 Judge each axis — correctness, architecture (conformance to the project's architecture guidance), and design quality
-(conformance to the project's code-quality standards) — against the project's review criteria, naming the criterion a
-finding violates when one applies. Navigate the project's documentation and agent-facing context rigorously to learn
-every expectation it holds along these axes, down to the rules binding the code this change touches.
+(conformance to the project's code-quality standards) — against the project's review criteria: before judging, open them
+and, per axis, the documents they route this change's code to, until you reach the rules themselves. Judge from what you
+read, not memory, naming the criterion a finding violates when one applies.
 
 Use the workspace's review tooling; exercise the change's end-to-end flows in the chunk's environment. Commit no fix
 here — review observes, build repairs.
@@ -22,9 +22,9 @@ here — review observes, build repairs.
 Anchor every finding — `<repo>/<path>:<line>` or `<repo>/<path>::<symbol>` — an unanchored finding can be neither acted
 on nor matched to a refutation.
 
-Grade each finding `blocking` — must be fixed before this can land — or `should-fix` — a real defect below that bar. A
+Grade each finding `blocking` — must be fixed before landing — or `should-fix` — a real defect below that bar. A
 should-fix also carries `in-diff` when its anchor is a line or passage this change added or modified, else
-`outside-diff` (untouched code, or an exposed defect). The tag only locates it; the round decides whether it blocks.
+`outside-diff` (untouched code or an exposed defect). The tag only locates it; the round decides if it blocks.
 
 ## A re-visit reviews the delta
 
@@ -55,8 +55,8 @@ its finding like a fix and does not block `pass`.
 
 ## Submit findings
 
-Submit findings before declaring done: `blizzard runner artifact create --name review-findings`, content on stdin — the
-tip you judged per repo (`<repo> <branch> <full-sha>`, the next round's diff base), this round's scope (the whole
-change, or the delta and what it resolved), what you checked, what passed, every finding with its severity and, on a
-should-fix, its tag. On `fail` the findings asset rides back into build's envelope, so make each specific and
-actionable.
+Submit before declaring done: `blizzard runner artifact create --name review-findings`, content on stdin — the tip you
+judged per repo (`<repo> <branch> <full-sha>`, the next round's diff base), this round's scope (whole change, or the
+delta and what it resolved), what you checked per axis and the path of each criteria document read for it, what passed,
+every finding with its severity and, on a should-fix, its tag. On `fail` the asset rides back to build, so make each
+finding specific and actionable.
