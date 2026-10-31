@@ -256,8 +256,6 @@ also_copy = [
     "scripts/restated_invariants.py",
     "scripts/repo_pointers.py",
     "scripts/mutation.py",
-    "scripts/typecheck_strict_rows.py",
-    "scripts/typecheck_private_usage.py",
     "docs/deployment/transcripts.md",
     "docs/deployment/egress.md",
     "docs/deployment/tracing.md",
@@ -289,9 +287,12 @@ also_copy = [
 [tool.pyright]
 include = ["src", "tests", "exemplars/python"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tests/node_modules"]
-extraPaths = ["exemplars/python"]
+extraPaths = ["src", "exemplars/python"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
+# Shipping code is held to strict; the tests are not yet. A store migration test under `src` that is not yet typed opts
+# itself back down with a `# pyright: standard` header (`bzh:strict-types`).
+strict = ["src", "exemplars/python"]
 reportMissingTypeStubs = false
 
 [tool.ruff]

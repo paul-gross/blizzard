@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.migration_support_tenant_carry_over_migration import _seed_every_tenant_owned_table
 
 _BEFORE_TENANTS = "20261008_1000_drop_work_item_proposals"
@@ -53,7 +53,7 @@ def _rows(engine: sa.Engine) -> dict[str, list[str]]:
 
 
 def _snapshot(engine: sa.Engine) -> dict[str, object]:
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    return schema_snapshot(engine, exemptions={}, name_exemptions={})
 
 
 def _tenant_ids(engine: sa.Engine) -> list[str]:

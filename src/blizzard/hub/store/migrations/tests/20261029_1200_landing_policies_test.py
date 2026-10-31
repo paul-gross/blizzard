@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.support import migrate_to
 
 pytestmark = [pytest.mark.component]
@@ -31,7 +31,7 @@ _SEEDED = 1001
 
 
 def _snapshot(engine: sa.Engine) -> dict[str, object]:
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    return schema_snapshot(engine, exemptions={}, name_exemptions={})
 
 
 def _reshaped(engine: sa.Engine) -> dict[str, object]:

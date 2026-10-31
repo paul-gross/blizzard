@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.support import default_tenant, migrate_to
 
 pytestmark = [pytest.mark.component]
@@ -158,14 +158,14 @@ def test_the_new_column_matches_the_declared_schema(tmp_path: Path) -> None:
 def test_a_rerun_changes_nothing(tmp_path: Path) -> None:
     runner, engine, _ = _seeded(tmp_path)
     runner.upgrade(_LEGACY)
-    schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
     rows = _rows(engine, "action", "action_args", "legacy_run", "run")
     with engine.begin() as conn:
         conn.execute(sa.text(f"UPDATE alembic_version SET version_num = '{_PARENT}'"))
 
     runner.upgrade(_LEGACY)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
     assert _rows(engine, "action", "action_args", "legacy_run", "run") == rows
 
 
@@ -174,13 +174,13 @@ def test_the_downgrade_restores_every_row_as_seeded_and_the_parent_still_refuses
 ) -> None:
     runner, engine, tenant = _seeded(tmp_path)
     _node(engine, tenant, "nd_test", action="test.answer", action_args=json.dumps({"choice": ["success"]}))
-    before = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    before = schema_snapshot(engine, exemptions={}, name_exemptions={})
     seeded = _rows(engine, "run", "action", "action_args")
     runner.upgrade(_LEGACY)
 
     runner.downgrade(_PARENT)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
     # A row translated from no `run` keeps `pass`, which the parent's own downgrade gives back as no `run`.
     assert _rows(engine, "run", "action", "action_args") == {**seeded, "nd_null": (None, "pass", None)}
     with pytest.raises(RuntimeError, match="nd_test"):

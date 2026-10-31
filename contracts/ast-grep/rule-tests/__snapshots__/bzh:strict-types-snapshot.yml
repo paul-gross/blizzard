@@ -1,0 +1,38 @@
+id: bzh:strict-types
+snapshots:
+  ? |
+    # pyright: basic
+  : labels:
+    - source: '# pyright: basic'
+      style: primary
+      start: 0
+      end: 16
+  ? |
+    # pyright: standard
+  : labels:
+    - source: '# pyright: standard'
+      style: primary
+      start: 0
+      end: 19
+  ? |
+    def f(x):  # noqa: E501  # type:ignore[no-untyped-def]
+        return x
+  : labels:
+    - source: '# noqa: E501  # type:ignore[no-untyped-def]'
+      style: primary
+      start: 11
+      end: 54
+  ? |
+    value: int = "s"  # type: ignore
+  : labels:
+    - source: '# type: ignore'
+      style: primary
+      start: 18
+      end: 32
+  ? |
+    value: int = "s"  # type: ignore[assignment]
+  : labels:
+    - source: '# type: ignore[assignment]'
+      style: primary
+      start: 18
+      end: 44

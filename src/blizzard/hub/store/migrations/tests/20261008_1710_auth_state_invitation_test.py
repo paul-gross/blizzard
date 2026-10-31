@@ -2,6 +2,8 @@
 it, beside the rows already in flight; a re-run over a store that already holds the column changes nothing; and the
 downgrade drops it, restoring the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -18,8 +20,8 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
     assert_frozen_table_lacks_a_later_revisions_columns,
+    schema_snapshot,
 )
 
 _MOVE = "20261008_1700_tenant_identity_move"
@@ -78,17 +80,17 @@ def test_a_rerun_over_a_store_already_holding_the_column_changes_nothing(tmp_pat
     with _at_the_move(tmp_path) as (runner, engine):
         with engine.begin() as conn:
             conn.execute(sa.text(f"ALTER TABLE auth_state ADD COLUMN {_COLUMN} VARCHAR"))
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
 
         runner.upgrade(_INVITATION)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
 
 
 @pytest.mark.component
 def test_the_downgrade_drops_the_column_and_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_move(tmp_path) as (runner, engine):
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
         runner.upgrade(_INVITATION)
         _seed_state(engine)
         with engine.begin() as conn:
@@ -96,7 +98,7 @@ def test_the_downgrade_drops_the_column_and_restores_the_store_exactly(tmp_path:
 
         runner.downgrade(_MOVE)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
         with engine.connect() as conn:
             assert conn.execute(sa.text("SELECT state FROM auth_state")).scalars().all() == ["st_1"]
 

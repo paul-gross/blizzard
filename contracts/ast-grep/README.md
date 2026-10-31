@@ -78,6 +78,15 @@ load-bearing: without it a stale `# ast-grep-ignore` comment goes unreported ins
     `# ast-grep-ignore: bzh:property-delegates` on its `def` line. Under `--error=unused-suppression` the list only
     shrinks.
 
+- **`bzh:strict-types`** (`rules/strict-types.yml`) — shipping code keeps every strict diagnostic visible. The rule's
+  own prose home is `blizzard-context:/standards/python.md#strict-types-bzhstrict-types`; this file states none of that
+  prose, only what the rule mechanically checks.
+  - Scoped to `src/**` and `exemplars/python/**`, except every `store/migrations/tests/**` tree.
+  - Matches a comment containing `type: ignore`, bracketed or bare, and a comment that is a `# pyright: basic` or
+    `# pyright: standard` file header. A rule-named `# pyright: ignore[<rule>]` and a `# pyright: <rule>=false` header
+    are unmatched.
+  - No exemption stands.
+
 - **`bzh:subscriptions-no-write`** (`rules/subscriptions-no-write.yml`) — blizzard never opens a subscription credential
   file for writing: the vendor CLI owns its own lock, atomic write, and refresh-token rotation, and a second writer
   risks corrupting the file mid-refresh or invalidating the login it just renewed.

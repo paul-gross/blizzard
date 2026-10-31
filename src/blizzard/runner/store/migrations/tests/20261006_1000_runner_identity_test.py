@@ -1,5 +1,7 @@
 """Runner-store migrations: the store keys nothing on the runner's id and keeps one identity row."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

@@ -60,7 +60,7 @@ def _decode_windows(payload: str | None) -> tuple[ExternalSubscriptionUsageWindo
 
 
 def _sample_summary(slug: str, row: Row[Any]) -> ExternalUsageSampleSummary:
-    decoded = json.loads(row.payload) if row.payload else {}
+    decoded: dict[str, list[object]] = json.loads(row.payload) if row.payload else {}
     return ExternalUsageSampleSummary(
         slug=slug,
         sampled_at=as_utc(row.sampled_at),

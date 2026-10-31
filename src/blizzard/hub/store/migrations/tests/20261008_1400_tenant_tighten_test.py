@@ -5,6 +5,8 @@ stopped part way finishes; the downgrade refuses while two tenants exist and oth
 Seeded from the store's reflected shape at the pinned revisions rather than ``src/blizzard/hub/store/schema.py``, whose
 tables keep changing shape after this revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import warnings

@@ -8,7 +8,7 @@ from typing import Any
 
 import sqlalchemy as sa
 
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 _VERSION_TABLE = "alembic_version"
 _AUTOINCREMENT = re.compile(r"\bAUTOINCREMENT\b")
@@ -16,7 +16,7 @@ _PARTS = ("columns", "primary key", "foreign keys", "unique constraints", "index
 
 
 def schema_of(url: str, *, renamed: Mapping[str, str] | None = None) -> dict[str, object]:
-    """``_schema_snapshot``'s fingerprint of the store at ``url``, with no exemption.
+    """``schema_snapshot``'s fingerprint of the store at ``url``, with no exemption.
 
     ``renamed`` maps a table to the name a history renamed it from. Postgres names a primary key, a foreign key and a
     serial sequence after their table when it creates them, so a renamed table keeps the old name on all three, and a
@@ -24,7 +24,7 @@ def schema_of(url: str, *, renamed: Mapping[str, str] | None = None) -> dict[str
     read away, by giving the old table's generated names the new table's name."""
     engine = sa.create_engine(url)
     try:
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
     finally:
         engine.dispose()
     renamed = renamed or {}

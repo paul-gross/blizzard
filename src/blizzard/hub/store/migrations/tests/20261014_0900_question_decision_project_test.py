@@ -2,6 +2,8 @@
 the tenant's first); a run stopped after any step finishes as a single run does; the fill pages in bounded batches;
 the new indexes and foreign keys exist; and the downgrade restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -26,7 +28,7 @@ from blizzard.foundation.store.migrations import MIGRATION_CLOCK_ATTRIBUTE, Migr
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -126,7 +128,7 @@ def _shape(engine: sa.Engine) -> tuple[object, ...]:
     stamped = {
         table: [tuple(labels.get(v, v) for v in row) for row in rows] for table, rows in _stamped(engine).items()
     }
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={}), stamped
+    return schema_snapshot(engine, exemptions={}, name_exemptions={}), stamped
 
 
 def test_every_question_and_decision_names_its_chunks_project(tmp_path: Path) -> None:
@@ -205,7 +207,7 @@ def test_the_fill_pages_in_bounded_batches_and_misses_no_row(tmp_path: Path, mon
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_parent(tmp_path) as (runner, engine):
         _seed(engine)
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
         questions = _query(engine, "SELECT * FROM questions ORDER BY question_id")
         decisions = _query(engine, "SELECT * FROM decisions ORDER BY decision_id")
 
@@ -213,6 +215,6 @@ def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
         runner.downgrade(_PARENT)
 
         assert runner.current_revision() == _PARENT
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _query(engine, "SELECT * FROM questions ORDER BY question_id") == questions
         assert _query(engine, "SELECT * FROM decisions ORDER BY decision_id") == decisions

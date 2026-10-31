@@ -1,5 +1,7 @@
 """Tests proving the ``20261008_1200_tenant_id_backfill`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -3,6 +3,8 @@ by it, a part-way rerun finishes, a tenantless row or a two-tenant downgrade is 
 change, and with one tenant the downgrade restores the store exactly. A legacy over-long
 derivations index name is renamed on the way to head."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

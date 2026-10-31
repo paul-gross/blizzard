@@ -2,6 +2,8 @@
 uniqueness lands only at this revision, the upgrade keeps the earliest of each duplicate and
 enforces the constraint after, and a down-then-up cycle round-trips the deduplicated rows."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

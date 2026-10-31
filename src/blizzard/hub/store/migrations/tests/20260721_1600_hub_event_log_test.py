@@ -1,5 +1,7 @@
 """Tests proving the ``20260721_1600_hub_event_log`` revision."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from pathlib import Path

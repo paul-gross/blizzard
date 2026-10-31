@@ -3,6 +3,8 @@ record links to, keys and uniqueness move under the project, an interrupted run 
 downgrade refuses a second project, else restores the store exactly. ``hub_invariants`` runs once,
 over the carried-over store in ``test_a_carried_over_store_keeps_every_project_invariant``."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import json
@@ -34,8 +36,8 @@ from blizzard.tools.invariants import hub_invariants
 from tests.migration_support_invariant_checker import _NOW as _INVARIANT_NOW
 from tests.migration_support_invariant_checker import _PROJECT_INVARIANTS, insert
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
     assert_frozen_table_lacks_a_later_revisions_columns,
+    schema_snapshot,
 )
 from tests.support import (
     MIGRATION_CLOCK,
@@ -212,7 +214,7 @@ def _shape(engine: sa.Engine) -> tuple[object, ...]:
         table: sorted(tuple(projects.get(v, v) if isinstance(v, str) else v for v in row) for row in values)
         for table, values in _all_rows(engine).items()
     }
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
+    return schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
 
 
 @pytest.mark.component
@@ -507,14 +509,14 @@ def test_the_downgrade_refuses_while_a_tenant_holds_two_projects(tmp_path: Path)
 def test_otherwise_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_closed_at(tmp_path) as (runner, engine):
         _seed(engine)
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
         rows = _all_rows(engine)
 
         runner.upgrade(_PROJECTS)
         runner.downgrade(_CLOSED_AT)
 
         assert runner.current_revision() == _CLOSED_AT
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _all_rows(engine) == rows
 
 

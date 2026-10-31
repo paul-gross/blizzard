@@ -17,7 +17,7 @@ from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
+    schema_snapshot,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -114,9 +114,9 @@ def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) 
     try:
         _SCHEMA_METADATA[daemon.name].create_all(declared)
         name_exemptions = _NAME_EXEMPTIONS[daemon.name]
-        assert _schema_snapshot(
+        assert schema_snapshot(
             migrated, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions
-        ) == _schema_snapshot(declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions)
+        ) == schema_snapshot(declared, exemptions=_SERVER_DEFAULT_EXEMPTIONS, name_exemptions=name_exemptions)
         assert set(name_exemptions) <= _constraint_names(migrated), "a name exemption matches no constraint"
     finally:
         migrated.dispose()
@@ -145,7 +145,7 @@ def test_schema_snapshot_tells_constraint_shapes_and_names_apart(
         engine = create_engine_from_url(f"sqlite:///{tmp_path / f'{side}.db'}")
         try:
             metadata.create_all(engine)
-            snapshots.append(_schema_snapshot(engine, exemptions={}, name_exemptions={}))
+            snapshots.append(schema_snapshot(engine, exemptions={}, name_exemptions={}))
         finally:
             engine.dispose()
     assert snapshots[0] != snapshots[1]

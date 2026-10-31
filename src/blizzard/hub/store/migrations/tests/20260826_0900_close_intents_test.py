@@ -4,6 +4,8 @@ The back-fill enqueues one pending intent per already-landed or hand-completed,
 non-ephemeral chunk's still-open work ref, narrowed to no source: an opted-in and a
 never-opted-in source both back-fill alike."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

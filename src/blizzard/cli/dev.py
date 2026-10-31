@@ -6,6 +6,7 @@ facts for debugging and crash-recovery verification, so the group is ``hidden=Tr
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
 from typing import cast
@@ -160,7 +161,7 @@ def _check_running(ctx: click.Context, hub_url: str | None, directory: str | Non
     client_factory = CliCollaborators.of(ctx).client_factory
     violations: list[Violation] = []
     failures: list[str] = []
-    asks = []
+    asks: list[Callable[[], list[Violation]]] = []
     if hub_url is not None:
         asks.append(lambda: _ask_hub(ctx, client_factory, hub_url))
     if directory is not None or runner_url is not None:

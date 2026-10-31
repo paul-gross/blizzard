@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 from tests.support import default_tenant, migrate_to
 
 pytestmark = [pytest.mark.component]
@@ -97,18 +97,18 @@ def test_the_new_columns_match_the_declared_schema(tmp_path: Path) -> None:
 
 def test_a_rerun_over_a_store_already_reshaped_changes_nothing(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _ACTIONS)
-    schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
     with engine.begin() as conn:
         conn.execute(sa.text(f"UPDATE alembic_version SET version_num = '{_PARENT}'"))
 
     runner.upgrade(_ACTIONS)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
 
 
 def test_the_downgrade_gives_an_action_only_row_its_inverse_run_and_restores_the_store(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _PARENT)
-    before = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+    before = schema_snapshot(engine, exemptions={}, name_exemptions={})
     runner.upgrade(_ACTIONS)
     tenant = default_tenant(engine)
     _graph(engine, tenant)
@@ -127,7 +127,7 @@ def test_the_downgrade_gives_an_action_only_row_its_inverse_run_and_restores_the
 
     runner.downgrade(_PARENT)
 
-    assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
+    assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == before
     scripts = "python3 -m blizzard.hub.graphs.scripts."
     assert _runs(engine) == {
         "nd_land": [{"command": f"{scripts}land_pr_ci", "name": "land-every-repo", "produces": None}],

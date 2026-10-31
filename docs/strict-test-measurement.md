@@ -4,8 +4,8 @@ At `blizzard` base revision `019ba7a8d15c4e4ab35125cf46b561f1c0b500eb`, after th
 1.1.414 reports 17,040 strict errors with this branch's baseline checker present. The corresponding `blizzard-mock`
 revision `f3a1f0425f37c8af94ef7ee029bcb9faf846498a` reports 1,633, and `blizzard-infra` revision
 `a4c9bd2f979f1056b66061cb45e67cc8bf78177c` reports 96. These are diagnostic counts, not independent type-error roots: an
-untyped fixture can cause multiple unknown-type reports. The standard `blizzard:typecheck` and `blizzard-mock:typecheck`
-tasks still pass with zero errors because their configured mode is `standard`.
+untyped fixture can cause multiple unknown-type reports. `blizzard-mock:typecheck` passes with zero errors because its
+configured mode is `standard`; `blizzard:typecheck` holds only shipping code to strict (`bzh:strict-types`).
 
 | Project / Python area                    | Strict errors | Files with errors |
 | ---------------------------------------- | ------------: | ----------------: |
@@ -58,10 +58,9 @@ files). Tests should use a published interface or establish that the reached nam
 is not an interface repair. Fixture-parameter and bare-generic reports are later cause-specific sweeps rather than part
 of the first single-file budgets.
 
-Ten shipping-code errors remain in blizzard: four at `src/blizzard/cli/dev.py:165-170`, two at
-`src/blizzard/hub/store/schema.py:677,1594`, and four at `src/blizzard/hub/work_sources/internal/factory.py:65`. They
-need a fresh strict correction before any switch. The proposed transition is per project: clear remaining diagnostics or
-justify each residual by file, Pyright rule, reason and removal condition, then make the normal typecheck invocation
-strict and retain only rule-named `# pyright: ignore[<rule>]` comments with reasons. No residual waiver is justified by
-this baseline. Infra first needs a standing typecheck task and verification-matrix/CI declaration. No gate has been
-switched by this measurement.
+The ten shipping-code errors this baseline counts are cleared, and the gate holds blizzard's `src/` and
+`exemplars/python/` to strict. What it does not yet hold are the tests and each store migration test still carrying a
+`# pyright: standard` waiver. Each follows the same path, per project: clear the remaining diagnostics or justify each
+residual by file, Pyright rule, reason and removal condition, bring the area under the gate's strict paths, and retain
+only rule-named `# pyright: ignore[<rule>]` comments with reasons. Infra first needs a standing typecheck task and
+verification-matrix/CI declaration.

@@ -2,6 +2,8 @@
 tenant's first twelve are distinct; the column ends required; a run stopped after any step finishes as a single run
 does; a re-run changes nothing; and the downgrade restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -22,7 +24,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_project_columns_migration import _run_step
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -128,7 +130,7 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
         single = (
             _colors(engine, busy),
             _colors(engine, _QUIET),
-            _schema_snapshot(engine, exemptions={}, name_exemptions={}),
+            schema_snapshot(engine, exemptions={}, name_exemptions={}),
         )
     with _at_the_parent(tmp_path / "stopped") as (runner, engine, busy):
         steps = _revision_module().UPGRADE_STEPS
@@ -141,32 +143,32 @@ def test_a_run_stopped_after_any_step_finishes_as_a_single_run_does(tmp_path: Pa
         assert (
             _colors(engine, busy),
             _colors(engine, _QUIET),
-            _schema_snapshot(engine, exemptions={}, name_exemptions={}),
+            schema_snapshot(engine, exemptions={}, name_exemptions={}),
         ) == single
 
 
 def test_a_re_run_changes_nothing(tmp_path: Path) -> None:
     with _at_the_parent(tmp_path) as (runner, engine, busy):
         runner.upgrade(_REVISION)
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
         colors = _colors(engine, busy)
 
         with engine.begin() as conn:
             for step in _revision_module().UPGRADE_STEPS:
                 _run_step(conn, step)
 
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _colors(engine, busy) == colors
 
 
 def test_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_parent(tmp_path) as (runner, engine, _busy):
-        snapshot = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        snapshot = schema_snapshot(engine, exemptions={}, name_exemptions={})
         projects = _query(engine, "SELECT * FROM projects ORDER BY project_id")
 
         runner.upgrade(_REVISION)
         runner.downgrade(_PARENT)
 
         assert runner.current_revision() == _PARENT
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == snapshot
         assert _query(engine, "SELECT * FROM projects ORDER BY project_id") == projects

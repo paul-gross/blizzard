@@ -2,6 +2,8 @@
 declares them, with their named keys and indexes; a re-run over a store that already holds one of them creates only
 what is missing; and the downgrade, with one tenant only, drops both and restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -17,7 +19,7 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import _schema_snapshot
+from tests.migration_support_store_migrations import schema_snapshot
 
 pytestmark = [pytest.mark.component]
 
@@ -119,7 +121,7 @@ def test_the_downgrade_refuses_while_a_second_tenant_exists_naming_both(tmp_path
 
 def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path) -> None:
     with _at_the_move(tmp_path) as (runner, engine):
-        schema = _schema_snapshot(engine, exemptions={}, name_exemptions={})
+        schema = schema_snapshot(engine, exemptions={}, name_exemptions={})
 
         runner.upgrade(_IDENTITY)
         with engine.begin() as conn:
@@ -132,4 +134,4 @@ def test_with_one_tenant_the_downgrade_restores_the_store_exactly(tmp_path: Path
         runner.downgrade(_MOVE)
 
         assert not _tables(engine) & set(_TABLES)
-        assert _schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema
+        assert schema_snapshot(engine, exemptions={}, name_exemptions={}) == schema

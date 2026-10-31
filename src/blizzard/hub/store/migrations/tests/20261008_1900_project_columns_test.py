@@ -3,6 +3,8 @@ id; a landed repository row gains a null record name; nothing else changes; the 
 a runner holds other than one project; a run stopped after any step finishes as a single run does; the fill pages in
 bounded batches; and the downgrade restores the store exactly."""
 
+# pyright: standard
+
 from __future__ import annotations
 
 import json
@@ -24,8 +26,8 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import MIGRATIONS_DIR
 from tests.migration_support_project_columns_migration import _NOW, _T0, _insert, _query, _run_step
 from tests.migration_support_store_migrations import (
-    _schema_snapshot,
     assert_frozen_table_lacks_a_later_revisions_columns,
+    schema_snapshot,
 )
 
 _CLOSED_AT = "20261008_1720_tenant_deletion_closed_at"
@@ -108,7 +110,7 @@ def _shape(engine: sa.Engine) -> tuple[object, ...]:
         table: sorted((tuple(_labelled(v, labels) for v in row) for row in values), key=repr)
         for table, values in _all_rows(engine).items()
     }
-    return _schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
+    return schema_snapshot(engine, exemptions={}, name_exemptions={}), rows
 
 
 @pytest.mark.component
