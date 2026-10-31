@@ -70,6 +70,37 @@ def test_advance_refusals(reason, cause):
         assert answer.escalation is not None and answer.escalation.cause == cause
 
 
+def test_stale_advance_rechecks_moved_base_before_retrying():
+    forge = _ahead()
+    state = forge.repo(_WIDGET)
+
+    def move_base(**_kwargs):
+        state.base_tip = "later-tip"
+        state.heads["main"] = "later-tip"
+        raise ForgeRejected(ForgeRejected.STALE)
+
+    state.replies["advance_ref"] = [move_base]
+    first, sink = _land(forge, _fast_visit())
+    assert first.choice == "pending"
+    assert not sink.landings()
+    assert sink.markers()[f"fast-forward-candidate/{_WIDGET}/{_SUBMITTED}"] == _SUBMITTED
+
+    # The old candidate does not contain the moved base. A new comparison is required
+    # before the advance can be retried, even though the intent marker is durable.
+    state.compares[(_SUBMITTED, "later-tip")] = comparison(ComparisonStatus.DIVERGED)
+    state.compares[("later-tip", _SUBMITTED)] = comparison(ComparisonStatus.AHEAD)
+    state.replies.pop("advance_ref")
+    marker = _row(ArtifactKind.ASSET, f"fast-forward-candidate/{_WIDGET}/{_SUBMITTED}", _SUBMITTED)
+    second, recovered = _land(forge, replace(_fast_visit(), markers=(marker,)))
+    assert second.choice == "landed"
+    assert recovered.landings()[0].revision == _SUBMITTED
+    assert forge.named("advance_ref")[-1][1] == {
+        "branch": "main",
+        "expected": "later-tip",
+        "revision": _SUBMITTED,
+    }
+
+
 def test_merge_method_refusal_escalates_instead_of_waiting():
     forge = _forge()
     forge.repo(_WIDGET).replies["merge"] = [ForgeRejected(ForgeRejected.METHOD)]

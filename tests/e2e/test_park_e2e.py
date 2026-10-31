@@ -160,6 +160,69 @@ def test_parked_repository_holds_landing_order_until_person_merges(tmp_path: Pat
         _assert_flow_record_holds(hub_dir)
 
 
+def test_second_parked_repository_has_its_own_review_clock(tmp_path: Path) -> None:
+    bin_dir, workspace, origins = flow_world(tmp_path)
+    hub_dir = tmp_path / "hub"
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
+        _add_web(hub, forge_port)
+        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
+        for slug in (_WEB_REPO_NAME, REPO_NAME):
+            configured = hub.patch(
+                f"/api/repositories/{slug}", json={"landing_policy": "park", "park_timeout_hours": 1}
+            )
+            assert configured.status_code == 200, configured.text
+        chunk = pinned_chunk(hub, forge, "TWO-PARK-CLOCKS.md", (REPO_NAME, _WEB_REPO_NAME))
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+            tick_until(lambda: (_detail(hub, chunk).get("pending") or {}).get("kind") == "awaiting-merge")
+            first = forge.get(f"/repos/{_WEB_REPO}/pulls", params={"state": "open"}).json()
+            assert len(first) == 1
+            assert forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json() == []
+            merged = forge.put(f"/repos/{_WEB_REPO}/pulls/{first[0]['number']}/merge", json={"merge_method": "merge"})
+            assert merged.status_code == 200, merged.text
+            with sqlite3.connect(hub_dir / "data" / "hub.db") as conn:
+                conn.execute(
+                    "UPDATE artifacts SET produced_at = ? WHERE chunk_id = ? AND name LIKE ?",
+                    ((datetime.now(UTC) - timedelta(hours=2)).isoformat(), chunk, f"delivery-pr/{_WEB_REPO}/%"),
+                )
+                conn.execute(
+                    "UPDATE hub_node_poll SET last_polled_at = ?, next_poll_at = NULL "
+                    "WHERE chunk_id = ? AND kind = 'awaiting-merge'",
+                    ((datetime.now(UTC) - timedelta(minutes=3)).isoformat(), chunk),
+                )
+            _await(
+                lambda: len(forge.get(f"/repos/{REPO}/pulls", params={"state": "open"}).json()) == 1,
+                "second parked change",
+                timeout=155,
+            )
+            with sqlite3.connect(hub_dir / "data" / "hub.db") as conn:
+                rows = conn.execute(
+                    "SELECT name, produced_at FROM artifacts WHERE chunk_id = ? AND name LIKE 'delivery-pr/%'",
+                    (chunk,),
+                ).fetchall()
+                assert len(rows) == 2, rows
+                first_since = datetime.fromisoformat(next(at for name, at in rows if _WEB_REPO in name))
+                second_since = datetime.fromisoformat(next(at for name, at in rows if REPO in name))
+                assert second_since.replace(tzinfo=UTC) - first_since > timedelta(hours=1)
+            detail = _detail(hub, chunk)
+            assert detail["status"] == "delivering" and detail["pending"]["kind"] == "awaiting-merge", detail
+            second = forge.get(f"/repos/{REPO}/pulls", params={"state": "open"}).json()
+            merged_second = forge.put(
+                f"/repos/{REPO}/pulls/{second[0]['number']}/merge", json={"merge_method": "squash"}
+            )
+            assert merged_second.status_code == 200, merged_second.text
+            with sqlite3.connect(hub_dir / "data" / "hub.db") as conn:
+                conn.execute(
+                    "UPDATE hub_node_poll SET last_polled_at = ?, next_poll_at = NULL "
+                    "WHERE chunk_id = ? AND kind = 'awaiting-merge'",
+                    ((datetime.now(UTC) - timedelta(minutes=3)).isoformat(), chunk),
+                )
+            _await(lambda: _detail(hub, chunk)["status"] == "done", "both human merges", timeout=155)
+        landed = {row["repo"]: row["commit_hash"] for row in _detail(hub, chunk)["landed_repos"]}
+        assert landed == {_WEB_REPO: merged.json()["sha"], REPO: merged_second.json()["sha"]}
+        _assert_flow_record_holds(hub_dir)
+
+
 def test_park_timeout_then_person_merge_is_adopted_on_requeue(tmp_path: Path) -> None:
     bin_dir, workspace, origins = flow_world(tmp_path)
     hub_dir = tmp_path / "hub"
