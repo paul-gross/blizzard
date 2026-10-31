@@ -310,12 +310,12 @@ def test_no_tagged_registry_and_malformed_tag(tmp_path: Path, monkeypatch: pytes
 @pytest.mark.unit
 def test_workflow_flag_gate() -> None:
     workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github/workflows/gate.yml").read_text())
-    job = workflow["jobs"]["flag-lifecycle"]
-    assert job["name"] == "flag lifecycle"
-    assert job["if"] == "github.event_name == 'pull_request'"
+    job = workflow["jobs"]["repo-checks"]
     assert job["steps"][0]["with"]["fetch-depth"] == 0
-    detect, run = job["steps"][-1]["run"].splitlines()
-    assert job["steps"][-1]["env"] == {
+    (step,) = [step for step in job["steps"] if step.get("name") == "flag lifecycle (cut on a release cut, else pr)"]
+    assert "github.event_name == 'pull_request'" in step["if"]
+    detect, run = step["run"].splitlines()
+    assert step["env"] == {
         "BASE_SHA": "${{ github.event.pull_request.base.sha }}",
         "HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
     }

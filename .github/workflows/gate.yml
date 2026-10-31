@@ -37,17 +37,70 @@ jobs:
       - name: repo-path pointers (blizzard:pointer-check)
         run: uv run python scripts/repo_pointers.py check
 
-  markdown-format:
-    name: dprint
+  # Five checks of seconds each share one job, so the gate's opening burst holds one runner for them, not five. Every
+  # check runs once the setup has, whichever check failed before it, so one CI cycle reports every failure.
+  repo-checks:
+    name: spec drift + change notes + flag lifecycle + dprint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The change notes' `owed` range and the flag lifecycle's release tags may be arbitrarily far back.
+          fetch-depth: 0
+          persist-credentials: false
       - uses: jdx/mise-action@v2
         with:
           version: 2026.9.2
           install: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - id: sync
+        run: uv sync
       - name: dprint check (blizzard:markdown-format)
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
         run: mise x dprint@0.55.2 -- dprint check
+      # Regenerate the committed specs the frontend's openapi-ts client is built
+      # from, and fail on any uncommitted difference — the Python half of the
+      # client-drift check (bzh:generated-client). The TypeScript half runs in
+      # the `frontend` job.
+      - name: OpenAPI spec drift
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
+        run: |
+          uv run blizzard-export-openapi --out-dir openapi
+          git diff --exit-code -- openapi/ \
+            || { echo "::error::OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit."; exit 1; }
+      # Regenerate the committed contract documents under contracts/ and fail on
+      # any uncommitted difference.
+      - name: contract drift
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
+        run: |
+          uv run blizzard-export-contracts --out-dir contracts
+          git diff --exit-code -- contracts/ \
+            || { echo "::error::Contract documents under contracts/ are stale — run 'mise run export-contracts' and commit."; exit 1; }
+          # `git diff` ignores a document the exporter wrote that was never committed.
+          [ -z "$(git ls-files --others --exclude-standard -- contracts/)" ] \
+            || { echo "::error::Contract documents under contracts/ are untracked — run 'mise run export-contracts' and commit them."; git ls-files --others --exclude-standard -- contracts/; exit 1; }
+      - name: change notes (blizzard-change-notes check)
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' }}
+        run: uv run blizzard-change-notes check
+      # The range is judged against the pull request's base branch; a push has already been judged.
+      - name: change notes owed (blizzard-change-notes owed)
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' && github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run blizzard-change-notes owed --against "origin/$BASE_REF"
+      # A release cut is judged in `cut` mode, found by the same detector the upgrade rehearsal
+      # uses; flips are judged against the pull request's base.
+      - name: flag lifecycle (cut on a release cut, else pr)
+        if: ${{ !cancelled() && steps.sync.conclusion == 'success' && github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$(./scripts/release-cut-in-range.sh "$BASE_SHA" "$HEAD_SHA")" = "true" ]; then mode="cut"; else mode="pr"; fi
+          uv run blizzard-flag-lifecycle "$mode" --base "$BASE_SHA"
 
   # The tier is the gate's longest job, so it runs as parallel shards — each a disjoint,
   # stable slice of the collected suite (`BLIZZARD_TEST_SHARD`, tests/suite_plugin.py) — and
@@ -121,47 +174,6 @@ jobs:
           git diff --exit-code -- harness/client/wire/ \
             || { echo "::error::tests/harness/client/wire/ is stale — run 'npm run generate:wire' in tests/ and commit."; exit 1; }
 
-  openapi-drift:
-    name: OpenAPI spec drift
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - run: uv sync
-      # Regenerate the committed specs the frontend's openapi-ts client is built
-      # from, and fail on any uncommitted difference — the Python half of the
-      # client-drift check (bzh:generated-client). The TypeScript half runs in
-      # the `frontend` job once the web workspace lands.
-      - name: export specs and fail on drift
-        run: |
-          uv run blizzard-export-openapi --out-dir openapi
-          git diff --exit-code -- openapi/ \
-            || { echo "::error::OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit."; exit 1; }
-
-  contract-drift:
-    name: contract drift
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - run: uv sync
-      # Regenerate the committed contract documents under contracts/ and fail on
-      # any uncommitted difference.
-      - name: export contracts and fail on drift
-        run: |
-          uv run blizzard-export-contracts --out-dir contracts
-          git diff --exit-code -- contracts/ \
-            || { echo "::error::Contract documents under contracts/ are stale — run 'mise run export-contracts' and commit."; exit 1; }
-          # `git diff` ignores a document the exporter wrote that was never committed.
-          [ -z "$(git ls-files --others --exclude-standard -- contracts/)" ] \
-            || { echo "::error::Contract documents under contracts/ are untracked — run 'mise run export-contracts' and commit them."; git ls-files --others --exclude-standard -- contracts/; exit 1; }
-
   compat:
     name: compatibility against supported releases
     # Holds HEAD's committed surface documents to every supported release, and attributes a break to the
@@ -192,51 +204,6 @@ jobs:
           ARGS=(--commits "${RANGE_BASE}..${RANGE_HEAD}")
           case "$LINE_REF" in release/*) ARGS+=(--line "$LINE_REF") ;; esac
           uv run blizzard-compat "${ARGS[@]}"
-
-  change-notes:
-    name: change notes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - run: uv sync
-      - name: change notes (blizzard-change-notes check)
-        run: uv run blizzard-change-notes check
-      # The range is judged against the pull request's base branch; a push has already been judged.
-      - name: change notes owed (blizzard-change-notes owed)
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: uv run blizzard-change-notes owed --against "origin/$BASE_REF"
-
-  flag-lifecycle:
-    name: flag lifecycle
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - run: uv sync
-      # A release cut is judged in `cut` mode, found by the same detector the upgrade rehearsal
-      # uses; flips are judged against the pull request's base.
-      - name: flag lifecycle (cut on a release cut, else pr)
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [ "$(./scripts/release-cut-in-range.sh "$BASE_SHA" "$HEAD_SHA")" = "true" ]; then mode="cut"; else mode="pr"; fi
-          uv run blizzard-flag-lifecycle "$mode" --base "$BASE_SHA"
 
   frontend:
     name: eslint + vitest + client drift

@@ -9,11 +9,12 @@ file is the in-repo operator reference for running it.
 
 [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) is the reusable (`workflow_call`) merge gate, called by
 every trigger workflow: ruff format+check, pyright, the `blizzard:structural-gate` ast-grep scan
-(`contracts/ast-grep/`), the `dprint check` Markdown format (`gate / dprint`, `blizzard:markdown-format`), pytest
-(unit + component), OpenAPI spec drift, contract document drift (`gate / contract drift`), compatibility against the
-supported releases (`gate / compatibility against supported releases`, every trigger but a tag — see below), the change
-notes under `changes/` (`gate / change notes`, `check` on every trigger and `owed` on pull requests — see below), flag
-lifecycle (`gate / flag lifecycle`, PR-only), the Playwright package's static checks (`gate / playwright static`,
+(`contracts/ast-grep/`), pytest (unit + component), compatibility against the supported releases
+(`gate / compatibility against supported releases`, every trigger but a tag — see below), five quick checks sharing one
+job, `gate / spec drift + change notes + flag lifecycle + dprint` — OpenAPI spec drift, contract document drift, the
+change notes under `changes/` (`check` on every trigger and `owed` on pull requests — see below), flag lifecycle
+(PR-only), and the `dprint check` Markdown format (`blizzard:markdown-format`), each a step of its own that still runs
+when an earlier one fails — the Playwright package's static checks (`gate / playwright static`,
 `mise run playwright-check`: `tsc`, eslint with the bans a service spec keeps, and a regenerate-and-diff of the
 committed wire types; no daemon starts), the `web/` frontend checks (eslint, vitest, structural gate, bundle
 composition, story render, generated-client drift), and the Vale prose lint
@@ -75,7 +76,7 @@ change note they do not add — a changed contract document, a `!` commit and a 
 note touched; changes/README.md §When a note is owed has the rules. A push has already been judged and runs only
 `check`. `mise run change-notes` reproduces both locally, `owed` against `origin/master`.
 
-`gate / flag lifecycle` runs only on pull requests with a full tag history. It parses HEAD and the registries at valid
+The flag lifecycle step runs only on pull requests with a full tag history. It parses HEAD and the registries at valid
 release tags, reports each flag's release-derived lifetime and rule-labelled findings, and fails on lifecycle
 violations. It runs in `cut` mode on a release-cut pull request — detected by `scripts/release-cut-in-range.sh` over the
 pull request's base and head, the detector the upgrade rehearsal uses — and in `pr` mode otherwise, passing `--base` the
