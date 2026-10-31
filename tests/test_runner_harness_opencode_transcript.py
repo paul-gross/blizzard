@@ -684,10 +684,44 @@ def test_size_bytes_on_export_failure_is_none() -> None:
 
 
 @pytest.mark.unit
-def test_context_tokens_is_unconditionally_none() -> None:
-    source = OpenCodeTranscriptSource(FakeExporter({"sess-1": _export("sess-1", [])}), _error_factory())
+@pytest.mark.parametrize(("version", "expected"), [("1.18.32", 103954), ("1.18.33", 42832)])
+def test_context_tokens_from_real_root_exports(version: str, expected: int) -> None:
+    raw = (_PACKAGE_ROOT / "contracts" / "opencode" / version / "root_export.json").read_text()
+    session_id = json.loads(raw)["info"]["id"]
+    source = OpenCodeTranscriptSource(FakeExporter({session_id: raw}), _error_factory())
+    assert source.context_tokens(session_id, spawn_cwd=None) == expected
 
-    assert source.context_tokens("sess-1", spawn_cwd=None) is None
+
+@pytest.mark.unit
+def test_context_tokens_skips_summaries_empty_turns_and_child_sessions() -> None:
+    def assistant(mid: str, tokens: dict[str, Any], **metadata: Any) -> dict[str, Any]:
+        message = _assistant_message("root", mid, [])
+        message["info"].update(tokens=tokens, **metadata)
+        return message
+
+    before = {"input": 494, "output": 65, "reasoning": 0, "cache": {"read": 269952, "write": 0}}
+    summary = {"input": 79473, "output": 670, "reasoning": 39, "cache": {"read": 0, "write": 0}}
+    after = {"input": 8698, "output": 162, "reasoning": 148, "cache": {"read": 10112, "write": 3}}
+    zero = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    messages = [assistant("before", before), assistant("summary", summary, agent="compaction", summary=True)]
+    exporter = FakeExporter({"root": _export("root", messages), "child": _export("child", [], parent_id="root")})
+    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    assert source.context_tokens("root", spawn_cwd=None) == 270446
+    messages.extend([assistant("after", after), assistant("empty", zero), assistant("summary2", summary, summary=True)])
+    exporter.scripts["root"] = _export("root", messages)
+    # Consume the source's single-use export memo before reading the new export.
+    source = OpenCodeTranscriptSource(exporter, _error_factory())
+    assert source.context_tokens("root", spawn_cwd=None) == 18813
+    assert "child" not in exporter.calls
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw", [_export("root", []), "not json", _export("root", [_assistant_message("root", "a", [])])]
+)
+def test_context_tokens_unknown_without_a_readable_qualifying_turn(raw: str) -> None:
+    source = OpenCodeTranscriptSource(FakeExporter({"root": raw}), _error_factory())
+    assert source.context_tokens("root", spawn_cwd=None) is None
 
 
 # --- pinned corpus: the real fixtures, not only hand-built ones ---

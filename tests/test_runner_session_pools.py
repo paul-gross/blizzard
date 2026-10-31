@@ -23,7 +23,8 @@ from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
@@ -691,7 +692,9 @@ def _bounded(mode: SessionMode, rotate=None, model=None):  # type: ignore[no-unt
     )
 
 
-def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -> str:
+def _seed_head(
+    store, *, session_id: str = "sess-head", model: str = "sonnet", harness_id: str = CLAUDE_CODE_HARNESS_ID
+) -> str:
     """A pool head for `code` — a session-bearing lease stamping the pool name."""
     store.record_lease(
         NewLease(
@@ -712,7 +715,7 @@ def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -
         "lease_head",
         pid=1,
         process_start_time="t",
-        session=SessionReference(CLAUDE_CODE_HARNESS_ID, session_id),
+        session=SessionReference(harness_id, session_id),
         spawned_at=_NOW,
     )
     return session_id
@@ -800,6 +803,103 @@ def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, boun
     source = FakeTranscriptSource(context_tokens_by_session={head: tokens})
 
     assert _resolve(store, env, transcript_source=source) == (head if resumed else None)
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(("bound", "resumed"), [(100, False), (102, True)])
+def test_opencode_context_rotates_or_resumes_pool_head(tmp_path, bound, resumed):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
+    raw = json.dumps(
+        {
+            "info": {"id": head},
+            "messages": [
+                {
+                    "info": {
+                        "id": "msg",
+                        "sessionID": head,
+                        "role": "assistant",
+                        "tokens": {"input": 1, "output": 2, "reasoning": 0, "cache": {"read": 100, "write": 0}},
+                    },
+                    "parts": [],
+                }
+            ],
+        }
+    )
+
+    class Exporter:
+        def export(self, session_id: str) -> str:
+            assert session_id == head
+            return raw
+
+    source = OpenCodeTranscriptSource(Exporter(), TranscriptErrorFactory(get_logger("test")))
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=bound))
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t", pgid=9), verdict="pass"
+    )
+    harness.resolved_model = "sonnet"
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    ctx = replace(ctx, sessions=SessionResolver(leases=store, harnesses=registry, transcripts_wired=True))
+    target = ctx.sessions.resolve_resume("ch_1", env.node, "/ws/e1")
+    assert (target.session.session_id if target.session else None) == (head if resumed else None)
+
+
+@pytest.mark.component
+def test_opencode_rotation_reads_growth_after_resume_boundary(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store, harness_id=OPENCODE_HARNESS_ID)
+
+    class Exporter:
+        tokens = 50
+
+        def export(self, session_id: str) -> str:
+            return json.dumps(
+                {
+                    "info": {"id": session_id},
+                    "messages": [
+                        {
+                            "info": {
+                                "id": "msg",
+                                "sessionID": session_id,
+                                "role": "assistant",
+                                "tokens": {
+                                    "input": self.tokens,
+                                    "output": 1,
+                                    "reasoning": 0,
+                                    "cache": {"read": 0, "write": 0},
+                                },
+                            },
+                            "parts": [],
+                        }
+                    ],
+                }
+            )
+
+    exporter = Exporter()
+    source = OpenCodeTranscriptSource(exporter, TranscriptErrorFactory(get_logger("test")))
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t", pgid=9), verdict="pass"
+    )
+    harness.resolved_model = "sonnet"
+    registry = HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
+    resolver = SessionResolver(leases=store, harnesses=registry, transcripts_wired=True)
+    node = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=100)).node
+
+    assert source.tail_position(head, spawn_cwd=None) is not None
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session == SessionReference(OPENCODE_HARNESS_ID, head)
+    assert source.tail_position(head, spawn_cwd=None) is not None
+    exporter.tokens = 200
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session is None
+    exporter.tokens = 50
+    assert resolver.resolve_resume("ch_1", node, "/ws/e1").session == SessionReference(OPENCODE_HARNESS_ID, head)
 
 
 @pytest.mark.component
