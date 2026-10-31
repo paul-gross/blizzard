@@ -35,6 +35,9 @@ nodes:
         unfulfillable:
           description: A step no worker can complete.
           to: escalate
+        blocked:
+          description: Blocked on something outside the repository.
+          to: escalate
 """
 
 _ESCALATED = "escalated — requeue the chunk"
@@ -139,3 +142,13 @@ def test_a_requeue_supersedes_the_escalate_choice_and_re_runs_the_node(tmp_path:
     assert detail["status"] == "ready"
     assert detail["current_node_id"] == chunk.node_id
     assert detail.get("escalation") is None
+
+
+def test_a_second_escalate_choice_after_the_first_is_refused_not_answered_as_its_replay(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable")["outcome"] == _PARKED
+
+    refused = chunk.complete("blocked")
+
+    assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
+    assert chunk.rows(s.escalations) == 1

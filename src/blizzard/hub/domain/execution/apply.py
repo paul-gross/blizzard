@@ -270,6 +270,7 @@ class ApplyService:
                     graph.edge_for_choice(from_node.node_id, submission.choice),
                     targets,
                     epoch=submission.epoch,
+                    taken=EscalateChoice.of(from_node, submission.choice),
                 ),
             )
             # Unconditional and ahead of every dispatch fork, so none carries a `git_commit`
@@ -426,9 +427,9 @@ class ApplyService:
     ) -> ApplyResult:
         """Take the ``escalate`` choice — write an escalation instead of a transition, once per
         epoch. The worker's reasoning stays in the artifacts it produced."""
-        if re_escalates(facts, edge, targets, epoch=submission.epoch):
-            return ApplyResult.escalate_choice(from_node, submission.choice)
         draft = EscalateChoice.of(from_node, submission.choice)
+        if re_escalates(facts, edge, targets, epoch=submission.epoch, taken=draft):
+            return ApplyResult.escalate_choice(from_node, submission.choice)
         escalated = self._escalations.record_escalation(
             chunk.chunk_id,
             epoch=submission.epoch,

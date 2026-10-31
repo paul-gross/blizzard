@@ -7,8 +7,7 @@ plan and publish it as `reviewed-plan`; bounce for must-fix findings alone.
 ## Start from what is there
 
 Run `blizzard runner artifact list`: the newest `plan` asset is your subject
-(`blizzard runner artifact get plan
---content`), `plan-findings` an earlier round's record, `plan-finding-refutes` the
+(`blizzard runner artifact get plan --content`), `plan-findings` an earlier round's record, `plan-finding-refutes` the
 findings the plan node declined. With no `plan` asset, do not invent one: `blizzard runner ask`.
 
 ## Adjudicate refutations first

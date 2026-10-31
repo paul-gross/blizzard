@@ -91,15 +91,27 @@ def refuse_incoherent_attempt(
         raise OpenQuestion(f"question {asked[0].question_id} is open — answer it before the chunk moves on")
 
 
-def re_escalates(facts: ChunkFacts, edge: Edge | None, targets: MigrationTargets, *, epoch: int) -> bool:
+def re_escalates(
+    facts: ChunkFacts,
+    edge: Edge | None,
+    targets: MigrationTargets,
+    *,
+    epoch: int,
+    taken: EscalateChoice | None = None,
+) -> bool:
     """Whether taking ``edge`` at ``epoch`` would only re-escalate — answered ``escalated`` with
     nothing written: it crosses graphs to a target that still names no enabled graph, or it is
-    the ``escalate`` choice, and the attempt at ``epoch`` already escalated."""
+    the very ``escalate`` choice (``taken``) the attempt at ``epoch`` already escalated by."""
     if edge is None:
         return False
     if edge.escalates:
         escalation = facts.open_escalation_at(epoch)
-        return escalation is not None and escalation.cause == EscalationCause.ESCALATE_CHOICE
+        return (
+            taken is not None
+            and escalation is not None
+            and escalation.cause == EscalationCause.ESCALATE_CHOICE
+            and escalation.detail == taken.detail
+        )
     return edge.target_graph is not None and targets.cross_graph is None and facts.escalated_at(epoch)
 
 
