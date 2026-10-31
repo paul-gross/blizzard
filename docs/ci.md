@@ -31,7 +31,7 @@ seams-mocked and token-free, needing no real forge, no tokens, and no network be
 `gate / playwright static` is a required check of its own; an operator adds it to branch protection once the job exists
 on `master`.
 
-The pytest tier runs as four parallel shard jobs. The service tier below runs three Python shards and four Playwright
+The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and four Playwright
 shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/suite_plugin.py`) keeps one disjoint slice of the collected suite,
 chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A `*-result` job
 reports each sharded tier under its single check name — `gate / pytest (unit + component)`,

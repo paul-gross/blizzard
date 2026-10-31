@@ -113,8 +113,8 @@ jobs:
       # Every shard runs to the end, so one CI cycle reports every failure, not the first.
       fail-fast: false
       matrix:
-        shards: [4]
-        shard: [1, 2, 3, 4]
+        shards: [6]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
         with:
