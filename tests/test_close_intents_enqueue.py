@@ -267,10 +267,17 @@ def test_a_ref_carrying_only_a_failed_outcome_still_enqueues(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize("hub_step", [False, True])
-def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(tmp_path: Path, hub_step: bool) -> None:
+@pytest.mark.parametrize("closable", [False, True])
+def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
+    tmp_path: Path, hub_step: bool, closable: bool
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     stores = chunk_stores(hub.engine, hub.clock)
+    ref = WorkRef("default", "1")
+    decision = CloseEnqueueDecision(
+        closable=frozenset({ref} if closable else ()), skipped=frozenset(() if closable else {ref})
+    )
 
     def transition(target: str, transition_id: str) -> None:
         with stores.exclusive.locked([chunk_id]) as handle:
@@ -288,6 +295,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(tmp_pa
                     at=hub.clock.now(),
                     artifacts=[],
                     release_route=False,
+                    close_decision=decision,
                 )
             else:
                 assert (
@@ -303,6 +311,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(tmp_pa
                         runner_id="r1",
                         at=hub.clock.now(),
                         artifacts=[],
+                        close_decision=decision,
                     )
                     is None
                 )
@@ -310,7 +319,10 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(tmp_pa
     transition("later", "tr_later")
     assert _pending_intents(hub) == set()
     transition("done", "tr_done")
-    assert _pending_intents(hub) == {(chunk_id, "default", "1")}
+    assert _pending_intents(hub) == ({(chunk_id, "default", "1")} if closable else set())
+    with hub.engine.connect() as conn:
+        outcomes = conn.execute(hub_scoped(select(s.work_item_closures.c.outcome))).scalars().all()
+    assert outcomes == ([] if closable else ["skipped"])
 
 
 @pytest.mark.parametrize("hub_step", [False, True])
@@ -318,6 +330,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     stores = chunk_stores(hub.engine, hub.clock)
+    decision = CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset())
     with pytest.raises(RuntimeError), stores.exclusive.locked([chunk_id]) as handle:
         if hub_step:
             assert stores.hub_exec.record_hub_step_transition_locked(
@@ -333,6 +346,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                 at=hub.clock.now(),
                 artifacts=[],
                 release_route=False,
+                close_decision=decision,
             )
         else:
             assert (
@@ -348,6 +362,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                     runner_id="r1",
                     at=hub.clock.now(),
                     artifacts=[],
+                    close_decision=decision,
                 )
                 is None
             )

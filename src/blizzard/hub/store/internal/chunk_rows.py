@@ -622,7 +622,7 @@ def enqueue_close_intents(
     ).all()
     if not refs:
         return
-    listed = {WorkRef(row.source, row.ref) for row in refs}
+    listed = frozenset(WorkRef(row.source, row.ref) for row in refs)
     if close_decision.closable & close_decision.skipped or listed != close_decision.closable | close_decision.skipped:
         raise ValueError("close decision must partition every chunk work ref")
     terminal = {

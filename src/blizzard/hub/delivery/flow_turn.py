@@ -694,9 +694,9 @@ class TurnRunner:
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title — the FIRST ``work_ref``'s work item title, best-effort. A read failure or
-        a missing registry, pointer, or title degrades to ``None`` rather than breaking delivery."""
+        a missing pointer or title degrades to ``None`` rather than breaking delivery."""
         pointer = chunk.originating_ref()
-        if pointer is None or self._work_sources is None:
+        if pointer is None:
             return None
         source = self._work_sources.get(pointer.source)
         if source is None:
@@ -711,11 +711,11 @@ class TurnRunner:
         """One ``{label, reference}`` per ``work_ref``, with no forge read; ``reference`` is ``None`` off-forge."""
         items: list[dict[str, str | None]] = []
         for pointer in chunk.work_refs:
-            source = self._work_sources.get(pointer.source) if self._work_sources is not None else None
-            label = self._work_sources.label(pointer) if self._work_sources is not None else None
+            source = self._work_sources.get(pointer.source)
+            label = self._work_sources.label(pointer)
             items.append(
                 {
-                    "label": label if label is not None else f"{pointer.source}:{pointer.ref}",
+                    "label": label,
                     "reference": source.forge_reference(pointer) if source is not None else None,
                 }
             )
