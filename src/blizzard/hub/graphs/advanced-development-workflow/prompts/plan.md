@@ -13,10 +13,9 @@ means a first draft.
 ## What the plan must contain
 
 - **The branch**, named at the top. Read triage's declaration with
-  `blizzard runner artifact get branch --node triage
-  --content` and keep it, or revise it when the work's scope
-  changed it, under the project's guidance. With no declaration to read — the chunk skipped triage — derive the name
-  from that guidance. Every repo the build touches uses this one branch.
+  `blizzard runner artifact get branch --node triage --content` and keep it, or revise it when the work's scope changed
+  it, under the project's guidance. With no declaration to read — the chunk skipped triage — derive the name from that
+  guidance. Every repo the build touches uses this one branch.
 - **How each change is verified** — every planned change maps to a verification method the project already declares;
   where none covers it, the plan schedules building that method first. Every surface the change reaches that a person
   can drive earns the manual method the project's verifiability matrix declares for that surface, with the concrete
