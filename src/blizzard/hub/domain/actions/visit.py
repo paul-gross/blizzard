@@ -16,7 +16,7 @@ from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.domain.chunk.no_code import no_code_repos
+from blizzard.hub.domain.chunk.no_code import no_code_marker, no_code_repos
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
@@ -269,3 +269,10 @@ class Visit:
     def no_code_repos(self) -> frozenset[str]:
         """Current declarations resolved without a merge at this node."""
         return no_code_repos(self.markers, self.git_commits.payload(self.resolution.qualified, self.resolution))
+
+    def no_code_marker(self, repo: str) -> tuple[str, str]:
+        """The marker for this visit's resolved declaration of ``repo``."""
+        declaration = next(
+            row for row in self.git_commits.payload(self.resolution.qualified, self.resolution) if row["repo"] == repo
+        )
+        return no_code_marker(declaration)
