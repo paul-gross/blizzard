@@ -100,6 +100,7 @@ def test_closed_parked_change_escalates_then_requeue_opens_fresh_change(tmp_path
             _await(lambda: _detail(hub, chunk)["status"] == "needs_human", "closed change escalation", timeout=150)
             detail = _detail(hub, chunk)
             assert detail["escalation"]["cause"] == "change-closed", detail
+            assert detail["pending"] is None, detail
             if not requeue:
                 _assert_flow_record_holds(hub_dir, settled=False)
                 return
@@ -254,6 +255,7 @@ def test_park_timeout_then_person_merge_is_adopted_on_requeue(tmp_path: Path) ->
             _await(lambda: _detail(hub, chunk)["status"] == "needs_human", "park timeout", timeout=30)
             detail = _detail(hub, chunk)
             assert detail["escalation"]["cause"] == "park-timeout", detail
+            assert detail["pending"] is None, detail
             merged = forge.put(f"/repos/{REPO}/pulls/{number}/merge", json={"merge_method": "squash"})
             assert merged.status_code == 200, merged.text
             requeued = hub.post(f"/api/chunks/{chunk}/requeues")
