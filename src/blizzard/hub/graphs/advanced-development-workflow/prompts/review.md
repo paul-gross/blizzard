@@ -1,22 +1,18 @@
 # Review (advanced-development-workflow)
 
-You work a chunk's **review** node-step cold, in a fresh session that did not build it. Review the change against the
-work item's intent and the plan of record — the `reviewed-plan` asset
-(`blizzard runner artifact get reviewed-plan --content`). Review observes, build repairs: commit no fix here.
+Review cold against the work item and `reviewed-plan` asset (`blizzard runner artifact get reviewed-plan --content`).
+Review observes; build repairs. Commit no fix here.
 
 ## Start from what is there
 
-Run `blizzard runner artifact list` first. The `git_commit` artifacts name the branch and commit per repo — take the
-newest per repo and confirm each worktree is on it before reading the diff. An earlier round's `review-findings` asset
-makes this a re-visit (below). A `review-finding-refutes` asset — findings the build declined — is adjudicated first
-(below).
+Run `blizzard runner artifact list` first. Take the newest `git_commit` per repo and confirm each worktree is on it
+before reading the diff. Earlier `review-findings` make this a re-visit; adjudicate `review-finding-refutes` first.
 
 ## Adjudicate refutations first
 
-The newest `review-finding-refutes` asset is the whole record — answer every entry explicitly, matched by **anchor**,
-never id (ids restart at `F1` every submission): an **`accepted`** entry stays accepted, carried into your
-`review-findings` with its anchor; **accept** an `open` entry whose argument holds and never raise it again; **reject**
-one whose argument fails — re-raise the finding and answer the argument.
+The newest `review-finding-refutes` is the whole record. Answer every entry by **anchor**, not id (ids restart at `F1`):
+carry `accepted` entries into `review-findings`; accept a sound `open` argument and do not re-raise it; reject an
+unsound one, re-raising the finding and answering the argument.
 
 ## The axes
 
@@ -26,8 +22,7 @@ Judge each axis against the project's review criteria, naming the criterion a fi
 - **Architecture** — conformance to the project's architecture guidance.
 - **Design quality** — clarity, simplicity, fit with existing patterns.
 
-Use the workspace's review tooling where it has one, and exercise the change's end-to-end flows in the chunk's
-environment.
+Use workspace review tooling and exercise end-to-end flows in the chunk's environment.
 
 ### A re-visit reviews the delta
 
@@ -41,6 +36,13 @@ After a rebase or base merge a tip-to-tip diff is mostly base-branch motion: sco
 `git range-diff` across a rebase, `git show --remerge-diff` on a merge, the `pre-push-summary` or `resolve-report`
 naming what integration touched. Restore full per-axis width only when the change moved rather than was repaired: a new
 repo in the change-set, commits beyond repairs of the last round's findings, or an amended plan.
+
+## The `review-finding-delta` asset
+
+Submit `review-finding-delta` via `blizzard runner artifact create --name review-finding-delta`: JSON
+`{"entries": [...]}`. Dispositions: `fixed`, `refuted`, `deferred`. Example:
+`{"entries":[{"ref":"F1","disposition":"fixed"}]}`. Empty: `{"entries": []}`. Shape:
+`blizzard runner artifact get --scope system review/finding-format --content`.
 
 ## Submit
 

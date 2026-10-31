@@ -386,7 +386,7 @@
           "short_help": "Worker: durably declare a git-commit artifact for REPO."
         },
         "create": {
-          "help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node\nscope only. A submission *stages* the content, published into the envelope only on completion\n\u2014 read it back with ``artifact staged``. Empty stdin and any rejection exit\nnon-zero rather than silently losing the submission.",
+          "help": "Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node\nscope only. A submission *stages* the content, published into the envelope only on completion\n\u2014 read it back with ``artifact staged``. Empty stdin, a body that fails its asset's\nregistered format (``review-finding-delta``), and any rejection exit non-zero rather than\nsilently losing the submission.",
           "params": [
             {
               "help": "The `produces:` name this content is submitted for.",
