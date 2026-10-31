@@ -6,7 +6,7 @@ from typing import Protocol
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.hub.delivery.actions.landing.merge_on_checks import _pr_body, _pr_title
+from blizzard.hub.delivery.actions.landing.merge_on_checks import pr_body, pr_title
 from blizzard.hub.delivery.actions.landing.repo import (
     AwaitingMerge,
     Held,
@@ -91,9 +91,7 @@ class Park:
                         change = found[0]
                     else:
                         change = await repo.ask(
-                            repo.forge.changes.open_change(
-                                repo.branch, repo.base_branch, _pr_title(repo), _pr_body(repo)
-                            )
+                            repo.forge.changes.open_change(repo.branch, repo.base_branch, pr_title(repo), pr_body(repo))
                         )
                         _OPEN.reached()
             except (ForgeRejected, ForgeNotFound) as exc:

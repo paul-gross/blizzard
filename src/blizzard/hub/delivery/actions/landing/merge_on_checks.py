@@ -80,7 +80,7 @@ class MergeMethodRefused(Exception):
     """The forge does not permit the configured merge method."""
 
 
-def _pr_title(repo: RepoLanding) -> str:
+def pr_title(repo: RepoLanding) -> str:
     """The visit's feature title, or the branch when none resolved, truncated to :data:`_PR_TITLE_MAX`."""
     title = repo.run.visit.feature_title or repo.branch
     if len(title) > _PR_TITLE_MAX:
@@ -88,7 +88,7 @@ def _pr_title(repo: RepoLanding) -> str:
     return title
 
 
-def _pr_body(repo: RepoLanding) -> str:
+def pr_body(repo: RepoLanding) -> str:
     """A newly opened PR's body: the work items, the chunk id, and its board link."""
     visit = repo.run.visit
     parts = ["Delivered by blizzard."]
@@ -133,7 +133,7 @@ class PullRequest:
             try:
                 existing = await target.ask(
                     target.forge.changes.open_change(
-                        target.branch, target.base_branch, _pr_title(target), _pr_body(target)
+                        target.branch, target.base_branch, pr_title(target), pr_body(target)
                     )
                 )
             except (ForgeRejected, ForgeNotFound) as exc:
