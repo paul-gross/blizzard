@@ -275,9 +275,22 @@ class OpenCodeTranscriptSource:
         return len(raw.encode("utf-8"))
 
     def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
-        """Unconditionally unknown: which OpenCode token fields represent prompt-context size
-        is unverified until the compatibility proof establishes it (spec, "Forward reads")."""
-        del session_id, spawn_cwd
+        """Input plus cache reads and writes of the newest completed, non-summary root turn."""
+        del spawn_cwd
+        export = self._export(session_id, recovered=True)
+        if export is None:
+            return None
+        for message in reversed(export.messages):
+            info = message.info
+            tokens = info.tokens
+            if (
+                info.role == "assistant"
+                and info.raw.get("summary") is not True
+                and info.raw.get("agent") != "compaction"
+                and tokens is not None
+                and tokens.output_tokens > 0
+            ):
+                return tokens.input_tokens + tokens.cache_read_tokens + tokens.cache_write_tokens
         return None
 
     def _export(self, session_id: str, *, recovered: bool, fresh: bool = False) -> OpenCodeSessionExport | None:
