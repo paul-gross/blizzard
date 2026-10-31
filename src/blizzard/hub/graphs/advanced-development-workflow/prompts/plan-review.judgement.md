@@ -1,9 +1,9 @@
 # Plan review — judgement
 
 Render your gate verdict. Two assets must be published before it: `plan-findings` — how you adjudicated every
-refutation, and a severity for every finding — and `reviewed-plan`, the plan of record: your improvements folded in on
-`acceptable`, the subject plan verbatim on `must-fix`. Build implements `reviewed-plan`, so an `acceptable` verdict
-without it leaves build nothing to build.
+refutation, the path of each criteria document you read per gate, and a severity for every finding — and
+`reviewed-plan`, the plan of record: your improvements folded in on `acceptable`, the subject plan verbatim on
+`must-fix`. Build implements `reviewed-plan`, so an `acceptable` verdict without it leaves build nothing to build.
 
 Select `acceptable` when both gates hold with no must-fix finding. Select `must-fix` only for a finding that meets the
 severity anchor. A defect you can fix surgically yourself is never a reason to bounce — fold it and select `acceptable`.
