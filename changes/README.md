@@ -1,9 +1,9 @@
 # Change notes
 
 A change note is a small Markdown file committed beside the change it describes. `blizzard-change-notes check` (run by
-`mise run change-notes`, `mise run gate` and the `gate / change notes` check) refuses a malformed one and names the file
-and the rule it broke; `blizzard-change-notes owed --against <ref>` (run by `mise run change-notes` and, on pull
-requests, `gate / change notes`) fails a change that owes a note it does not add.
+`mise run change-notes`, `mise run gate` and the `gate / spec drift + change notes + flag lifecycle + dprint` check)
+refuses a malformed one and names the file and the rule it broke; `blizzard-change-notes owed --against <ref>` (run by
+`mise run change-notes` and, on pull requests, the same check) fails a change that owes a note it does not add.
 
 ## Where notes live
 
