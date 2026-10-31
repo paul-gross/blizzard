@@ -1,0 +1,10 @@
+extends: existence
+message: "'%s' names a UI surface — a shared seam states the contract, not the client that renders it."
+level: error
+scope: text
+ignorecase: true
+nonword: true
+tokens:
+  - '\b(?:panel|badge|card|tooltip)s?\b'
+  - '\blogin\s+page\b'
+  - '\bboard\b'
