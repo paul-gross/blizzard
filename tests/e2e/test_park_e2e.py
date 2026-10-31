@@ -12,6 +12,7 @@ import yaml
 
 from tests.e2e.flow_support import _graph, flow_runner_config, flow_world, ticking_runner
 from tests.e2e.test_flow_turns_e2e import _assert_flow_record_holds, _await, _detail, _turns
+from tests.e2e.test_landing_order_e2e import _WEB_REPO, _WEB_REPO_NAME, _add_web, _landed_order, _order, _terms
 from tests.fleet_launchers import REPO, run_forge, run_hub
 from tests.fleet_world import REPO_NAME
 from tests.support import free_port
@@ -49,6 +50,9 @@ def test_park_waits_past_node_timeout_then_records_human_merge(tmp_path: Path, m
             pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "open"})
             assert pulls.status_code == 200 and len(pulls.json()) == 1, pulls.text
             number = pulls.json()[0]["number"]
+            changed = hub.patch(f"/api/repositories/{REPO_NAME}", json={"landing_policy": "merge-on-checks"})
+            assert changed.status_code == 200, changed.text
+            assert _terms(hub_dir, chunk)[REPO_NAME][0] == "park"
             time.sleep(4)
             held = _detail(hub, chunk)
             assert held["status"] == "delivering" and held["pending"]["kind"] == "awaiting-merge", held
@@ -114,3 +118,42 @@ def test_closed_parked_change_escalates_then_requeue_opens_fresh_change(tmp_path
             )
             assert replacement.json()[0]["number"] != number
         _assert_flow_record_holds(hub_dir, settled=False)
+
+
+@pytest.mark.parametrize("parked_first", [True, False], ids=["library-parked", "consumer-parked"])
+def test_parked_repository_holds_landing_order_until_person_merges(tmp_path: Path, parked_first: bool) -> None:
+    bin_dir, workspace, origins = flow_world(tmp_path)
+    hub_dir = tmp_path / "hub"
+    forge_port, hub_port = free_port(), free_port()
+    with run_forge(bin_dir, origins, forge_port) as forge, run_hub(hub_dir, forge_port, hub_port) as hub:
+        _add_web(hub, forge_port)
+        parked = _WEB_REPO_NAME if parked_first else REPO_NAME
+        _order(hub, "default", _WEB_REPO_NAME, REPO_NAME)
+        assert hub.patch(f"/api/repositories/{parked}", json={"landing_policy": "park"}).status_code == 200
+        graph = _graph("ORDER-PARK.md", (REPO_NAME, _WEB_REPO_NAME), poll_interval=1, record_findings=False)
+        assert hub.post("/api/graphs", json={"definition_yaml": graph}).status_code == 201
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "ORDER-PARK.md", "body": "ordered park"})
+        assert issue.status_code == 201, issue.text
+        created = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert created.status_code == 201, created.text
+        chunk = created.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk}/promote").status_code == 202
+        with ticking_runner(flow_runner_config(tmp_path, workspace, bin_dir, hub_port)) as tick_until:
+            tick_until(lambda: (_detail(hub, chunk).get("pending") or {}).get("kind") == "awaiting-merge")
+            detail = _detail(hub, chunk)
+            assert [row["repo"] for row in detail["landed_repos"]] == ([] if parked_first else [_WEB_REPO])
+            parked_path = _WEB_REPO if parked_first else REPO
+            pulls = forge.get(f"/repos/{parked_path}/pulls", params={"state": "open"}).json()
+            assert len(pulls) == 1
+            other = REPO if parked_first else _WEB_REPO
+            assert len(forge.get(f"/repos/{other}/pulls", params={"state": "open"}).json()) <= 1
+            merged = forge.put(f"/repos/{parked_path}/pulls/{pulls[0]['number']}/merge", json={"merge_method": "merge"})
+            assert merged.status_code == 200, merged.text
+            _await(lambda: _detail(hub, chunk)["status"] == "done", "ordered parked landing", timeout=155)
+        detail = _detail(hub, chunk)
+        assert _landed_order(hub_dir, chunk) == [_WEB_REPO_NAME, REPO_NAME]
+        assert (
+            next(row for row in detail["landed_repos"] if row["repo"] == parked_path)["commit_hash"]
+            == merged.json()["sha"]
+        )
+        _assert_flow_record_holds(hub_dir)
