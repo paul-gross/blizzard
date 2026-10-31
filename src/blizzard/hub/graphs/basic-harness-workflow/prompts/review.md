@@ -29,10 +29,10 @@ passage or exposed defect); the round decides if it blocks.
 
 ## A re-visit reviews the delta
 
-An earlier round's `review-findings` asset makes this a re-visit; without one, read the whole change. Read the newest
-with `blizzard runner artifact get review-findings --content` and judge only the delta since the tip it recorded per
-repo — the whole change if none was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and
-accepted, re-reporting any that is not.
+Earlier `review-findings` make this a re-visit; otherwise read the whole change. Read the newest with
+`blizzard runner artifact get review-findings --content` and judge the delta since its recorded tip per repo — the whole
+change if no tip was recorded or it cannot be fetched. Confirm every prior finding fixed or refuted and accepted,
+re-reporting any that is not.
 
 Reworded prose changes how the text around it reads: read each changed passage within its whole section and follow
 anything it renames or re-routes.
