@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { BoardShell, type BoardLayout } from './board-shell/board-shell';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
-import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables } from 'fleet';
+import { type ChunkSummary, asyncState, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
@@ -55,7 +55,7 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, DeliveryBand, FlowRecord, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner],
+  imports: [BoardShell, ChunkDetail, DeliveryBand, FlowRecord, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, UnservedBanner, KitErrorLine],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })

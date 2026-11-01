@@ -25,30 +25,16 @@
   color: var(--text);
   overflow: hidden;
 }
-/* An operator action's failure reads between the header and the columns — the
-   action's own result, next to the control that fired it, not buried in a column.
-   One notice serves detach, pause, and resume alike. */
-.notice {
-  margin: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--red-dim);
-  border-left-width: 2px;
-  background: var(--overlay-20);
-  color: var(--red);
-  font-size: var(--fs-xs);
-}
-/* An outcome sits in the same slot as the failure notice and carries the same
+/* An outcome sits in the same slot as the failure line and carries the same
    weight, but reads cyan rather than red: a lost answer race is news the operator
    needs, not something that went wrong or that they should retry. */
 .outcome {
   margin: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--cyan);
-  background: var(--overlay-20);
-  color: var(--text);
-  font-size: var(--fs-xs);
+  color: var(--cyan);
+  font-size: var(--fs-sm);
 }
+/* An operator action's failure line (the kit's `fleet-kit-error-line`) and its outcome read between the header and the
+   columns, next to the control that fired them; one slot serves detach, pause, and resume alike. */
 .action-notice {
   margin: 6px;
   flex: none;

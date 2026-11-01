@@ -5,9 +5,7 @@
       <span class="user" data-testid="identity-username">{{ user }}</span>
     </span>
     @if (variant() === 'control') {
-      @if (logoutError(); as error) {
-        <span class="logout-error" role="alert" data-testid="identity-logout-error">{{ error }}</span>
-      }
+      <fleet-kit-error-line [message]="logoutError()" testid="identity-logout-error" />
       <fleet-kit-button class="logout" testid="identity-logout" [disabled]="logoutPending()" (click)="logout()">Log out</fleet-kit-button>
     }
   </div>

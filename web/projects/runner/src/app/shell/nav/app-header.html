@@ -6,9 +6,7 @@
   <!-- The identity block is display-only here, so a failed logout surfaces in
        the header's own alert — outside the menu panel, where the failure of its
        Log out item has to stay readable. -->
-  @if (logout.error(); as error) {
-    <span header-trailing class="logout-error" role="alert" data-testid="local-panel-logout-error">{{ error }}</span>
-  }
+  <fleet-kit-error-line header-trailing class="logout-error" [message]="logout.error()" testid="local-panel-logout-error" />
   <!-- A @defer block does not carry its root node's slot attribute through to
        projection, so the wrapper names the slot instead. `on immediate` fetches the
        menu right after first render, so the header is usable before it lands. -->

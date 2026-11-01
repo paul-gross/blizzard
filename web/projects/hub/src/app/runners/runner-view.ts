@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks } from 'fleet';
+import { KitAsyncState, type KitAsyncStateValue, KitButton, KitGlyph, KitPanel, KitSlotBar, RunnerConnection, SubscriptionBlocks, KitErrorLine } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { groupHostRows, type HostCard } from './host-rows.model';
 import { railVm } from './runner-rail.model';
@@ -20,7 +20,7 @@ import { StatusLight } from './status-light';
 @Component({
   selector: 'app-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitGlyph, KitPanel, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks],
+  imports: [KitAsyncState, KitButton, KitGlyph, KitPanel, KitSlotBar, LensLink, RouterLink, StatusLight, SubscriptionBlocks, KitErrorLine],
   templateUrl: './runner-view.html',
   styleUrl: './runner-view.css',
 })

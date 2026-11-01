@@ -1,6 +1,7 @@
 import type { SecretView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { referenceCount, secretBadges, secretCreate, secretRecordVm, secretRows } from './secrets.model';
 
 const USED: SecretView = {
@@ -27,7 +28,7 @@ describe('secretBadges', () => {
   });
 
   it('badges a retired secret as retired only', () => {
-    expect(secretBadges(RETIRED).map((b) => b.label)).toEqual(['retired']);
+    expect(secretBadges(RETIRED)).toEqual([{ label: 'retired', tone: lifecycleTone(true) }]);
   });
 
   it('badges nothing on a referenced secret', () => {

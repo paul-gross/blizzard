@@ -13,9 +13,7 @@
     <fleet-kit-back-bar label="Fleet" />
   </a>
   <div class="detail" data-testid="mobile-fleet-detail">
-    @if (actionError(); as error) {
-      <p class="notice" role="alert" data-testid="mobile-fleet-action-error">{{ error }}</p>
-    }
+    <fleet-kit-error-line class="notice" [message]="actionError()" testid="mobile-fleet-action-error" />
     @if (selection(); as sel) {
       @switch (sel.kind) {
         @case ('host') {

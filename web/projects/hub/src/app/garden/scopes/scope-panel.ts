@@ -11,6 +11,7 @@ import {
   type KitFact,
   KitFactList,
   KitTextInput,
+  KitErrorLine,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
@@ -60,7 +61,7 @@ export interface ScopePanelVm {
 @Component({
   selector: 'app-scope-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, LensLink, RouterLink],
+  imports: [FleetWhen, KitAsyncState, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitTextInput, LensLink, RouterLink, KitErrorLine],
   templateUrl: './scope-panel.html',
   styleUrl: './scope-panel.css',
 })

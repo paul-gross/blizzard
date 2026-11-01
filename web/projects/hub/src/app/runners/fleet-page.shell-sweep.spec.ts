@@ -180,7 +180,7 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
       imports: [FleetView],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
-    const pace = (slug: string, freshness: 'aging' | 'stale', label: string) => ({
+    const pace = (slug: string, freshness: 'aging' | 'stale', label: string, tag: string) => ({
       slug,
       name: `${slug} — a genuinely long subscription display name`,
       condition: null,
@@ -190,12 +190,13 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
       ],
       sampledAt: NOW,
       refreshedLabel: label,
+      refreshedTag: tag,
       freshness,
       missReason: null,
     });
     const solo: RunnerRow = {
       ...row('rn_01KXKVVF1J3D6H6VYZ3XYNSOLO', 'solo', null),
-      subscriptionPaces: [pace('aging', 'aging', 'refreshed 30m ago'), pace('stale', 'stale', 'refreshed 2h ago')],
+      subscriptionPaces: [pace('aging', 'aging', 'refreshed 30m ago', '[30m]'), pace('stale', 'stale', 'refreshed 2h ago', '[2h]')],
     };
     const groups = groupHostRows([solo], []);
     const list = fleetList(groups);

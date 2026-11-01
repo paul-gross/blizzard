@@ -17,9 +17,7 @@
     (delete)="delete.emit($event)"
   />
 
-  @if (actionError(); as err) {
-    <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
-  }
+  <fleet-kit-error-line class="action-notice" [message]="actionError()" testid="action-error" />
 
   @if (actionOutcome(); as outcome) {
     <p class="outcome action-notice" data-testid="action-outcome" role="status">{{ outcome }}</p>

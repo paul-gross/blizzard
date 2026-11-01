@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
+import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, KitErrorLine } from 'fleet';
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { anyHubReachable } from '../../core/panel-reads.model';
 import { injectRunnerSessionQuery, signedInUsername } from '../../core/identity/auth.query';
@@ -28,7 +28,7 @@ import { RunnerLogout } from '../../core/identity/runner-logout';
 @Component({
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, LocalIdentity, ViewportMenu],
+  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, LocalIdentity, ViewportMenu, KitErrorLine],
   templateUrl: './mobile-titlebar.html',
   styleUrl: './mobile-titlebar.css',
 })

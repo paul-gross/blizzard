@@ -25,9 +25,7 @@
       (reposition)="reposition($event)"
       (laneMove)="moveAcrossLanes($event)"
     />
-    @if (actionError(); as err) {
-      <p class="notice action-notice" data-testid="board-action-error" role="alert">{{ err }}</p>
-    }
+    <fleet-kit-error-line class="action-notice" [message]="actionError()" testid="board-action-error" />
     <app-chunk-detail
       class="dock"
       [class.closed]="!selected()"

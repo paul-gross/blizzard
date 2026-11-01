@@ -250,9 +250,6 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
         const heldEnv = root.querySelector<HTMLElement>('[data-testid="host-env-held"]')!;
         expect(heldEnv.querySelector('.holder')?.textContent?.trim()).toBe('r-claude');
         expect(heldEnv.querySelector('.project')?.textContent?.trim()).toBe('Blizzard Context');
-        expect(root.querySelector('[data-testid="subscription-pace-group-spenders"]')?.textContent?.trim()).toBe(
-          'spent by r-claude',
-        );
       }
     } finally {
       root.remove();

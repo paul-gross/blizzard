@@ -50,6 +50,9 @@ const DETAIL = {
   // A bare, unbroken token far wider than a 320px phone — the same defect
   // class `chunk-page-layout.shell-sweep.spec.ts`'s own long-repo-path case
   // proves against, here for the artifact key column instead.
+  open_prs: [],
+  closed_prs: [],
+  landed_repos: [],
   work_refs: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: null }],
   history: [
     {

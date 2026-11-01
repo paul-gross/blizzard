@@ -22,12 +22,6 @@
 .notice {
   flex: none;
   margin: 6px;
-  padding: 4px 6px;
-  border: 1px solid var(--red-dim);
-  border-left-width: 2px;
-  background: var(--overlay-20);
-  color: var(--red);
-  font-size: var(--fs-xs);
 }
 /* An outcome sits in the same slot but reads cyan, not red: losing an answer race
    is news — the question *is* answered — not something to retry. The desktop dock
@@ -35,12 +29,8 @@
 .outcome {
   flex: none;
   margin: 6px;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-left: 2px solid var(--cyan);
-  background: var(--overlay-20);
-  color: var(--text);
-  font-size: var(--fs-xs);
+  color: var(--cyan);
+  font-size: var(--fs-sm);
 }
 fleet-chunk-general-tab {
   flex: 1;

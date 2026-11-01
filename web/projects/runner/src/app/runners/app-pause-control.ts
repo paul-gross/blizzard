@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton } from 'fleet';
+import { errorMessage, injectPendingMutationVariables, KitBadge, KitButton, KitErrorLine } from 'fleet';
 
 import { localPauseMutationKey } from '../core/mutation-keys';
 import { injectLocalPauseMutation, injectRunnerDashboardQuery, type LocalPauseVars } from '../core/status.query';
@@ -18,7 +18,7 @@ import { pendingLocalPause } from './app-pause-control.model';
 @Component({
   selector: 'app-pause-control',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitButton],
+  imports: [KitBadge, KitButton, KitErrorLine],
   templateUrl: './app-pause-control.html',
   styleUrl: './app-pause-control.css',
 })

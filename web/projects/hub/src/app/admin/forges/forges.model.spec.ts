@@ -1,4 +1,5 @@
 import type { ForgeDetail, ForgeSummary } from 'fleet';
+import { lifecycleTone } from '../../core/lifecycle-tone';
 import { budgetFacts, FORGE_FIELDS, forgeCreate, forgeOptions, forgePickerFields, forgeRecordVm, forgeRows } from './forges.model';
 
 const GITHUB: ForgeSummary = {
@@ -14,7 +15,7 @@ describe('forge admin models', () => {
     expect(forgeRows([GITHUB, RETIRED], 'active')).toMatchObject([
       { key: 'frg_1', title: 'github', sub: ['GitHub', 'github', 'https://api.github.com'] },
     ]);
-    expect(forgeRows([GITHUB, RETIRED], 'retired')[0].badges).toEqual([{ label: 'retired', tone: 'idle' }]);
+    expect(forgeRows([GITHUB, RETIRED], 'retired')[0].badges).toEqual([{ label: 'retired', tone: lifecycleTone(true) }]);
   });
 
   it('omits optional empty create fields and leaves kind immutable on edit', () => {

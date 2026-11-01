@@ -58,9 +58,7 @@
           </span>
         </header>
 
-        @if (actionError(); as err) {
-          <p class="rp-error" data-testid="gardening-routine-panel-error">{{ err }}</p>
-        }
+        <fleet-kit-error-line [message]="actionError()" testid="gardening-routine-panel-error" />
 
         @if (panel.blockedReason !== null) {
           <p class="rp-blocked" data-testid="gardening-routine-blocked">

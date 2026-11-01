@@ -14,7 +14,5 @@
     }
   </ul>
   <fleet-kit-button testid="tenant-picker-logout" [disabled]="logoutPending()" (click)="logout.emit()">Log out</fleet-kit-button>
-  @if (logoutError(); as error) {
-    <p class="detail" role="alert" data-testid="tenant-picker-logout-error">{{ error }}</p>
-  }
+  <fleet-kit-error-line [message]="logoutError()" testid="tenant-picker-logout-error" />
 </div>

@@ -7,6 +7,7 @@ import {
   KitPanel,
   KitPanelHeader,
   type runnerApi,
+  KitErrorLine,
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
@@ -46,7 +47,7 @@ import { MachineDetailHeader } from './machine-detail-header';
 @Component({
   selector: 'app-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, KitPanelHeader, MachineDetailHeader, MachineDetailView],
+  imports: [KitPanel, KitPanelHeader, MachineDetailHeader, MachineDetailView, KitErrorLine],
   templateUrl: './chunk-detail.html',
   styleUrl: './chunk-detail.css',
 })

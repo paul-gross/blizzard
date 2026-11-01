@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { BoardHeader, FlagStore } from 'fleet/shell';
+import { BoardHeader, FlagStore, KitErrorLine } from 'fleet/shell';
 import { type StatCell } from 'fleet/runner-shell';
 import { PanelFilters } from '../../core/panel-filters';
 import { injectHostEnvironmentsQuery, injectHostRunnersQuery } from '../../core/host.query';
@@ -40,7 +40,7 @@ import { AppProfileMenu } from './app-profile-menu';
 @Component({
   selector: 'app-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AppProfileMenu, BoardHeader, LocalIdentity],
+  imports: [AppProfileMenu, BoardHeader, LocalIdentity, KitErrorLine],
   templateUrl: './app-header.html',
   styleUrl: './app-header.css',
 })

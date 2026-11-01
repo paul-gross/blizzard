@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type FindingView, type GardenProposalView, type KitAsyncStateValue } from 'fleet';
+import { injectPendingMutationVariables, compactRef, errorMessage, restingAsyncState, type FindingView, type GardenProposalView, type KitAsyncStateValue, KitErrorLine } from 'fleet';
 import { FleetProposalPanel, type ProposalEvidenceRowVm, type ProposalEvidenceTriage, type ProposalEvidenceVerb, type ProposalPanelVm, type ProposalWorkItemVm } from './proposal-panel';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectHubFindingsQuery } from '../core/finding.query';
@@ -49,7 +49,7 @@ import {
 @Component({
   selector: 'app-gardening-proposal-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetProposalPanel, GardeningProposalAcceptDialog, GardeningProposalPassDialog],
+  imports: [FleetProposalPanel, GardeningProposalAcceptDialog, GardeningProposalPassDialog, KitErrorLine],
   templateUrl: './gardening-proposal-detail.html',
   styleUrl: '../core/gardening-detail-host.css',
 })

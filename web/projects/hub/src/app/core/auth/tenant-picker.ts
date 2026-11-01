@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type MeResponse, type MeTenant, KitButton } from 'fleet/shell';
+import { type MeResponse, type MeTenant, KitButton, KitErrorLine } from 'fleet/shell';
 
 /**
  * The tenant picker — a person with several memberships, none of them this tab's tenant or the browser's last
@@ -11,7 +11,7 @@ import { type MeResponse, type MeTenant, KitButton } from 'fleet/shell';
 @Component({
   selector: 'app-tenant-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, KitErrorLine],
   templateUrl: './tenant-picker.html',
   styleUrl: './tenant-picker.css',
 })
