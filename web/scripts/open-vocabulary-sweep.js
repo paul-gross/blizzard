@@ -9,15 +9,14 @@
  * The template-switch sweep: every `@switch` block in a `.html` template under `projects/` carries
  * an `@default` branch of its own (a nested `@switch`'s `@default` does not count for its parent).
  *
- * The vocabulary-record sweep: a full table keyed by a generated vocabulary — a `Record` or a mapped
- * type over one (`{ [K in RunnerEventType]: … }`), a lookup that returns `undefined` for a value it
- * does not list — is built through `openLookup` instead. Lint
+ * The vocabulary-record sweep: a table keyed by a generated vocabulary — a `Record` or a mapped
+ * type over one (`{ [K in RunnerEventType]: … }`), `Partial` or optional or not, a lookup that
+ * returns `undefined` for a value it does not list — is built through `openLookup` instead. Lint
  * is not type-aware, so the sweep reads the key's written form: a generated vocabulary named
  * directly or through its namespace (`ChunkStatus`, `hubApi.EventLogSeverity`), a generated type's
  * vocabulary field (`HostRegistrationView['state']`), or a type alias declared in the same file as
  * either. The vocabularies and fields are read at run time from `fleet/src/lib/api/{hub,runner}/
- * types.gen.ts`. A `Partial<Record<…>>` or an optional mapped type is not full and passes; a table
- * written inside an `openLookup(…)` call, or declared by an unexported `const` this file reads only
+ * types.gen.ts`. A table written inside an `openLookup(…)` call, or declared by an unexported `const` this file reads only
  * inside `openLookup(…)` calls, is the helper's own table and passes. Scope is every `.ts` under
  * `projects/` except specs, stories, and the generated `fleet/src/lib/api/`.
  *
@@ -230,7 +229,7 @@ function onlyReadThroughHelper(node, sf) {
   return reads > 0 && !outside;
 }
 
-/** The lines of every full table in `source` keyed by a vocabulary and not built through the helper.
+/** The lines of every table in `source` keyed by a vocabulary and not built through the helper.
  * @param {string} source
  * @param {Vocabulary} vocabulary
  * @returns {{ line: number, text: string }[]}
@@ -246,19 +245,17 @@ function vocabularyRecords(source, vocabulary) {
   const hits = [];
   /** @param {ts.Node} node */
   const visit = (node) => {
-    const fullRecord =
+    const record =
       ts.isTypeReferenceNode(node) &&
       ts.isIdentifier(node.typeName) &&
       node.typeName.text === "Record" &&
       node.typeArguments?.length === 2 &&
-      namesVocabulary(node.typeArguments[0], vocabulary, aliases) &&
-      !(ts.isTypeReferenceNode(node.parent) && ts.isIdentifier(node.parent.typeName) && node.parent.typeName.text === "Partial");
-    const fullMapped =
+      namesVocabulary(node.typeArguments[0], vocabulary, aliases);
+    const mapped =
       ts.isMappedTypeNode(node) &&
-      node.questionToken?.kind !== ts.SyntaxKind.QuestionToken &&
       node.typeParameter.constraint !== undefined &&
       namesVocabulary(node.typeParameter.constraint, vocabulary, aliases);
-    if ((fullRecord || fullMapped) && !insideHelperCall(node) && !onlyReadThroughHelper(node, sf)) {
+    if ((record || mapped) && !insideHelperCall(node) && !onlyReadThroughHelper(node, sf)) {
       hits.push({ line: lineOf(source, node.getStart(sf)), text: node.getText(sf) });
     }
     ts.forEachChild(node, visit);
@@ -290,8 +287,8 @@ function assertTemplateSwitchDetectorWorks() {
 }
 
 /** Prove the vocabulary-record sweep catches a `Record` keyed in every written form and a mapped type
- * over a vocabulary, and passes the helper's form, a table read only through the helper, a `Partial`
- * or optional mapped type, and a non-vocabulary key (`bzh:case-pins-its-own-name`). */
+ * over a vocabulary, `Partial` and optional ones included, and passes the helper's form, a table read
+ * only through the helper, and a non-vocabulary key (`bzh:case-pins-its-own-name`). */
 function assertVocabularyRecordDetectorWorks() {
   const vocabulary = readVocabulary([
     [
@@ -319,6 +316,10 @@ function assertVocabularyRecordDetectorWorks() {
     "const A: { readonly [K in hubApi.ChunkStatus]: (k: K) => void } = {};\nA.ready;",
     "const A: { [K in ChunkStatus]: string } = {};\nconst B = openLookup(A, () => '');\nA.ready;",
     "export const A: { [K in ChunkStatus]: string } = {};\nconst B = openLookup(A, () => '');",
+    "const A: Partial<Record<ChunkStatus, string>> = {};",
+    "const A: Readonly<Partial<Record<ChunkStatus, string>>> = {};",
+    "const A: Partial<Record<HostRegistrationView['state'], string>> = {};",
+    "const A: { [K in ChunkStatus]?: string } = {};",
   ];
   for (const source of hits) {
     if (vocabularyRecords(source, vocabulary).length !== 1) {
@@ -331,12 +332,10 @@ function assertVocabularyRecordDetectorWorks() {
   const misses = [
     "const A = openLookup<ChunkStatus, string>({ ready: 'r' }, (raw) => raw);",
     "const A = openLookup(registry as Record<ChunkStatus, () => void>, () => () => undefined);",
-    "const A: Partial<Record<ChunkStatus, string>> = {};",
     "const A: Record<string, string> = {};",
     "const A: Record<Tone, string> = {};",
     "const A: Record<HostRegistrationView['host_id'], string> = {};",
     "type S = 'a' | 'b';\nconst A: Record<S, string> = {};",
-    "const A: { [K in ChunkStatus]?: string } = {};",
     "const A: { [K in Tone]: string } = {};",
     "const A: { [K in ChunkStatus]: string } = {};\nconst B = openLookup(A as Record<ChunkStatus, string>, () => '');",
     "const A: Record<ChunkStatus, string> = {};\nconst B = openLookup(A, () => '');",
@@ -366,7 +365,7 @@ function templateSwitchViolations(projectsDir = PROJECTS_DIR) {
   return lines;
 }
 
-/** Vocabulary-keyed full tables under `projects/` not built through the helper, one report line each.
+/** Vocabulary-keyed tables under `projects/` not built through the helper, one report line each.
  * @param {string} [projectsDir] absolute
  * @returns {string[]}
  */

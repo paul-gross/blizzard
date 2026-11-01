@@ -68,14 +68,22 @@ export interface ActiveRow {
 
 /** What the in-flight node is doing, per status — `choice` keys the verdict color
  * table in the styles (run reads cyan, the parked verbs amber-hi/red), `label` is the
- * text shown. Statuses absent here have no node mid-flight, so no row renders. */
-const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string }>> = {
-  running: { choice: 'run', label: 'run' },
-  delivering: { choice: 'run', label: 'run' },
-  waiting_on_human: { choice: 'waiting', label: 'waiting' },
-  needs_human: { choice: 'needs-human', label: 'needs human' },
-  paused: { choice: 'paused', label: 'paused' },
-};
+ * text shown. A `null` status has no node mid-flight, so no row renders — as does a status
+ * the client does not know. */
+const ACTIVE_VERBS = openLookup<ChunkStatus, { choice: string; label: string } | null>(
+  {
+    not_ready: null,
+    ready: null,
+    running: { choice: 'run', label: 'run' },
+    delivering: { choice: 'run', label: 'run' },
+    waiting_on_human: { choice: 'waiting', label: 'waiting' },
+    needs_human: { choice: 'needs-human', label: 'needs human' },
+    paused: { choice: 'paused', label: 'paused' },
+    stopped: null,
+    done: null,
+  },
+  () => null,
+);
 
 /** One history step's summed usage — every invocation (spawn/resume/judge)
  * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
@@ -277,7 +285,7 @@ export function deriveMultiGraph(rows: readonly HistoryRow[]): boolean {
  * already used, and that reuse is not this lag window.
  */
 export function deriveActiveRow(detail: ChunkDetail): ActiveRow | null {
-  const verb = ACTIVE_VERBS[detail.status];
+  const verb = ACTIVE_VERBS(detail.status);
   if (!verb || !detail.current_node_id) return null;
   const laggingBehind = (detail.history ?? []).some(
     (t) => t.epoch === detail.latest_epoch && t.to_node_id === detail.current_node_id,

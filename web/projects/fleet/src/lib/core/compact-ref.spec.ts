@@ -13,6 +13,15 @@ describe('compactRef', () => {
     expect(compactRef('zz_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('Z-3YJ9');
   });
 
+  it('renders a declared prefix with no mark of its own as the default', () => {
+    expect(compactRef('usr_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('U-3YJ9');
+  });
+
+  it('falls back to the default for a prefix named like an object prototype member', () => {
+    expect(compactRef('constructor_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('C-3YJ9');
+    expect(compactRef('toString_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('T-3YJ9');
+  });
+
   it('passes a non-prefixed name through unchanged', () => {
     expect(compactRef('e1')).toBe('e1');
   });

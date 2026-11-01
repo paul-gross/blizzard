@@ -12,7 +12,8 @@
  * This is the single owner of that rendering, through {@link compactRef}.
  */
 
-import { IdPrefix } from '../api/hub';
+import type { IdPrefix } from '../api/hub';
+import { openLookup } from './open-lookup';
 
 /** How one entity kind displays: its sigil and how much of the ULID body's tail to keep. */
 export interface EntityDisplay {
@@ -22,46 +23,63 @@ export interface EntityDisplay {
   readonly tailLength: number;
 }
 
-/**
- * The display registry, keyed by the wire's {@link IdPrefix} vocabulary. A prefix
- * absent here (or outside that vocabulary) falls back to its first letter,
- * uppercased, with a 4-char tail — so a new entity kind renders sanely before
- * anyone registers it.
- * Register a prefix when the default collides (`ch`/`cho` both default to `C`)
- * or the kind deserves a distincter mark.
- */
-export const ENTITY_DISPLAY: Readonly<Partial<Record<IdPrefix, EntityDisplay>>> = {
-  ch: { sigil: 'C', tailLength: 4 },
-  lease: { sigil: 'L', tailLength: 4 },
-  qn: { sigil: 'Q', tailLength: 4 },
-  tko: { sigil: 'T', tailLength: 4 },
-  gr: { sigil: 'G', tailLength: 4 },
-  nd: { sigil: 'N', tailLength: 4 },
-  dec: { sigil: 'D', tailLength: 4 },
-  cho: { sigil: 'CH', tailLength: 4 },
-  art: { sigil: 'A', tailLength: 4 },
-  tr: { sigil: 'TR', tailLength: 4 },
-  self: { sigil: 'S', tailLength: 4 },
-  fin: { sigil: 'F', tailLength: 4 },
-  /* `fins` (a finding set) would default to the same `F` as `fin` (a finding) above. */
-  fins: { sigil: 'FS', tailLength: 4 },
-  /* `gprop` (a garden proposal) would default to `G`, colliding with the registered `gr` (graphs). */
-  gprop: { sigil: 'GP', tailLength: 4 },
-  /* `rtn` (a routine) and `rn` (a runner) would both default to `R`; the runner keeps the bare letter. */
-  rtn: { sigil: 'RTN', tailLength: 4 },
-  rn: { sigil: 'R', tailLength: 4 },
-  /* `proj` (a project) would default to `P`; the full word reads as a project at a glance. */
-  proj: { sigil: 'PROJ', tailLength: 4 },
-  hs: { sigil: 'H', tailLength: 4 },
-};
-
 const DEFAULT_TAIL_LENGTH = 4;
 
-const ID_PREFIXES: ReadonlySet<string> = new Set<string>(Object.values(IdPrefix));
-
-function isIdPrefix(prefix: string): prefix is IdPrefix {
-  return ID_PREFIXES.has(prefix);
+/** The default display: the prefix's first letter, uppercased, with a 4-char tail. */
+function defaultDisplay(prefix: string): EntityDisplay {
+  return { sigil: prefix[0].toUpperCase(), tailLength: DEFAULT_TAIL_LENGTH };
 }
+
+/**
+ * The display registry, keyed by the wire's {@link IdPrefix} vocabulary. Every declared prefix
+ * has an entry; most are the default (first letter, uppercased, 4-char tail), and a prefix
+ * outside the vocabulary falls back to that same default — so a new entity kind renders sanely
+ * before anyone registers it.
+ * Give a prefix its own mark when the default collides (`ch`/`cho` both default to `C`)
+ * or the kind deserves a distincter mark.
+ */
+const ENTITY_DISPLAY = openLookup<IdPrefix, EntityDisplay>(
+  {
+    ch: { sigil: 'C', tailLength: 4 },
+    lease: { sigil: 'L', tailLength: 4 },
+    qn: { sigil: 'Q', tailLength: 4 },
+    tko: { sigil: 'T', tailLength: 4 },
+    gr: { sigil: 'G', tailLength: 4 },
+    nd: { sigil: 'N', tailLength: 4 },
+    dec: { sigil: 'D', tailLength: 4 },
+    cho: { sigil: 'CH', tailLength: 4 },
+    art: { sigil: 'A', tailLength: 4 },
+    tr: { sigil: 'TR', tailLength: 4 },
+    self: { sigil: 'S', tailLength: 4 },
+    fin: { sigil: 'F', tailLength: 4 },
+    /* `fins` (a finding set) would default to the same `F` as `fin` (a finding) above. */
+    fins: { sigil: 'FS', tailLength: 4 },
+    /* `gprop` (a garden proposal) would default to `G`, colliding with `gr` (graphs). */
+    gprop: { sigil: 'GP', tailLength: 4 },
+    /* `rtn` (a routine) and `rn` (a runner) would both default to `R`; the runner keeps the bare letter. */
+    rtn: { sigil: 'RTN', tailLength: 4 },
+    rn: { sigil: 'R', tailLength: 4 },
+    /* `proj` (a project) would default to `P`; the full word reads as a project at a glance. */
+    proj: { sigil: 'PROJ', tailLength: 4 },
+    hs: { sigil: 'H', tailLength: 4 },
+    mg: defaultDisplay('mg'),
+    usr: defaultDisplay('usr'),
+    seg: defaultDisplay('seg'),
+    wi: defaultDisplay('wi'),
+    scp: defaultDisplay('scp'),
+    dep: defaultDisplay('dep'),
+    apl: defaultDisplay('apl'),
+    ten: defaultDisplay('ten'),
+    inv: defaultDisplay('inv'),
+    repo: defaultDisplay('repo'),
+    wsrc: defaultDisplay('wsrc'),
+    frg: defaultDisplay('frg'),
+    flw: defaultDisplay('flw'),
+    fsub: defaultDisplay('fsub'),
+    htn: defaultDisplay('htn'),
+  },
+  defaultDisplay,
+);
 
 /**
  * `ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9` → `C-3YJ9`. An id with no underscore (env
@@ -74,9 +92,6 @@ export function compactRef(id: string): string {
   const prefix = id.slice(0, sep);
   const body = id.slice(sep + 1);
   if (body.length === 0) return id;
-  const display = (isIdPrefix(prefix) ? ENTITY_DISPLAY[prefix] : undefined) ?? {
-    sigil: prefix[0].toUpperCase(),
-    tailLength: DEFAULT_TAIL_LENGTH,
-  };
+  const display = ENTITY_DISPLAY(prefix);
   return `${display.sigil}-${body.slice(-display.tailLength)}`;
 }
