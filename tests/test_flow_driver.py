@@ -37,6 +37,7 @@ from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support import (
     TEST_HUB_ACTIONS,
     build_hub,
+    capture_statements,
     chunk_stores,
     default_tenant,
     hub_scoped,
@@ -840,10 +841,10 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
     world.complete(sound, build_sound)
     submit = FlowLineReconciler.submit
 
-    def flaky(self: FlowLineReconciler, standing):
+    def flaky(self: FlowLineReconciler, standing, artifacts):
         if standing.chunk.chunk_id == broken:
             raise RuntimeError("unreadable visit")
-        return submit(self, standing)
+        return submit(self, standing, artifacts)
 
     monkeypatch.setattr(FlowLineReconciler, "submit", flaky)
 
@@ -851,3 +852,21 @@ def test_a_visit_that_raises_is_skipped_and_the_tenants_other_visits_still_submi
 
     assert result.failed == () and result.reconciled == (world.tenant,)
     assert world.submissions(broken) == [] and len(world.submissions(sound)) == 1
+
+
+def _artifact_reads(world: World) -> int:
+    with capture_statements(world.hub.engine) as statements:
+        world.tick()
+    return sum(1 for statement, _ in statements if " FROM artifacts" in statement)
+
+
+def test_a_reconcile_pass_reads_artifacts_in_a_constant_number_of_statements(tmp_path: Path) -> None:
+    reads = []
+    for n in (1, 3):
+        (tmp_path / str(n)).mkdir()
+        world = World(tmp_path / str(n))
+        for i in range(n):
+            chunk, build = world.mint(ref=f"r{i}")
+            world.complete(chunk, build)
+        reads.append(_artifact_reads(world))
+    assert reads[0] == reads[1]

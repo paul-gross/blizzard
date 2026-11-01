@@ -19,6 +19,7 @@ from sqlalchemy import insert, select
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
@@ -510,3 +511,24 @@ def test_a_chunk_that_absorbed_another_runs_work_ref_still_reads_its_own_identit
     rows = hub.services.garden_run.list_runs(since=_SINCE, until=_UNTIL)
     by_chunk = {r.chunk_id: r for r in rows}
     assert by_chunk[survivor_id].routine_name == "survivor-routine"
+
+
+def test_run_delta_answers_every_sets_finding_ids_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    hub = build_hub(tmp_path)
+    chunk_id = _run(hub, _routine(hub))
+    for i in range(5):  # three batches of finding sets under the lowered cap
+        findings = [{"op": "add", "class": "a", "locus": "a.py:1", "summary": "s", "introduced": None}]
+        _seed_delivery(hub, chunk_id, f"fins_{i}", artifact_id=f"art_{i}", findings=findings)
+        _seed_add_fact(hub, f"fin_{i}", finding_set_id=f"fins_{i}")
+
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+    delta = hub.services.garden_run.run_delta(chunk)
+
+    assert delta is not None
+    assert [(s.finding_set_id, s.added[0].finding_id) for s in delta.sets] == [
+        (f"fins_{i}", f"fin_{i}") for i in range(5)
+    ]

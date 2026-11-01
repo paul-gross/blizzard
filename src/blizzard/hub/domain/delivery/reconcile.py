@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.no_code import no_code_repos
@@ -137,11 +138,26 @@ class FlowLineReconciler:
         ]
         facts_by_id = self._facts.load_facts_for(live)
         in_line = {(sub.chunk_id, sub.node_id, sub.epoch) for sub in open_subs}
-        submitted = [
-            sub
+        visits = [
+            standing
             for standing in self._standing(facts_by_id)
             if (standing.chunk.chunk_id, standing.node.node_id, standing.epoch) not in in_line
-            and (sub := self._submit_isolated(standing, facts_by_id[standing.chunk.chunk_id])) is not None
+        ]
+        # One bounded read for every visit about to submit; an actionless visit only escalates, so reads nothing.
+        artifacts_by_id = self._artifacts.load_artifacts_for(
+            [standing.chunk.chunk_id for standing in visits if standing.node.action is not None]
+        )
+        submitted = [
+            sub
+            for standing in visits
+            if (
+                sub := self._submit_isolated(
+                    standing,
+                    facts_by_id[standing.chunk.chunk_id],
+                    artifacts_by_id.get(standing.chunk.chunk_id, []),
+                )
+            )
+            is not None
         ]
         withdrawn, still_open = self._close_departed(open_subs, facts_by_id)
         arrivals = [sub.arrival for sub in (*still_open, *submitted)]
@@ -293,28 +309,29 @@ class FlowLineReconciler:
             standing.append(_Standing(chunk, graph, node, facts.latest_epoch() or 0, entered_at))
         return sorted(standing, key=lambda s: (s.entered_at, s.chunk.chunk_id))
 
-    def _submit_isolated(self, standing: _Standing, facts: ChunkFacts) -> Submission | None:
+    def _submit_isolated(
+        self, standing: _Standing, facts: ChunkFacts, artifacts: Sequence[StoredArtifact]
+    ) -> Submission | None:
         """Submit one visit, logging and skipping it when it raises, so one chunk's failure never holds back the
         rest of the tenant's line. A closed tenant still ends the pass."""
         try:
             if standing.node.action is None:
                 self._escalate_actionless(standing.chunk, facts, standing.graph)
                 return None
-            return self.submit(standing)
+            return self.submit(standing, artifacts)
         except TenantClosed:
             raise
         except Exception:
             _log.exception("flow reconcile skipped a visit", chunk_id=standing.chunk.chunk_id)
             return None
 
-    def submit(self, standing: _Standing) -> Submission | None:
+    def submit(self, standing: _Standing, artifacts: Sequence[StoredArtifact]) -> Submission | None:
         """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
         moved — or refuse it, routing its failure choice, when it cannot name them."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
         generation = self._generation(chunk.chunk_id, node.node_id, epoch)
         if generation is None:
             return None
-        artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
         resolved = resolve_visit(
             artifacts,
             action=node.action,

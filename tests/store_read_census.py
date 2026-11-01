@@ -2398,6 +2398,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         ),
     ),
     (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
+    (IReadChunkArtifactsRepository, "load_artifacts_for"): lambda w: w.read.artifacts.load_artifacts_for(
+        [w.chunk_artifacts]
+    ),
     (IReadChunkArtifactsRepository, "delivery_sources_for"): lambda w: w.read.artifacts.delivery_sources_for(
         [w.chunk_artifacts]
     ),
@@ -2424,7 +2427,6 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadChunkDecisionsRepository, "live_decisions_for"): lambda w: w.read.decisions.live_decisions_for(
         [w.chunk_decision_1, w.chunk_decision_2]
     ),
-    (IReadChunkDeliveryRepository, "landed_repos"): lambda w: w.read.delivery.landed_repos(w.chunk_delivery_a),
     (IReadChunkDeliveryRepository, "count_landed_since"): lambda w: w.read.delivery.count_landed_since(
         "acme/widget", _HUB_BASE
     ),

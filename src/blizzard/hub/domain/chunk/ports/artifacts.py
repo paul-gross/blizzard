@@ -20,6 +20,12 @@ class IReadChunkArtifactsRepository(Protocol):
         """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
         ...
 
+    def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:
+        """`load_artifacts`' bulk sibling (`bzh:bulk-reconstitution`) — each chunk's artifact rows
+        in the singular's `(seq, artifact_id)` order, batched by caller-supplied ids. A chunk with no
+        artifact rows is absent from the result; read it with `.get(chunk_id, [])` for the singular's `[]`."""
+        ...
+
     def delivery_sources_for(self, chunk_ids: list[str]) -> dict[str, DeliverySources]:
         """Narrowed plural: git commits, merged/no-code/PR/external-merge markers and historical
         per-repo landing hashes and PR closures, batched by caller-supplied ids."""

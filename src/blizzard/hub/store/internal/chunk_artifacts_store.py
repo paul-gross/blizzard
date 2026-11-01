@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import or_
+from sqlalchemy import Row, or_
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import IClock
@@ -52,6 +52,23 @@ def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
     ):
         return None
     return PrMarker(name=name, epoch=epoch, repo=payload["repo"], number=payload["number"], url=payload["url"])
+
+
+def _stored_artifact(a: Row[Any]) -> StoredArtifact:
+    """One full ``artifacts`` row as the domain's :class:`StoredArtifact`."""
+    return StoredArtifact(
+        kind=ArtifactKind(a.kind),
+        name=a.name,
+        data=a.data,
+        repo=a.repo,
+        forge=a.forge,
+        artifact_id=a.artifact_id,
+        chunk_id=a.chunk_id,
+        node_id=a.node_id,
+        node_name=a.node_name,
+        epoch=a.epoch,
+        produced_at=a.produced_at,
+    )
 
 
 class ChunkArtifactsStore:
@@ -152,25 +169,25 @@ class ChunkArtifactsStore:
     def load_artifacts(self, chunk_id: str) -> list[StoredArtifact]:
         with self._store.read("load_artifacts") as conn:
             return [
-                StoredArtifact(
-                    kind=ArtifactKind(a.kind),
-                    name=a.name,
-                    data=a.data,
-                    repo=a.repo,
-                    forge=a.forge,
-                    artifact_id=a.artifact_id,
-                    chunk_id=a.chunk_id,
-                    node_id=a.node_id,
-                    node_name=a.node_name,
-                    epoch=a.epoch,
-                    produced_at=a.produced_at,
-                )
+                _stored_artifact(a)
                 for a in conn.execute(
                     self._store.select(s.artifacts)
                     .where(s.artifacts.c.chunk_id == chunk_id)
                     .order_by(s.artifacts.c.seq, s.artifacts.c.artifact_id)
                 ).all()
             ]
+
+    def load_artifacts_for(self, chunk_ids: Sequence[str]) -> dict[str, list[StoredArtifact]]:
+        grouped: dict[str, list[StoredArtifact]] = {}
+        with self._store.read("load_artifacts_for") as conn:
+            for batch in id_batches(chunk_ids):
+                for a in conn.execute(
+                    self._store.select(s.artifacts)
+                    .where(s.artifacts.c.chunk_id.in_(batch))
+                    .order_by(s.artifacts.c.chunk_id, s.artifacts.c.seq, s.artifacts.c.artifact_id)
+                ).all():
+                    grouped.setdefault(a.chunk_id, []).append(_stored_artifact(a))
+        return grouped
 
     def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
         with self._store.read("latest_artifact") as conn:

@@ -46,6 +46,7 @@ from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_gr
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     build_hub,
+    capture_statements,
     chunk_stores,
     count_queries,
     hub_store_connections,
@@ -656,3 +657,27 @@ def test_load_facts_for_query_count_scales_with_batch_count_not_id_count(
     assert set(result) == set(ids)
     for chunk_id in ids:
         assert result[chunk_id] == store.facts.load_facts(chunk_id)
+
+
+def test_load_facts_for_batches_the_graph_node_read_when_chunks_pin_more_graphs_than_a_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    store, engine, _clock = seeded_chunk_stores(tmp_path)
+    ids = []
+    for i in range(5):  # five distinct pinned graphs under a cap of two
+        graph_id = f"gr_extra_{i}"
+        with engine.begin() as conn:
+            seed_graph(conn, graph_id, at=T0)
+            _seed_node(conn, graph_id, f"nd_extra_{i}", executor="hub")
+        _mint(store, f"ch_extra_{i}", graph_id=graph_id)
+        store.queue.record_promote(f"ch_extra_{i}", at=T0)
+        ids.append(f"ch_extra_{i}")
+
+    with capture_statements(engine) as statements:
+        loaded = store.facts.load_facts_for(ids)
+    node_reads = [p for statement, p in statements if "FROM graph_nodes" in statement]
+
+    assert len(node_reads) == 3  # ceil(5 / 2)
+    assert loaded == {chunk_id: store.facts.load_facts(chunk_id) for chunk_id in ids}
+    assert store.facts.load_all_facts()["ch_extra_4"] == loaded["ch_extra_4"]
