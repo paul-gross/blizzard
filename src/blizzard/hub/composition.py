@@ -1082,6 +1082,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         links=stores.project_links,
         projects=stores.projects,
         work_sources=work_sources,
+        movement=chunk_movement,
+        decisions=chunk_decisions,
+        graphs=graph_store,
     )
     turns = TurnRunner(
         flows=stores.flows,
