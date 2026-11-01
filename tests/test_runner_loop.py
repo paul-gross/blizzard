@@ -2214,7 +2214,7 @@ def _preamble_config(*, runner_prompt: str = "BLIZZARD-FRAMING"):
     )
 
 
-def _first_build_spawn(store, hub, provider, env, *, session, at, config=None):
+def _first_build_spawn(store, hub: FakeHub, provider, env, *, session, at, config=None):
     """FILL's first arrival at `build` — a fresh session, nothing to resume."""
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -2236,7 +2236,7 @@ def _first_build_spawn(store, hub, provider, env, *, session, at, config=None):
     return harness
 
 
-def _reenter_node(store, hub, provider, env, *, session, pid, at, config=None):
+def _reenter_node(store, hub: FakeHub, provider, env, *, session, pid, at, config=None):
     """One ADVANCE + PULL cycle re-entering the envelope's node on its own prior session."""
     hub.envelopes["ch_1"] = env
     hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.NEXT, next_envelope=env)]

@@ -43,6 +43,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -67,7 +68,7 @@ def _build_envelope(chunk="ch_1"):
 
 
 def _seed_running_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     chunk="ch_1",
     lease="lease_1",
@@ -116,7 +117,7 @@ def _write_stdout(stdout_dir, lease_id, generation, content="<envelope>") -> Non
     (stdout_dir / f"{lease_id}.{generation}.stdout").write_text(content)
 
 
-def _usage_payloads(store):
+def _usage_payloads(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 

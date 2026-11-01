@@ -11,7 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from tests.support import build_hub, seed_session, seed_user
+from tests.support import HubHarness, build_hub, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -86,7 +86,7 @@ def _record(
     }
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
+def _ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])

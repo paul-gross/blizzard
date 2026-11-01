@@ -23,7 +23,16 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.overload import BACKOFF_LIMIT, backoff_delay
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.loop.steps import Advance
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_envelope, make_store
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_context,
+    make_envelope,
+    make_store,
+)
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +45,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_exited_lease(store):
+def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     """A build lease spawned into env e1; the worker has already exited (no probe entry)."""
     store.record_lease(
         NewLease(
@@ -60,7 +69,7 @@ def _seed_exited_lease(store):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store, harness, *, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, harness, *, clock=None):
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     return hub, make_context(

@@ -18,7 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
 from blizzard.tools.invariants import hub_invariants
-from tests.support import build_hub, ingest, report_lease
+from tests.support import HubHarness, build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -27,7 +27,7 @@ def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a"]}
 
 
-def _claim_and_lease(hub, chunk_id: str) -> None:
+def _claim_and_lease(hub: HubHarness, chunk_id: str) -> None:
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
     assert resp.status_code == 201, resp.text
     report_lease(hub, chunk_id, epoch=1, seq=1)

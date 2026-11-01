@@ -21,7 +21,14 @@ from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFile
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeProvider, FakeTranscriptSource, make_store, single_workspace
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProvider,
+    FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
+    make_store,
+    single_workspace,
+)
 
 pytestmark = pytest.mark.component
 
@@ -31,11 +38,11 @@ _CHUNK_ID = "ch_a"
 _NODE_ID = "nd_build"
 
 
-def _usage_payloads_by_lease(store):
+def _usage_payloads_by_lease(store: SqlAlchemyRunnerStore):
     return {b.lease_id: json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED}
 
 
-def _seed_lease(store) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_a",
@@ -50,7 +57,7 @@ def _seed_lease(store) -> None:
     )
 
 
-def _recorder(store, registry) -> UsageRecorder:
+def _recorder(store: SqlAlchemyRunnerStore, registry) -> UsageRecorder:
     return UsageRecorder(
         leases=store,
         usage=store,

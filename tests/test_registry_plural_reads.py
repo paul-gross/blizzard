@@ -12,7 +12,7 @@ import pytest
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.runners import hosts_of
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import build_hub, count_queries, seed_runner
+from tests.support import HubHarness, build_hub, count_queries, seed_runner
 
 pytestmark = pytest.mark.component
 
@@ -175,7 +175,7 @@ def test_hosts_of_reads_the_named_hosts_only_and_a_missing_host_falls_back(
     assert {r["runner_id"]: r["host_id"] for r in listed} == {"rn_1": first, "rn_2": second}
 
 
-def _runner_ids(hub, host_id: str) -> list[str]:
+def _runner_ids(hub: HubHarness, host_id: str) -> list[str]:
     return hub.client.get(f"/api/hosts/{host_id}").json()["runner_ids"]
 
 

@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, emitted_events, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
 
-def _claim(hub) -> tuple[str, str]:
+def _claim(hub: HubHarness) -> tuple[str, str]:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(
@@ -49,7 +49,7 @@ def _usage_payload(
 
 
 def _push_usage(
-    hub,
+    hub: HubHarness,
     *,
     chunk_id: str,
     node_id: str,

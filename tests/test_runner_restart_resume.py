@@ -26,6 +26,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     make_stores,
@@ -39,7 +40,16 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    pid=100,
+    start="start-100",
+    session="sess-a",
+    epoch=1,
+):
     """A build lease spawned into env e1 with a live worker, plus its binding."""
     store.record_lease(
         NewLease(

@@ -51,6 +51,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -69,7 +70,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
+def _service(store: SqlAlchemyRunnerStore, *, clock=None, harness=None, probe=None, workspace_root=""):
     return TakeoverService(
         clock or FixedClock(_NOW),
         probe or FakeProbe(),
@@ -85,7 +86,7 @@ def _service(store, *, clock=None, harness=None, probe=None, workspace_root=""):
     )
 
 
-def _two_workspace_service(store):
+def _two_workspace_service(store: SqlAlchemyRunnerStore):
     service = _service(store)
     service._workspaces = WorkspaceRegistry(
         [
@@ -97,7 +98,7 @@ def _two_workspace_service(store):
 
 
 def _seed_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     chunk="ch_1",
     lease="lease_1",
@@ -139,7 +140,7 @@ def _seed_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:
+def _open_scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> TakeoverOpenScope:
     """The edge resolution `chunk_scope.resolved_takeover_open_scope` performs in production."""
     return TakeoverOpenScope(
         chunk_id=chunk_id,
@@ -154,7 +155,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:
     )
 
 
-def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:
+def _close_scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> TakeoverCloseScope:
     """The edge resolution `chunk_scope.resolved_takeover_close_scope` performs in production."""
     return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=store.open_takeover_for_chunk(chunk_id))
 
@@ -682,7 +683,7 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
-def _force_taken_over(store):
+def _force_taken_over(store: SqlAlchemyRunnerStore):
     """An open forced takeover over an active lease, reached through the service's own verb."""
     probe = FakeProbe(alive={(100, "start-100")})
     _seed_lease(store, pid=100)
@@ -846,6 +847,6 @@ def test_takeover_env_withholds_a_capturing_bindings_telemetry_variables(
     assert not [n for n in opened.env if n.startswith(("OTEL_", "CLAUDE_CODE_"))]
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

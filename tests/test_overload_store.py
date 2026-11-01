@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.leases.overload import OverloadExit
-from tests.runner_fakes import make_store
+from blizzard.runner.leases.overload import InvocationKind, OverloadExit
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 
 pytestmark = pytest.mark.unit
 
@@ -25,13 +25,13 @@ def _store(tmp_path: Path):
 
 
 def _record(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     lease_id: str = "lease_1",
     chunk_id: str = "ch_1",
     epoch: int = 1,
     generation: int = 1,
-    invocation_kind: str = "worker",
+    invocation_kind: InvocationKind = "worker",
     invocation_identity: str = "1",
     streak_ordinal: int = 1,
     observed_at: datetime = _NOW,

@@ -75,7 +75,7 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, host: _Host, harness: FakeHarness, hub: FakeHub | None = None):
+def _ctx(store: SqlAlchemyRunnerStore, host: _Host, harness: FakeHarness, hub: FakeHub | None = None):
     return make_context(
         store,
         hub=hub or FakeHub(),
@@ -88,11 +88,11 @@ def _ctx(store, host: _Host, harness: FakeHarness, hub: FakeHub | None = None):
     )
 
 
-def _bind_in_b(store, chunk_id: str = "ch_1") -> None:
+def _bind_in_b(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> None:
     store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir=_WORKDIR_B, bound_at=_NOW, workspace_id="ws_b")
 
 
-def _seed_lease(store) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     """A build lease spawned into ``ws_b``'s ``e1``."""
     store.record_lease(
         NewLease(

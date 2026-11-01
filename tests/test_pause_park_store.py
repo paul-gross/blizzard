@@ -18,7 +18,16 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Reap, ResumeIntents
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store, make_stores
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    SqlAlchemyRunnerStore,
+    make_context,
+    make_store,
+    make_stores,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +41,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_spawned_lease(store):
+def _seed_spawned_lease(store: SqlAlchemyRunnerStore):
     """An in-flight build lease spawned into env e1 — session-bearing, pid recorded."""
     store.record_lease(
         NewLease(
@@ -56,7 +65,7 @@ def _seed_spawned_lease(store):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store, *, probe=None, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, *, probe=None, clock=None):
     return make_context(
         store,
         hub=FakeHub(),
@@ -111,7 +120,7 @@ def test_pause_park_resumed_lease_is_not_parked(tmp_path: Path):
     assert store.pause_parked_lease_ids() == set()
 
 
-def _close_lease(store, lease_id: str, chunk_id: str = "ch_1"):
+def _close_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str = "ch_1"):
     store.record_closure(lease_id=lease_id, chunk_id=chunk_id, node_id="nd_build", reason="terminal", closed_at=_NOW)
 
 

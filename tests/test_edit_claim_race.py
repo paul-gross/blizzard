@@ -65,7 +65,7 @@ nodes:
 """
 
 
-def _mint_alt_graph(hub) -> str:
+def _mint_alt_graph(hub: HubHarness) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _ALT_YAML})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]

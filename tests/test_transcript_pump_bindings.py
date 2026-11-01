@@ -19,6 +19,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
 )
@@ -84,7 +85,7 @@ def _open_segment(ctx, chunk_id: str, session: str, *, held: bool, bind: bool = 
     )
 
 
-def _binding_statements(store, fn) -> int:
+def _binding_statements(store: SqlAlchemyRunnerStore, fn) -> int:
     with capture_statements(store._engine) as statements:
         fn()
     return sum(1 for statement, _ in statements if "env_bindings" in statement)

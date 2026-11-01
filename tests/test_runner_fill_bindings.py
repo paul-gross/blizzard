@@ -76,7 +76,14 @@ def _bindings() -> tuple[BindingDeclaration, ...]:
     return (BindingDeclaration("pr_a", "ws_a", 2), BindingDeclaration("pr_b", "ws_b", 2))
 
 
-def _ctx(store, hub: FakeHub, bindings: tuple[BindingDeclaration, ...], *, agents: int = 2, workspaces=None):
+def _ctx(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub,
+    bindings: tuple[BindingDeclaration, ...],
+    *,
+    agents: int = 2,
+    workspaces=None,
+):
     return make_context(
         store,
         hub=hub,
@@ -94,7 +101,7 @@ def _entry(chunk_id: str, project_id: str, position: int = 0) -> QueueEntry:
 
 
 def _hold_open_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     chunk_id: str,
     *,
     workspace_id: str | None,

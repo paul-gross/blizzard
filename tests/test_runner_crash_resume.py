@@ -23,6 +23,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     make_stores,
@@ -39,7 +40,7 @@ def _store(tmp_path: Path):
 
 
 def _seed_running_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     chunk="ch_1",
     lease="lease_1",
@@ -73,7 +74,7 @@ def _seed_running_lease(
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=created)
 
 
-def _crashed_at(store, when):
+def _crashed_at(store: SqlAlchemyRunnerStore, when):
     """Stamp the daemon's last liveness beat — the crash-time reference the scan reads back."""
     store.record_daemon_liveness(alive_at=when)
 

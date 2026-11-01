@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -45,7 +46,7 @@ _OTHER_HARNESS_ID = "other_harness"
 
 
 def _seed_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     lease_id: str,
     chunk_id: str,
@@ -195,7 +196,7 @@ def test_restart_resume_owner_failure_escalates_only_the_affected_lease(tmp_path
 # JUDGEMENT (src/blizzard/runner/lifecycle/judgement/judgement.py `_resolve_harness`) — launch (`_elicit`) then collect.
 
 
-def _judgement_ctx(store, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):
+def _judgement_ctx(store: SqlAlchemyRunnerStore, *, harness_a: FakeHarness, harness_b: FakeHarness, probe: FakeProbe):
     choices = [("pass", "meets criteria"), ("fail", "does not")]
     envelope_a = make_envelope("ch_a", "build", node_id="nd_build", choices=choices)
     envelope_b = make_envelope("ch_b", "build", node_id="nd_build", choices=choices)
@@ -299,7 +300,9 @@ def test_judgement_owner_failure_on_one_lease_never_blocks_the_others_collect(tm
 # TAKEOVER (src/blizzard/runner/lifecycle/takeover.py `_resolved_harness`).
 
 
-def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) -> TakeoverService:
+def _takeover_service(
+    store: SqlAlchemyRunnerStore, *, harness_a: FakeHarness, harness_b: FakeHarness
+) -> TakeoverService:
     return TakeoverService(
         FixedClock(_NOW),
         FakeProbe(),
@@ -313,7 +316,7 @@ def _takeover_service(store, *, harness_a: FakeHarness, harness_b: FakeHarness) 
     )
 
 
-def _open_scope(store, chunk_id: str) -> TakeoverOpenScope:
+def _open_scope(store: SqlAlchemyRunnerStore, chunk_id: str) -> TakeoverOpenScope:
     return TakeoverOpenScope(
         chunk_id=chunk_id,
         open_takeover=store.open_takeover_for_chunk(chunk_id),
@@ -396,6 +399,6 @@ def test_takeover_owner_failure_on_one_chunk_never_blocks_the_others_open(tmp_pa
     assert store.open_takeover_for_chunk("ch_b") is None
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids

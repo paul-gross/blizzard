@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -47,7 +48,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_exited_lease(store):
+def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     """A build lease spawned into env e1; the worker has exited (probe reports it dead)."""
     store.record_lease(
         NewLease(
@@ -71,7 +72,7 @@ def _seed_exited_lease(store):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _ctx(store, *, hub=None, probe=None, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, *, hub=None, probe=None, clock=None):
     return make_context(
         store,
         hub=hub or FakeHub(),

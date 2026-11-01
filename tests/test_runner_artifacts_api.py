@@ -24,7 +24,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -112,7 +112,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):
     return app, store
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": _CHUNK,
@@ -440,7 +440,7 @@ def test_502_when_the_hub_is_unreachable(tmp_path: Path) -> None:
 # Graph scope — the runner's own store-read mirror, never the hub
 
 
-def _seed_graph_artifacts(store, graph_id: str = "gr_1") -> None:
+def _seed_graph_artifacts(store: SqlAlchemyRunnerStore, graph_id: str = "gr_1") -> None:
     store.record_graph_artifacts(
         graph_id=graph_id,
         artifacts=[PinnedGraphArtifact(name="docket", ordinal=0, kind=ArtifactKind.ASSET, content="the docket text")],

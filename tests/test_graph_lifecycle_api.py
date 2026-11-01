@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
-from tests.support import build_hub, count_queries
+from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -56,7 +56,7 @@ nodes:
 """
 
 
-def _mint(hub, definition_yaml: str = _GRAPH_A) -> str:
+def _mint(hub: HubHarness, definition_yaml: str = _GRAPH_A) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]

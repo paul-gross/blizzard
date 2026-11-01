@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -22,7 +22,7 @@ _POINTER_A = {"source": "default", "ref": "7"}
 _POINTER_B = {"source": "default", "ref": "8"}
 
 
-def _claim(hub, pointer: dict) -> tuple[str, str]:
+def _claim(hub: HubHarness, pointer: dict) -> tuple[str, str]:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     node_id = hub.client.post(
@@ -33,7 +33,7 @@ def _claim(hub, pointer: dict) -> tuple[str, str]:
 
 
 def _push_usage(
-    hub,
+    hub: HubHarness,
     *,
     chunk_id: str,
     node_id: str,

@@ -31,6 +31,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -71,7 +72,7 @@ def _done_chunk(chunk_id: str) -> ChunkState:
     return ChunkState(chunk_id=chunk_id, status=ChunkStatus.DONE, latest_epoch=1)
 
 
-def _assert_escalated_once_with_no_takeover(store, chunk_id: str) -> None:
+def _assert_escalated_once_with_no_takeover(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
     """The lease closed ``escalated``, exactly one ``escalation.recorded`` fact rode the
     outbound buffer for it, and it composed no takeover command — an owner this runner
     cannot resolve can never compose one."""

@@ -23,6 +23,7 @@ from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeProvider,
+    SqlAlchemyRunnerStore,
     StaticTranscriptRepositoryResolver,
     make_host_stores,
     make_store,
@@ -73,7 +74,7 @@ def _app_with_segments(tmp_path: Path, *, repo: FakeTranscriptRepository | None 
     ), store
 
 
-def _mint(store, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", runner_id="r1"):
+def _mint(store: SqlAlchemyRunnerStore, *, chunk="ch_1", node="nd_build", epoch=1, lease="lease_1", runner_id="r1"):
     store.record_lease(
         NewLease(
             lease_id=lease,

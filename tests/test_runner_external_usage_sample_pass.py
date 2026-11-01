@@ -22,7 +22,13 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 )
 from blizzard.runner.throttle.resample import FloorResampleTriggers
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from tests.runner_fakes import FakeSubscriptionSampler, make_host_stores, make_store, usage_limit_mark
+from tests.runner_fakes import (
+    FakeSubscriptionSampler,
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_store,
+    usage_limit_mark,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -35,7 +41,7 @@ _SLUG = "anthropic"
 class _StoreSink:
     """Records through the store's own runner-lane write, as an unregistered host's first runner does."""
 
-    def __init__(self, store) -> None:
+    def __init__(self, store: SqlAlchemyRunnerStore) -> None:
         self._store = store
 
     def record(self, **attempt) -> None:
@@ -52,7 +58,9 @@ def _declared(
     return SampledSubscription(slug=slug, name=slug.title(), sample_interval_seconds=interval_seconds, sampler=sampler)
 
 
-def _pass(store, clock: FixedClock, *subscriptions: SampledSubscription) -> ExternalUsageSamplePass:
+def _pass(
+    store: SqlAlchemyRunnerStore, clock: FixedClock, *subscriptions: SampledSubscription
+) -> ExternalUsageSamplePass:
     host = make_host_stores(store, clock)
     return ExternalUsageSamplePass(
         subscriptions=subscriptions,
@@ -80,7 +88,9 @@ def _snapshot(*, sampled_at: datetime = _NOW) -> ExternalSubscriptionUsageSnapsh
     )
 
 
-def _ctx(store, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300):
+def _ctx(
+    store: SqlAlchemyRunnerStore, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300
+):
     return _pass(store, clock, _declared(interval_seconds=interval_seconds, sampler=sampler))
 
 
@@ -462,7 +472,9 @@ def test_a_declared_provider_with_no_sampler_stays_declared_and_unsampled(tmp_pa
 # --------------------------------------------------------------------------- #
 
 
-def _mark(store, at: datetime, *, resets_in: timedelta | None = timedelta(hours=1), generation: int = 1) -> None:
+def _mark(
+    store: SqlAlchemyRunnerStore, at: datetime, *, resets_in: timedelta | None = timedelta(hours=1), generation: int = 1
+) -> None:
     make_host_stores(store).usage_limits.record_usage_limit_mark(
         _SLUG, usage_limit_mark(at, resets_in=resets_in, generation=generation)
     )

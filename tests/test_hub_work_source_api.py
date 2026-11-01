@@ -25,6 +25,7 @@ from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import (
     FakeWorkSource,
+    HubHarness,
     build_hub,
     count_queries,
     emitted_events,
@@ -199,7 +200,7 @@ def test_editor_listing_resolves_its_source_label_once_only_when_nonempty(
         label.assert_called_once_with("hub")
 
 
-def _seed_authored_items(hub, n: int) -> str:
+def _seed_authored_items(hub: HubHarness, n: int) -> str:
     """``n`` hub items, each authored by its own user — the token of the last one."""
     token = ""
     for i in range(n):
@@ -243,7 +244,7 @@ def test_list_work_items_author_query_count_is_independent_of_item_count(tmp_pat
     large = build_hub(tmp_path / "large", auth_mode="oauth")
     large_token = _seed_authored_items(large, 6)  # 3x the small fixture
 
-    def call(hub, token: str) -> None:
+    def call(hub: HubHarness, token: str) -> None:
         resp = hub.client.get("/api/work-sources/hub/items", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200, resp.text
 

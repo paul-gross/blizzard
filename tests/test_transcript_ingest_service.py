@@ -28,14 +28,14 @@ from blizzard.hub.domain.observability.transcripts import (
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, RetiredRunnerGuard
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
-from tests.support import build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
+from tests.support import HubHarness, build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
 
 pytestmark = pytest.mark.component
 
 _T0 = datetime(2026, 8, 9, tzinfo=UTC)
 
 
-def _seed_chunk(hub, chunk_id: str = "ch_1") -> None:
+def _seed_chunk(hub: HubHarness, chunk_id: str = "ch_1") -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=_T0)
         seed_chunk(conn, chunk_id, graph_id="gr_1", at=_T0)

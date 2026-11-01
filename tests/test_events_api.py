@@ -15,12 +15,12 @@ import pytest
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support import build_hub, chunk_stores, count_rows_read, seed_chunk, seed_graph, seed_lease
+from tests.support import HubHarness, build_hub, chunk_stores, count_rows_read, seed_chunk, seed_graph, seed_lease
 
 pytestmark = pytest.mark.component
 
 
-def _events(hub, **params) -> list[dict]:
+def _events(hub: HubHarness, **params) -> list[dict]:
     resp = hub.client.get("/api/events", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()["events"]

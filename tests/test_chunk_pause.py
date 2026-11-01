@@ -50,6 +50,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -69,7 +70,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100"):
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100"):
     """A build lease spawned into env e1, plus its binding. The probe decides liveness."""
     store.record_lease(
         NewLease(
@@ -128,15 +129,15 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):
     )
 
 
-def _closure_reasons(store, lease_id="lease_1"):
+def _closure_reasons(store: SqlAlchemyRunnerStore, lease_id="lease_1"):
     return [c.reason for c in store.list_closed_leases(10) if c.lease.lease_id == lease_id]
 
 
-def _make_ctx(store, hub, harness, probe, **kw):
+def _make_ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, harness, probe, **kw):
     return make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, **kw)
 
 
-def _pause_locally(store, ctx, *, paused: bool):
+def _pause_locally(store: SqlAlchemyRunnerStore, ctx, *, paused: bool):
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
     The twin of `tests/test_runner_paused.py`'s helper, kept local rather than imported across
@@ -639,7 +640,7 @@ def test_pausing_an_unheld_ready_chunk_simply_keeps_it_out_of_the_queue(tmp_path
 # The interrupt-then-kill park: envelope recorded, survivor killed only past the budget, no waits.
 
 
-def _usage_payloads(store):
+def _usage_payloads(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
@@ -847,7 +848,7 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
 # The spawn gate reads the chunk's own pause: a paused chunk starts no worker by any path.
 
 
-def _seed_orphan_lease(store, *, retries_max=2):
+def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max=2):
     """A lease minted but never spawned (no pid/session) — REAP's orphan case."""
     store.record_lease(
         NewLease(

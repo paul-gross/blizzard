@@ -27,14 +27,22 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import build_hub, count_queries, default_project, hub_scoped, hub_store_connections, stamp
+from tests.support import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    default_project,
+    hub_scoped,
+    hub_store_connections,
+    stamp,
+)
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:
+def _seed_proposal(hub: HubHarness, *, proposal_id: str = "gprop_1") -> None:
     with hub.engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)
@@ -62,7 +70,7 @@ def _seed_proposal(hub, *, proposal_id: str = "gprop_1") -> None:
     )
 
 
-def _seed_proposals(hub, proposal_ids: list[str]) -> None:
+def _seed_proposals(hub: HubHarness, proposal_ids: list[str]) -> None:
     with hub.engine.begin() as conn:
         conn.execute(s.scopes.insert().values(stamp(s.scopes, slug="blizzard", description="", created_at=_NOW)))
     store = hub_store_connections(hub.engine)

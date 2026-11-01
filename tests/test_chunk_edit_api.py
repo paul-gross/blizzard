@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, default_project, emitted_events, ingest
+from tests.support import HubHarness, build_hub, default_project, emitted_events, ingest
 
 pytestmark = pytest.mark.component
 
@@ -49,7 +49,7 @@ nodes:
 """
 
 
-def _mint_alt_graph(hub) -> str:
+def _mint_alt_graph(hub: HubHarness) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _ALT_YAML})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]
@@ -81,7 +81,7 @@ def test_a_freshly_ingested_chunk_carries_the_default_graph_and_no_model_prefere
 # Write — PATCH /chunks/{id}: applied all-or-nothing in one request.
 
 
-def _claim(hub, chunk_id: str, *, runner_id: str = "r1") -> None:
+def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> None:
     """Claim ``chunk_id`` for ``runner_id`` — the only status the plain #27/#120 graph and
     default edits refuse, and the status ``intended_migration``'s own window opens at."""
     resp = hub.client.post(

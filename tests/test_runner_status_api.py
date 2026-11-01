@@ -105,7 +105,7 @@ def _app_with_status(
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

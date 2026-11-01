@@ -17,6 +17,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store import schema
 from tests.support import (
+    HubHarness,
     assert_all_timestamps_utc,
     build_hub,
     emitted_events,
@@ -65,7 +66,7 @@ nodes:
 _PENDING_YAML = _MERGE_YAML.replace("action: pass", "action: test.answer\n    with: {choice: pending}")
 
 
-def _claim(hub, chunk_id: str) -> str:
+def _claim(hub: HubHarness, chunk_id: str) -> str:
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
@@ -94,7 +95,7 @@ def _build_completion(build_node_id: str, epoch: int) -> dict:
     }
 
 
-def _ingest_and_deliver(hub, *, yaml: str) -> str:
+def _ingest_and_deliver(hub: HubHarness, *, yaml: str) -> str:
     """Register ``yaml`` as the (pre-minted) default graph, then ingest and drive one
     chunk through it to its deliver hub node — reusing that graph by name (D-081), so
     the ingest below picks it up instead of the packaged prose graph."""
@@ -208,7 +209,7 @@ def test_pause_allows_a_running_chunk(tmp_path: Path) -> None:
     assert detail["route"] is not None  # unlike detach, the claim is kept
 
 
-def _ask(hub, chunk_id: str, *, question_id: str = "qn_1") -> None:
+def _ask(hub: HubHarness, chunk_id: str, *, question_id: str = "qn_1") -> None:
     resp = hub.client.post(
         "/api/questions",
         json={

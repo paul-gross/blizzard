@@ -33,6 +33,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     loop_context,
     make_context,
     make_envelope,
@@ -49,7 +50,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, lease="lease_1", chunk="ch_1", node_id="nd_build", epoch=1):
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, lease="lease_1", chunk="ch_1", node_id="nd_build", epoch=1):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -182,7 +183,7 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
 class _RecordingResumeHarness(FakeHarness):
     """Captures whether the resume-fired fact was already durable at the resume call."""
 
-    def __init__(self, *, store, lease_id: str, epoch: int, **kwargs) -> None:
+    def __init__(self, *, store: SqlAlchemyRunnerStore, lease_id: str, epoch: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self._store = store
         self._lease_id = lease_id

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -83,7 +83,7 @@ nodes:
 """
 
 
-def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:
+def _claimed(hub: HubHarness, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:
     """Mint the graph, claim a route, and report the runner-minted lease (epoch 1)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]

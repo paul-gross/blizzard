@@ -17,7 +17,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import usage_facts
-from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
 
 pytestmark = pytest.mark.unit
 
@@ -29,7 +29,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _spawned_lease(store, lease: str, *, chunk: str = "ch_1") -> None:
+def _spawned_lease(store: SqlAlchemyRunnerStore, lease: str, *, chunk: str = "ch_1") -> None:
     """A lease already spawned onto the one shared session."""
     store.record_lease(
         NewLease(
@@ -65,7 +65,7 @@ def _sample(kind: UsageKind, *, tokens: int, cost: float, scope: int | None) -> 
     )
 
 
-def _record(store, lease: str, *, generation: int, sample: UsageSample) -> None:
+def _record(store: SqlAlchemyRunnerStore, lease: str, *, generation: int, sample: UsageSample) -> None:
     record_usage(
         store,
         lease_id=lease,

@@ -49,7 +49,7 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, hub, *, pool: dict[str, str] | None = None, agents: int = 1):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, pool: dict[str, str] | None = None, agents: int = 1):
     ctx = make_context(
         store,
         hub=hub,
@@ -66,12 +66,12 @@ def _held_rows(store: SqlAlchemyRunnerStore) -> dict[str, tuple[str | None, str 
     return {b.environment_id: (b.workspace_id, b.project_id) for b in store.held_bindings()}
 
 
-def _seed_pre_revision_binding(store, chunk_id: str, environment_id: str, workdir: str) -> None:
+def _seed_pre_revision_binding(store: SqlAlchemyRunnerStore, chunk_id: str, environment_id: str, workdir: str) -> None:
     """A held row as the previous release wrote it — no workspace, no project."""
     store.record_binding(chunk_id=chunk_id, environment_id=environment_id, workdir=workdir, bound_at=_NOW)
 
 
-def _seed_running_lease(store, chunk_id: str) -> None:
+def _seed_running_lease(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
     lease_id = f"lease_{chunk_id}"
     store.record_lease(
         NewLease(

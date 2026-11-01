@@ -35,6 +35,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -52,11 +53,11 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _service(store, *, clock=None):
+def _service(store: SqlAlchemyRunnerStore, *, clock=None):
     return RequeueService(store, clock or FixedClock(_LATER))
 
 
-def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:
+def _scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> RequeueScope:
     """The edge resolution `chunk_scope.resolved_requeue_scope` performs in production."""
     return RequeueScope(
         chunk_id=chunk_id,
@@ -68,7 +69,7 @@ def _scope(store, chunk_id: str = "ch_1") -> RequeueScope:
 
 
 def _seed_escalated_chunk(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     chunk="ch_1",
     lease="lease_1",

@@ -32,6 +32,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -47,7 +48,17 @@ class _AttachingOnResumeHarness(FakeHarness):
     the wake it was resumed with."""
 
     def __init__(
-        self, *, store, clock, lease_id: str, chunk_id: str, node_id: str, epoch: int, name: str, content: str, **kwargs
+        self,
+        *,
+        store: SqlAlchemyRunnerStore,
+        clock,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        name: str,
+        content: str,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self._store = store
@@ -103,7 +114,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
     def __init__(
         self,
         *,
-        store,
+        store: SqlAlchemyRunnerStore,
         clock,
         lease_id: str,
         chunk_id: str,
@@ -166,7 +177,7 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
 
 
 def _seed_exited_lease(
-    store,
+    store: SqlAlchemyRunnerStore,
     *,
     lease_id: str,
     chunk_id: str,

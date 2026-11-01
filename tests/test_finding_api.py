@@ -15,14 +15,14 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import build_hub, default_project, hub_scoped, hub_store_connections, stamp
+from tests.support import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def _seed_scope(hub, slug: str) -> None:
+def _seed_scope(hub: HubHarness, slug: str) -> None:
     with hub.engine.begin() as conn:
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_NOW)))
 
@@ -396,7 +396,7 @@ def test_list_read_carries_no_facts_key(tmp_path: Path) -> None:
     assert "facts" not in resp.json()["findings"][0]
 
 
-def _seed_paging_fixture(hub) -> None:
+def _seed_paging_fixture(hub: HubHarness) -> None:
     """`fin_1`..`fin_8` under one routine/scope, `fin_2`/`fin_5`/`fin_6` interleaved-gone
     so a small SQL window can land entirely on gone rows, exercising `list_page`'s top-up."""
     _seed_scope(hub, "blizzard")
@@ -419,7 +419,7 @@ def _seed_paging_fixture(hub) -> None:
             store.record_fact(finding_id, kind="gone", at=_NOW, note="no longer reproduces")
 
 
-def _page_through(hub, *, params: dict[str, object], pages: int) -> list[str]:
+def _page_through(hub: HubHarness, *, params: dict[str, str | int], pages: int) -> list[str]:
     """Follows `next_cursor` from `params` to exhaustion, concatenating each page's
     `finding_id`s; `pages` bounds the loop so a broken cursor fails, not hangs."""
     finding_ids: list[str] = []
@@ -609,12 +609,12 @@ def test_get_unknown_id_is_404(tmp_path: Path) -> None:
     assert resp.status_code == 404, resp.text
 
 
-def _seeded_scopes(hub) -> set[str]:
+def _seeded_scopes(hub: HubHarness) -> set[str]:
     with hub.engine.connect() as conn:
         return {row.slug for row in conn.execute(hub_scoped(s.scopes.select()))}
 
 
-def _seed_finding(hub, finding_id: str, *, scope: str = "blizzard") -> None:
+def _seed_finding(hub: HubHarness, finding_id: str, *, scope: str = "blizzard") -> None:
     # `at=hub.clock.now()`, not module `_NOW`: exit-route facts stamp from `hub.clock`, and
     # newest-fact-wins would let a later `_NOW` add outrank a same-instant exit fact.
     if scope not in _seeded_scopes(hub):

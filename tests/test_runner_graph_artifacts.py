@@ -21,6 +21,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -36,7 +37,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _fill_ctx(store, env):
+def _fill_ctx(store: SqlAlchemyRunnerStore, env):
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id=env.graph_id, position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)

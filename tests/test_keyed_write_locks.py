@@ -18,12 +18,12 @@ import sqlalchemy as sa
 
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
+from tests.support import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
 
 pytestmark = pytest.mark.component
 
 
-def _live_chunks_holding(hub, source: str, ref: str) -> list[str]:
+def _live_chunks_holding(hub: HubHarness, source: str, ref: str) -> list[str]:
     return [c.chunk_id for c in hub.services.chunks.record.list_all() if any(w.ref == ref for w in c.work_refs)]
 
 

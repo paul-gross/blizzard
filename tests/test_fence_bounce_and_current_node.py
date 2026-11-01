@@ -24,6 +24,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from tests.support import (
+    HubHarness,
     build_hub,
     chunk_facts_of,
     chunk_stores,
@@ -37,7 +38,7 @@ from tests.test_write_fence import _Chunk, _held_by_a_writer, _restart_under_loc
 pytestmark = pytest.mark.component
 
 
-def _count(hub, table, chunk_id: str, **where) -> int:
+def _count(hub: HubHarness, table, chunk_id: str, **where) -> int:
     with hub.engine.begin() as conn:
         query = hub_store_connections(hub.engine).select(table, func.count()).where(table.c.chunk_id == chunk_id)
         for name, value in where.items():

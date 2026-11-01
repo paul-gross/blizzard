@@ -25,6 +25,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.repo_files import repo_root
 from tests.runner_fakes import (
@@ -32,6 +33,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     make_store,
     single_workspace,
 )
@@ -45,12 +47,17 @@ _SESSION_ID = "ses_a"
 _LUNA_STEP_ESTIMATE = (40 * 0.20 + 8 * 1.20) / 1_000_000
 
 
-def _usage_payloads(store):
+def _usage_payloads(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED]
 
 
 def _seed_lease(
-    store, *, harness_id: str, resolved_model: str | None, judge_boundary: bool = False, started_at: datetime = _NOW
+    store: SqlAlchemyRunnerStore,
+    *,
+    harness_id: str,
+    resolved_model: str | None,
+    judge_boundary: bool = False,
+    started_at: datetime = _NOW,
 ) -> None:
     store.record_lease(
         NewLease(
@@ -72,7 +79,7 @@ def _seed_lease(
         session=SessionReference(harness_id, _SESSION_ID),
         spawned_at=started_at,
     )
-    kinds = ["spawn", "judge"] if judge_boundary else ["spawn"]
+    kinds: list[InvocationBoundaryKind] = ["spawn", "judge"] if judge_boundary else ["spawn"]
     for kind in kinds:
         store.record_boundary_open(
             lease_id="lease_1",
@@ -137,7 +144,9 @@ _EXPORT_LINE = json.dumps(
 )
 
 
-def _opencode_recorder(spawn_executor: Executor, tmp_path: Path, store, *, transcripts_wired: bool = True):
+def _opencode_recorder(
+    spawn_executor: Executor, tmp_path: Path, store: SqlAlchemyRunnerStore, *, transcripts_wired: bool = True
+):
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()
     (stdout_dir / "lease_1.1.stdout").write_text(_RUN_EVENT_STDOUT)
@@ -222,7 +231,12 @@ def test_an_unpinned_generation_with_the_lane_unwired_is_never_observed(
 
 
 def _fake_recorder(
-    tmp_path: Path, store, harness: FakeHarness, source: FakeTranscriptSource, *, transcripts_wired: bool
+    tmp_path: Path,
+    store: SqlAlchemyRunnerStore,
+    harness: FakeHarness,
+    source: FakeTranscriptSource,
+    *,
+    transcripts_wired: bool,
 ):
     stdout_dir = tmp_path / "stdout"
     stdout_dir.mkdir()

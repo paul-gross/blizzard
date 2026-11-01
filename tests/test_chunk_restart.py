@@ -20,7 +20,15 @@ from blizzard.runner.hub.internal.http_hub import _chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
 from blizzard.tools.invariants import hub_invariants
 from blizzard.wire.chunk import ChunkStatusView
-from tests.support import assert_all_timestamps_utc, build_hub, chunk_stores, emitted_events, ingest, report_lease
+from tests.support import (
+    HubHarness,
+    assert_all_timestamps_utc,
+    build_hub,
+    chunk_stores,
+    emitted_events,
+    ingest,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -118,7 +126,7 @@ nodes:
 """
 
 
-def _claim(hub, chunk_id: str, *, epoch: int = 1) -> None:
+def _claim(hub: HubHarness, chunk_id: str, *, epoch: int = 1) -> None:
     resp = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
@@ -127,7 +135,7 @@ def _claim(hub, chunk_id: str, *, epoch: int = 1) -> None:
     report_lease(hub, chunk_id, epoch=epoch, seq=epoch)
 
 
-def _mint(hub, yaml: str = _YAML) -> str:
+def _mint(hub: HubHarness, yaml: str = _YAML) -> str:
     """A running chunk on ``yaml``'s graph, leased at epoch 1 — the pre-restart state."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": yaml}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
@@ -135,13 +143,13 @@ def _mint(hub, yaml: str = _YAML) -> str:
     return chunk_id
 
 
-def _detail(hub, chunk_id: str) -> dict:
+def _detail(hub: HubHarness, chunk_id: str) -> dict:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _restart(hub, chunk_id: str, **body: object):
+def _restart(hub: HubHarness, chunk_id: str, **body: object):
     return hub.client.post(f"/api/chunks/{chunk_id}/restart", json=body)
 
 
@@ -601,7 +609,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _target_graph(hub) -> str:
+def _target_graph(hub: HubHarness) -> str:
     """Mint the second graph the cross-graph move lands on, and hand back its id."""
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML})
     assert resp.status_code == 201, resp.text

@@ -19,7 +19,14 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeProvider, FakeTranscriptSource, make_store, single_workspace
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProvider,
+    FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
+    make_store,
+    single_workspace,
+)
 
 pytestmark = pytest.mark.component
 
@@ -28,11 +35,11 @@ _SHARED_SESSION_ID = "shared-usage-session"
 _OTHER_HARNESS_ID = "other_harness"
 
 
-def _usage_payloads_by_lease(store):
+def _usage_payloads_by_lease(store: SqlAlchemyRunnerStore):
     return {b.lease_id: json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED}
 
 
-def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: int) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, *, lease_id: str, chunk_id: str, harness_id: str, pid: int) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,

@@ -18,7 +18,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -53,7 +53,7 @@ def _app_with_store(tmp_path: Path, *, hub_url: str = _HUB_URL):
     return app, store
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": _CHUNK,

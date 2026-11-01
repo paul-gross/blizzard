@@ -30,6 +30,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -46,7 +47,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str):
+def _seed_active_lease(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str, pid: int, start: str):
     """A running lease with a live worker — no bearing on the cache other than being one
     of the ids every ``Reap``/``Pull``/``Advance`` sweep reads this tick."""
     store.record_lease(
@@ -70,7 +71,7 @@ def _seed_active_lease(store, *, chunk: str, lease: str, pid: int, start: str):
     )
 
 
-def _seed_escalated(store, *, chunk: str, lease: str):
+def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, spawned, then closed ``escalated`` — the open-escalation shape."""
     store.record_lease(
         NewLease(
@@ -94,7 +95,7 @@ def _seed_escalated(store, *, chunk: str, lease: str):
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=_NOW)
 
 
-def _seed_taken_over(store, *, chunk: str, lease: str):
+def _seed_taken_over(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, closed ``escalated``, then taken over — the open-takeover shape."""
     _seed_escalated(store, chunk=chunk, lease=lease)
     store.record_takeover(

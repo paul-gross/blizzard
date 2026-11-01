@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -43,7 +44,16 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    pid=100,
+    start="start-100",
+    session="sess-a",
+    epoch=1,
+):
     """A build lease spawned into env e1 with a live worker, plus its binding — no resume
     intent (a live tick's lease, not a restart-marked one)."""
     store.record_lease(
@@ -68,7 +78,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0):
+def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", retries_max=0):
     """A lease minted but never spawned (a crash in FILL's mint->spawn window) — REAP's own
     orphan case, with no retry budget left so the very first reap attempt exhausts it."""
     store.record_lease(
@@ -104,7 +114,7 @@ def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):
     )
 
 
-def _ctx(store, hub, *, provider=None, probe=None):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=None):
     return make_context(
         store,
         hub=hub,

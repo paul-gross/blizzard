@@ -29,6 +29,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -43,7 +44,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, node_id="nd_build", node_name="build"):
     store.record_lease(
         NewLease(
             lease_id="lease_1",

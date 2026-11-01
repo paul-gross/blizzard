@@ -18,7 +18,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.requeue import RequeueService
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seeded lease's _NOW
@@ -33,7 +33,7 @@ def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):
     ), store
 
 
-def _seed_escalated_chunk(store) -> None:
+def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",

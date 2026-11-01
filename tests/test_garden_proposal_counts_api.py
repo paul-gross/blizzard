@@ -26,7 +26,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import build_hub, default_project, hub_store_connections, stamp
+from tests.support import HubHarness, build_hub, default_project, hub_store_connections, stamp
 
 pytestmark = pytest.mark.component
 
@@ -36,12 +36,12 @@ _SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 _UNTIL = datetime(2026, 1, 15, tzinfo=UTC)
 
 
-def _seed_scope(hub, slug: str = "blizzard") -> None:
+def _seed_scope(hub: HubHarness, slug: str = "blizzard") -> None:
     with hub.engine.begin() as conn:
         conn.execute(insert(s.scopes).values(stamp(s.scopes, slug=slug, description="", created_at=_SINCE)))
 
 
-def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:
+def _seed_routine(hub: HubHarness, name: str = "nightly", *, default_scope_slug: str = "blizzard") -> None:
     routine = Routine(
         routine_id=Id.mint_at(IdPrefix.ROUTINE, _SINCE).value,
         name=name,
@@ -54,7 +54,9 @@ def _seed_routine(hub, name: str = "nightly", *, default_scope_slug: str = "bliz
     RoutineStore(hub_store_connections(hub.engine)).create(routine, change=change, scope_mint=None)
 
 
-def _seed_finding(hub, finding_id: str, *, routine_name: str = "nightly", scope_slug: str = "blizzard") -> None:
+def _seed_finding(
+    hub: HubHarness, finding_id: str, *, routine_name: str = "nightly", scope_slug: str = "blizzard"
+) -> None:
     with hub.engine.begin() as conn:
         conn.execute(
             insert(s.findings).values(
@@ -74,7 +76,7 @@ def _seed_finding(hub, finding_id: str, *, routine_name: str = "nightly", scope_
 
 
 def _seed_proposal(
-    hub,
+    hub: HubHarness,
     proposal_id: str,
     *,
     routine_name: str = "nightly",
@@ -95,7 +97,7 @@ def _seed_proposal(
     )
 
 
-def _pass(hub, proposal_id: str, *, at: datetime) -> None:
+def _pass(hub: HubHarness, proposal_id: str, *, at: datetime) -> None:
     with hub_store_connections(hub.engine).write("seed_pass") as conn:
         insert_garden_proposal_closure_row(
             conn,
@@ -109,7 +111,7 @@ def _pass(hub, proposal_id: str, *, at: datetime) -> None:
         )
 
 
-def _accept_mint(hub, proposal_id: str, *, at: datetime) -> None:
+def _accept_mint(hub: HubHarness, proposal_id: str, *, at: datetime) -> None:
     with hub_store_connections(hub.engine).write("seed_accept_mint") as conn:
         insert_garden_proposal_closure_row(
             conn,

@@ -35,6 +35,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -56,7 +57,16 @@ def _build_envelope(chunk="ch_1"):
     return make_envelope(chunk, "build", node_id="nd_build", choices=_CHOICES)
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1):
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    pid=100,
+    start="start-100",
+    session="sess-a",
+    epoch=1,
+):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -79,7 +89,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _ctx(store, *, harness, probe, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, *, harness, probe, clock=None):
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
@@ -495,7 +505,7 @@ def _usage_limit_judge_park(tmp_path: Path):
     return store, harness, probe, ctx, lease, elicitation
 
 
-def _unpause(ctx, store, lease, elicitation):
+def _unpause(ctx, store: SqlAlchemyRunnerStore, lease, elicitation):
     DormantSession(ctx, lease).on_unpause(
         store.open_pause_parks()["lease_1"],
         elicitation,

@@ -80,7 +80,7 @@ nodes:
 """
 
 
-def _claim(hub) -> tuple[str, str]:
+def _claim(hub: HubHarness) -> tuple[str, str]:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)

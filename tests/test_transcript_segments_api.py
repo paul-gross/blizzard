@@ -19,7 +19,7 @@ from blizzard.hub.domain.observability.transcripts import (
     stored_turns,
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
-from tests.support import build_hub, seed_runner, seed_session, seed_user
+from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
 from tests.test_fleet_auth import _enroll, _register
 
 pytestmark = pytest.mark.component
@@ -73,7 +73,7 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
+def _seed_enrolled(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:
     """Register + enroll ``runner_id`` on ``hub`` and return its token — same shape as
     ``tests/test_fleet_auth.py``'s helper of the same name, minus the throwaway-hub indirection
     since registration here needs no separate auth mode."""
@@ -81,7 +81,7 @@ def _seed_enrolled(hub, runner_id: str = "runner-a", workspace_id: str = "ws-a")
     return _enroll(hub, runner_id)
 
 
-def _ingest_chunk(hub, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
+def _ingest_chunk(hub: HubHarness, headers: dict[str, str] | None = None, *, pointer_token: str = "default:1") -> str:
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token]}, headers=headers)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["chunk_id"])

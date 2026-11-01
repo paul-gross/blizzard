@@ -11,6 +11,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
 from tests.support import (
     FakeWorkSource,
+    HubHarness,
     build_hub,
     chunk_stores,
     default_project,
@@ -240,7 +241,7 @@ def test_ingest_422s_when_no_configured_source_claims_the_token(tmp_path: Path) 
     assert resp.status_code == 422, resp.text  # no configured source claims it
 
 
-def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:
+def _pass(hub: HubHarness, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

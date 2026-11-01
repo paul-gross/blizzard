@@ -55,7 +55,7 @@ def _app_with_leases(tmp_path: Path, *, clock: FixedClock | None = None, probe: 
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",
@@ -273,7 +273,7 @@ def test_parked_state_reaches_the_wire_via_real_park_facts(tmp_path: Path) -> No
     assert items[0]["state"] == "parked"
 
 
-def _spawn(store) -> None:
+def _spawn(store: SqlAlchemyRunnerStore) -> None:
     store.record_spawn(
         "lease_1",
         pid=100,
@@ -283,20 +283,20 @@ def _spawn(store) -> None:
     )
 
 
-def _seed_active(store) -> None:
+def _seed_active(store: SqlAlchemyRunnerStore) -> None:
     _spawn(store)
 
 
-def _seed_parked(store) -> None:
+def _seed_parked(store: SqlAlchemyRunnerStore) -> None:
     _spawn(store)
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="q_1", parked_at=_NOW)
 
 
-def _seed_spawning(store) -> None:
+def _seed_spawning(store: SqlAlchemyRunnerStore) -> None:
     pass
 
 
-def _seed_closed(store) -> None:
+def _seed_closed(store: SqlAlchemyRunnerStore) -> None:
     _spawn(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
 
@@ -372,7 +372,9 @@ def test_an_open_ask_on_one_chunk_changes_only_that_chunk_s_display_status(tmp_p
     assert items["ch_1"]["state"] == "running"
 
 
-def _seed_chunk_history(store, *, count: int, chunk_id: str = "ch_1", prefix: str = "lease") -> list[str]:
+def _seed_chunk_history(
+    store: SqlAlchemyRunnerStore, *, count: int, chunk_id: str = "ch_1", prefix: str = "lease"
+) -> list[str]:
     """``count`` leases of ``chunk_id``, minted a minute apart, every one but the newest closed."""
     ids = [f"{prefix}_{n:02d}" for n in range(count)]
     for n, lease_id in enumerate(ids):

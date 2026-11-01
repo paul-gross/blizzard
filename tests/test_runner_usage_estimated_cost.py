@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.schema import outbound_buffer, usage_facts
-from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
 
 pytestmark = pytest.mark.component
 
@@ -31,7 +31,7 @@ def _sample(*, cost: float | None, estimate: float | None) -> UsageSample:
     )
 
 
-def _record(store, lease: str, sample: UsageSample) -> None:
+def _record(store: SqlAlchemyRunnerStore, lease: str, sample: UsageSample) -> None:
     record_usage(
         store,
         lease_id=lease,

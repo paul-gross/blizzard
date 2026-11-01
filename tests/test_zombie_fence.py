@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -51,7 +51,7 @@ nodes:
 """
 
 
-def _mint_build_deliver_graph(hub) -> None:
+def _mint_build_deliver_graph(hub: HubHarness) -> None:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
 
 

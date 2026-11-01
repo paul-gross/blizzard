@@ -16,7 +16,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
-from tests.support import build_hub, capture_statements, count_queries, emitted_events, ingest
+from tests.support import HubHarness, build_hub, capture_statements, count_queries, emitted_events, ingest
 
 pytestmark = pytest.mark.component
 
@@ -36,7 +36,7 @@ nodes:
 """
 
 
-def _claim(hub, ref: str, *, runner_id: str) -> str:
+def _claim(hub: HubHarness, ref: str, *, runner_id: str) -> str:
     """A promoted, claimed chunk — a live route under its own ``runner_id`` so a batch's
     ``lease.minted``/``escalation.recorded`` facts have somewhere real to land."""
     chunk_id = ingest(hub, [{"source": "default", "ref": ref}])
@@ -48,7 +48,7 @@ def _claim(hub, ref: str, *, runner_id: str) -> str:
     return chunk_id
 
 
-def _seed_scale(hub, m: int) -> list[str]:
+def _seed_scale(hub: HubHarness, m: int) -> list[str]:
     """``m`` distinct chunks, each claimed by the batch's own reporting runner — the only
     runner whose ``lease.minted`` and ``escalation.recorded`` the hub admits for them."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
@@ -90,7 +90,7 @@ def test_before_ingest_and_publish_query_counts_are_independent_of_batch_size(tm
 
     holder: dict[str, object] = {}
 
-    def before(hub, ids: list[str], key: str) -> None:
+    def before(hub: HubHarness, ids: list[str], key: str) -> None:
         batch = _scaled_batch(ids)
         holder[f"{key}_batch"] = batch
         holder[f"{key}_broadcast"] = IngestBroadcast.before_ingest(hub.services, "counter", batch)
@@ -166,15 +166,15 @@ nodes:
 """
 
 
-def _chunk_changed_frames(hub, *, since: int = 0) -> list[dict]:
+def _chunk_changed_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED]
 
 
-def _all_frames(hub, *, since: int = 0) -> list[dict]:
+def _all_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
     return [{"event": e["event"], **json.loads(e["data"])} for e in emitted_events(hub, since=since)]
 
 
-def _status_of(hub, chunk_id: str) -> str:
+def _status_of(hub: HubHarness, chunk_id: str) -> str:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return str(resp.json()["status"])

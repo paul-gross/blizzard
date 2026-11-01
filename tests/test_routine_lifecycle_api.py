@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from tests.support import build_hub, seed_session, seed_user
+from tests.support import HubHarness, build_hub, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 
@@ -47,12 +47,12 @@ nodes:
 """
 
 
-def _mint_graph(hub, definition_yaml: str = _GRAPH_A) -> None:
+def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH_A) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create(hub, **overrides: object) -> dict:
+def _create(hub: HubHarness, **overrides: object) -> dict:
     body: dict[str, object] = {
         "name": "nightly",
         "graph_name": "alpha",
@@ -302,7 +302,7 @@ def test_list_returns_every_routine(tmp_path: Path) -> None:
 # --- The routine_scopes join sub-resource -----------------------------
 
 
-def _mint_scope(hub, slug: str) -> None:
+def _mint_scope(hub: HubHarness, slug: str) -> None:
     resp = hub.client.post("/api/scopes", json={"slug": slug, "description": ""})
     assert resp.status_code == 201, resp.text
 

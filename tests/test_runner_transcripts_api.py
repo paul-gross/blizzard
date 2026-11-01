@@ -25,6 +25,7 @@ from tests.runner_client import runner_client
 from tests.runner_fakes import (
     FakeArchivedTranscriptRepository,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     StaticTranscriptRepositoryResolver,
     make_host_stores,
     make_store,
@@ -85,7 +86,7 @@ def _app_with_transcripts(
     )
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

@@ -22,7 +22,15 @@ from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStor
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease, serve_default_tenant
+from tests.support import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    report_lease,
+    serve_default_tenant,
+)
 
 pytestmark = pytest.mark.component
 
@@ -71,7 +79,7 @@ def _usage_payload(node_id: str, chunk_id: str) -> dict:
     }
 
 
-def _seed_batch(hub, n: int) -> list[str]:
+def _seed_batch(hub: HubHarness, n: int) -> list[str]:
     """``n`` claimed chunks, cycling every fourth one through a pause, a restart, an
     open gate decision, and a recorded usage fact — so a batch of any size exercises
     every field the tick loop reads."""
@@ -130,7 +138,7 @@ def test_chunk_statuses_query_count_is_independent_of_batch_size(tmp_path: Path)
 
     results: dict[str, int] = {}
 
-    def call(hub, ids: list[str], key: str) -> None:
+    def call(hub: HubHarness, ids: list[str], key: str) -> None:
         resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": ids})
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json())

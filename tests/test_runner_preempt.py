@@ -26,6 +26,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_store,
@@ -42,7 +43,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_running_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", epoch=1):
     """A build lease with a live worker and its env binding — the shape a restart preempts."""
     store.record_lease(
         NewLease(
@@ -78,7 +79,7 @@ def _moved_chunk(*, node_id="nd_build", epoch=2, chunk="ch_1"):
     )
 
 
-def _ctx(store, hub, *, provider=None, probe=None, harness=None):
+def _ctx(store: SqlAlchemyRunnerStore, hub, *, provider=None, probe=None, harness=None):
     return make_context(
         store,
         hub=hub,
@@ -97,7 +98,7 @@ def _restarted_hub(*, node_id="nd_build", node_name="build", session=SessionMode
     return hub
 
 
-def _brake(store, *, paused):
+def _brake(store: SqlAlchemyRunnerStore, *, paused):
     """Set the runner's own local brake, the way ``PATCH /runner`` does — fact + report."""
     store.record_local_pause(
         paused=paused,
@@ -444,7 +445,7 @@ def test_a_full_tick_under_the_local_brake_preempts_but_spawns_nothing_and_the_n
     assert fresh is not None and fresh.lease_id != "lease_1" and fresh.session_id == "sess-b"
 
 
-def _marked_for_restart_resume(store):
+def _marked_for_restart_resume(store: SqlAlchemyRunnerStore):
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
     assert store.resume_intent_lease_ids() == {"lease_1"}
 

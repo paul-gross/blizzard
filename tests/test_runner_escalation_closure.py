@@ -24,6 +24,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
 )
@@ -36,7 +37,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_escalated(store, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
+def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", epoch=1, at=_NOW):
     """A lease minted, spawned, then closed ``escalated`` — the parked needs-human shape,
     with no later mint to supersede it."""
     store.record_lease(
@@ -70,7 +71,7 @@ def _chunk(chunk="ch_1", *, status: ChunkStatus):
     )
 
 
-def _ctx(store, hub, *, clock=None):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, clock=None):
     return make_context(
         store,
         hub=hub,

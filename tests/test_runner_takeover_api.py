@@ -25,6 +25,7 @@ from tests.runner_fakes import (
     FakeHarness,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_host_stores,
     make_store,
     make_stores,
@@ -67,7 +68,7 @@ def _app_with_takeover(
     ), store
 
 
-def _seed_lease(store, **overrides: object) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: object) -> None:
     fields: dict[str, object] = {
         "lease_id": "lease_1",
         "chunk_id": "ch_1",

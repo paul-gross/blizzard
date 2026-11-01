@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.support import build_hub
+from tests.support import HubHarness, build_hub
 from tests.test_auth_login_api import ADA, FakeOAuthProvider, _state_from_redirect, known_ada
 
 pytestmark = pytest.mark.component
@@ -21,7 +21,7 @@ _PROXY_IP = "10.0.0.4"
 _DIRECT_IP = "203.0.113.9"
 
 
-def _client(hub, peer: str) -> TestClient:
+def _client(hub: HubHarness, peer: str) -> TestClient:
     assert hub.app is not None
     return TestClient(hub.app, client=(peer, 41000))
 

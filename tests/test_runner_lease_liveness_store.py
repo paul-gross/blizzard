@@ -16,14 +16,14 @@ from sqlalchemy import insert, select
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner
-from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
 
 pytestmark = pytest.mark.unit
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 
 
-def _seed_lease(store, *, lease_id: str = "lease_a", chunk_id: str = "ch_1") -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_a", chunk_id: str = "ch_1") -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -38,7 +38,7 @@ def _seed_lease(store, *, lease_id: str = "lease_a", chunk_id: str = "ch_1") -> 
     )
 
 
-def _seed_legacy_row(store, *, lease_id: str = "lease_a") -> None:
+def _seed_legacy_row(store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_a") -> None:
     """Exactly what a pre-``20260916_1000_two_phase_spawn_ownership`` row reads as after
     that additive migration ran: every two-phase column NULL, never backfilled."""
     with store._engine.begin() as conn:

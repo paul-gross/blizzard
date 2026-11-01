@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from tests.support import FakeWorkSource, build_hub, claim_route, pointer_token, seed_session, seed_user
+from tests.support import FakeWorkSource, HubHarness, build_hub, claim_route, pointer_token, seed_session, seed_user
 from tests.test_fleet_auth import _seed_enrolled
 
 pytestmark = pytest.mark.component
@@ -100,7 +100,7 @@ def _seeded_hub(tmp_path: Path, *, work_sources: dict[str, FakeWorkSource] | Non
     return hub, token, graph_id, nodes
 
 
-def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> str:
+def _mint_chunk(hub: HubHarness, token: str, *, source: str = "default", ref: str = "1") -> str:
     resp = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token({"source": source, "ref": ref})]}, headers=_cookie(token)
     )
@@ -109,7 +109,7 @@ def _mint_chunk(hub, token: str, *, source: str = "default", ref: str = "1") -> 
 
 
 def _push_usage(
-    hub,
+    hub: HubHarness,
     *,
     chunk_id: str,
     node_id: str,

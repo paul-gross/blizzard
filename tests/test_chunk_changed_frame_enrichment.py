@@ -13,7 +13,15 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import build_hub, emitted_events, make_ready, pointer_token, report_escalation, report_lease
+from tests.support import (
+    HubHarness,
+    build_hub,
+    emitted_events,
+    make_ready,
+    pointer_token,
+    report_escalation,
+    report_lease,
+)
 
 pytestmark = pytest.mark.component
 
@@ -51,20 +59,20 @@ nodes:
 """
 
 
-def _chunk_changed_frames(hub, *, since: int = 0) -> list[dict]:
+def _chunk_changed_frames(hub: HubHarness, *, since: int = 0) -> list[dict]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == HubEventType.CHUNK_CHANGED]
 
 
-def _frames_of(hub, event_type: str, *, since: int = 0) -> list[dict]:
+def _frames_of(hub: HubHarness, event_type: str, *, since: int = 0) -> list[dict]:
     return [json.loads(e["data"]) for e in emitted_events(hub, since=since) if e["event"] == event_type]
 
 
-def _latest_event_id(hub) -> int:
+def _latest_event_id(hub: HubHarness) -> int:
     events = emitted_events(hub)
     return int(events[-1]["id"]) if events else 0
 
 
-def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:
+def _claimed(hub: HubHarness, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:
     """Mint the graph, claim a route, and report the runner-minted lease (epoch 1)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]

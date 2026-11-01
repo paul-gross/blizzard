@@ -92,6 +92,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_host_stores,
@@ -152,7 +153,7 @@ def _finished(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[
     return list(exporter.get_finished_spans())
 
 
-def _seed_lease(store) -> None:
+def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",

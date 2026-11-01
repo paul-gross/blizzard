@@ -28,6 +28,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     serving,
@@ -44,7 +45,9 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(store, *, lease_id: str = "lease_1", session_id: str | None = _SESSION) -> str:
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_1", session_id: str | None = _SESSION
+) -> str:
     """One active lease, spawned (so it bears a session) — what the step sweeps."""
     store.record_lease(
         NewLease(
@@ -72,7 +75,14 @@ def _seed_running_lease(store, *, lease_id: str = "lease_1", session_id: str | N
     return lease_id
 
 
-def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300_000, interval: int = 60):
+def _ctx(
+    store: SqlAlchemyRunnerStore,
+    *,
+    tokens: int | None,
+    clock: FixedClock,
+    warn: int | None = 300_000,
+    interval: int = 60,
+):
     source = FakeTranscriptSource(context_tokens_by_session={_SESSION: tokens} if tokens is not None else {})
     harness = FakeHarness(handle=_HANDLE, verdict="pass", transcript_source=source)
     return (
@@ -96,7 +106,7 @@ def _ctx(store, *, tokens: int | None, clock: FixedClock, warn: int | None = 300
     )
 
 
-def _warnings(store) -> list[dict]:
+def _warnings(store: SqlAlchemyRunnerStore) -> list[dict]:
     return [json.loads(f.payload) for f in store.pending_outbound() if f.kind == EVENT_RECORDED]
 
 

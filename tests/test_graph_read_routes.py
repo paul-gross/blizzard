@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
-from tests.support import build_hub, count_queries
+from tests.support import HubHarness, build_hub, count_queries
 
 pytestmark = pytest.mark.component
 
@@ -87,7 +87,7 @@ nodes:
 """
 
 
-def _mint(hub, definition_yaml: str) -> str:
+def _mint(hub: HubHarness, definition_yaml: str) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
     return resp.json()["graph_id"]
@@ -181,7 +181,7 @@ def test_list_graphs_query_count_is_independent_of_graph_count(tmp_path: Path) -
     for _ in range(6):  # 3x the small fleet
         _mint(many, _GRAPH_A)
 
-    def call(hub) -> int:
+    def call(hub: HubHarness) -> int:
         resp = hub.client.get("/api/graphs")
         assert resp.status_code == 200, resp.text
         return len(resp.json())

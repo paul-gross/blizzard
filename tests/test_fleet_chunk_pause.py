@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, ingest
+from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
 
 
-def _routed_chunk(hub) -> str:
+def _routed_chunk(hub: HubHarness) -> str:
     chunk_id = ingest(hub, [_POINTER])
     resp = hub.client.post(
         "/api/fleet/routes",

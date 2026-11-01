@@ -46,6 +46,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -86,7 +87,7 @@ def _pooled(
     )
 
 
-def _ctx(store, hub, provider, harness, *, minutes: int = 0):
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, provider, harness, *, minutes: int = 0):
     return make_context(
         store,
         hub=hub,
@@ -221,7 +222,7 @@ def test_re_entering_a_fresh_named_node_mints_a_new_head_and_the_lineage_stays_l
     assert pool_sessions == ["sess-code-1", "sess-code-1", "sess-code-2", "sess-code-2"]
 
 
-def _pool_leases(store, chunk_id: str, session_name: str):
+def _pool_leases(store: SqlAlchemyRunnerStore, chunk_id: str, session_name: str):
     """Every lease this chunk minted into ``session_name``'s pool, oldest first."""
     from sqlalchemy import select
 
@@ -705,7 +706,7 @@ def test_a_lease_minted_before_the_columns_reads_graph_name_and_work_refs_as_unk
     assert (lease.graph_name, lease.work_refs) == (None, None)
 
 
-def _blank_stamps(store, chunk_id: str) -> None:
+def _blank_stamps(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
     from sqlalchemy import update
 
     from blizzard.runner.store import schema as s
@@ -749,7 +750,11 @@ def _bounded(mode: SessionMode, rotate=None, model=None):
 
 
 def _seed_head(
-    store, *, session_id: str = "sess-head", model: str = "sonnet", harness_id: str = CLAUDE_CODE_HARNESS_ID
+    store: SqlAlchemyRunnerStore,
+    *,
+    session_id: str = "sess-head",
+    model: str = "sonnet",
+    harness_id: str = CLAUDE_CODE_HARNESS_ID,
 ) -> str:
     """A pool head for `code` — a session-bearing lease stamping the pool name."""
     store.record_lease(
@@ -777,7 +782,7 @@ def _seed_head(
     return session_id
 
 
-def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int = 0) -> None:
+def _seed_usage(store: SqlAlchemyRunnerStore, *, kind: str = "spawn", generation: int = 1, tokens: int = 0) -> None:
     record_usage(
         store,
         lease_id="lease_head",
@@ -799,7 +804,7 @@ def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int 
 
 
 def _resolve(
-    store,
+    store: SqlAlchemyRunnerStore,
     envelope,
     *,
     transcript_source: IHarnessTranscriptSource | None = None,

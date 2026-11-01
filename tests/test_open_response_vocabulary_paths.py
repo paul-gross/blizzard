@@ -39,6 +39,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     no_retry_clock,
@@ -141,7 +142,7 @@ def test_a_request_carrying_an_unknown_value_is_refused_with_422() -> None:
     assert client.post("/shade", json={"shade": "gained"}).status_code == 422
 
 
-def _seed_running_lease(store) -> None:
+def _seed_running_lease(store: SqlAlchemyRunnerStore) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",

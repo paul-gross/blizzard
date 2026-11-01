@@ -21,7 +21,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats, transcript_outbound_buffer
 from blizzard.runner.usage.repository import InvocationCost
-from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, record_usage
+from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -30,7 +30,15 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, lease="lease_1", retries_max=2):
+def _mint(
+    store: SqlAlchemyRunnerStore,
+    chunk="ch_1",
+    node="nd_build",
+    node_name="build",
+    epoch=1,
+    lease="lease_1",
+    retries_max=2,
+):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -45,7 +53,7 @@ def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, leas
     )
 
 
-def _session_id(store, chunk_id, node_name):
+def _session_id(store: SqlAlchemyRunnerStore, chunk_id, node_name):
     session = store.latest_session(chunk_id, node_name)
     return session.session_id if session is not None else None
 
@@ -185,7 +193,9 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path: Path
     assert _session_id(store, "ch_1", "review") == "sess-review-1"
 
 
-def _mint_with_session(store, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None):
+def _mint_with_session(
+    store: SqlAlchemyRunnerStore, *, lease, session, epoch, at, node="nd_build", node_name="build", session_name=None
+):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -248,7 +258,7 @@ def test_without_a_released_closure_an_earlier_transitioned_session_is_still_ret
     assert head is not None and head.session_id == "sess-1"
 
 
-def _close(store, lease, reason, at, chunk="ch_1"):
+def _close(store: SqlAlchemyRunnerStore, lease, reason, at, chunk="ch_1"):
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason=reason, closed_at=at)
 
 
@@ -1780,7 +1790,7 @@ def test_prune_heartbeats_never_prunes_a_same_instant_tied_newest_pair(tmp_path:
     assert remaining == 2
 
 
-def _record_external_usage_attempt(store, *, slug: str, sampled_at):
+def _record_external_usage_attempt(store: SqlAlchemyRunnerStore, *, slug: str, sampled_at):
     store.record_external_usage_attempt(
         slug=slug, sampled_at=sampled_at, payload=None, report_kind="", report_payload=""
     )

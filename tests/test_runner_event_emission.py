@@ -30,6 +30,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeWorktreeGit,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -47,7 +48,7 @@ def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_lease(store: SqlAlchemyRunnerStore, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
     """A build lease already spawned into env e1, with a configurable retry budget."""
     store.record_lease(
         NewLease(
@@ -71,11 +72,11 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _events(store):
+def _events(store: SqlAlchemyRunnerStore):
     return [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
 
 
-def _dead_worker_ctx(store, **kwargs):
+def _dead_worker_ctx(store: SqlAlchemyRunnerStore, **kwargs):
     """A context whose worker is dead (empty alive set) and whose judgement is verdict-less
     — driving ADVANCE into ``Attempt.fail(via="advance")`` on its collect pass (the second
     ``Advance().run()`` after the launch/collect split)."""

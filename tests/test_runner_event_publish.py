@@ -47,6 +47,7 @@ from tests.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -81,7 +82,7 @@ def _frames(events: EventBroker, kind: str, *, runner_id: str = FIXTURE_RUNNER_I
     return frames
 
 
-def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
+def _seed_lease(store: SqlAlchemyRunnerStore, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch=1):
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -104,7 +105,7 @@ def _seed_lease(store, *, retries_max: int, chunk="ch_1", lease="lease_1", epoch
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
-def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:
+def _open_scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> TakeoverOpenScope:
     """The edge resolution `chunk_scope.resolved_takeover_open_scope` performs in production."""
     return TakeoverOpenScope(
         chunk_id=chunk_id,
@@ -118,7 +119,7 @@ def _open_scope(store, chunk_id: str = "ch_1") -> TakeoverOpenScope:
     )
 
 
-def _close_scope(store, chunk_id: str = "ch_1") -> TakeoverCloseScope:
+def _close_scope(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> TakeoverCloseScope:
     """The edge resolution `chunk_scope.resolved_takeover_close_scope` performs in production."""
     return TakeoverCloseScope(chunk_id=chunk_id, open_takeover=store.open_takeover_for_chunk(chunk_id))
 
@@ -867,6 +868,6 @@ def test_no_broker_wired_publishes_nothing_and_raises_nothing(tmp_path: Path) ->
     assert store.list_active_leases()  # the mutation itself still happened
 
 
-def _active_in(store, chunk_id: str, lease_ids) -> bool:
+def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids) -> bool:
     active = store.active_lease_for_chunk(chunk_id)
     return active is not None and active.lease_id in lease_ids
