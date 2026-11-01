@@ -878,7 +878,7 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
                     )
                 ).all()
             assert len(rows) == 1, "the attachment was not durably recorded before the crash"
-            row = rows[0]._mapping  # pyright: ignore[reportPrivateUsage]  # SQLAlchemy's public mapping view, underscored by design
+            row = rows[0]._mapping
             assert (row["chunk_id"], row["node_id"], row["epoch"], row["name"]) == (
                 "ch_attach",
                 "nd_review",
@@ -1026,7 +1026,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
                     )
                 ).all()
             assert len(rows) == 1, "the declaration was not durably recorded before the crash"
-            row = rows[0]._mapping  # pyright: ignore[reportPrivateUsage]  # SQLAlchemy's public mapping view, underscored by design
+            row = rows[0]._mapping
             assert (row["chunk_id"], row["node_id"], row["epoch"]) == ("ch_declare_commit", "nd_build", 4), (
                 "the declaration's provenance did not survive intact"
             )

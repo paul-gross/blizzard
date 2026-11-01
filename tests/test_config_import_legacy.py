@@ -128,7 +128,7 @@ def _rows(config: HubConfig) -> dict[str, list[dict[str, object]]]:
         store = hub_store_connections(engine)
         with engine.connect() as conn:
             return {
-                t.name: [dict(r._mapping) for r in conn.execute(_past_the_default_project(store.select(t)))]  # pyright: ignore[reportPrivateUsage]  # SQLAlchemy's public mapping view, underscored by design
+                t.name: [dict(r._mapping) for r in conn.execute(_past_the_default_project(store.select(t)))]
                 for t in _TABLES
             }
     finally:
