@@ -3,7 +3,7 @@ import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { ChunkCard, type Lane, KitBeacon } from 'fleet';
+import { ChunkCard, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
 import { resolveDrop } from './board-drop.model';
 
@@ -137,13 +137,14 @@ export class BoardColumn {
    * (`chunk:control`) from lists that exist at all (`queue:reorder`). */
   protected readonly crossLane = computed(() => this.reorderControls() && this.canReorder() && this.canControl());
 
-  /** The beacon color for an occupied lane's header, or null for the quiet lanes:
-   * amber for work in flight or parked on a human, red for an escalation. */
-  protected readonly blink = computed<'amber' | 'red' | null>(() => {
+  /** The count's color — its lane's tone. */
+  protected readonly countColor = computed(() => toneColor(laneTone(this.column().key)));
+
+  /** The beacon tone for an occupied lane's header, or null for the quiet lanes: the
+   * lanes with work in flight, parked on a human, or escalated beacon, in their lane's tone. */
+  protected readonly blink = computed<Tone | null>(() => {
     const key = this.column().key;
-    if (key === 'running' || key === 'waiting') return 'amber';
-    if (key === 'needs') return 'red';
-    return null;
+    return key === 'running' || key === 'waiting' || key === 'needs' ? laneTone(key) : null;
   });
 
   /** This lane's own reorder list tag, derived from {@link Lane.key}. Only meaningful

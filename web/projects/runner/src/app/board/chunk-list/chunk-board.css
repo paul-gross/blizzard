@@ -54,17 +54,6 @@ fleet-kit-panel.board-panel {
 }
 .b-col-head .n {
   font-size: var(--fs-md);
-  color: var(--label-dim);
-}
-/* The count carries each lane's colour, as on the hub board. */
-.b-col[data-col='progress'] .n {
-  color: var(--amber);
-}
-.b-col[data-col='needs'] .n {
-  color: var(--red);
-}
-.b-col[data-col='done'] .n {
-  color: var(--green);
 }
 .b-col[data-col='done'] .b-col-head {
   border-bottom-color: var(--green-dim);

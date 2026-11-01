@@ -24,25 +24,13 @@
   border-bottom: 1px solid var(--line);
   flex: none;
 }
+/* The header labels stay uniformly grey; the count carries its lane's tone,
+   bound from `laneTone`. */
 .b-col-head .n {
   display: flex;
   align-items: center;
   gap: 5px;
   font-size: var(--fs-md);
-  color: var(--label-dim);
-}
-/* Per the mockup, the header labels stay uniformly grey and the **count** carries
-   each lane's color: amber for live work (running, parked on a human), red for an
-   escalation, green for done — all from tokens. */
-:host([data-col='running']) .b-col-head .n,
-:host([data-col='waiting']) .b-col-head .n {
-  color: var(--amber);
-}
-:host([data-col='needs']) .b-col-head .n {
-  color: var(--red);
-}
-:host([data-col='done']) .b-col-head .n {
-  color: var(--green);
 }
 /* The DONE column keeps its green head accent; its cards' own accent is
    the fleet card's, drawn in the card's status tone

@@ -13,7 +13,7 @@ export { errorMessage } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
 export { openLookup, unlisted } from '../open-lookup';
-export { DONE_LANE, LANES, STATUS_LANE, STATUS_TONE, UNKNOWN_LANE, chunkLane, laneCounts, unknownLane, type Lane } from '../chunk-lanes';
+export { DONE_LANE, LANES, STATUS_LANE, STATUS_TONE, UNKNOWN_LANE, chunkLane, laneCounts, laneTone, unknownLane, type Lane } from '../chunk-lanes';
 export {
   formatWhen,
   formatClockTime,

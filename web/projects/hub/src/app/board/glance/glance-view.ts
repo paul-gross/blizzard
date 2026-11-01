@@ -3,12 +3,14 @@ import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import {
+  DONE_LANE,
   KitAsyncState,
   KitBadge,
   KitPanel,
   KitSkeleton,
   STATUS_TONE,
   projectTint,
+  laneTone,
   toneColor,
   type ChunkStatus,
   formatCost,
@@ -71,6 +73,14 @@ export class GlanceView {
   readonly listState = input.required<KitAsyncStateValue>();
   readonly spend = input<FleetSpendView | null>(null);
   readonly spendState = input.required<KitAsyncStateValue>();
+
+  protected readonly DONE_LANE = DONE_LANE;
+
+  /** A vital's color — the tone of the board lane it counts. Needs-you counts the NEEDS HUMAN
+   * lane and lights only while non-zero. */
+  protected laneColor(key: string): string {
+    return toneColor(laneTone(key));
+  }
 
   /** A chunk's status tone as a color — the card's left edge, as a desktop list row's. */
   protected statusColor(status: ChunkStatus): string {

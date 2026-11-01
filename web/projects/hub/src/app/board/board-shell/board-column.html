@@ -1,9 +1,8 @@
 <div class="b-col-head" [attr.title]="headTitle()">
   <span class="col-lbl">{{ column().label }}</span>
-  <span class="n">
+  <span class="n" data-testid="lane-count" [style.color]="countColor()">
     <!-- A live lane with occupants announces itself: a flashing square
-         ahead of the count — amber for work in flight or parked on a
-         human, red for an escalation. Quiet (empty) lanes show none. -->
+         ahead of the count, in its lane's tone. Quiet (empty) lanes show none. -->
     @if (cards().length > 0 && blink(); as tone) {
       <fleet-kit-beacon data-testid="lane-blink" [attr.data-blink]="tone" [active]="true" [tone]="tone" />
     }
