@@ -12,6 +12,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -28,7 +29,7 @@ class ChunkPage:
 class IReadChunkRecordRepository(Protocol):
     """Read-only chunk-record access."""
 
-    def get(self, chunk_id: str) -> Chunk | None: ...
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None: ...
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
         """`get`'s batched sibling — every requested id's chunk, keyed by chunk id. An id
         that doesn't exist or is ephemeral is silently dropped, the same as `get`

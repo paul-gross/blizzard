@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -23,6 +24,7 @@ from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordRepository
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -40,6 +42,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
+from blizzard.hub.store.transactions import connection_for
 
 #: `(minted_at, chunk_id)` — the tiebreak `minted_at desc` alone lacks.
 _CURSOR_ARITY = 2
@@ -92,8 +95,11 @@ class ChunkRecordStore:
         self._store = store
         self._clock = clock
 
-    def get(self, chunk_id: str) -> Chunk | None:
-        with self._store.read("get") as conn:
+    def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
+        connection = (
+            self._store.read("get") if transaction is None else nullcontext(connection_for(self._store, transaction))
+        )
+        with connection as conn:
             return self.get_conn(conn, chunk_id)
 
     def get_conn(self, conn: Connection, chunk_id: str) -> Chunk | None:

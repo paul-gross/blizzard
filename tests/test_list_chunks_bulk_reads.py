@@ -18,6 +18,7 @@ from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -229,9 +230,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
 
 class _CountingRouteStore(ChunkRouteStore):

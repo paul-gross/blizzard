@@ -15,6 +15,7 @@ import pytest
 
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest, serve_default_tenant
@@ -207,9 +208,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
     def load_facts_for(self, chunk_ids):  # type: ignore[no-untyped-def]
         self.load_facts_for_calls += 1

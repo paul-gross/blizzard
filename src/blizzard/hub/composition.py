@@ -256,6 +256,7 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS_PACKAGED
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
@@ -547,6 +548,7 @@ class TenantStores:
     ``tests/test_hub_core_sharing.py``)."""
 
     connections: ScopedConnections
+    transactions: HubTransactions
     registry: RunnerRegistryStore
     hosts: HostRegistryStore
     work_item_store: WorkItemStore
@@ -594,13 +596,15 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     registry = RunnerRegistryStore(connections)
     hosts = HostRegistryStore(connections)
     work_item_store = WorkItemStore(connections)
-    chunk_stores = build_chunk_stores(connections, clock, registry=registry)
+    transactions = HubTransactions(connections)
+    chunk_stores = build_chunk_stores(connections, clock, registry=registry, transactions=transactions)
     cycle_lock = threading.Lock()
     delete = DeleteService(
         items=work_item_store,
         clock=clock,
         exclusive=chunk_stores.exclusive,
         cycle_lock=cycle_lock,
+        transactions=transactions,
     )
     finding_store = FindingStore(connections)
     finding_exit = FindingExitService(repo=finding_store, clock=clock)
@@ -609,6 +613,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     project_links = ProjectLinkStore(connections)
     return TenantStores(
         connections=connections,
+        transactions=transactions,
         registry=registry,
         hosts=hosts,
         work_item_store=work_item_store,

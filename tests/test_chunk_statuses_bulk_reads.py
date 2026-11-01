@@ -17,6 +17,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import ChunkFacts, GateDecision
 from blizzard.hub.domain.chunk.ports.decisions import LiveDecisionStatus
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -154,9 +155,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.status_facts_for_calls += 1
         return super().status_facts_for(chunk_ids)
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
 
 class _CountingRouteStore(ChunkRouteStore):

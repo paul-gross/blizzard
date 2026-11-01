@@ -74,6 +74,17 @@ def test_the_stores_the_core_opens_for_a_tenant_are_scoped_to_it(tmp_path: Path)
     assert core.open(scope).connections.scope == scope
 
 
+def test_transaction_binding_is_shared_only_within_one_tenant(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    core = build_hub_core(hub.engine, clock=hub.clock)
+    first = core.open(StoreScope(default_tenant(hub.engine)))
+    second = core.open(StoreScope(add_tenant(hub.engine, "other")))
+
+    assert first.delete._transactions is first.transactions
+    assert first.chunk_stores.exclusive._transactions is first.transactions  # type: ignore[attr-defined]
+    assert second.transactions is not first.transactions
+
+
 def test_the_core_reads_no_tenant_until_one_is_opened_so_a_stale_store_still_builds(tmp_path: Path) -> None:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'empty.db'}")
 

@@ -17,6 +17,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.queue import IWriteChunkQueueRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.queue import QueueService
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
@@ -121,9 +122,9 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_live_statuses_calls += 1
         return super().load_live_statuses()
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
 
 def _wire_counting_facts(hub) -> _CountingFactsStore:  # type: ignore[no-untyped-def]

@@ -17,6 +17,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 
 
 class ChunkNotDeletable(ValueError):
@@ -82,11 +83,14 @@ class DeleteService:
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
         cycle_lock: threading.Lock,
+        transactions: IHubTransactions | None = None,
     ) -> None:
         self._items = items
         self._clock = clock
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
+        # Bound now; delete remains on the compatibility opener until its orchestration moves.
+        self._transactions = transactions
         # The residual per-tenant lock GroupService's own fold also shares: releasing this
         # chunk's own outgoing edges races a concurrent fold rewriting the same edges onto a
         # chunk neither one's row lock names — a row lock alone cannot close it.

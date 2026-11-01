@@ -234,6 +234,15 @@ class ScopedConnections(HubStoreConnections, ScopedStatements):
             raise ValueError(f"connections scoped to {self.scope.tenant} cannot be rescoped to {scope.tenant}")
         return self
 
+    def same_store_and_scope(self, other: ScopedConnections) -> bool:
+        """Whether ordinary seams address the same engine and tenant, without widening borrowed seams."""
+        return self is other or (
+            type(self) is ScopedConnections
+            and type(other) is ScopedConnections
+            and self._engine is other._engine
+            and self.scope == other.scope
+        )
+
     def _bind(self, conn: Connection) -> Connection:
         conn.execution_options(**{_SCOPE_OPTION: self.scope})
         if not event.contains(conn, "before_execute", _check_execute_time_keys):

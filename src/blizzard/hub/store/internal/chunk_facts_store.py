@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -41,6 +42,7 @@ from blizzard.hub.domain.chunk.model import (
     UsageFact,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
@@ -52,6 +54,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import (
     settled_stopped,
 )
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 #: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
 _ALL_FAMILIES: frozenset[str] = frozenset(
@@ -155,8 +158,13 @@ class ChunkFactsStore:
         self._store = store
         self._clock = clock
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
-        with self._store.read("load_facts") as conn:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
+        connection = (
+            self._store.read("load_facts")
+            if transaction is None
+            else nullcontext(connection_for(self._store, transaction))
+        )
+        with connection as conn:
             result = self._load(conn, [chunk_id])
         return result.get(chunk_id)
 

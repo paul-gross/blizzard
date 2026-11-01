@@ -19,6 +19,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
@@ -43,9 +44,9 @@ class _CountingFactsStore(ChunkFactsStore):
         super().__init__(store, clock)
         self.load_facts_calls = 0
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         self.load_facts_calls += 1
-        return super().load_facts(chunk_id)
+        return super().load_facts(chunk_id, transaction=transaction)
 
 
 class _CountingWorkRefsStore(ChunkWorkRefsStore):
