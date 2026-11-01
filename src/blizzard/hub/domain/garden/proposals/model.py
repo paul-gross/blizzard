@@ -512,6 +512,14 @@ class GardenProposalAuthoring:
         self._closures = closures
         self._clock = clock
 
+    @property
+    def proposals(self) -> IWriteGardenProposalRepository:
+        return self._proposals
+
+    @property
+    def closures(self) -> IReadGardenProposalClosureRepository:
+        return self._closures
+
     def create_operator(
         self,
         *,

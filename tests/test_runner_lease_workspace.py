@@ -291,7 +291,7 @@ def test_a_closed_leases_transcript_is_looked_up_in_its_own_workspace(tmp_path: 
     )
 
     assert store.bindings_for_chunk("ch_1") == []
-    assert service._spawn_cwd("ch_1") == "/root-b"
+    assert service.spawn_cwd("ch_1") == "/root-b"
 
 
 def test_a_release_hands_the_environment_back_to_its_own_workspaces_provider(tmp_path: Path) -> None:

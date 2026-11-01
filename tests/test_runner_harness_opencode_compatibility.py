@@ -1019,10 +1019,10 @@ def test_attach_proxy_preserves_buffered_response_content_encoding() -> None:
         directory=Path.cwd(),
         transport=UrllibLoopbackTransport(),
     )
-    request_index = proxy._record_request(OpenCodeAttachRequest("GET", "/config", None))
+    request_index = proxy.record_request(OpenCodeAttachRequest("GET", "/config", None))
     handler = Handler()
 
-    proxy._forward_buffered(handler, "/config", LoopbackResponse(Response()), request_index)  # type: ignore[arg-type]
+    proxy.forward_buffered(handler, "/config", LoopbackResponse(Response()), request_index)  # type: ignore[arg-type]
 
     assert handler.status == 200
     assert handler.headers["content-type"] == "application/json"

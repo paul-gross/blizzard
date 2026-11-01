@@ -109,7 +109,7 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
             )
         )
         store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)
-        runner_handle.instrument_engine(store._engine)
+        runner_handle.instrument_engine(store.engine)
         runner_handle.instrument_client(hub)
         runner = create_runner_app(
             RunnerConfig(root=tmp_path, db_url=db_url, hub_url=str(hub.base_url)),

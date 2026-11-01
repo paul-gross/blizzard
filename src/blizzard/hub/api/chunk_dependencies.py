@@ -45,7 +45,7 @@ def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:
     return chunk
 
 
-def _resolve_prerequisite(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
+def resolve_prerequisite(services: TenantServices, chunk_id: str) -> PrerequisiteScope:
     """Resolve the named prerequisite to its scope — from its chunk, or, for an id minted but since
     gone ephemeral (grouped-away or deleted), which has no chunk to load, from the id; 404 for an id
     never minted. Whether an ephemeral prerequisite is refused is ``DependencyService``'s to decide,
@@ -98,7 +98,7 @@ def declare_dependency(
     prerequisite goes ephemeral. 404 for an unknown or concurrently deleted dependent or prerequisite;
     409 for a dependent past its window, a cycle the edge would close, or an ephemeral prerequisite."""
     dependent = _resolve_dependent(services, chunk_id)
-    prerequisite = _resolve_prerequisite(services, request.prerequisite_chunk_id)
+    prerequisite = resolve_prerequisite(services, request.prerequisite_chunk_id)
     try:
         edge = services.dependencies.declare(dependent, prerequisite, by=request.by)
     except ChunkNotFound as exc:

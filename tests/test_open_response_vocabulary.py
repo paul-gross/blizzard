@@ -19,7 +19,7 @@ import pytest
 from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
-from blizzard.tools.compat.surfaces.wire import _reachable_schemas, is_any_operation
+from blizzard.tools.compat.surfaces.wire import is_any_operation, reachable_schemas
 from blizzard.wire.vocabulary import OPEN, DeclaredClosed, OpenVocabulary
 from tests.repo_files import repo_root
 
@@ -53,7 +53,7 @@ def _document_roles(documents: Iterable[dict[str, object]]) -> tuple[set[str], s
     responses: set[str] = set()
     requests: set[str] = set()
     for document in documents:
-        for component, roles in _reachable_schemas(document, is_any_operation).items():
+        for component, roles in reachable_schemas(document, is_any_operation).items():
             name = _component_class_name(component)
             if "response" in roles:
                 responses.add(name)

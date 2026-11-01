@@ -70,6 +70,10 @@ class HubStoreConnections:
         self._engine = engine
         self._errors = errors
 
+    @property
+    def errors(self) -> HubStoreErrorFactory:
+        return self._errors
+
     def scoped(self, scope: StoreScope) -> ScopedConnections:
         """These connections confined to ``scope``'s tenant — the only connections object an
         adapter over a tenant-owned table holds (``bzh:tenant-scoped-store``)."""

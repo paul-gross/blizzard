@@ -56,7 +56,7 @@ def _parsed(body: dict[str, object]) -> GraphDoc | None:
     reconciliation = GraphReconciliation(
         mint_service=cast(GraphMintService, None), graphs=cast(IReadGraphRepository, None), yaml=YAML_CODEC
     )
-    return reconciliation._parsed(YAML_CODEC.encode(body).decode("utf-8"), "g")
+    return reconciliation.parsed(YAML_CODEC.encode(body).decode("utf-8"), "g")
 
 
 def _deliver_of(body: dict[str, object]) -> tuple[str | None, dict[str, tuple[str, ...]], list[RunStepDoc]]:

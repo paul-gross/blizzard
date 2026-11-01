@@ -109,7 +109,7 @@ def _earliest(candidates: list[_Candidate]) -> StepClose | None:
     return StepClose(best.outcome, best.at, best.fact)
 
 
-def _runner_close(facts: StepFacts, epoch: int, start: datetime) -> StepClose | None:
+def runner_close(facts: StepFacts, epoch: int, start: datetime) -> StepClose | None:
     """A runner or hub step closes at the earliest closing fact; table order breaks a tie."""
     found: list[_Candidate] = []
     here = [t.recorded_at for t in facts.transitions if t.epoch == epoch]
@@ -132,11 +132,11 @@ def _runner_close(facts: StepFacts, epoch: int, start: datetime) -> StepClose | 
     for released in facts.route_released:
         if released.released_at > start and not any(at > released.released_at for at in here):
             found.append(_Candidate(released.released_at, 4, StepOutcome.RELEASED, released))
-    found += _terminal_candidates(facts, start, epoch)
+    found += terminal_candidates(facts, start, epoch)
     return _earliest(found)
 
 
-def _terminal_candidates(facts: StepFacts, start: datetime, epoch: int) -> list[_Candidate]:
+def terminal_candidates(facts: StepFacts, start: datetime, epoch: int) -> list[_Candidate]:
     found: list[_Candidate] = []
     for stopped in facts.chunk_stopped:
         if stopped.recorded_at > start:
@@ -151,7 +151,7 @@ def _terminal_candidates(facts: StepFacts, start: datetime, epoch: int) -> list[
     return found
 
 
-def _gate_close(facts: StepFacts, decision: TracedDecision) -> StepClose | None:
+def gate_close(facts: StepFacts, decision: TracedDecision) -> StepClose | None:
     """A gate closes at the first fact carrying its ``decision_id``, from the four closing tables."""
     key = decision.decision_id
     found: list[_Candidate] = []
@@ -159,11 +159,11 @@ def _gate_close(facts: StepFacts, decision: TracedDecision) -> StepClose | None:
     found += [_Candidate(m.recorded_at, 1, StepOutcome.MIGRATED, m) for m in facts.migrations if m.decision_id == key]
     found += [_Candidate(e.recorded_at, 2, StepOutcome.ESCALATED, e) for e in facts.escalations if e.decision_id == key]
     found += [_Candidate(r.recorded_at, 3, StepOutcome.RESTARTED, r) for r in facts.restarts if r.decision_id == key]
-    stand = _terminal_candidates(facts, decision.submitted_at, decision.epoch)
+    stand = terminal_candidates(facts, decision.submitted_at, decision.epoch)
     return _earliest(found + stand)
 
 
-def _hub_start(facts: StepFacts, minted_at: datetime) -> datetime:
+def hub_start(facts: StepFacts, minted_at: datetime) -> datetime:
     """The latest fact that placed the chunk on the hub node before the step's exit."""
     placed = [a for a in movement_arrivals(facts) if a.recorded_at < minted_at]
     if not placed:
@@ -182,7 +182,7 @@ def _attempt_steps(facts: StepFacts) -> list[NodeStep]:
             continue
         minted = min(lease.minted_at for lease in facts.lease_facts if lease.epoch == epoch)
         hub = owner.runner_id is None
-        start = _hub_start(facts, minted) if hub else minted
+        start = hub_start(facts, minted) if hub else minted
         steps.append(
             NodeStep(
                 kind=StepKind.HUB if hub else StepKind.RUNNER,
@@ -191,7 +191,7 @@ def _attempt_steps(facts: StepFacts) -> list[NodeStep]:
                 runner_id=owner.runner_id,
                 start=start,
                 position=position_at(facts, start),
-                close=_runner_close(facts, epoch, start),
+                close=runner_close(facts, epoch, start),
             )
         )
     return steps
@@ -207,7 +207,7 @@ def _gate_steps(facts: StepFacts) -> list[NodeStep]:
             runner_id=d.imposed_by_runner_id,
             start=d.submitted_at,
             position=position_of_node(facts, d.node_id, d.submitted_at),
-            close=_gate_close(facts, d),
+            close=gate_close(facts, d),
             decision_id=d.decision_id,
             resolved_at=resolved.get(d.decision_id),
         )
@@ -230,7 +230,7 @@ def _fence_events(facts: StepFacts, step_epochs: set[int]) -> list[tuple[datetim
     return sorted(events, key=lambda e: e[0])
 
 
-def _with_preceded_by(facts: StepFacts, steps: list[NodeStep]) -> tuple[NodeStep, ...]:
+def with_preceded_by(facts: StepFacts, steps: list[NodeStep]) -> tuple[NodeStep, ...]:
     events = _fence_events(facts, {s.epoch for s in steps if s.kind is not StepKind.GATE})
     out: list[NodeStep] = []
     previous: NodeStep | None = None
@@ -261,4 +261,4 @@ def identify_steps(facts: StepFacts) -> tuple[NodeStep, ...]:
     """Every runner, hub and gate step the facts hold, ordered by start (epoch, then attempt before gate)."""
     steps = _attempt_steps(facts) + _gate_steps(facts)
     steps.sort(key=lambda s: (s.start, s.epoch, s.kind is StepKind.GATE))
-    return _with_preceded_by(facts, steps)
+    return with_preceded_by(facts, steps)

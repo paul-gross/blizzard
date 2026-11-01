@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.composition import _credential_renewal_pass, _pool_held_ids
+from blizzard.runner.composition import credential_renewal_pass, pool_held_ids
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
@@ -36,22 +36,22 @@ def test_the_renewal_pass_pairs_each_renewable_subscription_with_its_slug_cadenc
         ),
     )
 
-    built = _credential_renewal_pass(declarations, stores, clock, children=CHILDREN, env=tool_env())  # type: ignore[arg-type]
+    built = credential_renewal_pass(declarations, stores, clock, children=CHILDREN, env=tool_env())  # type: ignore[arg-type]
 
     assert built is not None
-    claude, gpt = built._subscriptions
+    claude, gpt = built.subscriptions
     assert isinstance(claude.renewer, AnthropicCredentialRenewer)
     assert (gpt.slug, gpt.sample_interval_seconds) == ("gpt", 77)
     assert isinstance(gpt.renewer, OpenAICredentialRenewer)
-    assert built._renewals is stores.external_usage
-    assert built._clock is clock
+    assert built.renewals is stores.external_usage
+    assert built.clock is clock
 
 
 def test_a_host_whose_providers_bind_no_renewer_builds_no_renewal_pass() -> None:
     stores: Any = SimpleNamespace(external_usage=object())
     declarations = (SubscriptionDeclaration(slug="mystery", name="Mystery", provider="some-unshipped-provider"),)
 
-    built = _credential_renewal_pass(
+    built = credential_renewal_pass(
         declarations,
         stores,
         FixedClock(_NOW),  # type: ignore[arg-type]
@@ -79,7 +79,7 @@ class _Audit:
 def test_the_pool_held_set_is_every_runners_held_environment_once_in_the_order_first_held() -> None:
     audit = _Audit()
 
-    held = _pool_held_ids(audit, "ws_a")  # type: ignore[arg-type]
+    held = pool_held_ids(audit, "ws_a")  # type: ignore[arg-type]
 
     assert held() == ["e2", "e1"]
     assert audit.asked == ["ws_a"]
@@ -87,7 +87,7 @@ def test_the_pool_held_set_is_every_runners_held_environment_once_in_the_order_f
 
 def test_the_pool_held_set_is_read_afresh_on_every_call() -> None:
     audit = _Audit()
-    held = _pool_held_ids(audit, "ws_a")  # type: ignore[arg-type]
+    held = pool_held_ids(audit, "ws_a")  # type: ignore[arg-type]
 
     held()
     held()

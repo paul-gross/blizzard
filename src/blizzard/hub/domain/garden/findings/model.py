@@ -594,6 +594,10 @@ class FindingExitService:
         self._repo = repo
         self._clock = clock
 
+    @property
+    def repo(self) -> IWriteFindingRepository:
+        return self._repo
+
     def resolve(self, findings: Sequence[Finding], *, note: str, actor: str, proposal_id: str | None = None) -> None:
         self._exit(findings, kind="resolved", note=note, actor=actor, proposal_id=proposal_id)
 

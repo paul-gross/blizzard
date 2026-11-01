@@ -76,7 +76,7 @@ def test_of_two_kinds_recorded_at_one_instant_the_later_row_is_the_newest(tmp_pa
 def test_a_rejected_tracing_setting_is_announced_in_the_hub_log_not_the_tenants(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    hub_app._announce_rejected_tracing(
+    hub_app.announce_rejected_tracing(
         TracingSettings(state="rejected", setting="OTEL_EXPORTER_OTLP_PROTOCOL", value="grpc"), hub.hub_services
     )
 

@@ -146,7 +146,7 @@ class GardenProposalStore:
             project_id=project_id,
         )
 
-    def _is_closed(self, conn: Any, proposal_id: str) -> bool:
+    def is_closed(self, conn: Any, proposal_id: str) -> bool:
         """Whether `proposal_id` already carries a closure. Locks the proposal's own row
         before reading closures
         (`tests/test_garden_proposal_closure_race.py::test_is_closed_locks_the_proposal_row_before_reading_closures`)."""
@@ -172,7 +172,7 @@ class GardenProposalStore:
             if not isinstance(value, UnsetType)
         }
         with self._store.write("edit") as conn:
-            if self._is_closed(conn, proposal_id):
+            if self.is_closed(conn, proposal_id):
                 return None
             if given:
                 conn.execute(
@@ -184,7 +184,7 @@ class GardenProposalStore:
 
     def attach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("attach") as conn:
-            if self._is_closed(conn, proposal_id):
+            if self.is_closed(conn, proposal_id):
                 return None
             linked = set(self._findings(conn, proposal_id))
             for finding_id in finding_ids:
@@ -203,7 +203,7 @@ class GardenProposalStore:
 
     def detach(self, proposal_id: str, finding_ids: Sequence[str]) -> GardenProposal | None:
         with self._store.write("detach") as conn:
-            if self._is_closed(conn, proposal_id):
+            if self.is_closed(conn, proposal_id):
                 return None
             if finding_ids:
                 conn.execute(

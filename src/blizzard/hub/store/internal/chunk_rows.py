@@ -573,7 +573,7 @@ def fence(
     After :func:`lock_chunk_row` and the replay probe, refuse terminal chunks,
     then stale epochs, then displaced claimants. ``None`` admits the write."""
     newest = latest_epoch(conn, chunk_id)
-    if _is_terminal(conn, chunk_id):
+    if is_terminal(conn, chunk_id):
         return FenceRefusal.terminal(epoch)
     if not admission.admits(epoch, newest=newest):
         return FenceRefusal.stale(epoch, latest=newest)
@@ -592,14 +592,14 @@ def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: st
     return MintAdmission(
         epoch=epoch,
         newest=newest,
-        terminal=_is_terminal(conn, chunk_id),
+        terminal=is_terminal(conn, chunk_id),
         owner=epoch_owner(conn, chunk_id, epoch),
         owning_lease_id=owning_lease_id(conn, chunk_id, epoch),
         holds_route=route is not None and route.runner_id == runner_id,
     )
 
 
-def _is_terminal(conn: Connection, chunk_id: str) -> bool:
+def is_terminal(conn: Connection, chunk_id: str) -> bool:
     """Whether the chunk is stopped or done, read on the caller's connection so this sits inside the same
     transaction as the write it fences."""
     return bool(conn.execute(select(chunk_is_terminal(statements_of(conn), literal(chunk_id)))).scalar())

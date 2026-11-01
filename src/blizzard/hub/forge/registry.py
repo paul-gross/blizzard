@@ -111,12 +111,16 @@ class ForgeRegistry:
         self._locks = WriteLocks()
         self._budgets = budgets
 
+    @property
+    def secrets(self) -> ISecretReader:
+        return self._secrets
+
     def offered(self, forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
         """What ``forge`` offers, for ``repository`` when one is named; every forge is its kind's set for now."""
         return self._capabilities[forge.kind]
 
     def refs(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeRefs:
-        return _RefsHandle(self._adapter(repository), self._offered_for(repository), self._gate(repository, priority))
+        return RefsHandle(self._adapter(repository), self._offered_for(repository), self._gate(repository, priority))
 
     def changes(self, repository: RepositoryId, *, priority: ForgePriority) -> IForgeChanges:
         return _ChangesHandle(
@@ -135,7 +139,7 @@ class ForgeRegistry:
         gate = self._gate(repository, priority)
         return RepositoryForge(
             repository_id=repository,
-            refs=_RefsHandle(adapter, offered, gate, cut_off),
+            refs=RefsHandle(adapter, offered, gate, cut_off),
             changes=_ChangesHandle(adapter, offered, gate, cut_off),
             checks=_ChecksHandle(adapter, offered, gate, cut_off),
             offered=offered,
@@ -146,10 +150,10 @@ class ForgeRegistry:
         assert record is not None
         return self.offered(self._forge_of(record.fields.forge_id), repository)
 
-    def _gate(self, repository: RepositoryId, priority: ForgePriority) -> _BudgetGate:
+    def _gate(self, repository: RepositoryId, priority: ForgePriority) -> BudgetGate:
         record = self._records.get(repository)
         assert record is not None
-        return _BudgetGate(self._budgets, BudgetKey(record.fields.forge_id, record.fields.secret_name), priority)
+        return BudgetGate(self._budgets, BudgetKey(record.fields.forge_id, record.fields.secret_name), priority)
 
     def _forge_of(self, forge_id: ForgeId) -> ConfiguredForge:
         forge = self._forges.get(forge_id)
@@ -216,7 +220,7 @@ def _require(offered: frozenset[Capability], operation: str, cut_off: TurnCutOff
 
 
 @dataclass(frozen=True)
-class _BudgetGate:
+class BudgetGate:
     """One handle's way into its forge key's budget, at its caller's priority: admitted once per seam call before the
     call is made, and marked spent when the forge refuses the call for its rate."""
 
@@ -237,16 +241,16 @@ class _BudgetGate:
             raise
 
 
-def _admit(offered: frozenset[Capability], operation: str, gate: _BudgetGate, cut_off: TurnCutOff | None) -> None:
+def _admit(offered: frozenset[Capability], operation: str, gate: BudgetGate, cut_off: TurnCutOff | None) -> None:
     _require(offered, operation, cut_off)
     gate.admit()
 
 
 @dataclass(frozen=True)
-class _RefsHandle:
+class RefsHandle:
     adapter: IForgeRefs
     offered: frozenset[Capability]
-    gate: _BudgetGate
+    gate: BudgetGate
     cut_off: TurnCutOff | None = None
 
     async def branch_tip(self, branch: str) -> str | None:
@@ -282,7 +286,7 @@ class _RefsHandle:
 class _ChangesHandle:
     adapter: IForgeChanges
     offered: frozenset[Capability]
-    gate: _BudgetGate
+    gate: BudgetGate
     cut_off: TurnCutOff | None = None
 
     async def changes(self, state: ChangeListing, base: str, head: str | None = None) -> tuple[Change, ...]:
@@ -314,7 +318,7 @@ class _ChangesHandle:
 class _ChecksHandle:
     adapter: IForgeChecks
     offered: frozenset[Capability]
-    gate: _BudgetGate
+    gate: BudgetGate
     cut_off: TurnCutOff | None = None
 
     async def checks(self, ref: str) -> tuple[Check, ...]:
@@ -330,7 +334,7 @@ class _ChecksHandle:
         return await self.gate.spending(self.adapter.rerun_check(id))
 
 
-_refs_conforms: type[IForgeRefs] = _RefsHandle
+_refs_conforms: type[IForgeRefs] = RefsHandle
 
 
 _changes_conforms: type[IForgeChanges] = _ChangesHandle

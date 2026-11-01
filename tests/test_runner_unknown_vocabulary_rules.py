@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.unrecognized import Unrecognized
-from blizzard.runner.cli.control import _echo_identity
+from blizzard.runner.cli.control import echo_identity
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.hub.client import IncompatibleDenial, RouteClaimOutcome
 from blizzard.runner.leases.escalations import ParkedEscalation
@@ -200,7 +200,7 @@ def test_the_status_identity_line_shows_an_unknown_state_raw_with_no_refusal(
             "reset_command": "blizzard runner init",
         }
     )
-    _echo_identity(view)
+    echo_identity(view)
     assert capsys.readouterr().out == "  identity: unknown identity state 'gained'\n"
 
 

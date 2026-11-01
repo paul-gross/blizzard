@@ -105,7 +105,7 @@ def _is_count(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _translate(base_blocks: list[Block], feature_blocks: list[Block]) -> list[Block] | None:
+def translate(base_blocks: list[Block], feature_blocks: list[Block]) -> list[Block] | None:
     """``base_blocks`` (in merge-base coordinates) moved into the feature side's coordinates
     through ``feature_blocks``; ``None`` when any block overlaps or abuts a feature block — git
     conflicts there, so a merge over it was resolved by hand."""
@@ -131,7 +131,7 @@ def _same_changes(merged: FileChange, base_side: FileChange, feature_side: FileC
     got, want, feature = parse_blocks(merged), parse_blocks(base_side), parse_blocks(feature_side)
     if got is None or want is None or feature is None:
         return False
-    moved = _translate(want, feature)
+    moved = translate(want, feature)
     return moved is not None and moved == got
 
 

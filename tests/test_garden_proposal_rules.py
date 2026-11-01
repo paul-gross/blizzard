@@ -20,8 +20,8 @@ from blizzard.hub.domain.garden.proposals.closure import (
     GardenProposalClosure,
     GardenProposalPassReasonRequired,
     MintingAccept,
-    _compose_minted_body,
     accept_reason,
+    compose_minted_body,
 )
 from blizzard.hub.domain.garden.proposals.model import (
     GARDEN_PROPOSAL_TRANSITIONS,
@@ -438,10 +438,10 @@ def test_minting_accept_wraps_the_override_or_the_proposals_own_body() -> None:
     assert own == MintingAccept(
         proposal_id="gprop_1",
         title="Author a docstring standard",
-        body=_compose_minted_body("the case", findings),
+        body=compose_minted_body("the case", findings),
         reason="why",
     )
-    assert override.body == _compose_minted_body("hand-drafted", findings)
+    assert override.body == compose_minted_body("hand-drafted", findings)
 
 
 def test_minting_accept_refuses_a_closed_proposal() -> None:

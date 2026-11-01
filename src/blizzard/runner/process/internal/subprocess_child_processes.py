@@ -97,7 +97,7 @@ def _claim_controlling_terminal(child_setup: Callable[[], None] | None) -> Calla
     return setup
 
 
-def _write_unclosed(process: subprocess.Popen[str], text: str) -> None:
+def write_unclosed(process: subprocess.Popen[str], text: str) -> None:
     """Write ``text`` to the child's stdin and leave it open; a child that already exited or closed its own stdin
     is not an error. ``text`` is small enough to fit the pipe buffer with no concurrent reader."""
     assert process.stdin is not None
@@ -167,7 +167,7 @@ class SubprocessChildProcesses:
             raise ChildLaunchError(str(exc)) from exc
         try:
             if input is not None and input_settle > 0:
-                _write_unclosed(process, input)
+                write_unclosed(process, input)
                 time.sleep(max(0.0, min(input_settle, deadline - time.monotonic())))
                 input = None
             out, err = process.communicate(input, timeout=max(0.0, deadline - time.monotonic()))

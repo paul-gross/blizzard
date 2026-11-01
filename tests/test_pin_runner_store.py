@@ -62,7 +62,7 @@ def _counter(engine: sa.Engine, lane: str) -> int:
 
 def _seqs(store: SqlAlchemyRunnerStore, table: sa.Table) -> list[int]:
     """The ``seq`` of each of ``table``'s rows, in the order its rows were appended."""
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         return list(
             conn.execute(
                 sa.select(table.c.seq).where(table.c.runner_id == FIXTURE_RUNNER_ID).order_by(table.c.seq)
@@ -140,7 +140,7 @@ def test_a_same_instant_rebind_after_a_release_reads_as_held(tmp_path: Path):
 
     assert store.held_environment_ids() == ["e1"]
     assert store.live_tenure_chunk_ids() == ["ch_1"]
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         bound = (
             conn.execute(
                 sa.select(env_bindings.c.seq)
@@ -168,7 +168,7 @@ def test_a_same_instant_pause_resume_pause_leaves_the_second_park_open(tmp_path:
     store.record_pause_park(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW)
 
     assert store.pause_parked_lease_ids() == {"lease_1"}
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         parked = (
             conn.execute(
                 sa.select(pause_parks.c.seq)
@@ -232,7 +232,7 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
             )
         )
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
-    with store._engine.connect() as conn:
+    with store.engine.connect() as conn:
         floor = conn.execute(
             sa.select(binding_releases.c.lease_epoch_floor).where(binding_releases.c.runner_id == FIXTURE_RUNNER_ID)
         ).scalar_one()

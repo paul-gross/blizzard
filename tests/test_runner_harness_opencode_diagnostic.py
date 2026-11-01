@@ -123,6 +123,7 @@ def _probe(
     tmp_path: Path,
     *,
     process: IOpenCodeProcess | None = None,
+    config_snapshots: Mapping[Path, bytes] | None = None,
 ) -> OpenCodeCompatibilityProbe:
     transport = UrllibLoopbackTransport()
     return OpenCodeCompatibilityProbe(
@@ -136,6 +137,7 @@ def _probe(
         attach_proxy_factory=LoopbackAttachProxyFactory(transport),
         auth_source=None,
         allow_live_provider=True,
+        config_snapshots=config_snapshots,
     )
 
 
@@ -143,11 +145,11 @@ def _probe(
 def test_effective_config_requires_selected_model_input(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, input_value: object
 ) -> None:
-    probe = _probe(tmp_path)
     roots = prepare_isolation(tmp_path / "isolation")
     workdir = tmp_path / "workdir"
     workdir.mkdir()
     written = write_runner_config(workdir, roots, model=MODEL, variant=VARIANT)
+    probe = _probe(tmp_path, config_snapshots=written.snapshots)
     env = child_env(written.path, roots)
     payload = json.loads(written.path.read_text())
     limit = payload["provider"]["openai"]["models"]["gpt-5.6-luna"]["limit"]
@@ -162,9 +164,7 @@ def test_effective_config_requires_selected_model_input(
         "_command_denial_observation",
         lambda *args, **kwargs: ProbeObservation.observed(CompatibilityProbe.CONFIGURATION_ISOLATION, "denied"),
     )
-    probe._config_snapshots = written.snapshots
-
-    observation = probe._configuration_observation(workdir, written.path, env, roots)
+    observation = probe.configuration_observation(workdir, written.path, env, roots)
 
     assert observation.state is (EvidenceState.OBSERVED if input_value == COMPACTION_INPUT else EvidenceState.FAILED)
     if input_value != COMPACTION_INPUT:
@@ -209,7 +209,7 @@ def test_child_session_operational_outcomes_are_not_silent(
     effective = OpenCodeProcessResult(-1, "", "") if launch_error else result
     assert effective is not None
 
-    observation = probe._children_result_observation(effective, "ses_child_probe")
+    observation = probe.children_result_observation(effective, "ses_child_probe")
 
     assert observation.state is expected_state
     if expected_state is EvidenceState.FAILED:
@@ -220,7 +220,7 @@ def test_child_session_result_must_name_the_probed_session_as_parent(tmp_path: P
     result = OpenCodeProcessResult(0, '{"children": [{"id": "ses_child", "parentID": "ses_other"}]}', "")
     probe = _probe(tmp_path)
 
-    observation = probe._children_result_observation(result, "ses_child_probe")
+    observation = probe.children_result_observation(result, "ses_child_probe")
 
     assert observation.state is EvidenceState.FAILED
     assert "parent" in observation.summary
@@ -304,7 +304,7 @@ def test_fresh_turn_reaps_started_group_when_keyboard_interrupt_arrives(tmp_path
     probe = _probe(tmp_path, process=process)
 
     with pytest.raises(KeyboardInterrupt):
-        probe._fresh_turn(tmp_path, {})
+        probe.fresh_turn(tmp_path, {})
 
     assert process.started.cleanup_calls[:2] == ["terminate", "wait"]
     assert process.started.stopped is True
@@ -315,7 +315,7 @@ def test_process_control_reaps_started_group_when_cancelled(tmp_path: Path) -> N
     probe = _probe(tmp_path, process=process)
 
     with pytest.raises(asyncio.CancelledError):
-        probe._process_control_observation(tmp_path, {})
+        probe.process_control_observation(tmp_path, {})
 
     assert process.started.cleanup_calls[:2] == ["terminate", "wait"]
     assert process.started.stopped is True
@@ -420,7 +420,7 @@ def test_a_command_the_runner_never_started_is_not_reported_as_an_OpenCode_exit(
             raise AssertionError("this probe only exercises the captured-command path")
 
     probe = _probe(tmp_path, process=_UnstartableProcess())
-    export, error = probe._export_session(tmp_path, {}, "ses_x", operation="export")
+    export, error = probe.export_session(tmp_path, {}, "ses_x", operation="export")
 
     assert export is None
     # A status the runner invented says nothing about OpenCode's own exit behavior.
@@ -459,9 +459,9 @@ def test_a_runner_fault_is_not_reported_as_an_OpenCode_shape(tmp_path: Path) -> 
 def test_a_malformed_OpenCode_shape_is_still_attributed_to_OpenCode() -> None:
     probe = OpenCodeCompatibilityProbe.__new__(OpenCodeCompatibilityProbe)
 
-    assert probe._unexpected_error(OpenCodeShapeError("bad field")) == SHAPE_FAULT_SUMMARY
-    assert probe._unexpected_error(json.JSONDecodeError("bad", "{", 0)) == SHAPE_FAULT_SUMMARY
-    assert probe._unexpected_error(RuntimeError("a runner bug")) == INTERNAL_FAULT_SUMMARY
+    assert probe.unexpected_error(OpenCodeShapeError("bad field")) == SHAPE_FAULT_SUMMARY
+    assert probe.unexpected_error(json.JSONDecodeError("bad", "{", 0)) == SHAPE_FAULT_SUMMARY
+    assert probe.unexpected_error(RuntimeError("a runner bug")) == INTERNAL_FAULT_SUMMARY
 
 
 def test_malformed_model_is_rejected_before_any_diagnostic_side_effect(tmp_path: Path) -> None:

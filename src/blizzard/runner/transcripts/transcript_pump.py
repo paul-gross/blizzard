@@ -149,11 +149,11 @@ class TranscriptPump:
     ctx: TranscriptPumpContext
 
     @property
-    def _record_max_bytes(self) -> int:
+    def record_max_bytes(self) -> int:
         return resolve_record_max_bytes(self.ctx)
 
     @property
-    def _chunk_max_bytes(self) -> int:  # ast-grep-ignore: bzh:property-delegates
+    def chunk_max_bytes(self) -> int:  # ast-grep-ignore: bzh:property-delegates
         """The configured per-chunk budget, or the module default. Widened for a
         backfill window: a re-ship spends this budget a second time over the same chunk."""
         configured = self.ctx.config.transcript_chunk_max_bytes
@@ -304,7 +304,7 @@ class TranscriptPump:
     ) -> PumpOutcome:
         """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""
-        chunk_max_bytes = self._chunk_max_bytes
+        chunk_max_bytes = self.chunk_max_bytes
         budget_before = shipped.before(segment.chunk_id)
         gate = pre_read(
             segment,
@@ -408,7 +408,7 @@ class TranscriptPump:
 
         turn_range_start = segment.shipped_turns
         built = _build_records(
-            segment, batch, turn_range_start, record_max_bytes=self._record_max_bytes, parents=parents
+            segment, batch, turn_range_start, record_max_bytes=self.record_max_bytes, parents=parents
         )
         records, any_shrunk, any_unshippable = built.records, built.any_shrunk, built.any_unshippable
         # The source's own tail-cap signal rides the LAST record this batch produced.
@@ -504,20 +504,20 @@ class TranscriptPump:
         )
 
 
-def _turn_wire(turn: NormalizedTurn, index: int) -> dict[str, Any]:
+def turn_wire(turn: NormalizedTurn, index: int) -> dict[str, Any]:
     return {
         "index": index,
         "kind": turn.kind,
         "timestamp": iso_utc(turn.timestamp) if turn.timestamp is not None else None,
         "text": turn.text,
-        "tool": _tool_wire(turn.tool) if turn.tool is not None else None,
+        "tool": tool_wire(turn.tool) if turn.tool is not None else None,
         "thinking_redacted": turn.thinking_redacted,
-        "sidechain": _sidechain_wire(turn.sidechain) if turn.sidechain is not None else None,
+        "sidechain": sidechain_wire(turn.sidechain) if turn.sidechain is not None else None,
         "truncated": turn.truncated,
     }
 
 
-def _tool_wire(tool: ToolCall) -> dict[str, Any]:
+def tool_wire(tool: ToolCall) -> dict[str, Any]:
     return {
         "name": tool.name,
         # Deep, not shallow — the shrink pass recurses into and mutates NESTED
@@ -531,7 +531,7 @@ def _tool_wire(tool: ToolCall) -> dict[str, Any]:
         # Not a harness-seam field: only the shrink pass, mutating this dict, ever sets it True.
         "input_truncated": False,
         # Only `_output_patch_wire` sets this True; written explicit here so the stored payload
-        # already carries every wire-model default `TranscriptDrain._estimated_size` sizes from.
+        # already carries every wire-model default `TranscriptDrain.estimated_size` sizes from.
         "output_patch": False,
     }
 
@@ -590,7 +590,7 @@ def _late_sidechain_wire(sidechain: SidechainConversation, index: int, parent_to
         # `link` names the route that ATTACHED it, and this one did attach — leaving
         # "unlinked" here would label a linked conversation as orphaned on every board.
         "sidechain": {
-            **_sidechain_wire(sidechain),
+            **sidechain_wire(sidechain),
             "link": LATE_AGENT_ID_LINK,
             "parent_tool_use_id": parent_tool_use_id,
         },
@@ -598,20 +598,20 @@ def _late_sidechain_wire(sidechain: SidechainConversation, index: int, parent_to
     }
 
 
-def _sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
+def sidechain_wire(sidechain: SidechainConversation) -> dict[str, Any]:
     # Sidechain turns carry no index of their own; they are addressed by position within `turns`.
     return {
         "agent_id": sidechain.agent_id,
         "agent_type": sidechain.agent_type,
         "link": sidechain.link,
-        "turns": [_turn_wire(t, i) for i, t in enumerate(sidechain.turns)],
+        "turns": [turn_wire(t, i) for i, t in enumerate(sidechain.turns)],
         # Only `_late_sidechain_wire` overrides this; written explicit here for the same reason
-        # `_tool_wire`'s own `output_patch` is — see there.
+        # `tool_wire`'s own `output_patch` is — see there.
         "parent_tool_use_id": None,
     }
 
 
-def _record_envelope(
+def record_envelope(
     segment: TranscriptSegmentState, batch: TranscriptBatch, *, turn_range_start: int, turn_range_end: int
 ) -> dict[str, Any]:
     return {
@@ -635,7 +635,7 @@ def _record_envelope(
     }
 
 
-def _record_overhead(
+def record_overhead(
     segment: TranscriptSegmentState, batch: TranscriptBatch, *, turn_range_start: int, turn_count: int
 ) -> int:
     """The envelope's serialized cost with BOTH range fields at the widest value any group
@@ -644,12 +644,12 @@ def _record_overhead(
     digits and a group packs to exactly the cap, lands over it, and is shrunk — for tiny
     turns with nothing shrinkable, emptied outright."""
     widest = turn_range_start + turn_count
-    envelope = _record_envelope(segment, batch, turn_range_start=widest, turn_range_end=widest)
+    envelope = record_envelope(segment, batch, turn_range_start=widest, turn_range_end=widest)
     return len(json.dumps(envelope).encode("utf-8"))
 
 
 #: `json.dumps` separates array items with `", "` — real for every turn but a group's first.
-_ARRAY_SEPARATOR_BYTES = 2
+ARRAY_SEPARATOR_BYTES = 2
 
 #: A group's fitting outcome: `"ok"` as read, `"shrunk"` fit only after `_shrink_to_cap`,
 #: `"unshippable"` stayed over cap even shrunk to nothing.
@@ -690,16 +690,16 @@ def _build_records(
     closing a group once the next turn's estimated cost would push it over cap; each
     closed group's REAL size is then verified (and shrunk/emptied if needed). A turn whose
     own cost alone exceeds the cap forms a group of one, scoping any fallback to it alone."""
-    wire_turns = [_turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)]
+    wire_turns = [turn_wire(t, turn_range_start + i) for i, t in enumerate(batch.turns)]
     wire_turns += _late_link_wires(batch, turn_range_start + len(wire_turns), parents or {})
     turn_costs = [len(json.dumps(wt).encode("utf-8")) for wt in wire_turns]
-    overhead = _record_overhead(segment, batch, turn_range_start=turn_range_start, turn_count=len(wire_turns))
+    overhead = record_overhead(segment, batch, turn_range_start=turn_range_start, turn_count=len(wire_turns))
 
     records: list[dict[str, Any]] = []
     outcomes: list[_GroupOutcome] = []
 
     def close_group(start: int, end: int) -> None:
-        record = _record_envelope(
+        record = record_envelope(
             segment, batch, turn_range_start=turn_range_start + start, turn_range_end=turn_range_start + end - 1
         )
         record["turns"] = wire_turns[start:end]
@@ -722,7 +722,7 @@ def _build_records(
     group_start = 0
     running = overhead
     for i, cost in enumerate(turn_costs):
-        separator = _ARRAY_SEPARATOR_BYTES if group_start < i else 0
+        separator = ARRAY_SEPARATOR_BYTES if group_start < i else 0
         if group_start < i and running + separator + cost > record_max_bytes:
             close_group(group_start, i)
             group_start = i

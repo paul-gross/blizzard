@@ -526,7 +526,7 @@ def test_resume_owner_failure_escalates_in_place(tmp_path: Path, known_but_unava
     store = _store(tmp_path)
     _seed_running_lease(store)
     owner = "other" if known_but_unavailable else "missing"
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.exec_driver_sql(f"UPDATE leases SET harness_id = '{owner}' WHERE lease_id = 'lease_1'")
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
 

@@ -214,7 +214,7 @@ def test_escalation_candidates_drop_only_what_a_strictly_later_lease_or_requeue_
         for chunk_id, requeued_at in (("ch_requeue", at + timedelta(seconds=1)), ("ch_equal_requeue", at)):
             conn.execute(insert(s.requeues).values(stamp(s.requeues, chunk_id=chunk_id, requeued_at=requeued_at)))
 
-    assert set(_escalations(engine)._newest_escalation_per_chunk()) == {"ch_equal", "ch_equal_requeue", "ch_bare"}
+    assert set(_escalations(engine).newest_escalation_per_chunk()) == {"ch_equal", "ch_equal_requeue", "ch_bare"}
 
 
 def test_escalation_candidate_read_rows_flat_across_history_depth(tmp_path: Path) -> None:
@@ -236,7 +236,7 @@ def test_escalation_candidate_read_rows_flat_across_history_depth(tmp_path: Path
                 _escalate(conn, chunk_id, at=_at(2 * depth))
 
     def read(engine: Engine) -> object:
-        newest = _escalations(engine)._newest_escalation_per_chunk()
+        newest = _escalations(engine).newest_escalation_per_chunk()
         assert set(newest) == set(chunks)
         return sorted(newest)
 

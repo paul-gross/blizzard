@@ -81,7 +81,7 @@ def plugin_identity(reference: str) -> str:
     return name.casefold()
 
 
-def _plugins(document: Mapping[str, JsonValue], source: Path) -> dict[str, Path]:
+def plugins(document: Mapping[str, JsonValue], source: Path) -> dict[str, Path]:
     raw = document.get("plugin", [])
     if not isinstance(raw, list) or any(not isinstance(item, str) or not item for item in raw):
         raise HarnessBundleError(source, "plugin must be an array of non-empty strings")
@@ -94,7 +94,7 @@ def _plugins(document: Mapping[str, JsonValue], source: Path) -> dict[str, Path]
     return found
 
 
-def _directory_plugins(directory: Path) -> dict[str, Path]:
+def directory_plugins(directory: Path) -> dict[str, Path]:
     found: dict[str, Path] = {}
     if directory.is_dir():
         for path in sorted(directory.iterdir()):
@@ -107,7 +107,7 @@ def _directory_plugins(directory: Path) -> dict[str, Path]:
     return found
 
 
-def _merge_plugins(found: dict[str, Path], incoming: Mapping[str, Path]) -> None:
+def merge_plugins(found: dict[str, Path], incoming: Mapping[str, Path]) -> None:
     for identity, path in incoming.items():
         if identity in found:
             raise HarnessBundleError(path, f"duplicate plugin {identity!r} at {found[identity]} and {path}")
@@ -137,30 +137,30 @@ def ambient_plugin_sources(cwd: Path, env: Mapping[str, str]) -> dict[str, Path]
                     raise HarnessBundleError(config, f"cannot inspect plugin declarations: {exc}") from exc
                 if not isinstance(document, dict):
                     raise HarnessBundleError(config, "must hold a JSON object")
-                _merge_plugins(found, _plugins(document, config))
+                merge_plugins(found, plugins(document, config))
         if reads_plugin_dirs:
             for name in ("plugin", "plugins"):
-                _merge_plugins(found, _directory_plugins(scope / name))
+                merge_plugins(found, directory_plugins(scope / name))
     return found
 
 
 def check_ambient_plugins(effective_dir: Path, cwd: Path, env: Mapping[str, str]) -> None:
     document = decode_json_object((effective_dir / "opencode.json").read_text(encoding="utf-8"))
-    found = _plugins(document, effective_dir / "opencode.json")
-    _merge_plugins(found, _directory_plugins(effective_dir / "plugins"))
-    _merge_plugins(found, ambient_plugin_sources(cwd, env))
+    found = plugins(document, effective_dir / "opencode.json")
+    merge_plugins(found, directory_plugins(effective_dir / "plugins"))
+    merge_plugins(found, ambient_plugin_sources(cwd, env))
 
 
 def opencode_bundle_layout(worker_config_path: Path) -> HarnessLayout:
     """The layout, composing against the runner's worker config at ``worker_config_path``."""
 
-    def compose(composition: HarnessComposition) -> None:
-        _compose(composition, worker_config_path)
+    def compose_against_worker_config(composition: HarnessComposition) -> None:
+        compose(composition, worker_config_path)
 
-    return replace(OPENCODE_BUNDLE_LAYOUT, compose=compose)
+    return replace(OPENCODE_BUNDLE_LAYOUT, compose=compose_against_worker_config)
 
 
-def _compose(composition: HarnessComposition, worker_config_path: Path) -> None:
+def compose(composition: HarnessComposition, worker_config_path: Path) -> None:
     """Compose inside staging, before the snapshot can be published."""
     source = composition.source_dir
     if not worker_config_path.is_file():
@@ -180,16 +180,16 @@ def _compose(composition: HarnessComposition, worker_config_path: Path) -> None:
     for name in worker_config.permissions:
         if name in permission:
             raise HarnessBundleError(native, f"permission.{name} collides with runner-owned rule")
-    operator_plugins = _plugins(document, native)
-    _merge_plugins(operator_plugins, _directory_plugins(source / "plugins"))
-    runner_plugins = _plugins(worker_config.raw, worker_config_path)
+    operator_plugins = plugins(document, native)
+    merge_plugins(operator_plugins, directory_plugins(source / "plugins"))
+    runner_plugins = plugins(worker_config.raw, worker_config_path)
     for identity, runner_path in runner_plugins.items():
         if identity in operator_plugins:
             operator_path = operator_plugins[identity]
             raise HarnessBundleError(
                 operator_path, f"duplicate plugin {identity!r} at {operator_path} and {runner_path}"
             )
-    _merge_plugins(operator_plugins, runner_plugins)
+    merge_plugins(operator_plugins, runner_plugins)
     document["permission"] = {
         **permission,
         **{

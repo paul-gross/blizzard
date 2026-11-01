@@ -122,6 +122,24 @@ class KeyedStatementGuard:
         self._verdicts: OrderedDict[tuple[object, frozenset[str]], tuple[str, ...]] = OrderedDict()
         self._verdicts_lock = Lock()
 
+    @property
+    def metadata(self) -> MetaData:
+        return self._metadata
+
+    @property
+    def exempt_option(self) -> str:
+        return self._exempt_option
+
+    @property
+    def unscoped(self) -> Callable[[Sequence[str], ClauseElement], Exception]:
+        return self._unscoped
+
+    @property
+    def verdicts(self) -> Mapping[tuple[object, frozenset[str]], tuple[str, ...]]:
+        """The remembered verdicts, least recently used first."""
+        with self._verdicts_lock:
+            return dict(self._verdicts)
+
     def before_execute(
         self,
         conn: Connection,
@@ -147,7 +165,7 @@ class KeyedStatementGuard:
         key = None if cache_key is None else (cache_key.key, parameter_keys)
         violations = self._remembered(key)
         if violations is None:
-            walk = _Walk(self, parameter_keys)
+            walk = Walk(self, parameter_keys)
             walk.visit(statement, _TOP)
             violations = tuple(sorted(set(walk.violations)))
             self._remember(key, violations)
@@ -178,7 +196,7 @@ class KeyedStatementGuard:
         return table is not None and table.metadata is self._metadata and self.scoping.is_keyed(table)
 
 
-class _Walk:
+class Walk:
     """One statement's walk, mirroring the compiler's descent: each nested statement sees the FROM elements it may
     correlate to, and each ``SELECT``, ``UPDATE`` and ``DELETE`` must scope every keyed table it renders."""
 
@@ -189,6 +207,11 @@ class _Walk:
         self._parameter_keys = parameter_keys
         self._seen: set[tuple[int, _Enclosing, bool, bool]] = set()
         self.violations: list[str] = []
+
+    @property
+    def started(self) -> bool:
+        """Whether this walk has visited any element yet."""
+        return bool(self._seen)
 
     def visit(
         self, element: ClauseElement, enclosing: _Enclosing, *, asfrom: bool = False, lateral: bool = False

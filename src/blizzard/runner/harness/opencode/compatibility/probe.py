@@ -153,6 +153,7 @@ class OpenCodeCompatibilityProbe:
         auth_source: Path | None,
         allow_live_provider: bool = False,
         timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        config_snapshots: Mapping[Path, bytes] | None = None,
     ) -> None:
         if allow_live_provider is not True:
             raise LiveProviderOptInRequired("pass the explicit live-provider opt-in before running OpenCode")
@@ -186,7 +187,7 @@ class OpenCodeCompatibilityProbe:
         self.observed_version = "unknown"
         self.version_admitted = False
         self._evidence: JsonObject = {}
-        self._config_snapshots: dict[Path, bytes] = {}
+        self._config_snapshots: dict[Path, bytes] = dict(config_snapshots or {})
         self._security_markers: tuple[Path, Path] | None = None
 
     @property
@@ -270,7 +271,7 @@ class OpenCodeCompatibilityProbe:
                     self._evidence["config"] = runner_config.evidence
                     env = child_env(config_path, roots)
                     self._evidence["environment_keys"] = [*sorted(env)]
-                    fresh = self._fresh_turn(repo.workdir, env)
+                    fresh = self.fresh_turn(repo.workdir, env)
                     if fresh.provider_refusal is not None:
                         self._evidence["provider_refusal"] = fresh.provider_refusal
                         self._fill_ambiguous(observations, PROBE_ROSTER, fresh.provider_refusal)
@@ -359,7 +360,7 @@ class OpenCodeCompatibilityProbe:
                         )
 
                     observations[CompatibilityProbe.PERMISSION] = self._permission_observation(repo.workdir, env, roots)
-                    observations[CompatibilityProbe.PROCESS_CONTROL] = self._process_control_observation(
+                    observations[CompatibilityProbe.PROCESS_CONTROL] = self.process_control_observation(
                         repo.workdir, env
                     )
                     observations[CompatibilityProbe.ROOT_HOOK] = ProbeObservation.absent(
@@ -367,11 +368,11 @@ class OpenCodeCompatibilityProbe:
                         "the runner-owned proof config has no portable hook lifecycle signal",
                         "config/root-hook-unsupported",
                     )
-                    observations[CompatibilityProbe.CONFIGURATION_ISOLATION] = self._configuration_observation(
+                    observations[CompatibilityProbe.CONFIGURATION_ISOLATION] = self.configuration_observation(
                         repo.workdir, config_path, env, roots
                     )
         except Exception as exc:
-            message = self._unexpected_error(exc)
+            message = self.unexpected_error(exc)
             self.observed_version = self.observed_version or "unknown"
             self._fill_failed(observations, PROBE_ROSTER, message)
         return self._ordered_observations(observations)
@@ -395,7 +396,7 @@ class OpenCodeCompatibilityProbe:
         normalized = normalize_opencode_version(result.stdout)
         return normalized if normalized is not None else "unknown"
 
-    def _fresh_turn(self, cwd: Path, env: Mapping[str, str]) -> _TurnResult:
+    def fresh_turn(self, cwd: Path, env: Mapping[str, str]) -> _TurnResult:
         """Run the edit/commit turn and export it repeatedly while live and after it exits."""
 
         argv = self._run_args(FRESH_PROMPT, agent=TOOL_AGENT)
@@ -769,7 +770,7 @@ class OpenCodeCompatibilityProbe:
             )
         return ProbeObservation.observed(probe, summary, evidence)
 
-    def _process_control_observation(self, cwd: Path, env: Mapping[str, str]) -> ProbeObservation:
+    def process_control_observation(self, cwd: Path, env: Mapping[str, str]) -> ProbeObservation:
         argv = self._run_args(PROCESS_CONTROL_PROMPT, agent=TOOL_AGENT)
         self._record_operation("process_control", argv, cwd=cwd, result=None)
         try:
@@ -850,7 +851,7 @@ class OpenCodeCompatibilityProbe:
                 return True
         return False
 
-    def _configuration_observation(
+    def configuration_observation(
         self,
         cwd: Path,
         config_path: Path,
@@ -1030,9 +1031,9 @@ class OpenCodeCompatibilityProbe:
                 "the child-session server could not be reaped",
                 "children/reap",
             )
-        return self._children_result_observation(result, session_id)
+        return self.children_result_observation(result, session_id)
 
-    def _children_result_observation(self, result: OpenCodeProcessResult, session_id: str) -> ProbeObservation:
+    def children_result_observation(self, result: OpenCodeProcessResult, session_id: str) -> ProbeObservation:
         if result.timed_out:
             return ProbeObservation.failed(
                 CompatibilityProbe.CHILD_SESSIONS,
@@ -1360,7 +1361,7 @@ class OpenCodeCompatibilityProbe:
         del error
         return SHAPE_FAULT_SUMMARY
 
-    def _unexpected_error(self, error: Exception) -> str:
+    def unexpected_error(self, error: Exception) -> str:
         """Blame OpenCode only for a fault in its own output; a runner fault is not evidence about it."""
 
         if isinstance(error, OpenCodeShapeError | CursorError | json.JSONDecodeError):

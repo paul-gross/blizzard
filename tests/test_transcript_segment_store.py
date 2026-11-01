@@ -69,28 +69,28 @@ def _executed_statements() -> dict[str, ClauseElement]:
     record = _record()
     m = store_module
     return {
-        "_segments_for_chunk_stmt": m._segments_for_chunk_stmt(_STMTS, "ch_1"),
-        "_records_for_segment_stmt": m._records_for_segment_stmt(_STMTS, "ch_1", "sg_1"),
-        "_lease_runner_ids_stmt": m._lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
-        "_records_for_lease_stmt": m._records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
-        "_high_water_stmt": m._high_water_stmt(_STMTS, "r1"),
-        "_high_water_owner_stmt": m._high_water_owner_stmt(_STMTS, "r1"),
-        "_natural_key_state_stmt": m._natural_key_state_stmt(_STMTS, "sg_1", 0),
-        "_epoch_owners_stmt": m._epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
-        "_chunk_stored_bytes_stmt": m._chunk_stored_bytes_stmt(_STMTS, "ch_1"),
-        "_runner_window_bytes_stmt": m._runner_window_bytes_stmt(_STMTS, "r1", _NOW),
-        "_insert_high_water_stmt": m._insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
-        "_update_high_water_stmt": m._update_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
-        "_insert_accepted_stmt": m._insert_accepted_stmt(
+        "segments_for_chunk_stmt": m.segments_for_chunk_stmt(_STMTS, "ch_1"),
+        "records_for_segment_stmt": m.records_for_segment_stmt(_STMTS, "ch_1", "sg_1"),
+        "lease_runner_ids_stmt": m.lease_runner_ids_stmt(_STMTS, "ch_1", "nd_build", 1),
+        "records_for_lease_stmt": m.records_for_lease_stmt(_STMTS, "ch_1", "nd_build", 1, "r1"),
+        "high_water_stmt": m.high_water_stmt(_STMTS, "r1"),
+        "high_water_owner_stmt": m.high_water_owner_stmt(_STMTS, "r1"),
+        "natural_key_state_stmt": m.natural_key_state_stmt(_STMTS, "sg_1", 0),
+        "epoch_owners_stmt": m.epoch_owners_stmt(_STMTS, ["ch_1"], [1]),
+        "chunk_stored_bytes_stmt": m.chunk_stored_bytes_stmt(_STMTS, "ch_1"),
+        "runner_window_bytes_stmt": m.runner_window_bytes_stmt(_STMTS, "r1", _NOW),
+        "insert_high_water_stmt": m.insert_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "update_high_water_stmt": m.update_high_water_stmt(_STMTS, "r1", seq=7, at=_NOW),
+        "insert_accepted_stmt": m.insert_accepted_stmt(
             _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
         ),
-        "_insert_rejected_stmt": m._insert_rejected_stmt(
+        "insert_rejected_stmt": m.insert_rejected_stmt(
             _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
         ),
-        "_update_to_accepted_stmt": m._update_to_accepted_stmt(
+        "update_to_accepted_stmt": m.update_to_accepted_stmt(
             _STMTS, record, byte_count=10, codec="zlib", content=b"z", at=_NOW
         ),
-        "_update_still_rejected_stmt": m._update_still_rejected_stmt(
+        "update_still_rejected_stmt": m.update_still_rejected_stmt(
             _STMTS, record, byte_count=999, reason="record_too_large", at=_NOW
         ),
     }
@@ -402,7 +402,7 @@ def test_update_still_rejected_refreshes_the_row_without_storing_content(tmp_pat
 
 def test_two_successive_still_rejected_offers_leave_only_the_latest_bytes_in_the_window(tmp_path: Path) -> None:
     """`byte_count` replaces rather than accumulates — accumulating would double-count
-    against `_chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
+    against `chunk_stored_bytes_stmt` once a rejected row flips to accepted, so a second
     still-rejected offer must not leave the first's bytes in the runner's daily-rate window."""
     engine = _migrated_engine(tmp_path)
     store = TranscriptSegmentStore(hub_store_connections(engine))

@@ -324,7 +324,7 @@ def test_checks_block_renders_pass_and_fail_and_shows_the_tail_only_on_failure()
             ExecutedCheck(command="mise run lint", passed=True, output_tail="all good"),
             ExecutedCheck(command="mise run test", passed=False, output_tail="assert 1 == 2\n1 failed"),
         ]
-    )._checks_block()
+    ).checks_block()
     # Harness-inert: every line is `#`-prefixed so a mock harness that execs the prompt
     # sees only comments.
     assert all(line.startswith("#") for line in block.splitlines() if line)
@@ -338,7 +338,7 @@ def test_checks_block_renders_pass_and_fail_and_shows_the_tail_only_on_failure()
 
 @pytest.mark.unit
 def test_checks_block_is_empty_for_no_checks() -> None:
-    assert _prompt([])._checks_block() == ""
+    assert _prompt([]).checks_block() == ""
 
 
 @pytest.mark.component

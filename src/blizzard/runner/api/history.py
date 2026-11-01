@@ -28,7 +28,7 @@ def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     oldest-first into one kind-discriminated read. Excludes the in-flight node-step."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "history").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
-    return _rows(ChunkHistoryView.model_validate(upstream.json()))
+    return rows(ChunkHistoryView.model_validate(upstream.json()))
 
 
 @dto
@@ -135,7 +135,7 @@ class _RestartEntry(_HistoryEntry):
         )
 
 
-def _rows(detail: ChunkHistoryView) -> list[HistoryRowView]:
+def rows(detail: ChunkHistoryView) -> list[HistoryRowView]:
     """The chunk's transitions, migrations, bounces, resolutions, requeues, and restarts merged
     into one kind-discriminated timeline, oldest-first by ``recorded_at``. Each input list already
     arrives oldest-first, so a stable sort on ``recorded_at`` alone preserves each kind's own order and only

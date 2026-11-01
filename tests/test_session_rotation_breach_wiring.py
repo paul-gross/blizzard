@@ -1,4 +1,4 @@
-"""`SessionResolver._rotation_breach` — every argument it hands its collaborators, and every threshold's own breach.
+"""`SessionResolver.pool_head_breach` — every argument it hands its collaborators, and every threshold's own breach.
 
 Unit tier over recording stubs at the registry, lease-repository and transcript-source seams: the
 component tests in `tests/test_runner_session_pools.py` prove the resume-or-rotate outcome, and this pins what
@@ -117,7 +117,7 @@ def _resolver(registry: _Registry, leases: _Leases | None = None, *, wired: bool
 
 
 def _breach(resolver: SessionResolver, node):
-    return resolver._rotation_breach(_HEAD, node, _CWD)
+    return resolver.pool_head_breach(_HEAD, node, _CWD)
 
 
 # --- the model check --------------------------------------------------------------------------

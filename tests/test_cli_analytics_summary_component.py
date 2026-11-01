@@ -17,7 +17,7 @@ import pytest
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.cli.analytics import _DATASETS
+from blizzard.hub.cli.analytics import DATASETS
 from tests.repo_files import repo_root
 from tests.support import HubHarness
 from tests.test_analytics_events_api import cookie, seeded_hub
@@ -69,7 +69,7 @@ def _invoke(bound: Bound, *args: str) -> Result:
 
 
 def test_the_applicability_table_matches_the_openapi_declared_params() -> None:
-    for dataset, spec in _DATASETS.items():
+    for dataset, spec in DATASETS.items():
         declared = {p["name"] for p in _OPENAPI["paths"][spec.path]["get"]["parameters"]} - _ROLLUP_PARAMS
         assert declared >= _LENS_PARAMS, dataset
         table_filters = spec.filters
@@ -87,7 +87,7 @@ def test_the_dataset_choice_list_matches_the_table() -> None:
     dataset_param = next(p for p in summary_command.params if p.name == "dataset")
 
     assert isinstance(dataset_param.type, click.Choice)
-    assert set(dataset_param.type.choices) == set(_DATASETS)
+    assert set(dataset_param.type.choices) == set(DATASETS)
 
 
 # --- every dataset choice is reachable at the route the table names -------------------
@@ -97,7 +97,7 @@ def test_every_dataset_choice_is_reachable_at_the_real_router(tmp_path: Path) ->
     hub, token, _graph_id, _nodes = _seeded_spend_hub(tmp_path)
     bound = _relay(hub, token)
 
-    for dataset, spec in _DATASETS.items():
+    for dataset, spec in DATASETS.items():
         result = _invoke(bound, dataset, "--json")
         assert result.exit_code == 0, (dataset, result.output)
         assert spec.response_key in json.loads(result.stdout)

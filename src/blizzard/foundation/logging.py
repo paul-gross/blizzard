@@ -17,7 +17,7 @@ _configured = False
 ENV_LOG_FORMAT = "BZ_LOG_FORMAT"
 
 
-class _LiveStderr:
+class LiveStderr:
     """A file-like proxy resolving ``sys.stderr`` fresh on every write (pinned by
     ``tests/test_logging.py::test_a_cached_logger_survives_a_replaced_stderr``)."""
 
@@ -63,7 +63,7 @@ class LogFormat:
                 *self.exception_processors(),
                 self.renderer(),
             ],
-            logger_factory=structlog.PrintLoggerFactory(file=cast(TextIO, _LiveStderr())),
+            logger_factory=structlog.PrintLoggerFactory(file=cast(TextIO, LiveStderr())),
             cache_logger_on_first_use=True,
         )
 

@@ -115,7 +115,7 @@ def movement_arrivals(facts: StepFacts) -> tuple[Arrival, ...]:
     return tuple(sorted(arrivals, key=Arrival.order))
 
 
-def _starting_graph_id(facts: StepFacts, arrivals: tuple[Arrival, ...]) -> str:
+def starting_graph_id(facts: StepFacts, arrivals: tuple[Arrival, ...]) -> str:
     """The graph the chunk stood in before its first movement, read from facts, not the pin."""
     if not arrivals:
         if facts.pin_graph_id is None:
@@ -137,7 +137,7 @@ def _starting_graph_id(facts: StepFacts, arrivals: tuple[Arrival, ...]) -> str:
 def arrivals_with_entry(facts: StepFacts) -> tuple[Arrival, ...]:
     """The movement arrivals led by the entry placement, which is the chunk's first visit."""
     arrivals = movement_arrivals(facts)
-    graph = _graph(facts, _starting_graph_id(facts, arrivals))
+    graph = _graph(facts, starting_graph_id(facts, arrivals))
     entry = Arrival(
         _BEGINNING,
         0,

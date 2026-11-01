@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli import hub as hub_group
-from blizzard.hub.cli.runner_host import _token_lines
+from blizzard.hub.cli.runner_host import token_lines
 from tests.support import HubHarness, build_hub, seed_runner
 from tests.worker_http import Bound, bind_stubs
 
@@ -277,4 +277,4 @@ def test_runner_add_under_a_retired_host_is_refused(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_the_printed_env_line_names_the_host_token_variable() -> None:
-    assert _token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"
+    assert token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"

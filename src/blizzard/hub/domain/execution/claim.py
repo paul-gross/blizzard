@@ -324,6 +324,14 @@ class ClaimService:
         self._clock = clock
         self._label = label
 
+    @property
+    def registry(self) -> IReadRunnerRegistry:
+        return self._registry
+
+    @property
+    def exclusive(self) -> IChunkExclusiveWrites:
+        return self._exclusive
+
     # runner_id resolves a paused-runner guard, a domain rule (bzh:domain-takes-objects).
     # ast-grep-ignore: bzh:domain-takes-objects
     def claim(

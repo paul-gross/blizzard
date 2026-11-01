@@ -82,7 +82,7 @@ class GraphReconciliation:
         stored = self.graphs.newest_definition_yaml(doc.name)
         try:
             graph = self.mint_service.mint_if_changed(
-                doc, definition_yaml=definition_yaml, minted=self._parsed(stored, doc.name)
+                doc, definition_yaml=definition_yaml, minted=self.parsed(stored, doc.name)
             )
         except GraphValidationError as exc:
             _log.warning("packaged graph failed validation", graph=doc.name, error=str(exc))
@@ -94,7 +94,7 @@ class GraphReconciliation:
         _log.info("graph minted by reconciliation", graph=doc.name, graph_id=graph.graph_id, reason=reason)
         return GraphSyncOutcome(name=doc.name, status=GraphSyncStatus.MINTED, graph_id=graph.graph_id, detail=reason)
 
-    def _parsed(self, stored: str | None, name: str) -> GraphDoc | None:
+    def parsed(self, stored: str | None, name: str) -> GraphDoc | None:
         """A stored definition re-parsed into an authoring doc, or ``None``.
 
         ``None`` — a never-minted name, or a stored definition that no longer parses — mints. A

@@ -185,9 +185,9 @@ def test_the_send_is_capped_by_the_sessions_own_environment(
 def test_finishing_the_span_records_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _record_sends(monkeypatch, released=True)
     session = _traced(_ENV)
-    assert session._span is not None
+    assert session.span is not None
     codes: list[int] = []
-    monkeypatch.setattr(session._span, "finish", codes.append)
+    monkeypatch.setattr(session.span, "finish", codes.append)
 
     session.finish(7)
 

@@ -348,7 +348,7 @@ class _Dataset:
 
 
 #: Each ``summary`` dataset name mapped to its read and the filters it takes.
-_DATASETS: dict[str, _Dataset] = {
+DATASETS: dict[str, _Dataset] = {
     "counts-files": _Dataset(
         "/api/analytics/counts/files",
         "counts",
@@ -396,7 +396,7 @@ _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
 
 
 @analytics_group.command("summary", cls=FleetCommand)
-@click.argument("dataset", type=click.Choice(sorted(_DATASETS)))
+@click.argument("dataset", type=click.Choice(sorted(DATASETS)))
 @_graph_option
 @_source_option
 @_since_option
@@ -451,7 +451,7 @@ def analytics_summary(
 
     Only spend-chunks pages or streams; counts-files alone takes --limit as a top-N.
     A filter DATASET does not take is refused."""
-    spec = _DATASETS[dataset]
+    spec = DATASETS[dataset]
     given = {
         "graph_id": graph_id,
         "source": source,

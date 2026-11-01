@@ -42,7 +42,7 @@ def _unbound_store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 def _write_rows(store: SqlAlchemyRunnerStore, runner_id: str, *chunk_ids: str) -> None:
     """Pause-park rows as the named runner wrote them."""
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.execution_options(**{RUNNER_UNSCOPED_OPTION: True}).execute(
             sa.insert(schema.pause_parks),
             [{"lease_id": f"lease_{c}", "chunk_id": c, "parked_at": _NOW, "runner_id": runner_id} for c in chunk_ids],
@@ -123,7 +123,7 @@ def test_a_runner_is_bound_from_configuration_before_its_hub_answers_and_registr
         assert graph.identity_verdict.verdict().state is IdentityState.MISMATCHED
 
         hub.default_runner_id = "rn_a"
-        hub.issued[hub._token] = "rn_a"
+        hub.issued[hub.scripted_token] = "rn_a"
         tick(ctx)  # the configured runner's token: its identity row is recorded, and every row names it
 
         owners = _owners(graph.engine)

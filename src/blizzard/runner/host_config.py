@@ -165,10 +165,10 @@ _LEGACY_KEYS: Mapping[str, _LegacyKey] = {
 }
 
 #: Keys of the flat runner file that have no home under a host, with where graduation places each.
-_RETIRED_KEYS: Mapping[str, str] = {key: placed.retired for key, placed in _LEGACY_KEYS.items() if placed.retired}
+RETIRED_KEYS: Mapping[str, str] = {key: placed.retired for key, placed in _LEGACY_KEYS.items() if placed.retired}
 
 #: The flat runner file's keys that graduation moves into its one ``[[workspace]]``, by their name there.
-_GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
+GRADUATED_WORKSPACE_KEYS: Mapping[str, str] = {
     key: placed.home for key, placed in _LEGACY_KEYS.items() if placed.placement is _Placement.WORKSPACE
 }
 
@@ -200,7 +200,7 @@ RUNNER_PATH_KEYS: tuple[RunnerPathKey, ...] = (
 )
 
 #: Keys that belong to a ``[[workspace]]``, so are refused at the top level: every graduated workspace key but its id.
-_WORKSPACE_HOME_KEYS = tuple(home for home in _GRADUATED_WORKSPACE_KEYS.values() if home != "id")
+_WORKSPACE_HOME_KEYS = tuple(home for home in GRADUATED_WORKSPACE_KEYS.values() if home != "id")
 
 
 class HostConfigError(ConfigError):
@@ -561,7 +561,7 @@ class HostConfig:
         except (OSError, ConfigError) as exc:
             raise HostConfigError((f"{path} cannot be read: {exc}",)) from exc
         try:
-            return _parse(
+            return parse(
                 raw,
                 layout=layout,
                 host=host,
@@ -631,8 +631,8 @@ class HostConfig:
         hub id its store records, ``runner_id``, and binds each project ``served`` when the file names none. Every
         host error is refused."""
         layout = HostLayout(root.resolve())
-        return _parse(
-            _graduated_raw(legacy, runner_id=runner_id, served=served),
+        return parse(
+            graduated_raw(legacy, runner_id=runner_id, served=served),
             layout=layout,
             host=None,
             port=None,
@@ -802,7 +802,7 @@ def _parse_loop(value: object) -> LoopMode:
     raise ConfigError(f"loop must be one of {[str(mode) for mode in LoopMode]}, got {value!r}")
 
 
-def _parse(
+def parse(
     raw: dict[str, Any],
     *,
     layout: HostLayout,
@@ -929,11 +929,11 @@ def read_legacy_document(layout: HostLayout) -> dict[str, Any]:
     return decode_host_text(text, what=str(path))
 
 
-def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> dict[str, Any]:
+def graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[str, ...]) -> dict[str, Any]:
     """The host file a flat runner file graduates to, as parsed TOML: the host keys at the top, its ``workspace_*``
     and prompt keys as one ``[[workspace]]``, and everything else as one ``[[runner]]``."""
     raw: dict[str, Any] = {key: legacy[key] for key in _GRADUATED_HOST_KEYS if key in legacy}
-    workspace = {home: legacy[key] for key, home in _GRADUATED_WORKSPACE_KEYS.items() if key in legacy}
+    workspace = {home: legacy[key] for key, home in GRADUATED_WORKSPACE_KEYS.items() if key in legacy}
     workspace.setdefault("id", DEFAULT_WORKSPACE_ID)
     runner: dict[str, Any] = {key: value for key, value in legacy.items() if key not in _LEGACY_KEYS}
     runner["id"] = runner_id
@@ -972,7 +972,7 @@ def _graduated_raw(legacy: Mapping[str, Any], *, runner_id: str, served: tuple[s
 def _refuse_misplaced_keys(raw: ConfigView, errors: _Errors) -> None:
     """Top-level keys with no home under a host, and keys whose home is a ``[[runner]]`` or
     ``[[workspace]]``, each named with where it belongs."""
-    for key, home in _RETIRED_KEYS.items():
+    for key, home in RETIRED_KEYS.items():
         if key in raw:
             errors.add(f"{key!r} has no home under a host: it is {home}")
     for key in RUNNER_HOME_KEYS:
@@ -1077,7 +1077,7 @@ def _runner_entry(raw: ConfigView, name: str, *, root: Path, db_url: str, path: 
     if subscription is not None and not isinstance(subscription, str):
         problems.add(f"subscription must name a [[subscription]] slug, got {subscription!r}")
         subscription = None
-    for key, home in _RETIRED_KEYS.items():
+    for key, home in RETIRED_KEYS.items():
         if key in raw:
             problems.add(f"{key!r} has no home under a host: it is {home}")
     bindings = _bindings(raw, problems)
@@ -1330,7 +1330,7 @@ def _runner_toml(entry: RunnerEntry) -> str:
     ]
     if spend:
         text += "\n[runner.cost]\n" + "".join(spend) + f"window_hours = {own.runner_ceiling_window_hours}\n"
-    text += _throttle_toml(own.throttle)
+    text += throttle_toml(own.throttle)
     if own.context_warn_tokens is not None:
         text += (
             "\n[runner.context]\n"
@@ -1340,7 +1340,7 @@ def _runner_toml(entry: RunnerEntry) -> str:
     return text
 
 
-def _throttle_toml(settings: ThrottleSettings | None) -> str:
+def throttle_toml(settings: ThrottleSettings | None) -> str:
     """``[runner.throttle]``, each hold-or-release choice that is not ``hold``, and each configured lever's sub-table,
     and only those; loading the text gives back ``settings``."""
     if settings is None:

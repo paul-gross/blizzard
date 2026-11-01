@@ -122,6 +122,10 @@ class ChunkExclusiveWrites:
         self._registry = registry
         self._work_refs = work_refs
 
+    @property
+    def registry(self) -> RunnerRegistryStore:
+        return self._registry
+
     @contextmanager
     def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
         with self._store.write("locked_chunk_transaction") as conn:

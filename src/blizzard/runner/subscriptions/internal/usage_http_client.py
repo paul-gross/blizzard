@@ -15,6 +15,11 @@ class LazyUsageHttpClient:
     def __init__(self) -> None:
         self._client: httpx2.Client | None = None
 
+    @property
+    def built_client(self) -> httpx2.Client | None:
+        """The shared client, or ``None`` while no sample has built it."""
+        return self._client
+
     def __call__(self) -> httpx2.Client:
         if self._client is None:
             self._client = httpx2.Client()

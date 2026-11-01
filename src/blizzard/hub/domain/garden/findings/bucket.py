@@ -54,6 +54,10 @@ class FindingBucketReader:
     def __init__(self, findings: IReadFindingRepository) -> None:
         self._findings = findings
 
+    @property
+    def findings(self) -> IReadFindingRepository:
+        return self._findings
+
     def for_run(self, run: RunContext) -> FindingBucket:
         rows = self._findings.list_for_routine(run.project_id, run.routine_name, include_gone=True, exclude_exited=True)
         rows += self._findings.list_by_source(

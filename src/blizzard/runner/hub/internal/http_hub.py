@@ -316,7 +316,7 @@ class HttpHubClient:
             batch = ids[start : start + _CHUNK_STATUSES_BATCH_LIMIT]
             resp = self._get(f"{_FLEET_API}/chunk-statuses", params={"chunk_id": batch})
             for view in TypeAdapter(list[ChunkStatusView]).validate_python(resp.json()):
-                result[view.chunk_id] = _chunk_state(view)
+                result[view.chunk_id] = chunk_state(view)
         return result
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
@@ -883,7 +883,7 @@ def _queue(wire: QueuePeekResponse) -> list[QueueEntry]:
     ]
 
 
-def _chunk_state(wire: ChunkStatusView) -> ChunkState:
+def chunk_state(wire: ChunkStatusView) -> ChunkState:
     cost, decision, pause = wire.cost, wire.decision, wire.pause
     return ChunkState(
         chunk_id=wire.chunk_id,

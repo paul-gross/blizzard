@@ -115,26 +115,26 @@ def _migrated_engine(tmp_path: Path, *, chunk_ids: tuple[str, ...] = ("ch_1", "c
 def _executed_statements() -> dict[str, ClauseElement]:
     m = store_module
     return {
-        "_visible_segment_ids_stmt": m._visible_segment_ids_stmt(_STMTS),
-        "_derived_segment_ids_stmt": m._derived_segment_ids_stmt(_STMTS),
-        "_segment_records_stmt": m._segment_records_stmt(_STMTS, "sg_1"),
-        "_marker_stmt": m._marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
-        "_delete_events_stmt": m._delete_events_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
-        "_delete_marker_stmt": m._delete_marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
-        "_insert_events_stmt": m._insert_events_stmt(_STMTS),
-        "_upsert_marker_stmt": m._upsert_marker_stmt(
+        "visible_segment_ids_stmt": m.visible_segment_ids_stmt(_STMTS),
+        "derived_segment_ids_stmt": m.derived_segment_ids_stmt(_STMTS),
+        "segment_records_stmt": m.segment_records_stmt(_STMTS, "sg_1"),
+        "marker_stmt": m.marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "delete_events_stmt": m.delete_events_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "delete_marker_stmt": m.delete_marker_stmt(_STMTS, "sg_1", _EXTRACTOR_VERSION),
+        "insert_events_stmt": m.insert_events_stmt(_STMTS),
+        "upsert_marker_stmt": m.upsert_marker_stmt(
             _STMTS, "sg_1", _EXTRACTOR_VERSION, content_fingerprint="fp", event_count=1, complete=True, at=_NOW
         ),
-        "_delete_all_events_for_segments_stmt": m._delete_all_events_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
-        "_delete_all_markers_for_segments_stmt": m._delete_all_markers_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
-        "_candidacy_digests_stmt": m._candidacy_digests_stmt(_STMTS),
-        "_current_markers_stmt": m._current_markers_stmt(_STMTS, _EXTRACTOR_VERSION),
-        "_derivation_signature_stmt": m._derivation_signature_stmt(_STMTS),
-        "_markers_stmt": m._markers_stmt(_STMTS, _EXTRACTOR_VERSION),
-        "_segment_records_for_ids_stmt": m._segment_records_for_ids_stmt(_STMTS, ["sg_1"]),
-        "_segment_contexts_stmt": m._segment_contexts_stmt(_STMTS, ["sg_1"]),
-        "_drop_identities_stmt": m._drop_identities_stmt(_STMTS, ["sg_1"]),
-        "_insert_drops_stmt": m._insert_drops_stmt(_STMTS),
+        "delete_all_events_for_segments_stmt": m.delete_all_events_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
+        "delete_all_markers_for_segments_stmt": m.delete_all_markers_for_segments_stmt(_STMTS, frozenset({"sg_1"})),
+        "candidacy_digests_stmt": m.candidacy_digests_stmt(_STMTS),
+        "current_markers_stmt": m.current_markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "derivation_signature_stmt": m.derivation_signature_stmt(_STMTS),
+        "markers_stmt": m.markers_stmt(_STMTS, _EXTRACTOR_VERSION),
+        "segment_records_for_ids_stmt": m.segment_records_for_ids_stmt(_STMTS, ["sg_1"]),
+        "segment_contexts_stmt": m.segment_contexts_stmt(_STMTS, ["sg_1"]),
+        "drop_identities_stmt": m.drop_identities_stmt(_STMTS, ["sg_1"]),
+        "insert_drops_stmt": m.insert_drops_stmt(_STMTS),
     }
 
 
@@ -183,7 +183,7 @@ def test_no_statement_the_store_executes_leaves_the_portable_surface() -> None:
     "generated mutant body, which this sweep would wrongly hold to the same pattern",
 )
 def test_the_compile_sweep_reaches_every_statement_the_store_can_execute() -> None:
-    builders = {name for name in vars(store_module) if name.endswith("_stmt") or name == "_upsert_marker_stmt"}
+    builders = {name for name in vars(store_module) if name.endswith("_stmt") or name == "upsert_marker_stmt"}
     assert builders == set(_executed_statements())
 
     source = ast.parse(Path(store_module.__file__ or "").read_text())
@@ -586,8 +586,8 @@ def test_replace_segment_events_with_no_events_still_writes_a_marker(tmp_path: P
 
 def test_the_natural_key_is_enforced_by_the_schema(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
-    insert = store_module._insert_events_stmt(hub_store_connections(engine))
-    rows = store_module._event_rows("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE)
+    insert = store_module.insert_events_stmt(hub_store_connections(engine))
+    rows = store_module.event_rows("sg_1", _EXTRACTOR_VERSION, [_event()], _PROVENANCE)
     with engine.begin() as conn:
         conn.execute(insert, rows)
         with pytest.raises(IntegrityError):
@@ -710,7 +710,7 @@ def test_a_failure_after_the_deletes_leaves_events_markers_and_no_drop_fact(
     def _boom(stmts: ScopedStatements) -> Any:
         raise RuntimeError("injected")
 
-    monkeypatch.setattr(store_module, "_insert_drops_stmt", _boom)
+    monkeypatch.setattr(store_module, "insert_drops_stmt", _boom)
     with pytest.raises(RuntimeError):
         store.drop_segments(frozenset({"sg_1"}), at=_NOW)
 

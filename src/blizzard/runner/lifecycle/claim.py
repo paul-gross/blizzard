@@ -392,9 +392,9 @@ class InterruptedClaims:
             self._resume_requeued(chunk_id, view.latest_epoch)
         elif move is InterruptedClaimMove.ADOPT:
             if self._owns_node_entry(chunk_id, view, bindings, open_escalation):
-                self._adopt(chunk_id, view)
+                self.adopt(chunk_id, view)
         elif move is InterruptedClaimMove.RECLAIM:
-            self._reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
+            self.reclaim(chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif move is InterruptedClaimMove.RELEASE_REQUEUED_ELSEWHERE:
             self._release(chunk_id, "releasing binding — chunk requeued locally but no longer routed here")
         elif move is InterruptedClaimMove.RELEASE_OTHER_RUNNER:
@@ -418,7 +418,7 @@ class InterruptedClaims:
             lease_in_binding_tenure=self.ctx.stores.lease_record.has_lease_in_binding_tenure(chunk_id, bound_at),
         )
 
-    def _adopt(self, chunk_id: str, view: ChunkState) -> None:
+    def adopt(self, chunk_id: str, view: ChunkState) -> None:
         """Spawn the current node for a claimed chunk whose spawn never minted a lease.
 
         The route is confirmed and the binding held, but no lease was ever minted, so recovery is
@@ -476,7 +476,7 @@ class InterruptedClaims:
             harness_id=self._latest_owner(chunk_id),
         )
 
-    def _reclaim(self, chunk_id: str, bindings: list[EnvBinding]) -> None:
+    def reclaim(self, chunk_id: str, bindings: list[EnvBinding]) -> None:
         """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
 
         The environment was bound but the claim never landed, so the chunk still reads ``ready``.

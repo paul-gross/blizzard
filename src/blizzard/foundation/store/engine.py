@@ -29,11 +29,11 @@ def create_engine_from_url(url: str) -> Engine:
         connect_args["check_same_thread"] = False
     engine = create_engine(url, future=True, connect_args=connect_args)
     if url.startswith("sqlite"):
-        event.listen(engine, "connect", _set_sqlite_pragmas)
+        event.listen(engine, "connect", set_sqlite_pragmas)
     return engine
 
 
-def _set_sqlite_pragmas(dbapi_connection: sqlite3.Connection, connection_record: object) -> None:
+def set_sqlite_pragmas(dbapi_connection: sqlite3.Connection, connection_record: object) -> None:
     """Every connect-time pragma this store's sqlite connections get.
 
     Runs on the raw DBAPI connection before any transaction opens, so `journal_mode`

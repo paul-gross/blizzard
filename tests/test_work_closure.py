@@ -323,7 +323,7 @@ class _FakeCloseChunks:
     folded transaction."""
 
     def __init__(self, candidates: list[PendingCloseIntent]) -> None:
-        self._candidates = candidates
+        self.candidates = candidates
         self.closures: list[tuple[str, WorkRef, WorkItemCloseOutcome, str | None]] = []
         self.retired: list[tuple[str, WorkRef]] = []
         self.events: list[_RecordedEvent] = []
@@ -345,7 +345,7 @@ class _FakeCloseChunks:
         return {c: self.sources[c] for c in chunk_ids if c in self.sources}
 
     def pending_close_intents(self) -> list[TenantCloseIntent]:
-        return [TenantCloseIntent(tenant=_FAKE_TENANT, intent=intent) for intent in self._candidates]
+        return [TenantCloseIntent(tenant=_FAKE_TENANT, intent=intent) for intent in self.candidates]
 
     def record_close_attempt_skipped(self, intent_id: int, *, at: object) -> None:
         self.skipped_attempts.append(intent_id)
@@ -1048,7 +1048,7 @@ def test_sweep_attempts_at_most_the_pass_limit_and_the_rest_drain_on_later_passe
     drainer.sweep()
     assert closer.closed == refs[:CLOSE_DRAIN_PASS_LIMIT]  # in the read's order; the rest waits
 
-    chunks._candidates = [i for i in chunks._candidates if (i.chunk_id, i.ref) not in chunks.retired]
+    chunks.candidates = [i for i in chunks.candidates if (i.chunk_id, i.ref) not in chunks.retired]
     drainer.sweep()
     assert closer.closed == refs  # the head moved, so nothing starves
 

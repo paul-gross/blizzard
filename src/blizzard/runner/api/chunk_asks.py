@@ -23,7 +23,7 @@ def get_chunk_asks(lease_id: str, request: Request) -> list[ChunkAskView]:
     restart-superseded alike."""
     lease = authorized_lease(lease_id, request)
     upstream = HubProxy.of(request, "asks").get(f"/api/fleet/chunks/{lease.chunk_id}", chunk_id=lease.chunk_id)
-    return _rows(ChunkAsksSource.model_validate(upstream.json()))
+    return rows(ChunkAsksSource.model_validate(upstream.json()))
 
 
 def _node_names(source: ChunkAsksSource) -> dict[str, str]:
@@ -36,7 +36,7 @@ def _node_names(source: ChunkAsksSource) -> dict[str, str]:
     return {node_id: name for node_id, name in pairs if node_id and name}
 
 
-def _rows(source: ChunkAsksSource) -> list[ChunkAskView]:
+def rows(source: ChunkAsksSource) -> list[ChunkAskView]:
     names = _node_names(source)
     return [
         ChunkAskView(

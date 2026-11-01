@@ -109,7 +109,7 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
         start_position=None,
         opened_at=_NOW,
     )
-    source._tail_positions[_SESSION_ID] = TranscriptPosition("tail-after-gen-1")
+    source.script_tail_position(_SESSION_ID, TranscriptPosition("tail-after-gen-1"))
     lease_a = store.active_lease("lease_a")
     assert lease_a is not None
     recorder.record_worker(lease_a, bindings=[])
@@ -133,7 +133,7 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
         start_position="tail-after-gen-1",
         opened_at=_NOW,
     )
-    source._tail_positions[_SESSION_ID] = TranscriptPosition("tail-after-gen-2")
+    source.script_tail_position(_SESSION_ID, TranscriptPosition("tail-after-gen-2"))
     lease_a = store.active_lease("lease_a")
     assert lease_a is not None
     recorder.record_worker(lease_a, bindings=[])

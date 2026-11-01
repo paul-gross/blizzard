@@ -148,6 +148,10 @@ class FactIngestService:
         self._retired = retired
         self._clock = clock
 
+    @property
+    def usage(self) -> IWriteChunkUsageRepository:
+        return self._usage
+
     def ingest(
         self,
         runner_id: str,

@@ -20,7 +20,7 @@ from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.config import ConfigError
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import CompanionEscapes, HarnessBundleError, HarnessComposition, companion_path
-from blizzard.runner.harness.claude_code.bundle import _composer
+from blizzard.runner.harness.claude_code.bundle import composer
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.internal import bundle_publisher as bundle_module
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
@@ -663,7 +663,7 @@ def test_claude_code_compose_fails_a_non_object_settings_document_as_invalid_jso
     source.mkdir()
     staged.mkdir()
     (staged / "settings.json").write_text(json.dumps(document))
-    compose = _composer(None)
+    compose = composer(None)
 
     with pytest.raises(json.JSONDecodeError):
         compose(HarnessComposition(source_dir=source, staged_dir=staged))

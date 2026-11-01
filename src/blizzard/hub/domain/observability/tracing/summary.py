@@ -142,7 +142,7 @@ def step_end(step: NodeStep) -> datetime:
     return max(end, step.start)
 
 
-def _node_executor(facts: StepFacts, step: NodeStep) -> str:
+def node_executor(facts: StepFacts, step: NodeStep) -> str:
     if step.kind is StepKind.GATE:
         return _HUMAN
     graph = facts.graphs.get(step.position.graph_id)
@@ -152,7 +152,7 @@ def _node_executor(facts: StepFacts, step: NodeStep) -> str:
     return "hub" if step.kind is StepKind.HUB else "runner"
 
 
-def _runner_id(facts: StepFacts, step: NodeStep) -> str | None:
+def runner_id(facts: StepFacts, step: NodeStep) -> str | None:
     if step.kind is not StepKind.GATE or step.runner_id is not None:
         return step.runner_id
     owners = [o for o in facts.epoch_owners if o.epoch == step.epoch]
@@ -292,7 +292,7 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
     asks = [i for i in intervals if i.kind is IntervalKind.ASK]
     choice, to_node = _choice_and_destination(facts, step)
     graph = facts.graphs.get(step.position.graph_id)
-    runner_id = _runner_id(facts, step)
+    holder = runner_id(facts, step)
     return StepSummary(
         step_key=step.key,
         kind=step.kind,
@@ -308,12 +308,12 @@ def summarize_step(facts: StepFacts, step: NodeStep, steps: tuple[NodeStep, ...]
         graph_name=graph.name if graph is not None else step.position.graph_id,
         node_id=step.position.node_id,
         node_name=step.position.node_name,
-        node_executor=_node_executor(facts, step),
+        node_executor=node_executor(facts, step),
         epoch=step.epoch,
         decision_id=step.decision_id,
         visit=step.position.visit,
-        runner_id=runner_id,
-        runner_name=facts.runner_names.get(runner_id) if runner_id is not None else None,
+        runner_id=holder,
+        runner_name=facts.runner_names.get(holder) if holder is not None else None,
         harness_id=next((u.harness_id for u in reversed(usage) if u.harness_id is not None), None),
         models=tuple(dict.fromkeys(u.model for u in usage)),
         started_at=step.start,

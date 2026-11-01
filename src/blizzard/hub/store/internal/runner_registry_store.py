@@ -132,12 +132,12 @@ class RunnerRegistryStore:
     ) -> list[RunnerRegistration]:
         """The registrations ``rows`` stand for, in row order — retired ones only when ``include_retired``."""
         runner_ids = [row.runner_id for row in rows]
-        lifecycle = self._lifecycle_many(conn, runner_ids)
+        lifecycle = self.lifecycle_many(conn, runner_ids)
         if not include_retired:
             rows = [row for row in rows if not lifecycle[row.runner_id][0]]
             runner_ids = [row.runner_id for row in rows]
-        paused = self._paused_many(conn, runner_ids)
-        local_pause = self._local_pause_detail_many(conn, runner_ids)
+        paused = self.paused_many(conn, runner_ids)
+        local_pause = self.local_pause_detail_many(conn, runner_ids)
         # A hosted runner's usage is its host's, so its own rows are not read.
         alone = [row.runner_id for row in rows if row.host_id is None]
         usage = self._external_usage_many(conn, alone)
@@ -505,10 +505,10 @@ class RunnerRegistryStore:
     @staticmethod
     def _paused(conn: Connection, runner_id: str) -> bool:
         """Derive the fleet's brake from the newest pause/resume fact, default False."""
-        return RunnerRegistryStore._paused_many(conn, [runner_id])[runner_id]
+        return RunnerRegistryStore.paused_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _paused_many(conn: Connection, runner_ids: Sequence[str]) -> dict[str, bool]:
+    def paused_many(conn: Connection, runner_ids: Sequence[str]) -> dict[str, bool]:
         """``_paused``'s grouped sibling and its one home — every listed runner's fleet
         brake off its own newest pause/resume fact, one query for every id in
         ``runner_ids`` rather than one query per runner (`list_runners`)."""
@@ -535,10 +535,10 @@ class RunnerRegistryStore:
     @staticmethod
     def _lifecycle(conn: Connection, runner_id: str) -> tuple[bool, datetime | None, str | None]:
         """The runner's retirement, off its newest lifecycle fact."""
-        return RunnerRegistryStore._lifecycle_many(conn, [runner_id])[runner_id]
+        return RunnerRegistryStore.lifecycle_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _lifecycle_many(
+    def lifecycle_many(
         conn: Connection, runner_ids: Sequence[str]
     ) -> dict[str, tuple[bool, datetime | None, str | None]]:
         """``_lifecycle``'s grouped sibling — every listed runner's ``(retired, at, by)`` off
@@ -567,10 +567,10 @@ class RunnerRegistryStore:
     @staticmethod
     def _local_pause_detail(conn: Connection, runner_id: str) -> tuple[bool, str | None, str | None]:
         """The runner's own brake plus its cause, off the newest fact."""
-        return RunnerRegistryStore._local_pause_detail_many(conn, [runner_id])[runner_id]
+        return RunnerRegistryStore.local_pause_detail_many(conn, [runner_id])[runner_id]
 
     @staticmethod
-    def _local_pause_detail_many(
+    def local_pause_detail_many(
         conn: Connection, runner_ids: Sequence[str]
     ) -> dict[str, tuple[bool, str | None, str | None]]:
         """``_local_pause_detail``'s grouped sibling and its one home — every listed

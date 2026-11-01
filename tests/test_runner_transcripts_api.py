@@ -166,7 +166,7 @@ def test_unknown_recorded_owner_returns_503_without_reading_default_transcript_s
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         spawned_at=_NOW,
     )
-    with store._engine.begin() as conn:
+    with store.engine.begin() as conn:
         conn.exec_driver_sql("UPDATE leases SET harness_id = 'missing' WHERE lease_id = 'lease_1'")
 
     with runner_client(app) as client:

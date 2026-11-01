@@ -467,7 +467,7 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
 
     from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
 
-    from blizzard.runner.tracing.internal.received_pipeline import _MetricQueue
+    from blizzard.runner.tracing.internal.received_pipeline import MetricQueue
 
     release = threading.Event()
     entered = threading.Event()
@@ -490,7 +490,7 @@ def test_the_metrics_queue_drops_its_oldest_batch_when_full() -> None:
             return None
 
     held = Held()
-    queue = _MetricQueue(held, max_points=4)
+    queue = MetricQueue(held, max_points=4)
     batch = {n: MetricsData(resource_metrics=[object()] * n) for n in (1, 2, 3)}  # type: ignore[list-item]
     queue.put(batch[1], 1)
     assert entered.wait(5.0)
@@ -506,7 +506,7 @@ def test_the_metrics_queue_shutdown_discards_what_is_queued_and_leaves_an_in_fli
 
     from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult, MetricsData
 
-    from blizzard.runner.tracing.internal.received_pipeline import _MetricQueue
+    from blizzard.runner.tracing.internal.received_pipeline import MetricQueue
 
     release = threading.Event()
     entered = threading.Event()
@@ -533,13 +533,13 @@ def test_the_metrics_queue_shutdown_discards_what_is_queued_and_leaves_an_in_fli
             self.shut_down_while_exporting = self.shut_down_while_exporting or self.exporting
 
     held = Held()
-    queue = _MetricQueue(held)
+    queue = MetricQueue(held)
     queue.put(MetricsData(resource_metrics=[]), 1)
     assert entered.wait(5.0)
     queue.put(MetricsData(resource_metrics=[]), 2)
     queue.shutdown(0.1)
     assert not held.shut_down_while_exporting
     release.set()
-    queue._thread.join(5.0)
-    assert not queue._thread.is_alive()
+    queue.thread.join(5.0)
+    assert not queue.thread.is_alive()
     assert held.exported == 1

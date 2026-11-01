@@ -95,7 +95,7 @@ def test_two_concurrent_first_default_graph_resolutions_mint_it_once(tmp_path: P
     hub = build_hub(tmp_path)
     with_test_lock_wait(hub)
     services = hub.services
-    graph_store: Any = services.graph_mint._graphs
+    graph_store: Any = services.graph_mint.graphs
     entered = threading.Event()
     release = threading.Event()
     real_mint_locked = graph_store.mint_locked

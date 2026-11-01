@@ -22,9 +22,9 @@ class JudgementPrompt:
 
         The checks ride between so the worker judges against mechanical truth.
         """
-        return (self.envelope.judgement_prompt or "") + self._checks_block() + self._elicitation_tail()
+        return (self.envelope.judgement_prompt or "") + self.checks_block() + self._elicitation_tail()
 
-    def _checks_block(self) -> str:
+    def checks_block(self) -> str:
         """One line per check with its command and ``PASS``/``FAIL``.
 
         A failed check additionally shows its output tail; a node with no checks adds nothing.

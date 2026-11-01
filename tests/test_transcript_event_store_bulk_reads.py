@@ -21,7 +21,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.observability.analytics.events import SegmentProvenance
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, _segment_contexts_stmt
+from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, segment_contexts_stmt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -243,5 +243,5 @@ def test_segment_contexts_matches_across_a_batch_boundary(tmp_path: Path, monkey
 
 
 def test_segment_contexts_never_selects_the_content_column() -> None:
-    stmt = _segment_contexts_stmt(ScopedStatements(StoreScope(TenantId("ten_bulk"))), ["sg_1"])
+    stmt = segment_contexts_stmt(ScopedStatements(StoreScope(TenantId("ten_bulk"))), ["sg_1"])
     assert "content" not in {column.name for column in stmt.selected_columns}

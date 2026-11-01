@@ -1,4 +1,5 @@
-"""`Judgement._launch` — which standing record it sweeps, and every value it opens the judge boundary with.
+"""`Judgement`'s verdict launch, reached through `resume` — which standing record it sweeps, and every value it
+opens the judge boundary with.
 
 Unit tier over a real store: `tests/test_elicitation_launch_collect.py` proves the launch/collect shape, and this pins
 what the launch *passes* — the standing record's sweep bound, the boundary's start, kind and generation."""
@@ -87,7 +88,7 @@ def test_a_standing_record_the_caller_read_is_swept_through_its_relaunch_count(t
 
     judgement = Judgement.of(rig.ctx, rig.lease, known_elicitation=KnownElicitation(standing=standing))
     assert judgement is not None
-    judgement._launch()
+    judgement.resume()
 
     assert not os.path.exists(second)  # the relaunched attempt is swept; the fresh launch rewrites attempt 0
 
@@ -106,7 +107,7 @@ def test_the_judge_boundary_opens_at_the_tail_read_in_the_binding_workdir_and_wo
 
     judgement = Judgement.of(rig.ctx, rig.lease, generation=5, known_elicitation=KnownElicitation(standing=None))
     assert judgement is not None
-    judgement._launch()
+    judgement.resume()
 
     assert asked == [(SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"), "/ws/e1", "ws1")]
     (boundary,) = rig.store.open_boundaries_for_lease("lease_1")
@@ -136,7 +137,7 @@ def test_a_launch_given_no_generation_opens_the_boundary_under_the_leases_curren
 
     judgement = Judgement.of(rig.ctx, rig.lease)
     assert judgement is not None
-    judgement._launch()
+    judgement.resume()
 
     (boundary,) = rig.store.open_boundaries_for_lease("lease_1")
     assert (boundary.generation, boundary.start_position, boundary.start_unreadable) == (current, None, False)
