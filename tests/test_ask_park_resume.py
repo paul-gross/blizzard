@@ -72,7 +72,13 @@ def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _ctx(store: SqlAlchemyRunnerStore, *, hub: FakeHub | None = None, probe=None, clock=None):
+def _ctx(
+    store: SqlAlchemyRunnerStore,
+    *,
+    hub: FakeHub | None = None,
+    probe: FakeProbe | None = None,
+    clock: FixedClock | None = None,
+):
     return make_context(
         store,
         hub=hub or FakeHub(),
@@ -83,13 +89,13 @@ def _ctx(store: SqlAlchemyRunnerStore, *, hub: FakeHub | None = None, probe=None
     )
 
 
-def _open_question(question_id="qn_1") -> HubQuestion:
+def _open_question(question_id: str = "qn_1") -> HubQuestion:
     return HubQuestion(
         question_id=question_id, chunk_id="ch_1", runner_id="r1", epoch=1, question="Which API?", asked_at="t"
     )
 
 
-def _answered_question(question_id="qn_1") -> HubQuestion:
+def _answered_question(question_id: str = "qn_1") -> HubQuestion:
     return HubQuestion(
         question_id=question_id,
         chunk_id="ch_1",
@@ -263,7 +269,9 @@ def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path: Path):
 
 
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
-def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path: Path, workspace_root, expected_cwd):
+def test_answer_resumes_the_dormant_session_under_the_same_lease(
+    tmp_path: Path, workspace_root: str, expected_cwd: str
+):
     """The resume runs in the session's own spawn cwd — the workspace root when one is
     configured, never the environment's own workdir beneath it."""
     store = _store(tmp_path)
@@ -419,7 +427,9 @@ def test_a_superseded_ask_is_neither_open_nor_forwarded_once_the_newer_ask_is_pa
             asked_at=_NOW + timedelta(minutes=minute),
         )
     assert [ask.question_id for ask in store.open_asks()] == ["qn_new"]
-    assert store.unforwarded_ask("lease_1").question_id == "qn_new"  # type: ignore[union-attr]
+    unforwarded = store.unforwarded_ask("lease_1")
+    assert unforwarded is not None
+    assert unforwarded.question_id == "qn_new"
 
     store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_new", parked_at=_NOW)
     assert [ask.question_id for ask in store.open_asks()] == ["qn_new"]

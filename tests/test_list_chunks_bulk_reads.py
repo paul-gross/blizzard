@@ -6,6 +6,7 @@ reaches a whole-tenant read or `load_facts`/`route_of`."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +17,7 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef
 from blizzard.hub.domain.config.changes import RecordKind
+from blizzard.hub.domain.config.revisions import ConfigRevisions
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import MAX_LIMIT
@@ -28,6 +30,7 @@ from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsSt
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from tests.support import (
     FakeWorkSource,
@@ -122,16 +125,18 @@ def test_list_resolves_store_backed_sources_once_per_name_and_only_on_the_page(t
             super().__init__(store)
             self.calls: list[str] = []
 
-        def revisions(self, kind: RecordKind, key: str):
+        def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
             self.calls.append(key)
             return super().revisions(kind, key)
 
     revisions = CountingRevisions(scoped)
+    built_in = hub.work_sources.get("hub")
+    assert isinstance(built_in, HubWorkSource)
     registry = StoreWorkSourceRegistry(
         records=hub.services.work_source_records,
         objects=ConfigObjectCache(revisions),
         build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name), lambda: None),
-        built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+        built_in=built_in,
     )
     serve_default_tenant(hub, replace(hub.services, work_sources=registry))
 
@@ -180,16 +185,18 @@ def test_on_page_fallback_pointers_do_not_repeat_record_reads(tmp_path: Path) ->
             super().__init__(store)
             self.calls: list[str] = []
 
-        def revisions(self, kind: RecordKind, key: str):
+        def revisions(self, kind: RecordKind, key: str) -> ConfigRevisions | None:
             self.calls.append(key)
             return super().revisions(kind, key)
 
     revisions = CountingRevisions(hub_store_connections(hub.engine))
+    built_in = hub.work_sources.get("hub")
+    assert isinstance(built_in, HubWorkSource)
     registry = StoreWorkSourceRegistry(
         records=hub.services.work_source_records,
         objects=ConfigObjectCache(revisions),
         build=lambda record: BuiltWorkSource(record, FallbackSource(name=record.slug), lambda: None),
-        built_in=hub.work_sources.get("hub"),  # type: ignore[arg-type]
+        built_in=built_in,
     )
     serve_default_tenant(hub, replace(hub.services, work_sources=registry))
 
@@ -227,7 +234,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_all_facts_calls += 1
         return super().load_all_facts()
 
-    def load_facts_for(self, chunk_ids):
+    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         self.load_facts_for_calls += 1
         return super().load_facts_for(chunk_ids)
 
@@ -250,7 +257,7 @@ class _CountingRouteStore(ChunkRouteStore):
         self.load_all_routes_calls += 1
         return super().load_all_routes()
 
-    def routes_for(self, chunk_ids):
+    def routes_for(self, chunk_ids: Iterable[str]) -> dict[str, Route]:
         self.routes_for_calls += 1
         return super().routes_for(chunk_ids)
 
@@ -296,7 +303,7 @@ class _CountingWorkRefsStore(ChunkWorkRefsStore):
         self.find_live_holder_calls += 1
         return super().find_live_holder(pointer)
 
-    def live_holders(self, pointers):
+    def live_holders(self, pointers: Iterable[WorkRef]) -> dict[WorkRef, str]:
         self.live_holders_calls += 1
         return super().live_holders(pointers)
 
@@ -491,8 +498,8 @@ def test_live_holder_and_blocked_markings_survive_a_page_boundary(tmp_path: Path
             "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }
     ]
-    to_review = pass_node(hub, old_holder_id, build_id, 1, artifacts=commit)
-    review_id = to_review["next_envelope"]["node"]["node_id"]
+    to_review: dict[str, Any] = pass_node(hub, old_holder_id, build_id, 1, artifacts=commit)
+    review_id: str = to_review["next_envelope"]["node"]["node_id"]
     assert report_lease(hub, old_holder_id, epoch=2, seq=1)["applied"] == [1]
     pass_node(hub, old_holder_id, review_id, 2, artifacts=[])
     hub.settle_turns()
@@ -611,7 +618,7 @@ def test_list_chunks_never_reads_standing_edges_or_records_tenant_wide(tmp_path:
 
 
 def test_list_page_reads_are_flat_as_deleted_chunks_pile_ahead_of_the_page(tmp_path: Path) -> None:
-    measured = []
+    measured: list[tuple[int, int]] = []
     for n in (2, 12):
         (tmp_path / str(n)).mkdir()
         hub = build_hub(tmp_path / str(n))

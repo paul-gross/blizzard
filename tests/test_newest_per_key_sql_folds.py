@@ -7,17 +7,19 @@ equivalence case that a naive rewrite would get wrong."""
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, insert
+from sqlalchemy import Connection, Engine, insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from tests.support import count_rows_read, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
@@ -42,19 +44,28 @@ def _engine(tmp_path: Path, chunks: list[str]) -> Engine:
     return engine
 
 
-def _flat(tmp_path: Path, chunks: list[str], seed, read) -> None:
+def _flat(
+    tmp_path: Path, chunks: list[str], seed: Callable[[Engine, int], None], read: Callable[[Engine], object]
+) -> None:
     """``seed(engine, depth)`` then ``read(engine)`` at both depths: equal answers and equal rows."""
     shallow, deep = _engine(tmp_path / "shallow", chunks), _engine(tmp_path / "deep", chunks)
     seed(shallow, _SHALLOW)
     seed(deep, _DEEP)
     assert read(shallow) == read(deep)
-    assert count_rows_read(shallow, lambda: read(shallow)) == count_rows_read(deep, lambda: read(deep))
+
+    def read_shallow() -> object:
+        return read(shallow)
+
+    def read_deep() -> object:
+        return read(deep)
+
+    assert count_rows_read(shallow, read_shallow) == count_rows_read(deep, read_deep)
 
 
 # --- decisions ------------------------------------------------------------------------------------
 
 
-def _decision(conn, chunk_id: str, decision_id: str, *, at: datetime) -> None:
+def _decision(conn: Connection, chunk_id: str, decision_id: str, *, at: datetime) -> None:
     conn.execute(
         insert(s.decisions).values(
             stamp(
@@ -71,7 +82,7 @@ def _decision(conn, chunk_id: str, decision_id: str, *, at: datetime) -> None:
     )
 
 
-def _close(conn, chunk_id: str, decision_id: str) -> None:
+def _close(conn: Connection, chunk_id: str, decision_id: str) -> None:
     conn.execute(
         insert(s.escalations).values(
             stamp(s.escalations, chunk_id=chunk_id, epoch=1, decision_id=decision_id, recorded_at=_T0)
@@ -129,7 +140,7 @@ def test_live_decisions_read_rows_flat_across_history_depth(tmp_path: Path) -> N
 # --- routes ---------------------------------------------------------------------------------------
 
 
-def _route(conn, chunk_id: str, route_id: str, *, at: datetime, seq: int) -> None:
+def _route(conn: Connection, chunk_id: str, route_id: str, *, at: datetime, seq: int) -> None:
     conn.execute(
         insert(s.route_created).values(
             stamp(
@@ -148,7 +159,7 @@ def _route(conn, chunk_id: str, route_id: str, *, at: datetime, seq: int) -> Non
     )
 
 
-def _release(conn, chunk_id: str, *, at: datetime, seq: int) -> None:
+def _release(conn: Connection, chunk_id: str, *, at: datetime, seq: int) -> None:
     conn.execute(insert(s.route_released).values(stamp(s.route_released, chunk_id=chunk_id, released_at=at, seq=seq)))
 
 
@@ -161,7 +172,9 @@ def test_route_newest_follows_timestamp_order_not_seq_when_the_clock_stepped_bac
 
     assert routes.routes_for(["ch_1"])["ch_1"].route_id == "rt_later_clock"
     assert routes.load_all_routes()["ch_1"].route_id == "rt_later_clock"
-    assert routes.route_of("ch_1").route_id == "rt_later_clock"  # type: ignore[union-attr]
+    route = routes.route_of("ch_1")
+    assert route is not None
+    assert route.route_id == "rt_later_clock"
 
 
 def test_route_read_rows_flat_across_history_depth(tmp_path: Path) -> None:
@@ -191,10 +204,11 @@ def test_route_read_rows_flat_across_history_depth(tmp_path: Path) -> None:
 
 
 def _escalations(engine: Engine) -> ChunkEscalationsStore:
-    return ChunkEscalationsStore(hub_store_connections(engine), FixedClock(_T0), facts=None)  # type: ignore[arg-type]
+    store = hub_store_connections(engine)
+    return ChunkEscalationsStore(store, FixedClock(_T0), facts=ChunkFactsStore(store, FixedClock(_T0)))
 
 
-def _escalate(conn, chunk_id: str, *, at: datetime) -> None:
+def _escalate(conn: Connection, chunk_id: str, *, at: datetime) -> None:
     conn.execute(insert(s.escalations).values(stamp(s.escalations, chunk_id=chunk_id, epoch=1, recorded_at=at)))
 
 
@@ -281,7 +295,7 @@ def test_latest_artifacts_read_rows_flat_across_history_depth(tmp_path: Path) ->
 # --- graph enablement -----------------------------------------------------------------------------
 
 
-def _mint(conn, graph_id: str, *, name: str, at: datetime) -> None:
+def _mint(conn: Connection, graph_id: str, *, name: str, at: datetime) -> None:
     conn.execute(
         insert(s.graphs).values(
             stamp(s.graphs, graph_id=graph_id, name=name, entry_node_id="nd_1", definition_yaml="", created_at=at)
@@ -289,7 +303,7 @@ def _mint(conn, graph_id: str, *, name: str, at: datetime) -> None:
     )
 
 
-def _lifecycle(conn, graph_id: str, *, retired: bool) -> None:
+def _lifecycle(conn: Connection, graph_id: str, *, retired: bool) -> None:
     conn.execute(
         insert(s.graph_lifecycle_facts).values(
             stamp(s.graph_lifecycle_facts, graph_id=graph_id, retired=retired, set_at=_T0, set_by="op")
@@ -336,7 +350,7 @@ def test_enabled_by_name_read_rows_flat_across_mint_depth(tmp_path: Path) -> Non
 # --- delivery landings ----------------------------------------------------------------------------
 
 
-def _landed(conn, chunk_id: str, repo: str, commit: str, *, at: datetime) -> None:
+def _landed(conn: Connection, chunk_id: str, repo: str, commit: str, *, at: datetime) -> None:
     conn.execute(
         insert(s.delivery_repo_landed).values(
             stamp(s.delivery_repo_landed, chunk_id=chunk_id, repo=repo, commit_hash=commit, landed_at=at)
@@ -373,4 +387,11 @@ def test_legacy_landed_read_rows_flat_across_history_depth(tmp_path: Path) -> No
     seed(shallow, _SHALLOW)
     seed(deep, _DEEP)
     assert read(shallow) == read(deep)
-    assert count_rows_read(shallow, lambda: read(shallow)) == count_rows_read(deep, lambda: read(deep))
+
+    def read_shallow() -> object:
+        return read(shallow)
+
+    def read_deep() -> object:
+        return read(deep)
+
+    assert count_rows_read(shallow, read_shallow) == count_rows_read(deep, read_deep)

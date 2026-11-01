@@ -7,7 +7,7 @@ rather than handing it to the service through a fake repo."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -43,7 +43,7 @@ class _FakeChunkRepo:
     """Only the two pause writes and the locked ``facts`` read are live; anything else is a bug.
     ``facts_under_lock`` is what the row-locked read answers."""
 
-    recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list)
+    recorded: list[tuple[str, bool, str, datetime]] = field(default_factory=list[tuple[str, bool, str, datetime]])
     facts_under_lock: ChunkFacts | None = None
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
@@ -53,7 +53,7 @@ class _FakeChunkRepo:
         self.recorded.append((chunk_id, True, by, at))
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Iterator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
         yield cast(ILockedChunkRead, self)
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
@@ -122,13 +122,13 @@ def _done_facts() -> ChunkFacts:
     [_done_facts, _stopped_facts, _delivering_facts],
     ids=["done", "stopped", "delivering"],
 )
-def test_pause_refuses_done_stopped_and_delivering(facts_factory: object) -> None:
+def test_pause_refuses_done_stopped_and_delivering(facts_factory: Callable[[], ChunkFacts]) -> None:
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo()
     service = PauseService(lifecycle=_as_lifecycle(repo), exclusive=_as_exclusive(repo), clock=clock)
 
     with pytest.raises(ChunkNotPausable):
-        repo.facts_under_lock = facts_factory()  # type: ignore[operator]
+        repo.facts_under_lock = facts_factory()
         service.pause(_CHUNK, by="operator")
 
     assert repo.recorded == []
@@ -139,13 +139,13 @@ def test_pause_refuses_done_stopped_and_delivering(facts_factory: object) -> Non
     [_running_facts, _ready_facts, _waiting_on_human_facts, _needs_human_facts],
     ids=["running", "ready", "waiting_on_human", "needs_human"],
 )
-def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: object) -> None:
+def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: Callable[[], ChunkFacts]) -> None:
     # Decided: the lever stays broad — pause is not refused on waiting_on_human/needs_human.
     clock = FixedClock(instant=_T0)
     repo = _FakeChunkRepo()
     service = PauseService(lifecycle=_as_lifecycle(repo), exclusive=_as_exclusive(repo), clock=clock)
 
-    repo.facts_under_lock = facts_factory()  # type: ignore[operator]
+    repo.facts_under_lock = facts_factory()
     service.pause(_CHUNK, by="operator")
 
     assert repo.recorded == [("chk_1", True, "operator", _T0)]
@@ -156,7 +156,9 @@ def test_pause_allows_running_ready_and_human_gated_statuses(facts_factory: obje
     [_done_facts, _stopped_facts, _delivering_facts],
     ids=["done", "stopped", "delivering"],
 )
-def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(facts_factory: object) -> None:
+def test_resume_is_never_refused_not_even_for_the_statuses_pause_refuses(
+    facts_factory: Callable[[], ChunkFacts],
+) -> None:
     """Resume is unconditional — the refusal set governs `pause` only:
     pause must not engage on finished/in-flight work, but disengaging a brake is
     always safe."""

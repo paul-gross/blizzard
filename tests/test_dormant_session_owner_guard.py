@@ -44,11 +44,11 @@ _FOREIGN_HARNESS_ID = "foreign"
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _registry(default_harness, *, unavailable: bool) -> HarnessRegistry:
+def _registry(default_harness: FakeHarness, *, unavailable: bool) -> HarnessRegistry:
     """The default owner alone (an unregistered ``foreign`` id reads as unknown), or —
     when ``unavailable`` — ``foreign`` registered with no adapter bound (a known owner this
     runner cannot use right now, not an unheard-of one)."""
@@ -88,7 +88,7 @@ def _assert_escalated_once_with_no_takeover(store: SqlAlchemyRunnerStore, chunk_
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
+def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -155,7 +155,7 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Pa
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
+def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -215,7 +215,7 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: P
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable):
+def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
     store.record_lease(
         NewLease(
@@ -282,7 +282,7 @@ class _RecordWorkerSpy:
     forwarding the ask and parking the chunk, when the owner cannot be resolved."""
 
     inner: UsageRecorder
-    calls: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list[str])
 
     def record_worker(self, lease: Lease, bindings: list[EnvBinding]) -> None:
         self.calls.append(lease.lease_id)
@@ -293,7 +293,7 @@ class _RecordWorkerSpy:
 
 
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
-def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_path: Path, unavailable):
+def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_path: Path, unavailable: bool):
     """Parking needs no harness at all; only the generation's usage spend does, so an
     unresolvable owner skips *that* record alone — the ask still reaches the hub and the
     chunk still parks, exactly as it would otherwise."""

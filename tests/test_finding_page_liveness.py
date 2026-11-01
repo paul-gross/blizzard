@@ -142,7 +142,7 @@ def _seed_interleaved(engine: Engine, *, exited_each_gap: int) -> None:
 
 
 def test_page_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
-    measured = []
+    measured: list[tuple[int, int, list[str], bool]] = []
     for gaps in (1, 12):
         (tmp_path / f"g{gaps}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"g{gaps}")
@@ -193,7 +193,7 @@ def test_exclude_exited_keeps_exactly_the_findings_derive_liveness_does_not_exit
 
 
 def test_bucket_read_cost_is_flat_in_exited_finding_count(tmp_path: Path) -> None:
-    measured = []
+    measured: list[tuple[int, int, list[str]]] = []
     for exited in (1, 12):
         (tmp_path / f"e{exited}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"e{exited}")
@@ -250,7 +250,7 @@ def test_bounded_read_derives_what_the_full_chain_does(tmp_path: Path) -> None:
 
 
 def test_page_read_cost_is_flat_in_observation_depth(tmp_path: Path) -> None:
-    measured = []
+    measured: list[tuple[int, int, list[str]]] = []
     for depth in (1, 30):
         (tmp_path / f"d{depth}").mkdir()
         store, engine = _store_and_engine(tmp_path / f"d{depth}")

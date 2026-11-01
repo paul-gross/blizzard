@@ -7,10 +7,10 @@ outcomes, and this pins what is *passed*, so a dropped, swapped or defaulted arg
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import MutableMapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -19,13 +19,16 @@ from structlog.testing import capture_logs
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle import dormant
 from blizzard.runner.lifecycle.dormant import DormantSession, PauseParkSettle
 from blizzard.runner.lifecycle.model import UnpauseMove
 from blizzard.runner.lifecycle.spawn import Spawner, Suppression, SuppressionCause
+from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
@@ -37,6 +40,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
 )
@@ -63,11 +67,30 @@ def _spy(monkeypatch: pytest.MonkeyPatch, owner: Any, name: str, result: Any = N
     return calls
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _rig(tmp_path: Path, *, with_session: bool = True, with_binding: bool = True, probe: FakeProbe | None = None):
+@dataclass
+class _Rig:
+    """The pause-parked lease's world; the `_moving` spies are filled in by `_moving`."""
+
+    store: SqlAlchemyRunnerStore
+    hub: FakeHub
+    harness: FakeHarness
+    clock: FixedClock
+    ctx: LoopContext
+    lease: Lease
+    park: PausePark
+    bindings: list[EnvBinding]
+    resumes: _Calls = field(default_factory=_Calls)
+    wake: _Calls = field(default_factory=_Calls)
+    worker_usage: _Calls = field(default_factory=_Calls)
+
+
+def _rig(
+    tmp_path: Path, *, with_session: bool = True, with_binding: bool = True, probe: FakeProbe | None = None
+) -> _Rig:
     """A pause-parked lease whose worker is gone, its chunk routed to this runner and no longer paused."""
     store = _store(tmp_path)
     store.record_lease(
@@ -99,21 +122,23 @@ def _rig(tmp_path: Path, *, with_session: bool = True, with_binding: bool = True
         chunk_id="ch_1", status=ChunkStatus.RUNNING, latest_epoch=1, route_runner_id=FIXTURE_RUNNER_ID
     )
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    clock = FixedClock(_NOW)
     ctx = make_context(
         store,
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=probe or FakeProbe(),
-        clock=FixedClock(_NOW),
+        clock=clock,
     )
     lease = store.active_lease("lease_1")
     assert lease is not None
     park = store.open_pause_parks()["lease_1"]
-    return SimpleNamespace(
+    return _Rig(
         store=store,
         hub=hub,
         harness=harness,
+        clock=clock,
         ctx=ctx,
         lease=lease,
         park=park,
@@ -121,7 +146,14 @@ def _rig(tmp_path: Path, *, with_session: bool = True, with_binding: bool = True
     )
 
 
-def _unpause(rig, *, elicitation=None, ask_parked: bool = False, brakes=None, bindings=None):
+def _unpause(
+    rig: _Rig,
+    *,
+    elicitation: PendingElicitation | None = None,
+    ask_parked: bool = False,
+    brakes: RunnerBrakes | None = None,
+    bindings: list[EnvBinding] | None = None,
+) -> None:
     DormantSession(rig.ctx, rig.lease).on_unpause(
         rig.park,
         elicitation,
@@ -131,7 +163,7 @@ def _unpause(rig, *, elicitation=None, ask_parked: bool = False, brakes=None, bi
     )
 
 
-def _elicitation(rig, *, epoch: int = 1):
+def _elicitation(rig: _Rig, *, epoch: int = 1) -> PendingElicitation:
     rig.store.record_elicitation_launch("lease_1", 1, output_path="/tmp/unused-out", at=_NOW)
     standing = rig.store.in_flight_elicitation("lease_1", 1)
     assert standing is not None
@@ -169,7 +201,11 @@ def test_an_unregistered_runner_stays_parked_having_read_nothing_further(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _rig(tmp_path)
-    monkeypatch.setattr(dormant, "registered_runner_id", lambda identity: None)
+
+    def unregistered(identity: object) -> None:
+        return None
+
+    monkeypatch.setattr(dormant, "registered_runner_id", unregistered)
     suppression = _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     resumes = _spy(monkeypatch, type(rig.ctx.stores.pause), "record_pause_park_resume", bound=True)
 
@@ -209,12 +245,12 @@ def test_an_unregistered_runner_stays_parked_having_read_nothing_further(
 def test_the_unpause_move_is_asked_about_the_view_runner_and_each_reading(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    suppression,
-    ask_parked,
-    judge_standing,
-    with_binding,
-    with_session,
-    expected,
+    suppression: Suppression | None,
+    ask_parked: bool,
+    judge_standing: bool,
+    with_binding: bool,
+    with_session: bool,
+    expected: dict[str, bool],
 ):
     rig = _rig(tmp_path, with_session=with_session, with_binding=with_binding)
     _spy(monkeypatch, Spawner, "suppression", suppression, bound=True)
@@ -294,7 +330,13 @@ def test_an_unsettled_park_reads_nothing_and_moves_nothing(tmp_path: Path, monke
     ids=["nothing", "chunk-paused", "ask-parked", "declined", "braked"],
 )
 def test_the_usage_limit_release_is_asked_with_the_park_and_both_holds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paused, ask_parked, suppression, operator_holds, declined
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    paused: bool,
+    ask_parked: bool,
+    suppression: Suppression | None,
+    operator_holds: bool,
+    declined: bool,
 ):
     rig = _rig(tmp_path)
     throttle = ThrottleSettings(on_usage_limit=HoldOrRelease.RELEASE)
@@ -343,7 +385,7 @@ def test_a_released_usage_limited_park_is_offered_with_its_bindings_and_moves_no
 # --- on_unpause: each move's effects ----------------------------------------------------------------------
 
 
-def _moving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, move):
+def _moving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, move: UnpauseMove) -> _Rig:
     rig = _rig(tmp_path)
     _spy(monkeypatch, Spawner, "suppression", None, bound=True)
     _spy(monkeypatch, dormant, "unpause_move", move)
@@ -420,7 +462,7 @@ def test_an_unresolvable_owner_wakes_nothing_and_books_nothing(tmp_path: Path, m
 # --- pause_park_settled -------------------------------------------------------------------------------------
 
 
-def _settle(rig, elicitation=None):
+def _settle(rig: _Rig, elicitation: PendingElicitation | None = None) -> PauseParkSettle:
     return DormantSession(rig.ctx, rig.lease).pause_park_settled(rig.park, elicitation, rig.bindings)
 
 
@@ -438,7 +480,7 @@ def test_a_park_older_than_the_drain_budget_judges_its_group_past_the_deadline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     rig = _rig(tmp_path)
-    rig.ctx.clock.advance(timedelta(hours=1))
+    rig.clock.advance(timedelta(hours=1))
     group = _spy(monkeypatch, DormantSession, "_owned_group_settled", False, bound=True)
 
     _settle(rig)
@@ -458,7 +500,7 @@ def test_a_settled_worker_with_no_named_elicitation_settles_leaving_any_standing
     assert rig.store.in_flight_elicitation("lease_1", 1) is not None
 
 
-def _park_naming(rig, elicitation):
+def _park_naming(rig: _Rig, elicitation: PendingElicitation) -> None:
     rig.park = PausePark(lease_id="lease_1", chunk_id="ch_1", parked_at=_NOW, interrupted_elicitation_id=elicitation.id)
 
 
@@ -468,9 +510,12 @@ def test_a_named_elicitation_is_judged_settled_by_its_own_identity(tmp_path: Pat
     _park_naming(rig, elicitation)
     answers = iter([True, False])
     group = _spy(monkeypatch, DormantSession, "_owned_group_settled", None, bound=True)
-    monkeypatch.setattr(
-        DormantSession, "_owned_group_settled", lambda self, **kw: (group.append(((), kw)), next(answers))[1]
-    )
+
+    def owned_group_settled(self: DormantSession, **kw: Any) -> bool:
+        group.append(((), kw))
+        return next(answers)
+
+    monkeypatch.setattr(DormantSession, "_owned_group_settled", owned_group_settled)
 
     assert _settle(rig, elicitation) is PauseParkSettle.UNSETTLED
     assert group[-1] == ((), {"pid": 7, "process_start_time": "start-7", "pgid": 8, "past_deadline": False})
@@ -485,7 +530,11 @@ def test_a_named_elicitation_that_exited_books_its_judge_usage_then_clears_and_s
     _park_naming(rig, elicitation)
     _spy(monkeypatch, DormantSession, "_owned_group_settled", True, bound=True)
     resolved = _spy(monkeypatch, DormantSession, "_resolve_harness_for_usage_only", rig.harness, bound=True)
-    monkeypatch.setattr(type(rig.ctx.elicitation_files), "read", lambda self, path: f"read:{path}")
+
+    def read(self: object, path: str) -> str:
+        return f"read:{path}"
+
+    monkeypatch.setattr(type(rig.ctx.elicitation_files), "read", read)
     usage = _spy(monkeypatch, UsageRecorder, "record_attempt", bound=True)
     cleared = _spy(monkeypatch, type(rig.ctx.stores.elicitations), "clear_elicitation", bound=True)
     swept = _spy(monkeypatch, type(rig.ctx.elicitation_files), "cleanup", bound=True)
@@ -520,7 +569,7 @@ def test_the_brakes_type_is_the_one_the_unpause_reads_from(tmp_path: Path):
 # --- the log lines each outcome leaves ------------------------------------------------------------------------
 
 
-def _logged(logs, event):
+def _logged(logs: list[MutableMapping[str, Any]], event: str) -> list[dict[str, Any]]:
     return [{k: v for k, v in entry.items() if k != "timestamp"} for entry in logs if entry["event"] == event]
 
 

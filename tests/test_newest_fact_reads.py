@@ -6,17 +6,19 @@ the rows fetched are identical."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sized
+from collections.abc import Callable, Sequence, Sized
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Boolean, Column, Engine, Integer, MetaData, String, Table, create_engine, insert
+from sqlalchemy import Boolean, Column, Connection, Engine, Integer, MetaData, String, Table, create_engine, insert
 from structlog import get_logger
 
+from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId
+from blizzard.hub.domain.observability.tracing.repository import StepHydration
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
@@ -100,7 +102,7 @@ def _engine(tmp_path: Path, *, depth: int) -> Engine:
 def _reads(engine: Engine) -> dict[str, Callable[[], object]]:
     store = hub_store_connections(engine)
 
-    def registry(fn):
+    def registry(fn: Callable[[Connection, Sequence[str]], object]) -> Callable[[], object]:
         def run() -> object:
             with store.read("test") as conn:
                 return fn(conn, _KEYS)
@@ -108,7 +110,7 @@ def _reads(engine: Engine) -> dict[str, Callable[[], object]]:
         return run
 
     return {
-        "queue_positions": lambda: ChunkQueueStore(store, None).queue_positions(_KEYS),  # type: ignore[arg-type]
+        "queue_positions": lambda: ChunkQueueStore(store, FixedClock(_T0)).queue_positions(_KEYS),
         "paused": registry(RunnerRegistryStore.paused_many),
         "local_pause": registry(RunnerRegistryStore.local_pause_detail_many),
         "lifecycle": registry(RunnerRegistryStore.lifecycle_many),
@@ -170,7 +172,7 @@ def _retirement_reads(engine: Engine) -> dict[str, Callable[[], Sized]]:
     }
 
 
-def _read(store: ScopedConnections, fn):
+def _read[T](store: ScopedConnections, fn: Callable[[Connection], T]) -> T:
     with store.read("test") as conn:
         return fn(conn)
 
@@ -212,12 +214,20 @@ def test_newest_failure_reads_keep_the_old_failure_after_a_recovery(tmp_path: Pa
 
     corpus = build_hub_scoped_reads(store).corpus
     egress = EgressStore(store, hub_events=events, usage=corpus).newest_egress_failure()
+
+    # The newest-failure read never resolves a tenant, so neither seam may be reached.
+    def no_hydration(tenant: TenantId) -> StepHydration:
+        raise AssertionError(f"unexpected hydration for {tenant}")
+
+    def no_tenant_name(tenant: TenantId) -> str | None:
+        raise AssertionError(f"unexpected tenant-name lookup for {tenant}")
+
     export = TraceStore(
         store,
         hub_events=events,
         corpus=corpus,
-        hydration=None,  # type: ignore[arg-type]
-        tenant_name=None,  # type: ignore[arg-type]
+        hydration=no_hydration,
+        tenant_name=no_tenant_name,
     ).newest_export_failure()
 
     assert egress is not None and egress.message == "m0"
@@ -244,7 +254,8 @@ def _linked_hub(tmp_path: Path, *, depth: int) -> HubHarness:
 
 
 def test_the_link_reads_by_source_are_flat_across_history_depth(tmp_path: Path) -> None:
-    answers, rows = [], []
+    answers: list[dict[str, list[str]]] = []
+    rows: list[int] = []
     for depth in (1, 6):
         hub = _linked_hub(tmp_path / str(depth), depth=depth)
         links = hub.services.project_links

@@ -9,14 +9,14 @@ over the
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy import Engine, Row
+from sqlalchemy import Engine, Row, Select
 from sqlalchemy.dialects import sqlite
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -297,11 +297,23 @@ def test_visible_segment_ids_supersedes_subquery_plans_as_an_index_search(tmp_pa
 
 # --- activity_facts_since's per-source `_bounded` read -------------
 
+
 # (label, stmt fn, ts_col, pk_col, index name) — the real per-source base-statement
 # builder `ChunkEventsStore.activity_facts_since` calls, so the compiled statement
 # includes the same joins and `chunk_deleted` anti-join production issues, not a
 # hand-written mirror that could diverge.
-_ACTIVITY_FEED_SOURCES = (
+def _chunk_grouped_source(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+    return chunk_grouped_stmt(stmts)
+
+
+def _chunk_deleted_source(stmts: ScopedStatements, deleted: Select[Any]) -> Select[Any]:
+    return chunk_deleted_activity_stmt(stmts)
+
+
+_ActivitySource = tuple[
+    str, Callable[[ScopedStatements, Select[Any]], Select[Any]], sa.Column[Any], sa.Column[Any], str
+]
+_ACTIVITY_FEED_SOURCES: tuple[_ActivitySource, ...] = (
     ("chunks", chunk_minted_stmt, s.chunks.c.minted_at, s.chunks.c.chunk_id, "ix_chunks_tenant_minted_at_chunk_id"),
     (
         "transitions",
@@ -361,7 +373,7 @@ _ACTIVITY_FEED_SOURCES = (
     ),
     (
         "chunk_grouped",
-        lambda stmts, d: chunk_grouped_stmt(stmts),
+        _chunk_grouped_source,
         s.chunk_grouped.c.grouped_at,
         s.chunk_grouped.c.id,
         "ix_chunk_grouped_tenant_grouped_at_id",
@@ -417,7 +429,7 @@ _ACTIVITY_FEED_SOURCES = (
     ),
     (
         "chunk_deleted",
-        lambda stmts, d: chunk_deleted_activity_stmt(stmts),
+        _chunk_deleted_source,
         s.chunk_deleted.c.deleted_at,
         s.chunk_deleted.c.id,
         "ix_chunk_deleted_tenant_deleted_at_id",

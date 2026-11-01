@@ -10,19 +10,22 @@ in flight (the shape of ``tests/test_write_fence.py``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import func
+from sqlalchemy import Table, func
 
-from blizzard.hub.delivery.hub_node import HubNodeRouter
+from blizzard.hub.delivery.hub_node import NO_TURN, HubNodeRouter, ITurnEnd
+from blizzard.hub.domain.chunk.model import Chunk as ChunkRecord
 from blizzard.hub.domain.chunk.model import DecisionChoice, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
+from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
+from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
 from tests.support import (
     HubHarness,
     build_hub,
@@ -38,7 +41,7 @@ from tests.test_write_fence import Chunk, held_by_a_writer, restart_under_lock, 
 pytestmark = pytest.mark.component
 
 
-def _count(hub: HubHarness, table, chunk_id: str, **where) -> int:
+def _count(hub: HubHarness, table: Table, chunk_id: str, **where: object) -> int:
     with hub.engine.begin() as conn:
         query = hub_store_connections(hub.engine).select(table, func.count()).where(table.c.chunk_id == chunk_id)
         for name, value in where.items():
@@ -80,7 +83,18 @@ nodes:
 """
 
 
-def _bounce_capped_chunk(tmp_path: Path):
+class _StandingChunk(Chunk):
+    """An already-ingested chunk wearing the shape the ``test_write_fence`` writers act on —
+    ``Chunk.__init__`` would ingest and claim a fresh chunk of its own instead."""
+
+    def __init__(self, hub: HubHarness, chunk_id: str, build_node_id: str) -> None:
+        self.hub = hub
+        self.stores = chunk_stores(hub.engine, hub.clock)
+        self.chunk_id = chunk_id
+        self.nodes = {"build": build_node_id}
+
+
+def _bounce_capped_chunk(tmp_path: Path) -> tuple[HubHarness, str]:
     """A chunk on the poll graph one poll-timeout away from crossing its ``bounce_cap``: each ``merge`` visit's
     first turn answers ``pending``, and the next turn past ``poll_timeout`` kicks it back."""
     hub = build_hub(tmp_path)
@@ -128,26 +142,49 @@ def test_a_bounce_cap_escalation_is_refused_behind_a_restart_or_stop(
     write — the window the fence closes: the escalation the crossing would record is refused, so the turn
     escalates nothing."""
     hub, chunk_id = _bounce_capped_chunk(tmp_path)
-    stores = chunk_stores(hub.engine, hub.clock)
-    standing = SimpleNamespace(
-        hub=hub,
-        stores=stores,
-        chunk_id=chunk_id,
-        nodes={"build": hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]},
-    )
+    current_node_id: str = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+    standing = _StandingChunk(hub, chunk_id, current_node_id)
+    stores = standing.stores
     real_route = HubNodeRouter.route_pending_timeout
     real_escalate = ChunkEscalationsStore.record_bounce_escalation_locked
     landed: list[bool] = []
     outcomes: list[BounceEscalationOutcome] = []
 
-    def _after_the_writer(self, *args, **kwargs):
+    def _after_the_writer(
+        self: HubNodeRouter, chunk: ChunkRecord, graph: Graph, node: Node, *, epoch: int, ending: ITurnEnd = NO_TURN
+    ) -> None:
         with stores.exclusive.locked([chunk_id]) as handle:
-            writer(standing)(handle)  # type: ignore[arg-type]
+            writer(standing)(handle)
         landed.append(True)
-        return real_route(self, *args, **kwargs)
+        return real_route(self, chunk, graph, node, epoch=epoch, ending=ending)
 
-    def _observed(self, *args, **kwargs):
-        outcomes.append(real_escalate(self, *args, **kwargs))
+    def _observed(
+        self: ChunkEscalationsStore,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
+    ) -> BounceEscalationOutcome:
+        outcomes.append(
+            real_escalate(
+                self,
+                handle,
+                chunk_id,
+                epoch=epoch,
+                admission=admission,
+                runner_id=runner_id,
+                takeover_command=takeover_command,
+                at=at,
+                cause=cause,
+                detail=detail,
+            )
+        )
         return outcomes[-1]
 
     monkeypatch.setattr(HubNodeRouter, "route_pending_timeout", _after_the_writer)
@@ -170,9 +207,34 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
     real = ChunkEscalationsStore.record_bounce_escalation_locked
     outcomes: list[BounceEscalationOutcome] = []
 
-    def _twice(self, *args, **kwargs):
-        outcomes.append(real(self, *args, **kwargs))
-        outcomes.append(real(self, *args, **kwargs))
+    def _twice(
+        self: ChunkEscalationsStore,
+        handle: ILockedChunkRead,
+        chunk_id: str,
+        *,
+        epoch: int,
+        admission: EpochAdmission,
+        runner_id: str,
+        takeover_command: str,
+        at: datetime,
+        cause: str,
+        detail: str,
+    ) -> BounceEscalationOutcome:
+        for _ in range(2):
+            outcomes.append(
+                real(
+                    self,
+                    handle,
+                    chunk_id,
+                    epoch=epoch,
+                    admission=admission,
+                    runner_id=runner_id,
+                    takeover_command=takeover_command,
+                    at=at,
+                    cause=cause,
+                    detail=detail,
+                )
+            )
         return outcomes[-1]
 
     monkeypatch.setattr(ChunkEscalationsStore, "record_bounce_escalation_locked", _twice)
@@ -186,7 +248,8 @@ def test_a_rerun_over_an_already_recorded_bounce_escalation_reports_escalated(
 def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_twice(tmp_path: Path) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
-    def _land_the_first(handle) -> None:
+    def _land_the_first(handle: object) -> None:
+        assert isinstance(handle, LockedChunkTransaction)
         chunk.stores.movement.record_transition_locked(
             handle,
             transition_id="tr_raced",
@@ -211,7 +274,8 @@ def test_a_racing_duplicate_completion_answers_as_a_replay_and_writes_nothing_tw
 def test_a_racing_duplicate_runner_config_decision_opens_one_decision(tmp_path: Path) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
-    def _open_the_first(handle) -> None:
+    def _open_the_first(handle: object) -> None:
+        assert isinstance(handle, LockedChunkTransaction)
         chunk.stores.decisions.record_decision_locked(
             handle,
             decision_id="dec_raced",

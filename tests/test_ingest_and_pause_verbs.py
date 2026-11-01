@@ -11,7 +11,7 @@ import dataclasses
 import json
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -47,7 +47,9 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx2.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+            request = httpx2.Request("GET", "http://hub")
+            response = httpx2.Response(self.status_code, request=request)
+            raise httpx2.HTTPStatusError("error", request=request, response=response)
 
 
 # --------------------------------------------------------------------------- #
@@ -589,7 +591,7 @@ def _init_runner(tmp_path: Path) -> Path:
 
 
 @contextmanager
-def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
+def _serve_local_api(root: Path) -> Generator[tuple[Path, str]]:
     """A live runner daemon's local API on its real socket — yields (socket path, TCP url).
 
     Driven against a real server, since the socket itself is what has to work; TCP binds
@@ -733,7 +735,11 @@ def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) 
 def test_a_hub_pause_note_names_the_resume_verb_by_the_registered_id(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verb: str, stance: str
 ) -> None:
-    view = {"runner_id": "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A", "runner_name": "r-claude", "hub_paused": True}
+    view: dict[str, object] = {
+        "runner_id": "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6A",
+        "runner_name": "r-claude",
+        "hub_paused": True,
+    }
     _daemon_answering(monkeypatch, view)
 
     result = CliRunner().invoke(runner_group, [verb, "--dir", str(tmp_path)])

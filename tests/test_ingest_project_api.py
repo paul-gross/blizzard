@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -42,12 +43,13 @@ def two_projects(tmp_path: Path) -> tuple[HubHarness, ProjectId, ProjectId]:
     return hub, first, second
 
 
-def ingest_project(hub: HubHarness, *tokens: str, project: str | None = None) -> tuple[int, dict]:
+def ingest_project(hub: HubHarness, *tokens: str, project: str | None = None) -> tuple[int, dict[str, Any]]:
     body: dict[str, object] = {"tokens": list(tokens)}
     if project is not None:
         body["project"] = project
     resp = hub.client.post("/api/chunks", json=body)
-    return resp.status_code, resp.json()
+    decoded: dict[str, Any] = resp.json()
+    return resp.status_code, decoded
 
 
 def _project_of(hub: HubHarness, chunk_id: str) -> ProjectId | None:
