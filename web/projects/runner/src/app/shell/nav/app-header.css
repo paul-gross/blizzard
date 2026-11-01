@@ -1,5 +1,5 @@
-/* Content-dependent like the username: it truncates rather than pushing the
-   profile menu off a narrow header. */
+/* Content-dependent like the username: the kit line wraps within `min-width: 0`
+   rather than pushing the profile menu off a narrow header. */
 .logout-error {
   min-width: 0;
   padding: 0 10px;
