@@ -80,6 +80,9 @@ def test_the_new_tables_match_the_declared_schema(tmp_path: Path) -> None:
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)
+        # This index belongs to the later turn pagination revision, not the flows revision.
+        with declared.begin() as conn:
+            conn.execute(sa.text("DROP INDEX ix_hub_turns_tenant_submission_turn"))
         for table in _NEW_TABLES:
             assert _shape(engine, table) == _shape(declared, table)
     finally:
