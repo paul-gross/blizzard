@@ -267,3 +267,21 @@ def test_tick_on_a_registered_host_drives_its_runner_as_one_the_host_reports(
 
     assert result.exit_code == 0, result.output
     assert seen == [True]
+
+
+def test_add_gives_the_new_runner_the_hosts_tool_profile_so_the_host_still_loads(
+    tmp_path: Path, fake_init_hub: FakeInitHub
+) -> None:
+    root = _registered(tmp_path, fake_init_hub)
+    path = HostLayout(root).config_path
+    text = path.read_text()
+    assert "env_passthrough = []" in text
+    path.write_text(text.replace("env_passthrough = []", 'env_passthrough = ["SSH_AUTH_SOCK"]', 1))
+
+    result = _run(fake_init_hub, "add", "r2", "--project", "default", "--dir", str(root))
+
+    assert result.exit_code == 0, result.output
+    runners = tomllib.loads(path.read_text())["runner"]
+    assert runners[1]["worker"]["env_passthrough"] == ["SSH_AUTH_SOCK"]
+    assert runners[1]["worker"]["path_prepend"] == runners[0]["worker"]["path_prepend"]
+    assert len(load_host_config(root).runners) == 2
