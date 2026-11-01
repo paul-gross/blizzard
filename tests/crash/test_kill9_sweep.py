@@ -46,6 +46,7 @@ from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings, UtilizationSettings
 from blizzard.tools.invariants import Invariants
 from tests.config_inputs import init_host, load_host_config, load_hub_config
+from tests.crash.flow_graph import _graph
 from tests.crash.support import (
     ENV_CRASH_FENCE,
     ENV_CRASH_POINT,
@@ -82,7 +83,6 @@ from tests.crash.support import (
     write_runner_config,
 )
 from tests.crash_points import discover_crash_points
-from tests.e2e.flow_support import _graph
 from tests.fleet_world import BUILD_BRANCH, scripted_build, world_repos
 from tests.host_files import load_runner_config, with_runner
 from tests.otlp_sink import OtlpSink, otlp_sink
