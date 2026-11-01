@@ -105,3 +105,17 @@ def test_sweep_orphans_is_a_noop_when_disabled() -> None:
     dirs = WorkerScratchDirs("")
 
     assert dirs.sweep_orphans({"lease_active"}) == 0
+
+
+@pytest.mark.unit
+def test_sweep_flat_entries_removes_only_accepted_names_and_never_a_runner_subtree(tmp_path: Path) -> None:
+    for name in ("lease_old", "lease_other", "rn_x"):
+        (tmp_path / name).mkdir()
+    dirs = WorkerScratchDirs(str(tmp_path))
+
+    removed = dirs.sweep_flat_entries(lambda name: name != "lease_other" and name != "never")
+
+    assert removed == 1
+    assert not (tmp_path / "lease_old").exists()
+    assert (tmp_path / "lease_other").exists()
+    assert (tmp_path / "rn_x").exists()

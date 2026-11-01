@@ -112,11 +112,13 @@ periodic sweep prunes both streams once they age past `[worker_stdout] retention
 
 ## Worker scratch directory
 
-Every worker session gets a private staging directory, under `worker-tmp/<lease_id>/` in the runner's own runtime
+Every worker session gets a private staging directory, under `worker-tmp/<runner_id>/<lease_id>/` in the runtime
 directory, exported into the session as `BLIZZARD_TMPDIR`. Unlike `worker-stdout/`, it does not outlive the lease: the
 runner removes it once the lease closes, however that closure happened — a node transition, a reap, an escalation — and
 recreates it on every later spawn, resume, or judge of a lease that is still open. A directory left behind by a crash is
-swept the next time the runner starts.
+swept the next time that runner starts; the sweep covers only this runner's own `worker-tmp/<runner_id>/`, so
+restarting one runner never touches another's scratch. A directory an earlier version left directly under `worker-tmp/`
+is removed only by the runner whose own store holds its lease, once that lease has closed.
 
 ## Reading the feed
 

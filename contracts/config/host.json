@@ -1447,6 +1447,12 @@
       "written_by": []
     },
     {
+      "holds": "each elicitation's output, one file per attempt",
+      "mode": null,
+      "path": "elicitation-output",
+      "written_by": []
+    },
+    {
       "holds": "the host's local API socket",
       "mode": null,
       "path": "host.sock",
@@ -1490,6 +1496,18 @@
       "written_by": [
         "init"
       ]
+    },
+    {
+      "holds": "each worker's harness stdout, one file per lease generation",
+      "mode": null,
+      "path": "worker-stdout",
+      "written_by": []
+    },
+    {
+      "holds": "one runner's per-lease scratch directories (BLIZZARD_TMPDIR)",
+      "mode": null,
+      "path": "worker-tmp/<runner-id>",
+      "written_by": []
     }
   ]
 }
