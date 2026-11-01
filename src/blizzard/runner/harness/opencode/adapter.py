@@ -601,7 +601,10 @@ class OpenCodeAdapter:
             if key not in self._unavailable_compaction_windows:
                 self._unavailable_compaction_windows.add(key)
                 _log.warning(
-                    "cannot apply OpenCode compaction window; launching unchanged", model=model, detail=str(exc)
+                    "cannot apply OpenCode compaction window; launching unchanged",
+                    model=model,
+                    window=window,
+                    detail=str(exc),
                 )
             return env
 
