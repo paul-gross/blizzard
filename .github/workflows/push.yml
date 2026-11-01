@@ -2,8 +2,12 @@
 #
 # Runs the PR gate with the SERVICE tier and the kill-9 CRASH SWEEP (bounded profile) alongside as
 # REAL gates (blizzard-context verification/blizzard.md: blizzard:service-test,
-# blizzard:crash-sweep), then publishes a dev-build wheel as a workflow artifact for
+# blizzard:crash-sweep), and publishes a dev-build wheel as a workflow artifact for
 # fleet dogfooding.
+#
+# The wheel builds, and the upgrade rehearsal runs against it, alongside the gate rather than after
+# it: neither needs the gate's result, and waiting on it put both on the run's longest path. Only
+# `dev-image` publishes, and it waits on every proof; a red run's wheel is never a dogfood build.
 #
 # The rest of the suite (e2e, journey, the two smokes) is the pull request's gate, `full_suite` in
 # upper-tiers.yml: the `edge` channel is not held behind it, and an admin's direct push is ungated by
@@ -57,7 +61,6 @@ jobs:
 
   dev-build:
     name: dev build wheel artifact
-    needs: [gate]
     runs-on: ubuntu-latest
     # Exposes the computed dev version so dev-image (below) can stamp the same
     # string into its image's org.opencontainers.image.version annotation —
@@ -137,7 +140,7 @@ jobs:
 
   rehearsal:
     # Each supported release upgraded to this commit's dev wheel; the dev channel waits on it.
-    needs: [gate, dev-build]
+    needs: [dev-build]
     uses: ./.github/workflows/rehearsal.yml
     with:
       candidate_artifact: blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}
