@@ -31,7 +31,7 @@ type Withdrawal = Literal["stopped", "restarted", "completed", "superseded"]
 type FlowFactKind = FlowChangeKind
 #: Where an open submission stands on a flow it holds: taking its turn, next to take one, eligible behind another,
 #: waiting on its next poll, or passed over while its chunk is not ``delivering`` or its visit not current.
-type FlowPlaceState = Literal["landing", "next", "waiting", "polling", "passed-over"]
+type FlowPlaceState = Literal["landing", "next", "waiting", "polling", "awaiting-merge", "passed-over"]
 #: The outcome of a turn that ended without its pass's answer.
 TURN_INTERRUPTED = "interrupted"
 #: The outcome of a turn its driver ended at the pass's deadline or the build's bound, routing nothing.
@@ -46,6 +46,7 @@ STUCK_AFTER = 3
 # Pending-poll cadence defaults, overridable per node.
 DEFAULT_POLL_INTERVAL = timedelta(seconds=30)
 DEFAULT_POLL_TIMEOUT = timedelta(hours=3)
+PARK_POLL_FLOOR = timedelta(minutes=2)
 #: The longest a tenant's full reconcile is ever skipped, whatever its change probe says.
 RECONCILE_FLOOR = timedelta(minutes=1)
 #: The statuses in which a person holds a chunk: a visit they hold at a later epoch keeps its place.
@@ -308,6 +309,7 @@ def stamp_terms(
                 target,
                 landing_policy=LandingPolicy(taken.landing_policy),
                 landing_position=taken.landing_position,
+                park_timeout_hours=taken.park_timeout_hours,
             )
             if (taken := terms.get(target.record)) is not None
             else replace(target, landing_position=positions.get(target.record))
@@ -369,8 +371,12 @@ class PollPolicy:
     def due_at(self, row: HubNodePollFact) -> datetime:
         """When a visit waiting since ``row`` is next due: the later of its interval elapsing and
         the row's own ``next_poll_at``, which only ever postpones. Every reader of due-ness asks here."""
-        due = row.polled_at + self.interval
+        due = (row.last_polled_at or row.polled_at) + self.interval_for(row.kind)
         return max(due, row.next_poll_at) if row.next_poll_at is not None else due
+
+    def interval_for(self, kind: str) -> timedelta:
+        """Parked visits poll no more often than once every two minutes."""
+        return max(self.interval, PARK_POLL_FLOOR) if kind == "awaiting-merge" else self.interval
 
 
 def describe_standing(
@@ -543,6 +549,9 @@ class FlowLine:
             return "passed-over", None
         due = self._due_at(submission)
         if due is not None and due > now:
+            poll = self._latest_poll(submission)
+            if poll is not None and poll.kind == "awaiting-merge":
+                return "awaiting-merge", due
             return "polling", due
         return ("next" if self.is_next(submission, now=now) else "waiting"), None
 
@@ -557,10 +566,14 @@ class FlowLine:
 
     def _due_at(self, submission: Submission) -> datetime | None:
         """When the visit's next poll is due, or ``None`` while it has no poll row."""
+        poll = self._latest_poll(submission)
+        return self.policies[submission.submission_id].due_at(poll) if poll else None
+
+    def _latest_poll(self, submission: Submission) -> HubNodePollFact | None:
         polls = self.facts[submission.chunk_id].hub_node_poll_history(
             node_id=submission.node_id, epoch=submission.epoch
         )
-        return self.policies[submission.submission_id].due_at(polls[-1]) if polls else None
+        return polls[-1] if polls else None
 
 
 @domain_model

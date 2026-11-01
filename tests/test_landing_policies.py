@@ -78,5 +78,5 @@ def test_a_forge_lacking_requirements_is_refused_naming_each_policy_and_forge() 
 def test_parse_policy_refuses_an_unknown_name() -> None:
     assert parse_policy("merge-on-checks") is LandingPolicy.MERGE_ON_CHECKS
     with pytest.raises(ConfigFieldError) as refused:
-        parse_policy("fast-forward")
+        parse_policy("merge-queue")
     assert refused.value.field == "landing_policy"

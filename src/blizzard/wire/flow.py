@@ -17,6 +17,7 @@ class FlowPlaceState(StrEnum):
     NEXT = "next"
     WAITING = "waiting"
     POLLING = "polling"
+    AWAITING_MERGE = "awaiting-merge"
     PASSED_OVER = "passed-over"
 
 

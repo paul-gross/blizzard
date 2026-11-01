@@ -3029,6 +3029,10 @@ export const EscalationCause = {
     FORGE_AUTH: 'forge-auth',
     FORGE_CONFIG: 'forge-config',
     FORGE_CAPABILITY_MISSING: 'forge-capability-missing',
+    CHANGE_CLOSED: 'change-closed',
+    BRANCH_PROTECTED: 'branch-protected',
+    MERGE_METHOD_REFUSED: 'merge-method-refused',
+    PARK_TIMEOUT: 'park-timeout',
     ESCALATE_CHOICE: 'escalate-choice'
 } as const;
 
@@ -3851,6 +3855,7 @@ export const FlowPlaceState = {
     NEXT: 'next',
     WAITING: 'waiting',
     POLLING: 'polling',
+    AWAITING_MERGE: 'awaiting-merge',
     PASSED_OVER: 'passed-over'
 } as const;
 
@@ -6017,7 +6022,11 @@ export type LandingOrderRequest = {
  *
  * A landing policy a write may name — how a repository's changes land.
  */
-export const LandingPolicyName = { MERGE_ON_CHECKS: 'merge-on-checks' } as const;
+export const LandingPolicyName = {
+    MERGE_ON_CHECKS: 'merge-on-checks',
+    FAST_FORWARD: 'fast-forward',
+    PARK: 'park'
+} as const;
 
 /**
  * LandingPolicyName
@@ -6534,6 +6543,10 @@ export type PauseView = {
  */
 export type PendingView = {
     /**
+     * Kind
+     */
+    kind: string;
+    /**
      * Next Poll At
      */
     next_poll_at: string;
@@ -6541,6 +6554,10 @@ export type PendingView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Since
+     */
+    since: string | null;
 };
 
 /**

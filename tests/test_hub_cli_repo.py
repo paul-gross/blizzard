@@ -164,7 +164,7 @@ def test_show_prints_the_policy_and_a_forge_its_capabilities(client: TestClient)
 @pytest.mark.parametrize(
     ("args", "said"),
     [
-        (["--policy", "park"], "landing_policy"),
+        (["--policy", "merge-queue"], "landing_policy"),
         (["--park-timeout", "5"], "park_timeout_hours"),
         (["--park-timeout", "5", "--clear", "park-timeout"], "--park-timeout and --clear park-timeout contradict"),
     ],

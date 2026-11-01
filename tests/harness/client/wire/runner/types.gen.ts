@@ -1727,7 +1727,7 @@ export type FlowFactView = {
  *
  * Where an open submission stands on a flow it holds.
  */
-export type FlowPlaceState = 'landing' | 'next' | 'waiting' | 'polling' | 'passed-over';
+export type FlowPlaceState = 'landing' | 'next' | 'waiting' | 'polling' | 'awaiting-merge' | 'passed-over';
 
 /**
  * GardenProposalClosureKind
@@ -2924,6 +2924,10 @@ export type PauseView = {
  */
 export type PendingView = {
     /**
+     * Kind
+     */
+    kind: string;
+    /**
      * Next Poll At
      */
     next_poll_at: string;
@@ -2931,6 +2935,10 @@ export type PendingView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Since
+     */
+    since: string | null;
 };
 
 /**

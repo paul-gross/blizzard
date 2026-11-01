@@ -29,6 +29,14 @@ def test_registry_enumerates_the_daemon_loop_points() -> None:
     assert any(n.startswith("flush.") for n in names)
     assert any(n.startswith("flow.") for n in names)
     assert any(n.startswith("action.") for n in names)
+    assert {
+        "policy.after-create-ref.before-merge-into",
+        "policy.after-merge-into.before-advance",
+        "policy.after-advance.before-marker",
+        "policy.after-marker.before-delete-ref",
+        "policy.after-open-change.before-marker",
+        "policy.after-merged-read.before-marker",
+    } <= set(names)
 
 
 def test_duplicate_declaration_is_rejected() -> None:

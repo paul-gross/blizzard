@@ -493,13 +493,20 @@ class ChunkView:
         :class:`Node`, not the :class:`GraphSummary`/name projection :attr:`names`
         otherwise resolves through."""
         pending = self.facts.hub_node_pending()
-        if pending is None:
+        if pending is None or self.facts.open_escalation() is not None:
             return None
         graph = self.services.graphs.get(self.chunk.graph_id)
         node = graph.node_by_id(pending.node_id) if graph is not None else None
         if node is None:
             return None
-        return PendingView(node_name=node.name, next_poll_at=iso_utc(PollPolicy.of(node).due_at(pending)))
+        return PendingView(
+            node_name=node.name,
+            next_poll_at=iso_utc(PollPolicy.of(node).due_at(pending)),
+            kind=pending.kind,
+            since=iso_utc(
+                self.facts.hub_node_pending_since(node_id=pending.node_id, epoch=pending.epoch) or pending.polled_at
+            ),
+        )
 
     def intended_migration(self) -> IntendedMigrationView | None:
         """The chunk's standing migration intent as a view, or ``None`` when no

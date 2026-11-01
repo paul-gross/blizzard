@@ -434,15 +434,15 @@ class BounceFact:
 
 
 #: What a recorded wait waits on.
-type WaitKind = Literal["pending"]
+type WaitKind = Literal["pending", "awaiting-merge"]
 
 
 @domain_model
 @dataclass(frozen=True)
 class HubNodePollFact:
-    """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node.
-    Append-only. ``epoch`` is the arrival epoch of the current visit to ``node_id``, not
-    a fresh one per poll. Pending-ness (:meth:`ChunkFacts.hub_node_pending`) derives from these rows
+    """A ``hub_node_poll`` row — a wait run at a hub command node.
+    ``epoch`` is the arrival epoch of the current visit to ``node_id``, not
+    a fresh one per poll. Waiting (:meth:`ChunkFacts.hub_node_pending`) derives from these rows
     plus the newest transition, so a ``kill -9`` between polls resumes from the store."""
 
     node_id: str
@@ -450,7 +450,7 @@ class HubNodePollFact:
     polled_at: datetime
     # The earliest moment the waiting pass asked to be polled again — it only postpones.
     next_poll_at: datetime | None = None
-    # What the pass waits on, read open: every row the hub writes is ``pending``.
+    # What the pass waits on, read open.
     kind: str = "pending"
     # The newest poll a coalesced row stands for; ``None`` on a row that stands for one poll.
     last_polled_at: datetime | None = None
@@ -1514,11 +1514,21 @@ class ChunkFacts:
     def hub_node_poll_history(self, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
         """A hub node's poll attempts for one (node, epoch) visit, oldest first.
 
-        The earliest entry bounds ``poll_timeout``, the newest gates ``poll_interval`` —
+        The newest uninterrupted pending run bounds ``poll_timeout``; the newest row gates ``poll_interval`` —
         read off this history rather than in-memory state, so a ``kill -9`` resumes here."""
         return sorted(
             (p for p in self.hub_node_polls if p.node_id == node_id and p.epoch == epoch), key=lambda p: p.polled_at
         )
+
+    def hub_node_pending_since(self, *, node_id: str, epoch: int) -> datetime | None:
+        """Start of the newest uninterrupted pending run, or ``None`` while waiting on something else."""
+        start = None
+        for poll in self.hub_node_poll_history(node_id=node_id, epoch=epoch):
+            if poll.kind != "pending":
+                start = None
+            elif start is None:
+                start = poll.polled_at
+        return start
 
     def hub_node_pending(self) -> HubNodePollFact | None:
         """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty.

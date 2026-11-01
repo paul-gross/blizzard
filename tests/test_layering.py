@@ -2545,6 +2545,9 @@ def _within(module: str, prefixes: Iterable[str]) -> bool:
 def _action_import_admitted(module: str, name: str | None) -> bool:
     """A plain import of an allowlisted module, or a name taken from one — or a submodule taken from a package
     whose submodule is allowlisted (``from blizzard.foundation import roles``)."""
+    # Test-fenced crash points are the sole admitted process-affecting hook, not the crash module's other API.
+    if module == "blizzard.foundation.crash" and name == "crashpoint":
+        return True
     candidates = [module] if name is None else [module, f"{module}.{name}"]
     for candidate in candidates:
         if candidate in _ACTION_STDLIB or candidate in _ACTION_FOUNDATION or _within(candidate, _ACTION_BLIZZARD):
@@ -2581,7 +2584,13 @@ def _os_misuses(path: Path, src_root: Path) -> list[str]:
 
 
 def _reached_violations(
-    reached: list[str], module_root: Path, refused: tuple[str, ...], *, os_misuse: bool, process_calls: bool = False
+    reached: list[str],
+    module_root: Path,
+    refused: tuple[str, ...],
+    *,
+    os_misuse: bool,
+    process_calls: bool = False,
+    crash_hook: bool = False,
 ) -> list[str]:
     """Walk every blizzard module ``reached`` names — and each it imports in turn, through its parent packages — under
     ``module_root``, naming each import of a ``refused`` module, and, with ``os_misuse``, any use of ``os`` but
@@ -2598,6 +2607,17 @@ def _reached_violations(
                 continue
             seen.add(path)
             for line, imported, name in _action_imports(path, module_root):
+                if (
+                    crash_hook
+                    and path.relative_to(module_root).as_posix()
+                    in {
+                        "blizzard/hub/delivery/actions/landing/park.py",
+                        "blizzard/hub/delivery/actions/landing/fast_forward.py",
+                    }
+                    and imported == "blizzard.foundation.crash"
+                    and name == "crashpoint"
+                ):
+                    continue
                 if _within(imported, refused) or (name is not None and _within(f"{imported}.{name}", refused)):
                     violations.append(
                         f"{path.relative_to(module_root)}:{line} imports {imported}, reached by an action"
@@ -2621,9 +2641,17 @@ def _hub_action_purity_violations(actions_dir: Path, src_root: Path, module_root
     for path in _production_files(actions_dir):
         rel = path.relative_to(src_root)
         for line, module, name in _action_imports(path, src_root):
-            if not _action_import_admitted(module, name):
+            crash_allowed = rel.as_posix() in {
+                "blizzard/hub/delivery/actions/landing/park.py",
+                "blizzard/hub/delivery/actions/landing/fast_forward.py",
+            }
+            if not _action_import_admitted(module, name) or (
+                module == "blizzard.foundation.crash" and not crash_allowed
+            ):
                 violations.append(f"{rel}:{line} imports {module if name is None else f'{module}.{name}'}")
-            elif module.startswith("blizzard."):
+            elif module.startswith("blizzard.") and not (
+                module == "blizzard.foundation.crash" and name == "crashpoint"
+            ):
                 reached += [module, f"{module}.{name}"] if name is not None else [module]
         violations += [
             f"{rel}:{node.lineno} reaches asyncio.{node.attr}"
@@ -2633,7 +2661,9 @@ def _hub_action_purity_violations(actions_dir: Path, src_root: Path, module_root
             and node.value.id == "asyncio"
             and node.attr in _ACTION_REFUSED_ASYNCIO
         ]
-    violations += _reached_violations(reached, module_root or src_root, _ACTION_TRANSITIVE_REFUSED, os_misuse=True)
+    violations += _reached_violations(
+        reached, module_root or src_root, _ACTION_TRANSITIVE_REFUSED, os_misuse=True, crash_hook=True
+    )
     return sorted(set(violations))
 
 
@@ -2720,6 +2750,10 @@ def _plant_actions(tmp_path: Path, files: Mapping[str, str]) -> list[str]:
         ("blizzard/hub/delivery/actions/a.py", "import httpx2", True),
         ("blizzard/hub/delivery/actions/a.py", "from ...store import schema", True),
         ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation import process", True),
+        ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation.crash import crashpoint", True),
+        ("blizzard/hub/delivery/actions/landing/park.py", "from blizzard.foundation.crash import crashpoint", False),
+        ("blizzard/hub/delivery/actions/a.py", "from blizzard.foundation.crash import CrashPoint", True),
+        ("blizzard/hub/delivery/actions/a.py", "import blizzard.foundation.crash", True),
         ("blizzard/hub/delivery/actions/a.py", "import asyncio\n\nasyncio.create_subprocess_exec('true')", True),
         ("blizzard/hub/delivery/actions/a.py", "from asyncio import open_connection", True),
         ("blizzard/hub/domain/actions/visit.py", "import subprocess", True),

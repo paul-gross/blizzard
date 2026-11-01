@@ -10,19 +10,17 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
+from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.checks import (
     BOUNCE,
     CI_WATCH_STATES,
     FAILED,
     FOREIGN,
-    INHERITED_FAILURE,
     UPDATE,
     WAIT,
     Route,
-    inherited,
+    failed_checks,
     read_verdict,
-    rerun_marker,
-    rerun_once,
 )
 from blizzard.hub.delivery.actions.landing.head_gate import gate_head
 from blizzard.hub.delivery.actions.landing.repo import (
@@ -30,7 +28,6 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Conflict,
     Failure,
     ForgeEscalation,
-    Inherited,
     Landed,
     LandedRevisionUnknown,
     NeedsPerson,
@@ -40,7 +37,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     RepoState,
     Waiting,
 )
-from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
@@ -79,7 +76,11 @@ class MergeDidNotLand(Exception):
     """A merge did not land and a re-read confirms the change is still open; the message is the refusal."""
 
 
-def _pr_title(repo: RepoLanding) -> str:
+class MergeMethodRefused(Exception):
+    """The forge does not permit the configured merge method."""
+
+
+def pr_title(repo: RepoLanding) -> str:
     """The visit's feature title, or the branch when none resolved, truncated to :data:`_PR_TITLE_MAX`."""
     title = repo.run.visit.feature_title or repo.branch
     if len(title) > _PR_TITLE_MAX:
@@ -87,7 +88,7 @@ def _pr_title(repo: RepoLanding) -> str:
     return title
 
 
-def _pr_body(repo: RepoLanding) -> str:
+def pr_body(repo: RepoLanding) -> str:
     """A newly opened PR's body: the work items, the chunk id, and its board link."""
     visit = repo.run.visit
     parts = ["Delivered by blizzard."]
@@ -132,7 +133,7 @@ class PullRequest:
             try:
                 existing = await target.ask(
                     target.forge.changes.open_change(
-                        target.branch, target.base_branch, _pr_title(target), _pr_body(target)
+                        target.branch, target.base_branch, pr_title(target), pr_body(target)
                     )
                 )
             except (ForgeRejected, ForgeNotFound) as exc:
@@ -254,8 +255,11 @@ class PullRequest:
             )
         except (ForgeRejected, ForgeNotFound) as exc:
             refusal = str(exc)
+            method_refused = isinstance(exc, ForgeRejected) and exc.reason == ForgeRejected.METHOD
         landed = await self.reread()
         if not landed.merged:
+            if method_refused:
+                raise MergeMethodRefused(refusal)
             raise MergeDidNotLand(refusal)
         if landed.change.merged_revision is None:
             raise LandedRevisionUnknown(f"{self} merged but no read carries its landed commit")
@@ -353,52 +357,18 @@ async def _routed(pull: PullRequest) -> RepoState:
 async def _failed(pull: PullRequest, failing: list[Check], checks: list[dict[str, Any]]) -> RepoState:
     """A change whose checks failed: its own failure, or — every failing check inherited from the base — one re-run
     each before it is charged as inherited."""
-    repo, run, head_sha = pull.target, pull.target.run, pull.head_sha
-    if not all(inherited(check["base_red"]) for check in checks):
-        # Any owned failure charges this chunk; inherited ones on the same repo accompany it in one diagnosis.
-        run.say(f"{pull} has a terminal CI check failure — will not re-poll")
-        return Failure((pull.record(FAILED, checks=checks),))
-    # Every failing check is inherited from the base: re-run each once (a forge that cannot re-run counts as
-    # re-run) before charging a repair.
-    rerunnable = Capability.CHECKS_RERUN in repo.forge.offered
-    already = run.visit.marker_names()
-    unsigned = [
-        check for check in failing if rerunnable and rerun_marker(repo.repo, check.name, head_sha) not in already
-    ]
-    if unsigned:
-        accepted = [await rerun_once(repo, check, head_sha) for check in unsigned]
-        if False in accepted:
-            # The forge will not re-run a check for this credential: no re-run is coming, so the failure routes
-            # as an owned one would.
-            run.say(f"{pull}'s failing checks could not be re-run — will not re-poll")
-            return Failure((pull.record(FAILED, checks=checks),))
-        run.say(f"{pull}'s failing checks are inherited from the base — re-requested once; re-polling")
-        return Waiting(f"{pull}'s inherited failures re-run")
-    record = pull.record(
-        INHERITED_FAILURE,
-        base_branch=repo.base_branch,
-        checks=[
-            {
-                "name": check.name,
-                "conclusion": check.detail,
-                "details_url": check.details_url,
-                "signature": rerun_marker(repo.repo, check.name, head_sha),
-            }
-            for check in failing
-        ],
+    return await failed_checks(
+        pull.target, pull.head_sha, failing, checks, {"repo": pull.target.repo, "number": pull.number, "url": pull.url}
     )
-    run.say(
-        f"{pull}'s failing checks are still inherited from the base after a re-run — not this chunk's defect; "
-        "routing to repair the base"
-    )
-    return Inherited((record,))
 
 
-def _merge_at(pull: PullRequest, head_sha: str) -> Callable[[], Awaitable[Landed | Waiting]]:
-    async def land() -> Landed | Waiting:
+def _merge_at(pull: PullRequest, head_sha: str) -> Callable[[], Awaitable[Landed | Waiting | NeedsPerson]]:
+    async def land() -> Landed | Waiting | NeedsPerson:
         """Merge the change's CURRENT head, which a self-heal update may have advanced past the submitted commit."""
         try:
             return Landed(await pull.merge(head_sha))
+        except MergeMethodRefused as exc:
+            return NeedsPerson(ActionEscalation(EscalationCause.MERGE_METHOD_REFUSED, f"{pull}: {exc}"))
         except MergeDidNotLand as exc:
             # Not an already-merged earlier pass (`merge` absorbs that) — a race worth re-polling.
             return Waiting(f"merge of {pull} did not land ({exc}); will re-poll")

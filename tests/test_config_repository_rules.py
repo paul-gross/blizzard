@@ -166,9 +166,9 @@ def test_a_repository_lands_by_merge_on_checks_with_no_timeout_unless_stated() -
 
 def test_an_unknown_policy_is_refused_naming_the_field() -> None:
     with pytest.raises(ConfigFieldError) as refused:
-        validate_fields(replace(_FIELDS, landing_policy="park"))  # pyright: ignore[reportArgumentType]
+        validate_fields(replace(_FIELDS, landing_policy="queue"))  # pyright: ignore[reportArgumentType]
     assert refused.value.field == "landing_policy"
-    assert "park" in refused.value.message
+    assert "queue" in refused.value.message
 
 
 @pytest.mark.parametrize("hours", [0, -1])

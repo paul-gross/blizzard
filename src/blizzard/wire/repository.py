@@ -14,6 +14,8 @@ class LandingPolicyName(StrEnum):
     """A landing policy a write may name — how a repository's changes land."""
 
     MERGE_ON_CHECKS = "merge-on-checks"
+    FAST_FORWARD = "fast-forward"
+    PARK = "park"
 
 
 class RepositorySummary(WireModel):

@@ -352,6 +352,10 @@ describe('ChunkEscalation', () => {
         'blizzard/toy-api at https://api.github.com does not offer checks.read',
         "The repository's forge does not offer what the hub node's action needs (epoch 3).",
       ],
+      ['change-closed', 'repo#42 closed without merging', 'The change was closed without merging (epoch 3).'],
+      ['branch-protected', 'repo: branch main: protected branch hook declined', 'The forge refused to update a protected branch (epoch 3).'],
+      ['merge-method-refused', 'repo#42: merge method disabled', 'The forge refused the configured merge method (epoch 3).'],
+      ['park-timeout', 'repo#42 exceeded its 168 hour review timeout', 'The wait for the change to merge timed out (epoch 3).'],
     ])(
       'renders the hub-authored cause %s with its detail',
       async (cause, given, expected) => {

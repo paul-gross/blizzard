@@ -18,9 +18,11 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.no_code import no_code_marker, no_code_repos
 from blizzard.hub.domain.config.forges import ConfiguredForge
+from blizzard.hub.domain.config.landing_policies import LandingPolicy, landing_sort_key
 from blizzard.hub.domain.config.repositories import (
     CommitOrigin,
     ConfiguredRepository,
+    RepositoryId,
     RepositoryOutcome,
     RepositoryResolution,
     ResolvedRepository,
@@ -276,3 +278,25 @@ class Visit:
             row for row in self.git_commits.payload(self.resolution.qualified, self.resolution) if row["repo"] == repo
         )
         return no_code_marker(declaration)
+
+    def parked_watch(self) -> RepositoryId | None:
+        """The first unlanded parked repository with an existing change, unless it needs a fresh review."""
+        names = self.marker_names()
+        pairs = sorted(
+            zip(self.resolution.targets, self.resolution.qualified, strict=True),
+            key=lambda pair: landing_sort_key(pair[0].landing_position, pair[0].slug),
+        )
+        for target, repo in pairs:
+            if f"merged/{repo}" in names:
+                continue
+            if target.landing_policy is not LandingPolicy.PARK:
+                return None
+            prefix = f"delivery-pr/{repo}/"
+            marker = next((row for row in reversed(self.markers) if row.name.startswith(prefix)), None)
+            if marker is None or any(
+                row.name == f"park-reopen/{repo}/{marker.name.rsplit('/', 1)[1]}" and row.epoch == self.epoch
+                for row in self.markers
+            ):
+                return None
+            return RepositoryId(target.record)
+        return None

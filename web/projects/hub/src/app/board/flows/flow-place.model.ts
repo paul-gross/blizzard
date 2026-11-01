@@ -13,6 +13,7 @@ const PLACE_STATES = openLookup<hubApi.FlowPlaceState, PlaceStateLook>(
     next: { label: 'next', tone: 'spawning' },
     waiting: { label: 'waiting', tone: 'waiting' },
     polling: { label: 'polling', tone: 'waiting' },
+    'awaiting-merge': { label: 'awaiting merge', tone: 'waiting' },
     'passed-over': { label: 'passed over', tone: 'idle' },
   },
   (raw) => ({ label: raw, tone: 'idle' }),

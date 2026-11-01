@@ -3128,6 +3128,7 @@
           "next",
           "waiting",
           "polling",
+          "awaiting-merge",
           "passed-over"
         ],
         "title": "FlowPlaceState",
@@ -5303,6 +5304,11 @@
       "PendingView": {
         "description": "A hub node's in-progress poll \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
         "properties": {
+          "kind": {
+            "default": "pending",
+            "title": "Kind",
+            "type": "string"
+          },
           "next_poll_at": {
             "title": "Next Poll At",
             "type": "string"
@@ -5310,11 +5316,24 @@
           "node_name": {
             "title": "Node Name",
             "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
           }
         },
         "required": [
           "node_name",
-          "next_poll_at"
+          "next_poll_at",
+          "kind",
+          "since"
         ],
         "title": "PendingView",
         "type": "object"

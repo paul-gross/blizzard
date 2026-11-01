@@ -156,6 +156,10 @@ class GitHubLanding:
 
     async def branch_tip(self, branch: str) -> str | None:
         response = await self._send("GET", f"{self._repo}/git/ref/heads/{branch}")
+        # The mock forge names an absent ref with this precise 422, rather than GitHub's 404.
+        missing_ref = f"ref does not resolve in {self._binding.owner}/{self._binding.repo}: {branch}"
+        if response.status_code == 422 and _message(response) == missing_ref:
+            return None
         if response.status_code == 404 and not await self._repository_missing():
             return None
         payload = await self._answered(response, ForgeObject.BRANCH)
@@ -529,6 +533,9 @@ def _change(pull: Any) -> Change:
             mergeability=mergeability_of(pull.get("mergeable_state")),
             web_url=pull.get("html_url") or "",
             merged_revision=(pull.get("merge_commit_sha") or None) if merged else None,
+            closed_at=datetime.fromisoformat(pull["closed_at"].replace("Z", "+00:00"))
+            if pull.get("closed_at")
+            else None,
         )
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise ForgeUnavailable(f"unreadable pull request: {exc}") from exc

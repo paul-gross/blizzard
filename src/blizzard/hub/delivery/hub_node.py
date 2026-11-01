@@ -51,7 +51,6 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.delivery.flows import TURN_ESCALATED
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals
-from blizzard.hub.domain.graph.actions import RESERVED_WAITS
 from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -71,8 +70,7 @@ _EVENT_ACTION_MISSING: EventLogKind = "hub-action-missing"
 _EVENT_CAPABILITY_MISSING: EventLogKind = "forge-capability-missing"
 _CAPABILITY_MISSING_STEP = "forge-capability-missing"
 HUB_LOG_PREFIX = "hub-log."
-# The one reserved wait a pass answers; the router never authors it.
-(_PENDING,) = RESERVED_WAITS
+_PENDING = "pending"
 _MARKER_PREFIX = "merged/"
 #: The event each resolution outcome records — ``None`` where the resolution stands. Every refused
 #: outcome records its ``hub-log.<outcome>`` artifact before any pass is taken.
@@ -342,7 +340,7 @@ class HubNodeRouter:
             )
             if reached is not None:
                 reached()
-            ending.end(handle, outcome=_PENDING, closure=None)
+            ending.end(handle, outcome=kind, closure=None)
 
     def route_pending_timeout(
         self, chunk: Chunk, graph: Graph, node: Node, *, epoch: int, ending: ITurnEnd = NO_TURN

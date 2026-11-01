@@ -82,8 +82,8 @@ def test_a_repository_created_without_a_policy_lands_by_merge_on_checks(hub: Hub
 
 
 def test_an_unknown_policy_is_refused_on_create_and_on_a_patch(hub: HubHarness) -> None:
-    created = hub.client.post("/api/repositories", json=_repository("acme-park", landing_policy="park"))
-    patched = hub.client.patch("/api/repositories/acme-app", json={"landing_policy": "park"})
+    created = hub.client.post("/api/repositories", json=_repository("acme-unknown", landing_policy="unknown"))
+    patched = hub.client.patch("/api/repositories/acme-app", json={"landing_policy": "unknown"})
 
     assert _refusal(created)[0] == "landing_policy"
     assert _refusal(patched)[0] == "landing_policy"
@@ -215,7 +215,7 @@ def _written(applied: dict[str, Any]) -> list[tuple[str, str, str]]:
 @pytest.mark.parametrize("version", [1, 2])
 def test_an_unknown_policy_in_a_document_is_refused(hub: HubHarness, version: int) -> None:
     document = _ok(hub.client.get("/api/config/export", params={"version": version}))
-    document["repositories"][0]["landing_policy"] = "park"
+    document["repositories"][0]["landing_policy"] = "unknown"
 
     refused = _apply(hub.client, document)
 

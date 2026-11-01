@@ -81,7 +81,11 @@ class LandingRun:
             self.resume_at = exc.resume_at
 
     def answer(self, choice: str) -> Pass:
-        return Pass(choice=choice, log=tuple(self.log), next_poll_at=self.resume_at if choice == PENDING else None)
+        return Pass(
+            choice=choice,
+            log=tuple(self.log),
+            next_poll_at=self.resume_at if choice in {PENDING, "awaiting-merge"} else None,
+        )
 
     def escalate(self, escalation: ActionEscalation) -> Pass:
         return Pass(choice=None, log=tuple(self.log), escalation=escalation)
@@ -209,7 +213,7 @@ class Ready:
     """Proven and landable: ``land`` is the one forge write that lands it, taken when the order allows. It answers
     :class:`Landed`, or :class:`Waiting` when the write did not land."""
 
-    land: Callable[[], Awaitable[Landed | Waiting]]
+    land: Callable[[], Awaitable[Landed | Waiting | NeedsPerson]]
 
 
 @domain_model
