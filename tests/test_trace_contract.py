@@ -8,7 +8,7 @@ import os
 import re
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -275,7 +275,9 @@ def _instant(value: datetime) -> str:
 
 
 def _value(value: object) -> object:
-    return list(value) if isinstance(value, tuple) else value
+    if isinstance(value, tuple):
+        return list(cast("tuple[object, ...]", value))
+    return value
 
 
 def _attributes(attributes: Any) -> dict[str, object]:

@@ -3,6 +3,7 @@ hydrated to ``StepFacts`` and selected through the window the sweep and replay s
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -145,7 +146,7 @@ def test_a_step_names_its_runner_by_id_and_latest_registered_name_and_a_rename_b
     assert retold == (_RN, "r-claude-2")
 
 
-def _drain(store: TraceStore, since: CursorKey, until, limit: int) -> list[CursorKey]:
+def _drain(store: TraceStore, since: CursorKey, until: datetime, limit: int) -> list[CursorKey]:
     """Every key the window tells, pass after pass, until its position stops moving."""
     told: list[CursorKey] = []
     for _ in range(50):
@@ -251,12 +252,18 @@ class _CountingReads:
         self._store = store
         self.candidate_reads: list[int] = []
 
-    def closing_candidates(self, since, until, limit):
+    def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         self.candidate_reads.append(limit)
         return self._store.closing_candidates(since, until, limit)
 
-    def step_facts_for(self, chunk_ids):
+    def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         return self._store.step_facts_for(chunk_ids)
+
+    def newest_cursor(self) -> TraceCheckpoint | None:
+        raise NotImplementedError
+
+    def newest_export_latch(self) -> HubEventKind | None:
+        raise NotImplementedError
 
 
 def test_oldest_unsent_is_the_first_key_the_drain_tells_and_reads_in_pages(tmp_path: Path) -> None:
@@ -268,7 +275,7 @@ def test_oldest_unsent_is_the_first_key_the_drain_tells_and_reads_in_pages(tmp_p
     store = trace_store(hub)
     reads = _CountingReads(store)
 
-    oldest = oldest_unsent(reads, since, until)  # type: ignore[arg-type]
+    oldest = oldest_unsent(reads, since, until)
 
     assert oldest is not None
     assert oldest.key == read_window(store, since, until, 1000).items[0].key
@@ -283,7 +290,7 @@ class _NonClosingBacklog:
         self.limits: list[int] = []
         self.hydrated = 0
 
-    def closing_candidates(self, since, until, limit):
+    def closing_candidates(self, since: datetime, until: datetime, limit: int) -> ClosingCandidates:
         self.limits.append(limit)
         served = (len(self.limits) - 1) * limit
         page = tuple(self._ids[served : served + limit])
@@ -294,9 +301,15 @@ class _NonClosingBacklog:
             return ClosingCandidates(page, frontier=at)
         return ClosingCandidates(page, newest=at)
 
-    def step_facts_for(self, chunk_ids):
+    def step_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, StepFacts]:
         self.hydrated += 1
         return {}
+
+    def newest_cursor(self) -> TraceCheckpoint | None:
+        raise NotImplementedError
+
+    def newest_export_latch(self) -> HubEventKind | None:
+        raise NotImplementedError
 
 
 @pytest.mark.parametrize(("depth", "pages"), [(100, 1), (150, 2), (350, 4)])
@@ -304,7 +317,7 @@ def test_oldest_unsent_passes_grow_by_pages_of_candidates_not_by_candidates(dept
     backlog = _NonClosingBacklog(depth)
     since = CursorKey.opening(datetime(2026, 1, 1, tzinfo=UTC))
 
-    assert oldest_unsent(backlog, since, since.at + timedelta(days=1)) is None  # type: ignore[arg-type]
+    assert oldest_unsent(backlog, since, since.at + timedelta(days=1)) is None
 
     # One read per page, then the settling read that finds the position unmoved.
     assert backlog.limits == [100] * (pages + 1)

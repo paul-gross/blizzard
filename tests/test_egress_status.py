@@ -5,13 +5,15 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.egress.factory import EgressUnavailable
+from blizzard.hub.egress.writer import EgressWriterSettings
 from tests.support import HubHarness
 from tests.test_egress_sweep import closed_step, egress_hub
 from tests.worker_http import bind_stubs
@@ -40,9 +42,12 @@ def test_a_hub_with_the_export_off_reports_it_off(tmp_path: Path) -> None:
 
 
 def test_a_rejected_export_names_the_setting_and_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "blizzard.hub.composition.build_egress_writer", lambda *_: EgressUnavailable("parquet needs pyarrow")
-    )
+    def without_pyarrow(
+        format: Literal["ndjson", "parquet"], directory: Path, settings: EgressWriterSettings, token: str
+    ) -> EgressUnavailable:
+        return EgressUnavailable("parquet needs pyarrow")
+
+    monkeypatch.setattr("blizzard.hub.composition.build_egress_writer", without_pyarrow)
     config = EgressConfig(directory=tmp_path / "out", format="parquet")
     hub, _ = egress_hub(tmp_path, config)
     body = _status(hub)
@@ -111,7 +116,11 @@ def test_the_cli_renders_the_status_and_its_json(tmp_path: Path) -> None:
     sweep = hub.hub_services.egress_export
     assert sweep is not None
     sweep.sweep()
-    bound = bind_stubs(get=lambda url, *, params=None, timeout, **_: hub.client.get(url, params=params))
+
+    def get(url: str, *, params: dict[str, str] | None = None, timeout: float, **_: object) -> httpx2.Response:
+        return hub.client.get(url, params=params)
+
+    bound = bind_stubs(get=get)
 
     text = bound.runner.invoke(hub_group, ["egress", "status"], env={"BZ_HUB_URL": "http://hub.local:8421"})
     assert text.exit_code == 0, text.output

@@ -17,7 +17,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill, TranscriptReshipError
 from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES
 from tests.runner_fakes import (
@@ -92,22 +92,20 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
     return ctx, source
 
 
-def _with_source(ctx, source: FakeTranscriptSource):
+def _with_source(ctx: LoopContext, source: FakeTranscriptSource) -> LoopContext:
     """Replace the production-shaped exact-owner source as well as the legacy sentinel."""
+    adapter = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
+    assert isinstance(adapter, FakeHarness)
     return replace(
         ctx,
         transcripts_wired=True,
-        harnesses=HarnessRegistry(
-            {
-                CLAUDE_CODE_HARNESS_ID: HarnessBinding(
-                    adapter=ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID), transcript_source=source
-                )
-            }
-        ),
+        harnesses=HarnessRegistry({CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=adapter, transcript_source=source)}),
     )
 
 
-def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at=_NOW) -> None:
+def _historical_lease(
+    ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at: datetime = _NOW
+) -> None:
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -133,7 +131,7 @@ def _historical_lease(ctx, *, lease_id: str, session_id: str, epoch: int, node_i
     )
 
 
-def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=_NOW) -> None:
+def _foreign_owner_lease(ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, at: datetime = _NOW) -> None:
     """A closed lease whose session's recorded owner this run's registry does not bind."""
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -155,7 +153,7 @@ def _foreign_owner_lease(ctx, *, lease_id: str, session_id: str, epoch: int, at=
     )
 
 
-def _shipped_bodies(ctx) -> list[dict[str, Any]]:
+def _shipped_bodies(ctx: LoopContext) -> list[dict[str, Any]]:
     hub = ctx.hub
     assert isinstance(hub, FakeHub)
     return [json.loads(record.model_dump_json()) for record in hub.transcripts_pushed]
@@ -492,7 +490,7 @@ def test_the_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
 # --- the operator re-ship (supersede an already-imported segment) ---------------
 
 
-def _import_one(ctx, *, session_id: str = "sess-a") -> str:
+def _import_one(ctx: LoopContext, *, session_id: str = "sess-a") -> str:
     """Backfill a single historical session and return the segment id it landed under."""
     _historical_lease(ctx, lease_id="lease_1", session_id=session_id, epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)

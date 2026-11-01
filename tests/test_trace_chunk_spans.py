@@ -90,15 +90,6 @@ def _done(**extra: Any) -> StepFacts:
     )
 
 
-def _all_spans(facts: StepFacts) -> list[FinishedSpan]:
-    steps = [s for s in identify_steps(facts) if s.close is not None]
-    return (
-        [span for step in steps for span in assemble_step(facts, step, identify_steps(facts))]
-        + list(assemble_work(facts))
-        + list(assemble_lifetime(facts))
-    )
-
-
 def _named(spans: tuple[FinishedSpan, ...], name: str) -> FinishedSpan:
     return next(s for s in spans if s.name == name)
 
@@ -492,7 +483,7 @@ def test_a_sweep_tells_each_chunk_span_exactly_once() -> None:
     facts = _done()
     first = _window(facts, CursorKey.opening(fx.at(0)))
 
-    assert [type(i) for i in first.items].count(ClosedStep) == 4
+    assert len([i for i in first.items if type(i) is ClosedStep]) == 4
     assert len(first.finished_chunks()) == 1
     again = _window(facts, first.position)
     assert again.items == ()

@@ -29,7 +29,7 @@ from blizzard.runner.harness.transcript import (
 )
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.ledger import (
     BufferedTranscriptDelta,
     TranscriptSegmentState,
@@ -292,7 +292,7 @@ def _ctx(
     return ctx, source
 
 
-def _spawn_one_segment(ctx) -> str:
+def _spawn_one_segment(ctx: LoopContext) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -432,7 +432,9 @@ def test_pump_advances_the_cursor_on_a_turnless_batch() -> None:
     assert source.turns_since_calls[-1][2] == TranscriptPosition("pos-1")  # read from the advanced cursor
     pending = ctx.stores.transcript_ledger.pending_transcript_outbound()
     assert len(pending) == 1
-    assert ctx.stores.transcript_ledger.transcript_segment(segment_id).cursor == "pos-2"  # type: ignore[union-attr]
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-2"
 
 
 def test_pump_truncates_a_single_record_that_alone_exceeds_the_cap() -> None:
@@ -472,7 +474,9 @@ def test_pump_keeps_shipping_after_a_record_cap_truncation() -> None:
     segment_id = _spawn_one_segment(ctx)
 
     TranscriptPump(ctx).run()
-    assert ctx.stores.transcript_ledger.transcript_segment(segment_id).truncated_reason == "record_cap_exceeded"  # type: ignore[union-attr]
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.truncated_reason == "record_cap_exceeded"
 
     source.script_batch("sess-a", transcript_batch([normalized_turn(0, "small")], next_token="pos-2"))
     TranscriptPump(ctx).run()
@@ -848,7 +852,9 @@ def test_pump_skips_when_an_already_pumped_segments_cursor_would_not_advance() -
     )
     segment_id = _spawn_one_segment(ctx)
     TranscriptPump(ctx).run()
-    assert ctx.stores.transcript_ledger.transcript_segment(segment_id).cursor == "pos-1"  # type: ignore[union-attr]
+    segment = ctx.stores.transcript_ledger.transcript_segment(segment_id)
+    assert segment is not None
+    assert segment.cursor == "pos-1"
 
     source.script_batch(
         "sess-a",
@@ -982,13 +988,36 @@ def test_a_raise_before_the_warning_leaves_the_dropped_sidechain_unlatched() -> 
     real_record = ctx.stores.transcript_ledger.record_transcript_deltas
     calls: list[int] = []
 
-    def _raise_once(**kwargs: Any) -> None:
+    def _raise_once(
+        *,
+        segment_id: str,
+        chunk_id: str,
+        cursor: str | None,
+        shipped_bytes: int,
+        shipped_turns: int,
+        normalizer_version: str,
+        harness_version: str | None,
+        payloads: list[str],
+        created_at: datetime,
+        agent_tool_use_ids: dict[str, str] | None = None,
+    ) -> list[int]:
         calls.append(1)
         if len(calls) == 1:
             raise RuntimeError("enqueue failed")
-        real_record(**kwargs)
+        return real_record(
+            segment_id=segment_id,
+            chunk_id=chunk_id,
+            cursor=cursor,
+            shipped_bytes=shipped_bytes,
+            shipped_turns=shipped_turns,
+            normalizer_version=normalizer_version,
+            harness_version=harness_version,
+            payloads=payloads,
+            created_at=created_at,
+            agent_tool_use_ids=agent_tool_use_ids,
+        )
 
-    ctx.stores.transcript_ledger.record_transcript_deltas = _raise_once  # type: ignore[method-assign]
+    ctx.stores.transcript_ledger.record_transcript_deltas = _raise_once
     TranscriptPump(ctx).run()
 
     kinds = [json.loads(e.payload).get("kind") for e in ctx.stores.outbound.pending_outbound()]
@@ -1724,7 +1753,9 @@ class _AdvanceClockAfterSessionSource:
     clock: FixedClock
     jump: timedelta
     advance_after: str
-    turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = field(default_factory=list)
+    turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = field(
+        default_factory=list[tuple[str, str | None, TranscriptPosition | None]]
+    )
 
     def turns_since(
         self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
@@ -2230,7 +2261,7 @@ def test_unconfigured_caps_leave_the_module_defaults_in_force() -> None:
 # --- cross-window correlation ----------------------------------------
 
 
-def _shipped_turns(ctx) -> list[dict[str, Any]]:
+def _shipped_turns(ctx: LoopContext) -> list[dict[str, Any]]:
     """Every turn the pump actually enqueued, in wire order across all its records."""
     return [
         turn

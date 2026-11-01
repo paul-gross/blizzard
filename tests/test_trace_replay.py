@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedTransition
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
@@ -268,7 +269,7 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
     accepted = len(exporter.batches)
     original = exporter.export
 
-    def second_fails(spans):
+    def second_fails(spans: Sequence[FinishedSpan]) -> bool:
         if exporter.attempts > accepted:
             exporter.fail, exporter.raises = mode == "refuses", mode == "raises"
         return original(spans)

@@ -7,6 +7,7 @@ must land, attributed to its own epoch. Proves idempotent ingest, totals, and SS
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ def _claim(hub: HubHarness) -> tuple[str, str]:
 def _usage_payload(
     node_id: str, *, epoch: int, cost_usd: float | None, estimated_cost_usd: float | None = None
 ) -> dict[str, object]:
-    payload = {
+    payload: dict[str, object] = {
         "chunk_id": "",  # filled by the caller
         "node_id": node_id,
         "epoch": epoch,
@@ -128,11 +129,44 @@ def test_a_mid_batch_crash_persists_the_high_water_mark_at_the_last_applied_seq(
     real_record_usage = hub.services.facts.usage.record_usage
     calls = {"n": 0}
 
-    def _crash_on_second_call(*args, **kwargs):
+    def _crash_on_second_call(
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        runner_id: str,
+        kind: str,
+        model: str,
+        harness_id: str | None = None,
+        harness_version: str | None = None,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int,
+        cache_create_tokens: int,
+        cost_usd: float | None,
+        estimated_cost_usd: float | None = None,
+        at: datetime,
+    ) -> None:
         calls["n"] += 1
         if calls["n"] == 2:
             raise RuntimeError("simulated crash mid-batch")
-        return real_record_usage(*args, **kwargs)
+        real_record_usage(
+            chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            runner_id=runner_id,
+            kind=kind,
+            model=model,
+            harness_id=harness_id,
+            harness_version=harness_version,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_create_tokens=cache_create_tokens,
+            cost_usd=cost_usd,
+            estimated_cost_usd=estimated_cost_usd,
+            at=at,
+        )
 
     hub.services.facts.usage.record_usage = _crash_on_second_call
     try:

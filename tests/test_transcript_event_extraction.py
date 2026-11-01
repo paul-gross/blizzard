@@ -15,7 +15,12 @@ _DIALECT = "claude-code-jsonl/2"
 
 
 def _tool_turn(
-    index: int, name: str, input: dict[str, object], *, timestamp: str | None = None, sidechain=None
+    index: int,
+    name: str,
+    input: dict[str, object],
+    *,
+    timestamp: str | None = None,
+    sidechain: TurnSidechain | None = None,
 ) -> TranscriptTurn:
     return TranscriptTurn(
         index=index,

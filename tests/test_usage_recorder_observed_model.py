@@ -21,7 +21,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -254,9 +254,9 @@ def _fake_recorder(
     )
 
 
-def _sample(kind: str) -> UsageSample:
+def _sample(kind: UsageKind) -> UsageSample:
     return UsageSample(
-        kind=kind,  # type: ignore[arg-type]
+        kind=kind,
         model="fake-model",
         input_tokens=1,
         output_tokens=1,
@@ -377,7 +377,7 @@ def test_an_opencode_generation_records_its_descendant_sessions_steps_in_the_one
 
 
 def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
-    tmp_path, spawn_executor: Executor
+    tmp_path: Path, spawn_executor: Executor
 ) -> None:
     from tests.test_runner_harness_opencode_subagents import opencode_events, opencode_session, opencode_task, step
 

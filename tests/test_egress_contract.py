@@ -4,6 +4,9 @@ the views each declares, and this module binds the code schemas, the writer's ou
 ``dictionary.json`` and the view SQL are authored; ``golden/`` and ``_schema/`` and the generated block of
 ``docs/deployment/egress.md`` are written only by regeneration."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+# pyarrow ships no type information, so every read-back through it is unknown to the checker.
+
 from __future__ import annotations
 
 import gzip
@@ -61,6 +64,7 @@ from blizzard.hub.egress.writer import (
     EgressPass,
     EgressValues,
     EgressWriterSettings,
+    FilesWritten,
     PlacedFile,
     rfc3339_utc,
 )
@@ -336,8 +340,8 @@ def _write_events_pass(
             if row.step_started_at.astimezone(UTC).date() == day
         ]
         written = writer.write(EgressBatch(EVENTS_SCHEMA, day, egress_pass, values))
-        assert not hasattr(written, "cause"), written
-        placed += written.files  # type: ignore[union-attr]
+        assert isinstance(written, FilesWritten), written
+        placed += written.files
     committed = writer.commit_pass(egress_pass, placed)
     assert not hasattr(committed, "cause"), committed
 
@@ -358,8 +362,8 @@ def _write_pass(
         for day in sorted({at.astimezone(UTC).date() for at, _ in timed}):
             rows: list[EgressValues] = [row for at, row in timed if at.astimezone(UTC).date() == day]
             written = writer.write(EgressBatch(schema, day, egress_pass, rows))
-            assert not hasattr(written, "cause"), written
-            placed += written.files  # type: ignore[union-attr]
+            assert isinstance(written, FilesWritten), written
+            placed += written.files
     committed = writer.commit_pass(egress_pass, placed)
     assert not hasattr(committed, "cause"), committed
 

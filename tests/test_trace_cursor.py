@@ -15,7 +15,7 @@ from blizzard.foundation.trace_export.cursor import (
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedChunkStop, TracedEpochOwner, TracedLease
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
-from blizzard.hub.domain.observability.tracing.window import select_window
+from blizzard.hub.domain.observability.tracing.window import TraceWindow, select_window
 from tests import trace_fixtures as fx
 
 pytestmark = pytest.mark.unit
@@ -122,7 +122,7 @@ def _chunk(chunk_id: str, *, closes_at: int) -> StepFacts:
     )
 
 
-def _ids(window) -> list[str]:
+def _ids(window: TraceWindow) -> list[str]:
     return [c.key.chunk_id for c in window.closed_steps()]
 
 

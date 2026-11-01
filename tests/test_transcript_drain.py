@@ -19,9 +19,15 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, TranscriptPosition
 from blizzard.runner.hub.client import TranscriptPush, TranscriptPushAck
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.context import LoopConfig
+from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts import transcript_drain as transcript_drain_module
+from blizzard.runner.transcripts.ledger import (
+    BufferedTranscriptDelta,
+    IWriteTranscriptLedgerRepository,
+    TranscriptSegmentState,
+)
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
 from tests.runner_fakes import (
     FIXTURE_RUNNER_ID,
@@ -54,7 +60,7 @@ class _SteppingClock(FixedClock):
         return self.instant if self.calls == 1 else self.instant + self.step
 
 
-def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None):
+def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None) -> LoopContext:
     store = make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
@@ -73,7 +79,7 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int
     )
 
 
-def _spawn_one_segment(ctx) -> str:
+def _spawn_one_segment(ctx: LoopContext) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -100,7 +106,7 @@ def _spawn_one_segment(ctx) -> str:
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
-def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:
+def _enqueue_delta(ctx: LoopContext, segment_id: str, *, cursor: str) -> int:
     payload = json.dumps(
         {
             "segment_id": segment_id,
@@ -636,10 +642,10 @@ def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline()
     calls = 0
     real_pending = ctx.stores.transcript_ledger.pending_transcript_outbound
 
-    def _counting_pending(*args, **kwargs):
+    def _counting_pending(*, limit: int | None = None) -> list[BufferedTranscriptDelta]:
         nonlocal calls
         calls += 1
-        return real_pending(*args, **kwargs)
+        return real_pending(limit=limit)
 
     ctx.stores.transcript_ledger.pending_transcript_outbound = _counting_pending
 
@@ -657,7 +663,7 @@ def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> 
     captured: dict[str, object] = {}
     original_run = transcript_drain_module.TranscriptPump.run
 
-    def _capturing_run(self, *, deadline=None):
+    def _capturing_run(self: TranscriptPump, *, deadline: datetime | None = None) -> None:
         captured["deadline"] = deadline
         return original_run(self, deadline=deadline)
 
@@ -751,13 +757,13 @@ class _RaisingOpenSegmentsStore:
     OUTSIDE `TranscriptPump`'s own per-segment loop,
     which no per-segment try/except can isolate."""
 
-    def __init__(self, inner):
+    def __init__(self, inner: IWriteTranscriptLedgerRepository) -> None:
         self._inner = inner
 
-    def open_transcript_segments(self):
+    def open_transcript_segments(self) -> list[TranscriptSegmentState]:
         raise RuntimeError("store unavailable (scripted)")
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> object:
         return getattr(self._inner, name)
 
 
@@ -886,7 +892,7 @@ def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() ->
     real_transcript_segments = ctx.stores.transcript_ledger.transcript_segments
     calls: list[list[str]] = []
 
-    def _counting_transcript_segments(segment_ids):
+    def _counting_transcript_segments(segment_ids: Sequence[str]) -> dict[str, TranscriptSegmentState]:
         calls.append(list(segment_ids))
         return real_transcript_segments(segment_ids)
 

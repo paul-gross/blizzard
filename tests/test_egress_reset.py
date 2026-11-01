@@ -153,10 +153,16 @@ def test_an_unconfigured_dataset_and_a_future_instant_are_422(tmp_path: Path) ->
 def test_the_cli_moves_the_cursor_and_renders_a_refusal(tmp_path: Path) -> None:
     hub, _ = egress_hub(tmp_path, SETTLED)
     egress_sweep(hub, InMemoryEgressWriter()).sweep()
-    bound = bind_stubs(
-        request=lambda method, url, *, json=None, params=None, timeout, **_: hub.client.request(method, url, json=json),
-        post=lambda url, *, json=None, params=None, timeout, **_: hub.client.post(url, json=json),
-    )
+
+    def _request(
+        method: str, url: str, *, json: object = None, params: object = None, timeout: object, **_: object
+    ) -> httpx2.Response:
+        return hub.client.request(method, url, json=json)
+
+    def _post(url: str, *, json: object = None, params: object = None, timeout: object, **_: object) -> httpx2.Response:
+        return hub.client.post(url, json=json)
+
+    bound = bind_stubs(request=_request, post=_post)
 
     moved = bound.runner.invoke(
         hub_group, ["egress", "reset", "--dataset", "invocations", "--to", "2026-07-12T00:00:00"], env=_ENV
