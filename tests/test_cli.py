@@ -700,9 +700,22 @@ def _host_answering(sock_path: Path, *replies: bytes) -> socket.socket:
             with conn:
                 _read_request(conn)
                 conn.sendall(reply)
+                _close_after_client(conn)
 
     threading.Thread(target=_answer, daemon=True).start()
     return server
+
+
+def _close_after_client(conn: socket.socket) -> None:
+    """Half-close, then wait for the client to finish with the connection. Closing outright while the client still has
+    bytes in flight — a pooled connection's next request — resets the connection under it before it reads the reply."""
+    conn.shutdown(socket.SHUT_WR)
+    conn.settimeout(2)
+    try:
+        while conn.recv(4096):
+            pass
+    except OSError:
+        pass
 
 
 def _read_request(conn: socket.socket) -> None:
@@ -725,7 +738,7 @@ def _read_request(conn: socket.socket) -> None:
 
 
 def _json_reply(status: str, body: str) -> bytes:
-    return f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+    return f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
 
 
 _RUNNERS = _json_reply(
