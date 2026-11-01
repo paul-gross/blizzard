@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token, report_escalation, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -60,7 +60,7 @@ nodes:
 """
 
 
-def _claim(hub) -> str:  # type: ignore[no-untyped-def]
+def _claim(hub: HubHarness) -> str:
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)

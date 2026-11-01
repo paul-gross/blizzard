@@ -253,7 +253,7 @@ def _receiver(
 
     class _Tracing(DisabledPlatformTracing):
         @property
-        def enabled(self) -> bool:  # type: ignore[override]
+        def enabled(self) -> bool:
             return enabled
 
     return TelemetryReceiver(

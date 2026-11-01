@@ -47,7 +47,7 @@ nodes:
 """
 
 
-def _drive(hub, *, target: str, mint_target: bool):  # type: ignore[no-untyped-def]
+def _drive(hub, *, target: str, mint_target: bool):
     if mint_target:
         assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML}).status_code == 201
     chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_CROSS.replace("@TARGET@", target))

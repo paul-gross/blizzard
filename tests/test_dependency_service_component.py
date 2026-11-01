@@ -25,7 +25,7 @@ from tests.support import HubHarness, build_hub, claim_route, hub_scoped, ingest
 pytestmark = pytest.mark.component
 
 
-def _resolve(hub: HubHarness, chunk_id: str):  # type: ignore[no-untyped-def]
+def _resolve(hub: HubHarness, chunk_id: str):
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
     return chunk

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -38,12 +40,19 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(  # type: ignore[no-untyped-def]
-    store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    pid=100,
+    start="start-100",
+    session="sess-a",
+    epoch=1,
 ):
     """A build lease spawned into env e1 with a live worker, plus its binding — no resume
     intent (a live tick's lease, not a restart-marked one)."""
@@ -69,7 +78,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0):  # type: ignore[no-untyped-def]
+def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, chunk="ch_1", lease="lease_1", retries_max=0):
     """A lease minted but never spawned (a crash in FILL's mint->spawn window) — REAP's own
     orphan case, with no retry budget left so the very first reap attempt exhausts it."""
     store.record_lease(
@@ -87,7 +96,7 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[no-untyped-def]
+def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -96,7 +105,7 @@ def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[
     )
 
 
-def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type: ignore[no-untyped-def]
+def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):
     return ChunkState(
         chunk_id=chunk,
         status=status,
@@ -105,7 +114,7 @@ def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type
     )
 
 
-def _ctx(store, hub, *, provider=None, probe=None):  # type: ignore[no-untyped-def]
+def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub, *, provider=None, probe=None):
     return make_context(
         store,
         hub=hub,
@@ -119,7 +128,7 @@ def _ctx(store, hub, *, provider=None, probe=None):  # type: ignore[no-untyped-d
 
 
 @pytest.mark.unit
-def test_pull_abandons_a_live_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_abandons_a_live_detached_chunk(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -139,7 +148,7 @@ def test_pull_abandons_a_live_detached_chunk(tmp_path):  # type: ignore[no-untyp
 
 
 @pytest.mark.unit
-def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -159,7 +168,7 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
 
 
 @pytest.mark.unit
-def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path: Path):
     """The must-fix-1 backstop: the hub still routes the chunk to this
     runner, but it derives ``stopped`` — the status branch catches it directly, honoring
     the terminal fact rather than depending on the route release having landed."""
@@ -179,7 +188,7 @@ def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_thi
 
 
 @pytest.mark.unit
-def test_pull_reconcile_leases_closes_a_stopped_chunks_open_invocation_boundary(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_reconcile_leases_closes_a_stopped_chunks_open_invocation_boundary(tmp_path: Path):
     """The hub-terminal closure claim, proven through the actual funnel a
     `STOPPED` chunk drives — never just a direct ``Attempt.abandon`` call standing in for it."""
     store = _store(tmp_path)
@@ -213,7 +222,7 @@ def test_pull_reconcile_leases_closes_a_stopped_chunks_open_invocation_boundary(
 
 
 @pytest.mark.unit
-def test_pull_leaves_a_still_running_lease_untouched(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_leaves_a_still_running_lease_untouched(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -232,7 +241,7 @@ def test_pull_leaves_a_still_running_lease_untouched(tmp_path):  # type: ignore[
 
 @pytest.mark.unit
 @pytest.mark.parametrize("status", [ChunkStatus.DELIVERING, ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.NEEDS_HUMAN])
-def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path, status):  # type: ignore[no-untyped-def]
+def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path: Path, status):
     """The regression test for the route-only predicate: copying restart-resume's
     ``status == RUNNING and ours`` here would wrongly abandon a live runner's lease
     while its chunk derives ``delivering``, ``waiting_on_human``, or ``needs_human``."""
@@ -256,7 +265,7 @@ def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path, status):
 
 
 @pytest.mark.unit
-def test_pull_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_defers_when_hub_unreachable(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.enqueue_outbound(kind=LEASE_MINTED, chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
@@ -291,17 +300,17 @@ class _OrderTrackingHub(FakeHub):
         super().__init__()
         self.calls: list[str] = []
 
-    def chunk_statuses(self, chunk_ids):  # type: ignore[no-untyped-def]
+    def chunk_statuses(self, chunk_ids):
         self.calls.append("chunk_statuses")
         return super().chunk_statuses(chunk_ids)
 
-    def push_facts(self, facts):  # type: ignore[no-untyped-def]
+    def push_facts(self, facts):
         self.calls.append("push_facts")
         return super().push_facts(facts)
 
 
 @pytest.mark.unit
-def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_abandons_before_it_flushes(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.enqueue_outbound(kind=LEASE_MINTED, chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
@@ -324,7 +333,7 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
 
 
 @pytest.mark.unit
-def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path: Path):
     """REAP's exhausted-budget path can reach requeue-or-escalate before PULL's own
     detach sweep runs this tick; escalating anyway would post a fact the flush can't
     retract, so REAP re-asks the same ownership question and abandons in place instead."""
@@ -350,7 +359,7 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path: Path):
     """The companion case: an exhausted-budget lease whose chunk the hub still routes here
     escalates exactly as before — the new ownership check must not suppress a genuine
     escalation, only one that would race ahead of a detach."""
@@ -378,7 +387,7 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
 
 
 @pytest.mark.component
-def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -405,7 +414,7 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
 
 
 @pytest.mark.component
-def test_a_chunk_detached_mid_node_and_reclaimed_starts_a_fresh_session_not_a_resume(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_chunk_detached_mid_node_and_reclaimed_starts_a_fresh_session_not_a_resume(tmp_path: Path):
     """Detach discards the attempt's session (``domain/execution/recovery.md`` §Detach): a
     re-claim on the same runner spawns a new session instead of resuming the detached one."""
     store = _store(tmp_path)
@@ -443,7 +452,7 @@ def test_a_chunk_detached_mid_node_and_reclaimed_starts_a_fresh_session_not_a_re
 
 
 @pytest.mark.unit
-def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path: Path):
     """The regression pin: an exited worker still holding its env, its chunk 404ing at the
     hub (a store reset), is reaped and released rather than retried forever."""
     store = _store(tmp_path)
@@ -468,7 +477,7 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
 
 
 @pytest.mark.unit
-def test_pull_group_kills_a_still_live_detached_worker(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_group_kills_a_still_live_detached_worker(tmp_path: Path):
     """The companion case: a recorded (pid, start_time) that still reads alive IS killed —
     the liveness re-check gates the kill, it does not disable it."""
     store = _store(tmp_path)
@@ -494,7 +503,7 @@ def test_pull_group_kills_a_still_live_detached_worker(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
-def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(tmp_path: Path):
     """The leader pid itself already exited, but a descendant it spawned — still in the
     same recorded process group — survives. A leader-only liveness check would skip the
     kill entirely and leak that descendant forever; the group must still be killed."""
@@ -522,7 +531,7 @@ def test_pull_group_kills_a_dead_leader_whose_descendant_still_holds_the_group(t
 
 
 @pytest.mark.unit
-def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process(tmp_path: Path):
     """The pid/pgid-reuse hazard closes: a LIVE pid whose start time no longer matches
     the recorded one is not this lease's worker any more — the OS gave that pid to an
     unrelated process, and a bare `killpg` with no re-check would hit it instead."""
@@ -551,7 +560,7 @@ def test_pull_skips_the_kill_when_the_recorded_pid_was_reused_by_another_process
 
 
 @pytest.mark.unit
-def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type: ignore[no-untyped-def]
+def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path: Path):
     """The companion case: a transient hub failure (unreachable / 5xx) must NOT be read
     as the chunk being gone — the env stays held and the lease survives untouched,
     retried next tick, unlike the 404 case above."""
@@ -572,7 +581,7 @@ def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path: Path):
     """The leaseless counterpart: a chunk parked at a hub node (envs held, no lease)
     whose ``GET /chunks/{id}`` now 404s is released the same way a landed delivery is —
     :func:`_advance_held_chunk`'s own terminal branch."""
@@ -590,7 +599,7 @@ def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type: ignore[no-untyped-def]
+def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path: Path):
     """Companion to the above: an unreachable hub leaves the held-but-leaseless chunk's
     environment untouched, retried next tick."""
     store = _store(tmp_path)
@@ -607,7 +616,7 @@ def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type
 
 
 @pytest.mark.unit
-def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path: Path):
     """The exhausted-budget escalate guard shares the same ownership predicate
     (:func:`_reassigned_or_detached`), so a chunk that 404s there is abandoned instead of
     escalated too — the unknown-chunk mirror of the detached-chunk case above."""
@@ -632,7 +641,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 
 
 @pytest.mark.unit
-def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path: Path):
     """The requeue path's own 404 guard: REAP's ``Attempt.fail`` closes the exhausted
     attempt and calls ``_requeue`` before PULL's sweep runs, so no active lease is left
     for that sweep to abandon — left generic, the env would hold forever."""
@@ -652,7 +661,7 @@ def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_pat
 
 
 @pytest.mark.unit
-def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hub(tmp_path: Path):
     """The interrupted-claim reconciler's own 404 guard: a binding left by a crash in
     FILL's bind->claim->spawn window is released the same way ``_advance_held_chunk``
     releases a held-but-leaseless chunk, not re-asked about forever."""
@@ -671,7 +680,7 @@ def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hu
 
 
 @pytest.mark.component
-def test_tick_releases_a_chunk_unknown_at_the_hub_and_the_next_tick_does_not_reclaim_it(tmp_path):  # type: ignore[no-untyped-def]
+def test_tick_releases_a_chunk_unknown_at_the_hub_and_the_next_tick_does_not_reclaim_it(tmp_path: Path):
     """The full-tick seam, mirroring ``test_tick_releases_a_detached_chunk_and_the_next_
     tick_does_not_reclaim_it``: a 404'ing chunk is reaped and released in one tick, and
     stays released — the runner does not loop on the 404 forever."""

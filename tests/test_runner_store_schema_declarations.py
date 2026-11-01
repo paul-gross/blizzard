@@ -8,6 +8,7 @@ deliberately broken schema rather than passing vacuously."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -42,7 +43,7 @@ def _undeclared_scopes(metadata: sa.MetaData) -> list[str]:
     return [t.name for t in metadata.sorted_tables if t.info.get("scope") not in _SCOPES]
 
 
-def _is_key_like(column: sa.Column) -> bool:
+def _is_key_like(column: sa.Column[Any]) -> bool:
     return (
         isinstance(column.type, sa.Integer)
         and not column.primary_key
@@ -100,7 +101,7 @@ def _cross_kind_references(metadata: sa.MetaData) -> list[str]:
     return faults
 
 
-def _fixture(*columns: sa.Column, scope: str | None = "runner", **info: object) -> sa.MetaData:
+def _fixture(*columns: sa.Column[Any], scope: str | None = "runner", **info: object) -> sa.MetaData:
     metadata = sa.MetaData()
     sa.Table(
         "t",

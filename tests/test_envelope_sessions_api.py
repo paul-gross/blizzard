@@ -7,10 +7,11 @@ read."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.support import build_hub, ingest
+from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
@@ -74,7 +75,7 @@ nodes:
 """
 
 
-def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:  # type: ignore[no-untyped-def]
+def _mint_and_pin(hub: HubHarness, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:
     """Mint ``yaml`` and repin ``chunk_id`` to it, returning the new graph's id."""
     resp = hub.client.post("/api/graphs", json={"definition_yaml": yaml})
     assert resp.status_code == 201, resp.text
@@ -84,7 +85,7 @@ def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:  # typ
     return graph_id
 
 
-def _envelope(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _envelope(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}/envelope")
     assert resp.status_code == 200, resp.text
     return resp.json()

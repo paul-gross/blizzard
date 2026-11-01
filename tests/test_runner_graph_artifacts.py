@@ -5,6 +5,7 @@ lease mint, insert-if-absent, keyed on the mint's own ``graph_id`` rather than t
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -20,6 +21,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     claimed_outcome,
     make_context,
     make_envelope,
@@ -31,11 +33,11 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _fill_ctx(store, env):  # type: ignore[no-untyped-def]
+def _fill_ctx(store: SqlAlchemyRunnerStore, env):
     hub = FakeHub()
     hub.queue = [QueueEntry(chunk_id="ch_1", graph_id=env.graph_id, position=0)]
     hub.claim_outcome = claimed_outcome("ch_1", env)
@@ -48,7 +50,7 @@ def _fill_ctx(store, env):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.component
-def test_record_graph_artifacts_lands_rows_keyed_on_graph_id_in_authored_order(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_graph_artifacts_lands_rows_keyed_on_graph_id_in_authored_order(tmp_path: Path):
     store = _store(tmp_path)
     store.record_graph_artifacts(
         graph_id="gr_a",
@@ -65,7 +67,7 @@ def test_record_graph_artifacts_lands_rows_keyed_on_graph_id_in_authored_order(t
 
 
 @pytest.mark.component
-def test_record_graph_artifacts_is_a_no_op_for_an_already_recorded_graph_id(tmp_path):  # type: ignore[no-untyped-def]
+def test_record_graph_artifacts_is_a_no_op_for_an_already_recorded_graph_id(tmp_path: Path):
     """Insert-if-absent: a second lease against the same mint calls this again with
     the same ``graph_id``. The second call's content deliberately differs from the first's —
     a guard that merely no-ops on identical content would still let this through."""
@@ -84,7 +86,7 @@ def test_record_graph_artifacts_is_a_no_op_for_an_already_recorded_graph_id(tmp_
 
 
 @pytest.mark.component
-def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path: Path):
     """The insert loop is one transaction: were a partial pin to
     commit, the insert-if-absent guard would see it and freeze the missing rows out forever.
     A repeated ``name`` trips the composite key partway through, standing in for any failure."""
@@ -109,7 +111,7 @@ def test_a_failed_write_lands_no_partial_pin_for_a_later_call_to_freeze(tmp_path
 
 
 @pytest.mark.component
-def test_a_superseded_mints_rows_survive_a_later_mints_write(tmp_path):  # type: ignore[no-untyped-def]
+def test_a_superseded_mints_rows_survive_a_later_mints_write(tmp_path: Path):
     """The mirror is keyed on ``graph_id``: writing a newer mint's rows leaves the
     superseded mint's rows untouched."""
     store = _store(tmp_path)
@@ -131,7 +133,7 @@ def test_a_superseded_mints_rows_survive_a_later_mints_write(tmp_path):  # type:
 
 
 @pytest.mark.component
-def test_fill_pins_the_mints_graph_artifacts_keyed_on_the_envelopes_graph_id(tmp_path):  # type: ignore[no-untyped-def]
+def test_fill_pins_the_mints_graph_artifacts_keyed_on_the_envelopes_graph_id(tmp_path: Path):
     store = _store(tmp_path)
     env = make_envelope(
         "ch_1",
@@ -151,7 +153,7 @@ def test_fill_pins_the_mints_graph_artifacts_keyed_on_the_envelopes_graph_id(tmp
 
 
 @pytest.mark.component
-def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The pin must land BEFORE ``record_lease``, so a crash between the two leaves only
     an orphan row a retry re-writes identically. Swap the order and this reds: at the
     instant ``record_lease`` runs, the pin would not exist yet."""
@@ -168,7 +170,7 @@ def test_mint_writes_graph_artifacts_before_recording_the_lease(tmp_path, monkey
     seen_at_lease_write = []
     original_record_lease = store.record_lease
 
-    def _spy(lease):  # type: ignore[no-untyped-def]
+    def _spy(lease):
         seen_at_lease_write.append(store.graph_artifacts_for_graph(lease.graph_id))
         return original_record_lease(lease)
 

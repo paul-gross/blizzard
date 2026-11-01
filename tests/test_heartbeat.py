@@ -18,20 +18,20 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
 from tests.config_inputs import create_runner_app
 from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 from tests.worker_http import bind_stubs
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
 
-def _runner_app_with_store(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _runner_app_with_store(tmp_path: Path):
     """A runner app wired to a real (migrated) store — the ``host`` heartbeat surface."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
     return create_runner_app(config, runner_stores=make_stores(store), host_stores=make_host_stores(store)), store
 
 
-def _seed_lease(store, lease_id: str = "lease_1") -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, lease_id: str = "lease_1") -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -109,9 +109,9 @@ class _FakeResponse:
 @pytest.mark.unit
 def test_heartbeat_verb_posts_inherited_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb reads the spawn-injected identity and posts it — no arguments."""
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float, **_: object) -> _FakeResponse:
         calls.append((url, json))
         return _FakeResponse()
 

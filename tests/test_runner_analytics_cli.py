@@ -70,7 +70,7 @@ class _FakeResponse:
 
 
 class _RejectingResponse:
-    def __init__(self, detail: dict | None = None) -> None:
+    def __init__(self, detail: dict[str, object] | None = None) -> None:
         self._detail = detail or {}
 
     def raise_for_status(self) -> None:
@@ -85,9 +85,11 @@ class _RejectingResponse:
 def test_each_verb_hits_its_lease_scoped_path_with_since_converted_to_utc(
     monkeypatch: pytest.MonkeyPatch, argv: list[str], path: str
 ) -> None:
-    calls: list[tuple[str, dict, dict]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object], **_: object
+    ) -> _FakeResponse:
         calls.append((url, headers, params))
         return _FakeResponse(text=_COUNTS_TEXT)
 
@@ -107,9 +109,11 @@ def test_each_verb_hits_its_lease_scoped_path_with_since_converted_to_utc(
 @pytest.mark.unit
 @pytest.mark.parametrize(("argv", "path"), _VERBS)
 def test_until_is_carried_through_when_given(monkeypatch: pytest.MonkeyPatch, argv: list[str], path: str) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object], **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text=_COUNTS_TEXT)
 
@@ -126,9 +130,11 @@ def test_until_is_carried_through_when_given(monkeypatch: pytest.MonkeyPatch, ar
 @pytest.mark.unit
 @pytest.mark.parametrize(("argv", "_path"), _VERBS[3:])
 def test_by_name_is_forwarded_as_a_query_param(monkeypatch: pytest.MonkeyPatch, argv: list[str], _path: str) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_get(url: str, *, headers: dict, timeout: float, params: dict, **_: object) -> _FakeResponse:
+    def fake_get(
+        url: str, *, headers: dict[str, object], timeout: float, params: dict[str, object], **_: object
+    ) -> _FakeResponse:
         calls.append(params)
         return _FakeResponse(text=_COUNTS_TEXT)
 

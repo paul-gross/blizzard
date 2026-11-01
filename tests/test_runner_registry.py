@@ -23,7 +23,7 @@ def _register(
     runner_id: str = "runner-a",
     workspace_id: str = "ws-a",
     env_capacity: int | None = None,
-) -> dict:
+) -> dict[str, object]:
     body: dict[str, object] = {"runner_id": runner_id, "workspace_id": workspace_id}
     if env_capacity is not None:
         body["env_capacity"] = env_capacity
@@ -196,7 +196,7 @@ def _report_local_pause(
     runner_id: str = "runner-a",
     by: str = "alice",
     reason: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     kind = "runner.locally_paused" if paused else "runner.locally_resumed"
     payload: dict[str, object] = {"runner_id": runner_id, "by": by}
     if reason is not None:
@@ -423,7 +423,7 @@ def _declare(hub: HubHarness, *slugs: str) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def _subscriptions(hub: HubHarness) -> dict[str, dict]:
+def _subscriptions(hub: HubHarness) -> dict[str, dict[str, object]]:
     view = hub.client.get("/api/fleet/runners/runner-a").json()
     return {item["slug"]: item for item in view["subscriptions"]}
 

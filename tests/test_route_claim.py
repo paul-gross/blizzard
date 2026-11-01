@@ -9,25 +9,25 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, hub_scoped, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
 
-def _ingest(hub, ref: str = "7") -> str:  # type: ignore[no-untyped-def]
+def _ingest(hub: HubHarness, ref: str = "7") -> str:
     pointer = {"source": "default", "ref": ref}
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     make_ready(hub, chunk_id)
     return chunk_id
 
 
-def _claim_body(chunk_id: str, runner: str = "r1") -> dict:
+def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:
     return {"chunk_id": chunk_id, "runner_id": runner, "workspace_id": "w1", "environment_ids": ["env-a", "env-b"]}
 
 
-def _register(hub, runner_id: str = "r1", workspace_id: str = "w1") -> None:  # type: ignore[no-untyped-def]
+def _register(hub: HubHarness, runner_id: str = "r1", workspace_id: str = "w1") -> None:
     resp = hub.client.post(
         "/api/fleet/runners",
         json={

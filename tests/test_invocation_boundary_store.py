@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.runner_fakes import make_store
+from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
+from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
 
 pytestmark = pytest.mark.unit
 
@@ -151,7 +152,7 @@ def test_open_boundaries_for_lease_excludes_closed_rows() -> None:
     assert closed.closed_reason == "failed"
 
 
-def _open_judge(store, *, position: str | None = "pos-original") -> None:  # type: ignore[no-untyped-def]
+def _open_judge(store: SqlAlchemyRunnerStore, *, position: str | None = "pos-original") -> None:
     store.record_boundary_open(
         lease_id="lease_1",
         chunk_id="ch_1",
@@ -354,7 +355,7 @@ def test_open_after_close_keeps_the_closed_marker() -> None:
     assert (boundary.start_position, boundary.closed_reason) == ("pos-original", "completed")
 
 
-def _open(store, lease_id: str, generation: int, kind: str) -> None:  # type: ignore[no-untyped-def]
+def _open(store: SqlAlchemyRunnerStore, lease_id: str, generation: int, kind: InvocationBoundaryKind) -> None:
     store.record_boundary_open(
         lease_id=lease_id,
         chunk_id="ch_1",
@@ -367,7 +368,14 @@ def _open(store, lease_id: str, generation: int, kind: str) -> None:  # type: ig
     )
 
 
-def _advance(store, lease_id: str, generation: int, kind: str, superseded: str, at: datetime) -> None:  # type: ignore[no-untyped-def]
+def _advance(
+    store: SqlAlchemyRunnerStore,
+    lease_id: str,
+    generation: int,
+    kind: InvocationBoundaryKind,
+    superseded: str,
+    at: datetime,
+) -> None:
     store.record_boundary_advance(
         lease_id=lease_id,
         generation=generation,
@@ -382,7 +390,12 @@ def test_advances_are_independent_across_lease_generation_and_kind() -> None:
     """The same superseded invocation advances each ``(lease, generation, kind)`` on its own —
     neither the replay check nor ``current_start`` reads a sibling's advance."""
     store = make_store("sqlite://")
-    markers = [("lease_1", 1, "judge"), ("lease_2", 1, "judge"), ("lease_1", 2, "judge"), ("lease_1", 1, "nudge")]
+    markers: list[tuple[str, int, InvocationBoundaryKind]] = [
+        ("lease_1", 1, "judge"),
+        ("lease_2", 1, "judge"),
+        ("lease_1", 2, "judge"),
+        ("lease_1", 1, "nudge"),
+    ]
     for lease_id, generation, kind in markers:
         _open(store, lease_id, generation, kind)
     at = _T0.replace(hour=1)
@@ -391,7 +404,7 @@ def test_advances_are_independent_across_lease_generation_and_kind() -> None:
         _advance(store, lease_id, generation, kind, "el-1", at)
 
     for lease_id, generation, kind in markers:
-        current = store.current_start(lease_id, generation, kind)  # type: ignore[arg-type]
+        current = store.current_start(lease_id, generation, kind)
         assert current is not None
         assert (current.start_position, current.at) == (f"adv-{lease_id}-{generation}-{kind}-el-1", at)
 

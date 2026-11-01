@@ -443,7 +443,7 @@ def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
     }
     # Blizzard cyan variants, hashless per the API: a lighter cyan for ingested, a
     # darker one for in-progress.
-    assert forge_state(double)["repo_label_colors"] == {  # type: ignore[index]
+    assert forge_state(double)["repo_label_colors"] == {
         "blizzard:ingested": "5cd1e5",
         "blizzard:in-progress": "2b6675",
     }
@@ -658,7 +658,7 @@ def _trace_comments(double: TestClient, key: str = "acme/widget#1") -> list[str]
     return [c for c in forge_state(double)["issues"][key]["comments"] if "blizzard-delivery:ch_9" in c]  # type: ignore[index]
 
 
-def _closer_over(issues: dict[str, dict]) -> tuple[TestClient, GitHubWorkSource]:
+def _closer_over(issues: dict[str, dict[str, object]]) -> tuple[TestClient, GitHubWorkSource]:
     double = github_double(issues=issues)
     return double, GitHubWorkSource(double, source_id="widget", slug="widget", repo="acme/widget", web_base="https://x")
 

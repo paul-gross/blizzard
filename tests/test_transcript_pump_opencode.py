@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -49,7 +50,7 @@ def _registry(harness: FakeHarness, source: OpenCodeTranscriptSource) -> Harness
     return HarnessRegistry({OPENCODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=source)})
 
 
-def _open_segment(ctx) -> str:  # type: ignore[no-untyped-def]
+def _open_segment(ctx) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -73,7 +74,7 @@ def _open_segment(ctx) -> str:  # type: ignore[no-untyped-def]
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
-def _shipped_turns(ctx) -> list[dict]:  # type: ignore[no-untyped-def]
+def _shipped_turns(ctx) -> list[dict[str, Any]]:
     return [
         turn
         for delta in ctx.stores.transcript_ledger.pending_transcript_outbound(limit=50)

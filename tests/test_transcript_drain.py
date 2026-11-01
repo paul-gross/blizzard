@@ -54,7 +54,7 @@ class _SteppingClock(FixedClock):
         return self.instant if self.calls == 1 else self.instant + self.step
 
 
-def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None):  # type: ignore[no-untyped-def]
+def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int | None = None):
     store = make_store("sqlite://")
     harness = FakeHarness(handle=WorkerHandle(session_id="sess-a", pid=1, process_start_time="1", pgid=1), verdict=None)
     return make_context(
@@ -73,7 +73,7 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int
     )
 
 
-def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
+def _spawn_one_segment(ctx) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     ctx.stores.lease_record.record_lease(
         NewLease(
@@ -100,7 +100,7 @@ def _spawn_one_segment(ctx) -> str:  # type: ignore[no-untyped-def]
     return ctx.stores.transcript_ledger.open_transcript_segments()[0].segment_id
 
 
-def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:  # type: ignore[no-untyped-def]
+def _enqueue_delta(ctx, segment_id: str, *, cursor: str) -> int:
     payload = json.dumps(
         {
             "segment_id": segment_id,
@@ -636,12 +636,12 @@ def test_drain_never_queries_pending_once_the_pump_alone_exhausts_the_deadline()
     calls = 0
     real_pending = ctx.stores.transcript_ledger.pending_transcript_outbound
 
-    def _counting_pending(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def _counting_pending(*args, **kwargs):
         nonlocal calls
         calls += 1
         return real_pending(*args, **kwargs)
 
-    ctx.stores.transcript_ledger.pending_transcript_outbound = _counting_pending  # type: ignore[method-assign]
+    ctx.stores.transcript_ledger.pending_transcript_outbound = _counting_pending
 
     TranscriptDrain(ctx).run()
 
@@ -657,7 +657,7 @@ def test_drain_caps_the_pumps_own_deadline_to_a_fraction_of_the_run_budget() -> 
     captured: dict[str, object] = {}
     original_run = transcript_drain_module.TranscriptPump.run
 
-    def _capturing_run(self, *, deadline=None):  # type: ignore[no-untyped-def]
+    def _capturing_run(self, *, deadline=None):
         captured["deadline"] = deadline
         return original_run(self, deadline=deadline)
 
@@ -678,7 +678,7 @@ class _RaisingTranscriptSource:
     """A `turns_since` that always raises — the isolation case no scripted
     :class:`FakeTranscriptSource` batch can trigger."""
 
-    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):  # type: ignore[no-untyped-def]
+    def turns_since(self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None):
         raise RuntimeError("transcript source unavailable (scripted)")
 
     def read_raw_lines(
@@ -751,13 +751,13 @@ class _RaisingOpenSegmentsStore:
     OUTSIDE `TranscriptPump`'s own per-segment loop,
     which no per-segment try/except can isolate."""
 
-    def __init__(self, inner):  # type: ignore[no-untyped-def]
+    def __init__(self, inner):
         self._inner = inner
 
-    def open_transcript_segments(self):  # type: ignore[no-untyped-def]
+    def open_transcript_segments(self):
         raise RuntimeError("store unavailable (scripted)")
 
-    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattr__(self, name: str):
         return getattr(self._inner, name)
 
 
@@ -886,11 +886,11 @@ def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() ->
     real_transcript_segments = ctx.stores.transcript_ledger.transcript_segments
     calls: list[list[str]] = []
 
-    def _counting_transcript_segments(segment_ids):  # type: ignore[no-untyped-def]
+    def _counting_transcript_segments(segment_ids):
         calls.append(list(segment_ids))
         return real_transcript_segments(segment_ids)
 
-    ctx.stores.transcript_ledger.transcript_segments = _counting_transcript_segments  # type: ignore[method-assign]
+    ctx.stores.transcript_ledger.transcript_segments = _counting_transcript_segments
 
     delivered = TranscriptDrain(ctx).flush(limit=50, deadline=None)
 
@@ -911,7 +911,7 @@ def test_drain_delivers_a_record_with_a_lone_surrogate_and_keeps_valid_emoji() -
         batches.append(TranscriptSegmentBatch(records=shipped))
         return push(records)
 
-    hub.push_transcripts = capture  # type: ignore[method-assign]
+    hub.push_transcripts = capture
     ctx = _ctx(hub)
     segment_id = _spawn_one_segment(ctx)
     turn = {

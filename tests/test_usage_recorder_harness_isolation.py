@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -18,7 +19,14 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FakeHarness, FakeProvider, FakeTranscriptSource, make_store, single_workspace
+from tests.runner_fakes import (
+    FakeHarness,
+    FakeProvider,
+    FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
+    make_store,
+    single_workspace,
+)
 
 pytestmark = pytest.mark.component
 
@@ -27,11 +35,11 @@ _SHARED_SESSION_ID = "shared-usage-session"
 _OTHER_HARNESS_ID = "other_harness"
 
 
-def _usage_payloads_by_lease(store):  # type: ignore[no-untyped-def]
+def _usage_payloads_by_lease(store: SqlAlchemyRunnerStore):
     return {b.lease_id: json.loads(b.payload) for b in store.pending_outbound() if b.kind == USAGE_RECORDED}
 
 
-def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: int) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore, *, lease_id: str, chunk_id: str, harness_id: str, pid: int) -> None:
     store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -65,7 +73,7 @@ def _seed_lease(store, *, lease_id: str, chunk_id: str, harness_id: str, pid: in
     )
 
 
-def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(tmp_path: Path) -> None:
     """No stdout envelope survives for either generation, so both fall back to summing
     the raw transcript — each must read its OWN recorded owner's source, at the same raw
     session id, without ever summing the sibling harness's lines."""
@@ -130,7 +138,7 @@ def test_envelope_less_fallback_sums_each_harnesss_own_transcript_no_cross_read(
     assert payloads["lease_b"]["model"] == "other-model"
 
 
-def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path: Path) -> None:
     """``transcripts_wired=False`` disables only the envelope-less fallback (its own
     docstring) — a generation whose own stdout envelope parses fine must still record,
     never silently skipped just because the transcripts lane is off."""
@@ -171,7 +179,7 @@ def test_envelope_parse_still_records_with_the_transcripts_lane_off(tmp_path) ->
     assert payloads["lease_a"]["model"] == "claude-model"
 
 
-def test_transcript_fallback_with_no_transcript_source_records_nothing_rather_than_raising(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_transcript_fallback_with_no_transcript_source_records_nothing_rather_than_raising(tmp_path: Path) -> None:
     """A recorded owner with an adapter but no bound transcript source (or none registered
     at all) must not raise out of usage recovery — no envelope survived, so the fallback is
     reached, finds nothing it can read, and simply records no sample."""

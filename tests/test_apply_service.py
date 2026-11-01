@@ -304,7 +304,7 @@ def test_a_fenced_migration_write_answers_the_refusal() -> None:
 
 def test_a_migration_locks_reads_and_writes_the_submitted_chunk_through_the_lock_handle() -> None:
     service, ports, _clock = _apply_service(replace(_AT_BUILD, promoted=False))
-    exclusive = cast(_FakeExclusiveWrites, service._exclusive)  # pyright: ignore[reportPrivateUsage]
+    exclusive = cast(_FakeExclusiveWrites, service._exclusive)
 
     service.apply(_CHUNK, _GRAPH, _submission("hand-off"), targets=_HAND_OFF)
 

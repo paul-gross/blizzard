@@ -6,10 +6,11 @@ asserting the slim batch read and the full aggregate agree on every shared field
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.support import build_hub, ingest, report_lease
+from tests.support import HubHarness, build_hub, ingest, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -43,13 +44,13 @@ nodes:
 """
 
 
-def _build_node_id(hub) -> str:  # type: ignore[no-untyped-def]
+def _build_node_id(hub: HubHarness) -> str:
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _YAML})
     assert graph.status_code == 201, graph.text
     return next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
 
 
-def _claim(hub, chunk_id: str, *, runner_id: str = "r1", epoch: int = 1) -> None:  # type: ignore[no-untyped-def]
+def _claim(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1", epoch: int = 1) -> None:
     claimed = hub.client.post(
         "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": runner_id, "workspace_id": "w1", "environment_ids": ["e1"]},
@@ -58,20 +59,20 @@ def _claim(hub, chunk_id: str, *, runner_id: str = "r1", epoch: int = 1) -> None
     report_lease(hub, chunk_id, epoch=epoch, seq=epoch, runner_id=runner_id)
 
 
-def _status_for(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _status_for(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": [chunk_id]})
     assert resp.status_code == 200, resp.text
     [view] = resp.json()
     return view
 
 
-def _detail_for(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _detail_for(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _assert_parity(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _assert_parity(hub: HubHarness, chunk_id: str) -> None:
     status_view = _status_for(hub, chunk_id)
     detail = _detail_for(hub, chunk_id)
 

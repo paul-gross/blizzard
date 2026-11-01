@@ -24,21 +24,21 @@ def test_a_well_formed_add_op_parses() -> None:
     assert len(delta.findings) == 1
     op = delta.findings[0]
     assert op.op == "add"
-    assert op.class_ == "stale-docstring"  # type: ignore[union-attr]
+    assert op.class_ == "stale-docstring"
 
 
 def test_a_well_formed_observed_op_parses() -> None:
     delta = FindingDelta.model_validate(_delta(findings=[{"op": "observed", "id": "fin_1"}]))
     op = delta.findings[0]
     assert op.op == "observed"
-    assert op.id == "fin_1"  # type: ignore[union-attr]
+    assert op.id == "fin_1"
 
 
 def test_a_well_formed_gone_op_parses() -> None:
     delta = FindingDelta.model_validate(_delta(findings=[{"op": "gone", "id": "fin_1", "note": "gone"}]))
     op = delta.findings[0]
     assert op.op == "gone"
-    assert op.note == "gone"  # type: ignore[union-attr]
+    assert op.note == "gone"
 
 
 def test_a_gone_op_missing_its_note_is_refused() -> None:

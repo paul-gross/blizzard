@@ -57,7 +57,7 @@ def _lease(*, lease_id: str = "lease_1", epoch: int = 3, session: bool = True) -
     )
 
 
-def _takeover(  # type: ignore[no-untyped-def]
+def _takeover(
     *,
     takeover_id: str = "tko_1",
     reference_epoch: int | None = 3,
@@ -91,7 +91,7 @@ def _scope(**overrides: object) -> TakeoverOpenScope:
     return TakeoverOpenScope(**fields)  # type: ignore[arg-type]
 
 
-def _admit(scope: TakeoverOpenScope, *, force: bool = False, parked: bool = False, pending: bool = False):  # type: ignore[no-untyped-def]
+def _admit(scope: TakeoverOpenScope, *, force: bool = False, parked: bool = False, pending: bool = False):
     return admit_takeover(replace(scope, active_parked=parked, submission_pending=pending), force=force)
 
 

@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.support import build_hub, emitted_events, pointer_token
+from tests.support import HubHarness, build_hub, emitted_events, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -45,7 +45,7 @@ nodes:
 """
 
 
-def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _claimed(hub: HubHarness) -> tuple[str, str]:
     """Ingest, promote, and claim a chunk for ``r1``; return (chunk_id, route token)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post(
@@ -60,8 +60,14 @@ def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, str(claim.json()["route_token"])
 
 
-def _release(  # type: ignore[no-untyped-def]
-    hub, chunk_id: str, *, epoch: int = 1, route_token: str | None, runner_id: str = "r1", reason: str = "throttled"
+def _release(
+    hub: HubHarness,
+    chunk_id: str,
+    *,
+    epoch: int = 1,
+    route_token: str | None,
+    runner_id: str = "r1",
+    reason: str = "throttled",
 ) -> httpx2.Response:
     # The harness authenticates as the body's `runner_id`; the hub itself never reads it.
     body: dict[str, object] = {"epoch": epoch, "reason": reason, "runner_id": runner_id}
@@ -70,7 +76,7 @@ def _release(  # type: ignore[no-untyped-def]
     return hub.client.post(f"/api/fleet/chunks/{chunk_id}/release", json=body)
 
 
-def _status(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
+def _status(hub: HubHarness, chunk_id: str) -> str:
     return str(hub.client.get(f"/api/chunks/{chunk_id}").json()["status"])
 
 

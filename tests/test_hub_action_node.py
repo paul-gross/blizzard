@@ -39,7 +39,7 @@ def _deliver(**overrides: object) -> dict[str, object]:
     return node
 
 
-def _errors(deliver: dict[str, object], *, catalogue=TEST_CATALOGUE) -> list[str]:  # type: ignore[no-untyped-def]
+def _errors(deliver: dict[str, object], *, catalogue=TEST_CATALOGUE) -> list[str]:
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": {"build": _BUILD, "deliver": deliver}})
     return Validator.of(doc, catalogue).result.errors
 

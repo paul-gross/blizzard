@@ -38,7 +38,7 @@ _OLD_GARDEN_PROPOSALS = sa.Table(
 )
 
 
-def _seed_preexisting_proposal(tmp_path: Path):  # type: ignore[no-untyped-def]
+def _seed_preexisting_proposal(tmp_path: Path):
     runner, engine = migrate_to(tmp_path, _BEFORE)
     with engine.begin() as conn:
         conn.execute(

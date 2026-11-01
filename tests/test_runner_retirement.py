@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
 from blizzard.wire.route import RouteClaimPausedDenial
-from tests.support import build_hub, pointer_token, report_lease, runner_token
+from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
 from tests.test_route_classification import _api_routes, _dependency_names
 
 pytestmark = pytest.mark.component
@@ -40,7 +40,7 @@ nodes:
 """
 
 
-def _register(hub, runner_id: str = "runner-a") -> None:  # type: ignore[no-untyped-def]
+def _register(hub: HubHarness, runner_id: str = "runner-a") -> None:
     resp = hub.client.post(
         "/api/fleet/runners",
         json={
@@ -52,7 +52,7 @@ def _register(hub, runner_id: str = "runner-a") -> None:  # type: ignore[no-unty
     assert resp.status_code == 201, resp.text
 
 
-def _enroll(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+def _enroll(hub: HubHarness, runner_id: str = "runner-a") -> str:
     resp = hub.client.post(f"/api/runners/{runner_id}/enrollments")
     assert resp.status_code == 201, resp.text
     return str(resp.json()["token"])
@@ -69,7 +69,7 @@ def _enrolled(tmp_path: Path, runner_id: str = "runner-a") -> str:
     return _enroll(hub, runner_id)
 
 
-def _held_chunk(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+def _held_chunk(hub: HubHarness, runner_id: str = "runner-a") -> str:
     """Ingest, promote, and claim one chunk for ``runner_id``; return the chunk id."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _YAML}).status_code == 201
     chunk_id = hub.client.post(
@@ -84,11 +84,11 @@ def _held_chunk(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-unt
     return str(chunk_id)
 
 
-def _retire(hub, runner_id: str = "runner-a", **body):  # type: ignore[no-untyped-def]
+def _retire(hub: HubHarness, runner_id: str = "runner-a", **body):
     return hub.client.post(f"/api/runners/{runner_id}/retire", json={"by": "op", **body})
 
 
-def _listed(hub, *, include_retired: bool = False) -> list[dict]:  # type: ignore[no-untyped-def]
+def _listed(hub: HubHarness, *, include_retired: bool = False) -> list[dict[str, object]]:
     params = {"include_retired": "true"} if include_retired else {}
     return hub.client.get("/api/runners", params=params).json()["runners"]
 
@@ -160,7 +160,7 @@ def test_a_retire_rerun_finishes_a_partial_release(tmp_path: Path) -> None:
     assert _retire(hub).json()["released_chunk_ids"] == []
 
 
-def _finished_chunk(hub, runner_id: str = "runner-a") -> str:  # type: ignore[no-untyped-def]
+def _finished_chunk(hub: HubHarness, runner_id: str = "runner-a") -> str:
     """A chunk ``runner_id`` claimed and completed to ``done`` — its route fact left live."""
     chunk_id = _held_chunk(hub, runner_id)
     node_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
@@ -243,7 +243,7 @@ def test_revoke_token_on_a_runner_holding_none_is_409(tmp_path: Path) -> None:
     assert hub.client.post("/api/runners/runner-a/token-revocations", json={"by": "op"}).status_code == 409
 
 
-def _store_rows(hub) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
+def _store_rows(hub: HubHarness) -> dict[str, list[str]]:
     metadata = sa.MetaData()
     metadata.reflect(hub.engine)
     with hub.engine.connect() as conn:
@@ -373,7 +373,7 @@ def test_a_forced_retire_records_the_fact_before_its_first_release(
     release_held = detach.release_held
     retired_at_release: list[bool] = []
 
-    def observed(chunk, *, runner_id: str) -> int | None:  # type: ignore[no-untyped-def]
+    def observed(chunk, *, runner_id: str) -> int | None:
         registration = hub.services.registry.get_runner(runner_id)
         assert registration is not None
         retired_at_release.append(registration.retired)

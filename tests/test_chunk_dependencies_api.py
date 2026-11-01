@@ -32,14 +32,14 @@ def _claim(hub: HubHarness, chunk_id: str) -> None:
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
 
-def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
+def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: str | None = None):
     body = {"prerequisite_chunk_id": prerequisite_id}
     if by is not None:
         body["by"] = by
     return hub.client.post(f"/api/chunks/{dependent_id}/dependencies", json=body)
 
 
-def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: str | None = None):  # type: ignore[no-untyped-def]
+def _release(hub: HubHarness, dependent_id: str, prerequisite_id: str, *, by: str | None = None):
     body = {"prerequisite_chunk_id": prerequisite_id}
     if by is not None:
         body["by"] = by
@@ -258,7 +258,7 @@ def test_declare_against_a_dependent_deleted_between_resolution_and_the_write_is
     before = _rows(hub)
     real_resolve_prerequisite = chunk_dependencies_module._resolve_prerequisite
 
-    def _delete_dependent_then_resolve(services, chunk_id):  # type: ignore[no-untyped-def]
+    def _delete_dependent_then_resolve(services, chunk_id):
         assert hub.client.request("DELETE", f"/api/chunks/{dependent_id}", json={}).status_code == 202
         return real_resolve_prerequisite(services, chunk_id)
 

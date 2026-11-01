@@ -21,11 +21,11 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeTokenResponse:
-    def __init__(self, status_code: int, body: dict) -> None:
+    def __init__(self, status_code: int, body: dict[str, object]) -> None:
         self.status_code = status_code
         self._body = body
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, object]:
         return self._body
 
 
@@ -52,7 +52,7 @@ def test_loopback_login_completes_and_exchanges(monkeypatch: pytest.MonkeyPatch)
         _hit_loopback_in_background(query["redirect_uri"][0], code="the-code", state=query["state"][0])
         return True
 
-    def fake_post(url: str, *, json: dict, timeout: float) -> _FakeTokenResponse:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
         captured_exchange.update(json)
         assert url == "http://hub.example/api/auth/cli/token"
         return _FakeTokenResponse(200, {"token": "the-session-token"})
@@ -106,7 +106,7 @@ def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) ->
         _hit_loopback_in_background(query["redirect_uri"][0], code="the-code", state=query["state"][0])
         return True
 
-    def fake_post(url: str, *, json: dict, timeout: float) -> _FakeTokenResponse:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
         return _FakeTokenResponse(400, {"detail": "invalid or expired code"})
 
     monkeypatch.setattr(cli_login.webbrowser, "open", fake_open)
@@ -119,7 +119,7 @@ def test_loopback_login_rejects_the_exchange(monkeypatch: pytest.MonkeyPatch) ->
 def test_paste_code_login_exchanges_the_pasted_code() -> None:
     captured_exchange = {}
 
-    def fake_post(url: str, *, json: dict, timeout: float) -> _FakeTokenResponse:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
         captured_exchange.update(json)
         return _FakeTokenResponse(200, {"token": "the-session-token"})
 

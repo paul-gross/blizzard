@@ -99,7 +99,7 @@ def test_an_edit_leaving_the_slug_reports_none_left() -> None:
 @pytest.mark.parametrize("field", ["slug", "name"])
 def test_an_explicit_none_is_refused_on_the_slug_and_the_name(field: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        _record().edit(RepositoryEdit(**{field: None}), _CTX, if_match=None, at=_AT)  # type: ignore[arg-type]
+        _record().edit(RepositoryEdit(**{field: None}), _CTX, if_match=None, at=_AT)
     assert caught.value.field == field
 
 
@@ -115,7 +115,7 @@ def test_an_explicit_none_is_refused_on_the_slug_and_the_name(field: str) -> Non
 )
 def test_invalid_fields_name_the_offender(changes: dict[str, object], field: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        validate_fields(replace(_FIELDS, **changes))  # type: ignore[arg-type]
+        validate_fields(replace(_FIELDS, **changes))
     assert caught.value.field == field
 
 
@@ -143,7 +143,7 @@ def test_a_set_field_is_applied_and_the_rest_are_left() -> None:
 )
 def test_an_explicit_none_is_refused_on_every_field(field: str, named: str) -> None:
     with pytest.raises(ConfigFieldError) as caught:
-        merge(_FIELDS, RepositoryEdit(**{field: None}))  # type: ignore[arg-type]
+        merge(_FIELDS, RepositoryEdit(**{field: None}))
     assert caught.value.field == named
 
 
@@ -166,7 +166,7 @@ def test_a_repository_lands_by_merge_on_checks_with_no_timeout_unless_stated() -
 
 def test_an_unknown_policy_is_refused_naming_the_field() -> None:
     with pytest.raises(ConfigFieldError) as refused:
-        validate_fields(replace(_FIELDS, landing_policy="queue"))  # pyright: ignore[reportArgumentType]
+        validate_fields(replace(_FIELDS, landing_policy="queue"))
     assert refused.value.field == "landing_policy"
     assert "queue" in refused.value.message
 

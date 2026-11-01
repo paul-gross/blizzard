@@ -83,7 +83,7 @@ class _PausedChunk:
         assert hub.client.post(f"/api/fleet/chunks/{self.chunk_id}/pause").status_code == 202
         assert self.detail()["pause"] is not None
 
-    def complete(self, choice: str) -> dict:
+    def complete(self, choice: str) -> dict[str, object]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/completions",
             json={
@@ -97,7 +97,7 @@ class _PausedChunk:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def decide(self) -> dict:
+    def decide(self) -> dict[str, object]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/decisions",
             json={"from_node_id": self.nodes["build"], "epoch": 1, "runner_id": "r1", "artifacts": []},
@@ -105,7 +105,7 @@ class _PausedChunk:
         assert resp.status_code == 200, resp.text
         return resp.json()
 
-    def detail(self) -> dict:
+    def detail(self) -> dict[str, object]:
         return self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()
 
 

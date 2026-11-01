@@ -11,14 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token
+from tests.support import HubHarness, build_hub, make_ready, pointer_token
 
 pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "2"}
 
 
-def _claim_body(runner: str) -> dict:
+def _claim_body(runner: str) -> dict[str, object]:
     return {"chunk_id": "", "runner_id": runner, "workspace_id": "w1", "environment_ids": [f"env-{runner}"]}
 
 
@@ -104,7 +104,7 @@ def test_two_hub_processes_racing_a_claim_over_one_store_yield_exactly_one_winne
     start = threading.Barrier(2)
     results: dict[str, int] = {}
 
-    def claim(hub, runner: str) -> None:  # type: ignore[no-untyped-def]
+    def claim(hub: HubHarness, runner: str) -> None:
         body = _claim_body(runner) | {"chunk_id": chunk_id}
         start.wait()  # release both processes' threads together to maximize the race
         results[runner] = hub.client.post("/api/fleet/routes", json=body).status_code

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, hub_scoped, pointer_token, report_escalation, report_lease
+from tests.support import HubHarness, build_hub, hub_scoped, pointer_token, report_escalation, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -56,7 +57,7 @@ _ARTIFACT = {
 _NOTE = "fix the flaky test only"
 
 
-def _running(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
+def _running(hub: HubHarness) -> tuple[str, dict[str, str]]:
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
@@ -70,7 +71,7 @@ def _running(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyped-def]
     return chunk_id, nodes
 
 
-def _gated(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _gated(hub: HubHarness) -> tuple[str, str]:
     chunk_id, nodes = _running(hub)
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
@@ -86,20 +87,20 @@ def _gated(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     return chunk_id, hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
 
-def _escalated(hub) -> str:  # type: ignore[no-untyped-def]
+def _escalated(hub: HubHarness) -> str:
     chunk_id, _ = _running(hub)
     assert report_escalation(hub, chunk_id, epoch=1, seq=2)["applied"] == [2]
     hub.clock.advance(timedelta(seconds=1))
     return chunk_id
 
 
-def _fleet_detail(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
+def _fleet_detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     resp = hub.client.get(f"/api/fleet/chunks/{chunk_id}")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
-def _stored_notes(hub, table: sa.Table) -> list[str | None]:  # type: ignore[no-untyped-def]
+def _stored_notes(hub: HubHarness, table: sa.Table) -> list[str | None]:
     with hub.engine.connect() as conn:
         return list(conn.execute(hub_scoped(sa.select(table.c.note))).scalars().all())
 
@@ -126,7 +127,9 @@ def test_a_resolution_note_is_stored_and_read_back_on_the_chunk(tmp_path: Path) 
 
 
 @pytest.mark.parametrize("body", [{"choice": "approve"}, {"choice": "approve", "note": "  \n "}])
-def test_an_omitted_or_blank_resolution_note_stores_none_and_resolves_alike(tmp_path: Path, body: dict) -> None:
+def test_an_omitted_or_blank_resolution_note_stores_none_and_resolves_alike(
+    tmp_path: Path, body: dict[str, Any]
+) -> None:
     hub = build_hub(tmp_path)
     chunk_id, decision_id = _gated(hub)
 
@@ -180,7 +183,7 @@ def test_a_requeue_note_and_requeuer_are_stored_and_read_back(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize("body", [None, {}, {"note": ""}, {"note": "   "}])
-def test_a_requeue_without_a_note_records_the_requeuer_and_no_note(tmp_path: Path, body: dict | None) -> None:
+def test_a_requeue_without_a_note_records_the_requeuer_and_no_note(tmp_path: Path, body: dict[str, Any] | None) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _escalated(hub)
 
@@ -212,7 +215,7 @@ def test_a_restart_note_is_stored_and_read_back(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("body", [{}, {"note": " "}])
-def test_a_restart_without_a_note_stores_none_and_moves_alike(tmp_path: Path, body: dict) -> None:
+def test_a_restart_without_a_note_stores_none_and_moves_alike(tmp_path: Path, body: dict[str, Any]) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _ = _running(hub)
 

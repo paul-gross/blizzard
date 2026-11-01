@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, ingest
+from tests.support import HubHarness, build_hub, ingest
 
 pytestmark = pytest.mark.component
 
 
-def _claim_route(hub, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _claim_route(hub: HubHarness, chunk_id: str) -> None:
     """Claim a route for the chunk — a live route derives ``running``."""
     resp = hub.client.post(
         "/api/fleet/routes",

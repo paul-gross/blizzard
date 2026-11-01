@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +26,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     make_stores,
@@ -34,12 +36,19 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _seed_running_lease(  # type: ignore[no-untyped-def]
-    store, *, chunk="ch_1", lease="lease_1", pid=100, start="start-100", session="sess-a", epoch=1
+def _seed_running_lease(
+    store: SqlAlchemyRunnerStore,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    pid=100,
+    start="start-100",
+    session="sess-a",
+    epoch=1,
 ):
     """A build lease spawned into env e1 with a live worker, plus its binding."""
     store.record_lease(
@@ -64,7 +73,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-def]
+def _running_chunk(chunk="ch_1", *, runner_id="r1"):
     return ChunkState(
         chunk_id=chunk,
         status=ChunkStatus.RUNNING,
@@ -77,7 +86,7 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
 
 
 @pytest.mark.unit
-def test_marks_active_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
+def test_marks_active_session_bearing_lease(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
 
@@ -88,7 +97,7 @@ def test_marks_active_session_bearing_lease(tmp_path):  # type: ignore[no-untype
 
 
 @pytest.mark.unit
-def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[no-untyped-def]
+def test_marking_skips_parked_pending_and_unspawned(tmp_path: Path):
     store = _store(tmp_path)
     # A parked lease (dormant on a question) — its resume is the answer, not a restart.
     _seed_running_lease(store, chunk="ch_park", lease="lease_park")
@@ -128,7 +137,7 @@ def test_marking_skips_parked_pending_and_unspawned(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.unit
-def test_marking_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type: ignore[no-untyped-def]
+def test_marking_skips_a_lease_with_an_in_flight_elicitation(tmp_path: Path):
     """A lease whose worker already exited into a
     detached verdict elicitation is neither parked nor pending, but resuming it would wake a
     SECOND process on the same session — the elicitation's own collect pass is what must
@@ -144,7 +153,7 @@ def test_marking_skips_a_lease_with_an_in_flight_elicitation(tmp_path):  # type:
 
 
 @pytest.mark.unit
-def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignore[no-untyped-def]
+def test_remark_across_two_restarts_reopens_the_intent(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     # First restart: mark then clear (RESUME consumed it).
@@ -160,7 +169,7 @@ def test_remark_across_two_restarts_reopens_the_intent(tmp_path):  # type: ignor
 
 
 @pytest.mark.component
-def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -194,7 +203,7 @@ def test_resume_in_place_keeps_lease_epoch_session_rewrites_pid(tmp_path):  # ty
 
 
 @pytest.mark.unit
-def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(tmp_path: Path):
     """`_wake` carries the resumed launch's own recorded `process_start_time`
     straight through into `record_spawn` — never re-probing `/proc` a second time, which
     would race a pid-reuse window opening between the launch and this call."""
@@ -218,7 +227,9 @@ def test_restart_resume_records_the_launchers_own_start_time_without_reprobing(t
 
 
 @pytest.mark.unit
-def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """For a resume launch: a plain exception writing the durable
     `record_spawn` row must not leave the trampoline parked forever with nothing durable
     for REAP/ADVANCE to re-adopt — `_wake` kills the group itself, never disarming."""
@@ -234,7 +245,7 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(tmp
     probe = FakeProbe(alive={(100, "start-100"), (4321, "start-4321")})
     ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
 
-    def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def _raise(*args, **kwargs):
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_spawn", _raise)
@@ -247,7 +258,7 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(tmp
 
 
 @pytest.mark.unit
-def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path: Path):
     """The same pid/pgid-reuse hazard `Attempt._kill_process` guards against: a LIVE pid
     whose start time no longer matches the recorded one is not this lease's survivor any
     more, and a bare, unchecked kill would hit whoever the OS gave that pid to instead."""
@@ -272,7 +283,7 @@ def test_restart_resume_skips_the_kill_when_the_recorded_pid_was_reused(tmp_path
 
 
 @pytest.mark.unit
-def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_path):  # type: ignore[no-untyped-def]
+def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_path: Path):
     """A survivor with a durable recorded pgid is killed by GROUP, never by bare
     pid — the same preference `Attempt._kill_process` applies, reached here through the
     same shared, liveness-checked helper."""
@@ -302,7 +313,7 @@ def test_restart_resume_group_kills_the_survivor_when_a_pgid_is_recorded(tmp_pat
 
 
 @pytest.mark.unit
-def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_null(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_null(tmp_path: Path):
     """A prior generation's own recorded pgid must never be silently nulled by a resume that
     forgot its own — each generation's group-kill target is always the CURRENT one."""
     store = _store(tmp_path)
@@ -332,7 +343,7 @@ def test_resume_records_its_own_pgid_rather_than_clobbering_a_prior_one_with_nul
 
 
 @pytest.mark.unit
-def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_the_pid(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_the_pid(tmp_path: Path):
     """The same "recorded, not inferred" contract a fresh spawn already keeps: a resumed
     process's real group can differ from its own pid. A call site that still wrote
     ``pgid=pid`` would record 4321 here instead of the launcher's actual 9999."""
@@ -357,7 +368,7 @@ def test_resume_records_the_launchers_real_pgid_rather_than_inferring_it_from_th
 
 
 @pytest.mark.unit
-def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-untyped-def]
+def test_resumed_lease_is_not_judged_by_advance(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -381,7 +392,7 @@ def test_resumed_lease_is_not_judged_by_advance(tmp_path):  # type: ignore[no-un
 
 
 @pytest.mark.unit
-def test_resumed_lease_with_a_durable_session_end_is_still_resumed_not_judged(tmp_path):  # type: ignore[no-untyped-def]
+def test_resumed_lease_with_a_durable_session_end_is_still_resumed_not_judged(tmp_path: Path):
     """A durable `SessionEnd` for the marked lease's own generation must not route it to
     ADVANCE as exited work — the open resume intent is checked first, so RESUME still
     re-attaches it in place, same lease/epoch/session, no retry consumed."""
@@ -412,7 +423,7 @@ def test_resumed_lease_with_a_durable_session_end_is_still_resumed_not_judged(tm
 
 
 @pytest.mark.unit
-def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -438,7 +449,7 @@ def test_resume_abandons_chunk_reassigned_to_another_runner(tmp_path):  # type: 
 
 
 @pytest.mark.unit
-def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_abandons_detached_chunk(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -463,7 +474,7 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
 
 
 @pytest.mark.unit
-def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path: Path):
     """A 404 (``ChunkNotFoundError``) is terminal, not deferred like the generic
     ``HubClientError`` below — ``_resume_marked_lease`` abandons on it directly."""
     store = _store(tmp_path)
@@ -488,7 +499,7 @@ def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-
 
 
 @pytest.mark.unit
-def test_resume_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_defers_when_hub_unreachable(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)
@@ -508,7 +519,7 @@ def test_resume_defers_when_hub_unreachable(tmp_path):  # type: ignore[no-untype
 
 @pytest.mark.unit
 @pytest.mark.parametrize("known_but_unavailable", [False, True], ids=["unknown", "unavailable"])
-def test_resume_owner_failure_escalates_in_place(tmp_path, known_but_unavailable):  # type: ignore[no-untyped-def]
+def test_resume_owner_failure_escalates_in_place(tmp_path: Path, known_but_unavailable):
     """An unservable exact owner escalates the chunk in place — no other
     runner can resume this exact session, so RESUME kills the stale survivor, closes the
     lease escalated, and clears the resume intent rather than leaving either open forever."""
@@ -540,7 +551,7 @@ def test_resume_owner_failure_escalates_in_place(tmp_path, known_but_unavailable
 
 
 @pytest.mark.unit
-def test_resume_is_a_noop_without_intents(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_is_a_noop_without_intents(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)  # in flight, but no graceful-shutdown mark
 
@@ -556,7 +567,7 @@ def test_resume_is_a_noop_without_intents(tmp_path):  # type: ignore[no-untyped-
 
 
 @pytest.mark.unit
-def test_resume_clears_intent_for_lease_closed_while_down(tmp_path):  # type: ignore[no-untyped-def]
+def test_resume_clears_intent_for_lease_closed_while_down(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
     ResumeIntents(make_stores(store)).mark_graceful(now=_NOW)

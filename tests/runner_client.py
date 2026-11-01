@@ -30,7 +30,7 @@ class UntimedTestClient(TestClient):
     in-process transport never honored one and warns when it is passed, so the budget is dropped here and the seam's
     code, which really sets it, stays untouched."""
 
-    def request(self, method: str, url: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+    def request(self, method: str, url: Any, **kwargs: Any) -> Any:
         kwargs.pop("timeout", None)
         return super().request(method, url, **kwargs)
 

@@ -92,6 +92,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
     make_host_stores,
@@ -152,7 +153,7 @@ def _finished(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[
     return list(exporter.get_finished_spans())
 
 
-def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
+def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     store.record_lease(
         NewLease(
             lease_id="lease_1",
@@ -168,7 +169,7 @@ def _seed_lease(store) -> None:  # type: ignore[no-untyped-def]
     store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)
 
 
-def _app(  # type: ignore[no-untyped-def]
+def _app(
     tmp_path: Path,
     handle: IPlatformTracing,
     seen: list[httpx2.Request],
@@ -358,12 +359,12 @@ class _CallingHub:
         self._inner = inner
         self._client = client
 
-    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+    def __getattr__(self, name: str):
         attr = getattr(self._inner, name)
         if not callable(attr):
             return attr
 
-        def call(*args, **kwargs):  # type: ignore[no-untyped-def]
+        def call(*args, **kwargs):
             self._client.get(f"http://hub.local/{name}")
             return attr(*args, **kwargs)
 
@@ -458,7 +459,7 @@ def _protobuf(document: dict[str, object]) -> bytes:
     return Parse(json.dumps(document), ExportTraceServiceRequest()).SerializeToString()
 
 
-def _post_json(client: TestClient, document: dict[str, object], headers: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+def _post_json(client: TestClient, document: dict[str, object], headers: dict[str, str] | None = None):
     return client.post(
         "/v1/traces",
         content=json.dumps(document),
@@ -604,7 +605,7 @@ def test_worker_programs_caps_a_program_span_but_a_cli_span_keeps_its_declared_a
     admitted: list[list[str]] = []
     real_admit = otlp_receiver.admit
 
-    def spy(spans, lease, allowlist, *, runner):  # type: ignore[no-untyped-def]
+    def spy(spans, lease, allowlist, *, runner):
         admitted.append([span.scope_name for span in spans])
         return real_admit(spans, lease, allowlist, runner=runner)
 
@@ -739,7 +740,9 @@ def test_the_receiver_makes_no_server_span_of_its_own(tmp_path: Path) -> None:
     assert [s for s in spans if s not in _worker_spans(spans)] == []
 
 
-def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from fastapi import HTTPException
 
     from blizzard.runner.api.wiring import RunnerWiring
@@ -748,7 +751,7 @@ def test_a_non_404_lease_failure_propagates_and_an_unknown_hash_is_403(tmp_path:
     with runner_client(_app(tmp_path, handle, []), raise_server_exceptions=False) as client:
         assert _post_json(client, _export(_own_trace()), {"X-Blizzard-Lease-Token": "unknown"}).status_code == 403
 
-        def failing(self, lease_id):  # type: ignore[no-untyped-def]
+        def failing(self, lease_id):
             raise HTTPException(status_code=503, detail="down")
 
         monkeypatch.setattr(RunnerWiring, "worker_lease_standing", failing)
@@ -1036,7 +1039,7 @@ def _encoded_body(message: Message, encoding: str) -> bytes:
     return json.dumps(claude_code_telemetry.hex_ids(MessageToDict(message))).encode()
 
 
-def _post(client: TestClient, path: str, body: bytes, encoding: str = "protobuf", token: bool = True):  # type: ignore[no-untyped-def]
+def _post(client: TestClient, path: str, body: bytes, encoding: str = "protobuf", token: bool = True):
     return client.post(path, content=body, headers={"Content-Type": _ENCODED[encoding], **(_TOKEN if token else {})})
 
 

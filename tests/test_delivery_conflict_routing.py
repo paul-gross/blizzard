@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -176,7 +176,7 @@ def test_a_dirty_conflict_escalates_once_the_bounce_cap_is_crossed(tmp_path: Pat
     assert chunk_facts_of(hub, chunk_id).routes.newest is not None
 
 
-def _envelope(hub: HubHarness, chunk_id: str) -> dict:
+def _envelope(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
     (bounce,) = hub.client.get(f"/api/chunks/{chunk_id}").json()["bounces"]
     return json.loads(bounce["envelope"])
 

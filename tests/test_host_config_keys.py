@@ -356,10 +356,10 @@ def test_every_declared_host_key_is_read_by_a_load_that_carries_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     read: set[str] = set()
-    checked = ConfigView._check  # pyright: ignore[reportPrivateUsage]
+    checked = ConfigView._check
 
     def recording(view: ConfigView, key: str) -> None:
-        read.add(view._join(key))  # pyright: ignore[reportPrivateUsage]
+        read.add(view._join(key))
         checked(view, key)
 
     monkeypatch.setattr(ConfigView, "_check", recording)

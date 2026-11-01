@@ -113,7 +113,9 @@ def _submissions(hub_dir: Path) -> list[tuple[str, str, int, str | None]]:
         ).fetchall()
 
 
-def _await_submissions(hub_dir: Path, until: Callable[[list[tuple[str, str, int, str | None]]], bool]) -> list:
+def _await_submissions(
+    hub_dir: Path, until: Callable[[list[tuple[str, str, int, str | None]]], bool]
+) -> list[tuple[str, str, int, str | None]]:
     """Wait on the hub's own flow driver until its submissions satisfy ``until``; return them."""
     deadline = time.monotonic() + _DRIVER_WAIT
     while time.monotonic() < deadline:

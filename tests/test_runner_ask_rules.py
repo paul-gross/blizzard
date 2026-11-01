@@ -4,6 +4,7 @@ unforwarded ask on the same lease supersedes."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -138,7 +139,7 @@ def test_only_an_unforwarded_ask_can_be_superseded() -> None:
     assert ASK_TRANSITIONS[AskState.ANSWERED] == ASK_TRANSITIONS[AskState.SUPERSEDED] == frozenset()
 
 
-def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tmp_path):  # type: ignore[no-untyped-def]
+def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tmp_path: Path):
     from datetime import UTC, datetime
 
     from tests.runner_fakes import make_store
@@ -146,7 +147,7 @@ def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tm
 
     at = datetime(2026, 7, 16, tzinfo=UTC)
 
-    def at_depth(depth: int, path):  # type: ignore[no-untyped-def]
+    def at_depth(depth: int, path):
         path.mkdir()
         store = make_store(f"sqlite:///{path / 'runner.db'}")
         for n in range(depth):

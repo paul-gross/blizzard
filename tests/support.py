@@ -797,7 +797,7 @@ OMIT_TITLE = _OmitTitle()
 def github_double(
     *,
     conflict_branches: set[str] | None = None,
-    issues: dict[str, dict] | None = None,
+    issues: dict[str, dict[str, Any]] | None = None,
     pull_numbers: set[int] | None = None,
 ) -> TestClient:
     """A tiny GitHub-shaped forge double for the real HTTP adapters.
@@ -820,7 +820,7 @@ def github_double(
     }
 
     @app.get("/repos/{owner}/{repo}/issues/{number}")
-    def get_issue(owner: str, repo: str, number: int) -> dict:
+    def get_issue(owner: str, repo: str, number: int) -> dict[str, Any]:
         key = f"{owner}/{repo}#{number}"
         data = issue_store.get(key, {"body": f"issue {number}", "comments": []})
         payload: dict[str, object] = {"number": number, "body": data["body"]}
@@ -832,12 +832,12 @@ def github_double(
         return payload
 
     @app.patch("/repos/{owner}/{repo}/issues/{number}")
-    def update_issue_state(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
+    def update_issue_state(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
         # A number the double's fixed issue store doesn't know about is the "gone"
         # case a closer must surface distinctly from a generic failure.
-        issue_state: dict[str, dict] = state.setdefault("issue_state", {})  # type: ignore[assignment]
+        issue_state: dict[str, dict[str, Any]] = state.setdefault("issue_state", {})  # type: ignore[assignment]
         key = f"{owner}/{repo}#{number}"
         if key not in issue_store and key not in issue_state:
             return JSONResponse(status_code=404, content={"message": "Not Found"})
@@ -859,7 +859,7 @@ def github_double(
         return JSONResponse(content=[{"body": c} for c in chunk], headers=headers)
 
     @app.post("/repos/{owner}/{repo}/issues/{number}/comments")
-    def post_comment(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
+    def post_comment(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
         key = f"{owner}/{repo}#{number}"
         if key not in issue_store:
             return JSONResponse(status_code=404, content={"message": "Not Found"})
@@ -867,8 +867,8 @@ def github_double(
         return JSONResponse(status_code=201, content={"body": body["body"]})
 
     @app.post("/repos/{owner}/{repo}/pulls")
-    def create_pull(owner: str, repo: str, body: dict) -> JSONResponse:
-        pulls = state["pulls"]  # type: ignore[index]
+    def create_pull(owner: str, repo: str, body: dict[str, Any]) -> JSONResponse:
+        pulls = state["pulls"]
         if any(p["state"] == "open" and p["head"] == body["head"] for p in pulls.values()):  # type: ignore[union-attr]
             # GitHub 422s a second PR for the same head — the redelivery reuse path.
             return JSONResponse(status_code=422, content={"message": "A pull request already exists"})
@@ -891,8 +891,8 @@ def github_double(
         )
 
     @app.get("/repos/{owner}/{repo}/pulls")
-    def list_pulls(owner: str, repo: str, state_: str = "open") -> list[dict]:
-        pulls = state["pulls"]  # type: ignore[index]
+    def list_pulls(owner: str, repo: str, state_: str = "open") -> list[dict[str, Any]]:
+        pulls = state["pulls"]
         return [
             {
                 "number": n,
@@ -905,7 +905,7 @@ def github_double(
         ]
 
     @app.get("/repos/{owner}/{repo}/pulls/{number}")
-    def get_pull(owner: str, repo: str, number: int) -> dict:
+    def get_pull(owner: str, repo: str, number: int) -> dict[str, Any]:
         p = state["pulls"].get(number, {})  # type: ignore[union-attr]
         return {
             "number": number,
@@ -916,7 +916,7 @@ def github_double(
         }
 
     @app.put("/repos/{owner}/{repo}/pulls/{number}/merge")
-    def merge_pull(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
+    def merge_pull(owner: str, repo: str, number: int, body: dict[str, Any]) -> JSONResponse:
         pull = state["pulls"].get(number, {})  # type: ignore[union-attr]
         if pull.get("head") in conflict:
             return JSONResponse(status_code=409, content={"message": "not mergeable"})
@@ -932,7 +932,7 @@ def github_double(
         return None
 
     @app.post("/repos/{owner}/{repo}/labels")
-    def create_repo_label(owner: str, repo: str, body: dict) -> JSONResponse:
+    def create_repo_label(owner: str, repo: str, body: dict[str, Any]) -> JSONResponse:
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
         repo_labels = state["repo_labels"].setdefault(f"{owner}/{repo}", set())  # type: ignore[union-attr]
@@ -984,7 +984,7 @@ def github_double(
         )
         start = (page - 1) * per_page
         page_numbers = numbers[start : start + per_page]
-        items: list[dict] = []
+        items: list[dict[str, Any]] = []
         for n in page_numbers:
             item: dict[str, object] = {
                 "number": n,
@@ -1784,14 +1784,14 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
     return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
 
 
-def pointer_token(pointer: dict) -> str:
+def pointer_token(pointer: dict[str, Any]) -> str:
     """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token —
     the request-side shape a test builds from the same dict it asserts the response
     (``{source, ref, label, web_url}``) against."""
     return f"{pointer['source']}:{pointer['ref']}"
 
 
-def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True, project: str | None = None) -> str:
+def ingest(hub: HubHarness, pointers: list[dict[str, Any]], *, promote: bool = True, project: str | None = None) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and, by default,
     promote it to ready — each dict converts to its ``{source}:{ref}`` ingest token.
     ``project`` names the project by id or slug; ``None`` leaves the hub to infer it.
@@ -2040,7 +2040,7 @@ def make_ready(hub: HubHarness, chunk_id: str) -> None:
     hub.services.promote.promote(chunk, statuses=hub.services.chunks.facts.load_live_statuses())
 
 
-def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict:
+def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dict[str, Any]:
     """Promote ``chunk_id`` (a replay once promoted) and claim it for ``runner_id`` through POST
     /routes — the route a runner must hold before its first ``lease.minted`` above the claim's
     reservation is admitted. Only a ``ready`` chunk is claimable."""
@@ -2055,7 +2055,7 @@ def claim_route(hub: HubHarness, chunk_id: str, *, runner_id: str = "r1") -> dic
 
 def report_lease(
     hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1", route_token: str | None = None
-) -> dict:
+) -> dict[str, Any]:
     """Report a runner-minted ``lease.minted`` fact through POST /events.
 
     A component test calls this first so the hub knows the chunk's latest epoch.
@@ -2081,7 +2081,7 @@ def report_escalation(
     runner_id: str = "r1",
     takeover_command: str = "cd env && claude --resume s",
     **fields: object,
-) -> dict:
+) -> dict[str, Any]:
     """Report a runner's ``escalation.recorded`` fact through POST /events — the chunk derives
     ``needs_human`` when the fence admits it. ``fields`` rides the payload verbatim
     (``lease_id``, ``wrapped_takeover_command``, ``cause``, ``detail``, ``route_token``); the
@@ -2097,7 +2097,7 @@ def report_escalation(
 
 def report_question(
     hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, question_id: str = "q_1", runner_id: str = "r1"
-) -> dict:
+) -> dict[str, Any]:
     """Report a runner's ``question.asked`` fact through POST /events; the caller reads
     ``applied``/``rejected`` off the returned ack."""
     payload = {"chunk_id": chunk_id, "question_id": question_id, "epoch": epoch, "question": "which?"}
@@ -2298,7 +2298,7 @@ def capture_statements(engine: Engine) -> Iterator[list[tuple[str, Any]]]:
     ``EXPLAIN QUERY PLAN``) with no drift from what was actually sent."""
     statements: list[tuple[str, Any]] = []
 
-    def _listener(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+    def _listener(conn, cursor, statement, parameters, context, executemany):
         statements.append((statement, parameters))
 
     event.listen(engine, "before_cursor_execute", _listener)

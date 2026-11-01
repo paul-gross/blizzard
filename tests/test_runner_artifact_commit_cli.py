@@ -21,21 +21,23 @@ _ENV = {
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict | None = None) -> None:
+    def __init__(self, payload: dict[str, object] | None = None) -> None:
         self._payload = payload or {}
 
     def raise_for_status(self) -> None:
         return None
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, object]:
         return self._payload
 
 
 @pytest.mark.unit
 def test_commit_verb_posts_inherited_identity_and_declaration_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict, dict]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append((url, json, headers))
         return _FakeResponse()
 
@@ -89,9 +91,11 @@ def test_commit_verb_echoes_the_response_note() -> None:
 @pytest.mark.unit
 def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytest.MonkeyPatch) -> None:
     """No ``--env`` sends no ``environment_id`` key at all, rather than an explicit null."""
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(json)
         return _FakeResponse()
 
@@ -107,9 +111,11 @@ def test_commit_verb_omits_the_environment_key_when_not_named(monkeypatch: pytes
 
 @pytest.mark.unit
 def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(json)
         return _FakeResponse()
 
@@ -126,9 +132,11 @@ def test_commit_verb_forwards_the_named_environment(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.unit
 def test_commit_verb_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict] = []
+    calls: list[dict[str, object]] = []
 
-    def fake_post(url: str, *, json: dict, headers: dict, timeout: float, **_: object) -> _FakeResponse:
+    def fake_post(
+        url: str, *, json: dict[str, object], headers: dict[str, object], timeout: float, **_: object
+    ) -> _FakeResponse:
         calls.append(headers)
         return _FakeResponse()
 
@@ -192,7 +200,7 @@ def test_commit_verb_surfaces_the_rejection_detail_so_the_worker_can_correct_its
     class _RejectingResponse:
         status_code = 400
 
-        def json(self) -> dict:
+        def json(self) -> dict[str, object]:
             return {"detail": "environment 'e1' has no repo 'blizzrd' — it holds ['blizzard', 'blizzard-mock']"}
 
         def raise_for_status(self) -> None:

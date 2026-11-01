@@ -27,7 +27,7 @@ def test_throttle_admits_capacity_then_refuses_then_refills_one_token() -> None:
     assert throttle.allow("10.0.0.1") is False
 
 
-def _auth(table: dict) -> AuthConfig:
+def _auth(table: dict[str, object]) -> AuthConfig:
     root = ConfigView.root(HUB_REGISTRY, {"auth": {"login_throttle": table}}, strict=True)
     return AuthConfig.of(root.table("auth"))
 
@@ -52,6 +52,6 @@ def test_login_throttle_reads_the_table() -> None:
         ({"refill_seconds": -6}, "refill_seconds"),
     ],
 )
-def test_invalid_login_throttle_is_refused_naming_the_key(table: dict, key: str) -> None:
+def test_invalid_login_throttle_is_refused_naming_the_key(table: dict[str, object], key: str) -> None:
     with pytest.raises(ConfigError, match=f"auth.login_throttle.{key}"):
         _auth(table)

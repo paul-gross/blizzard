@@ -42,7 +42,7 @@ _ROUTINE = Routine(
 )
 
 
-def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
+def _seed_artifact(conn, artifact_id: str, *, chunk_id: str) -> None:
     conn.execute(
         insert(s.artifacts).values(
             stamp(

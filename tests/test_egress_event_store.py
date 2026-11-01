@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine
@@ -133,7 +134,9 @@ def test_markers_after_a_position_come_in_cursor_order_settled_and_limited(tmp_p
     _derive(engine, "sg_c", _at(30))
     store = _store(engine)
 
-    def keys(position: EventsPosition, until: datetime, limit: int, version: str | None = None) -> list[tuple]:
+    def keys(
+        position: EventsPosition, until: datetime, limit: int, version: str | None = None
+    ) -> list[tuple[Any, ...]]:
         markers = store.markers_after(position, until, limit, extractor_version=version)
         return [(m.derived_at, m.segment_id, m.extractor_version) for m in markers]
 

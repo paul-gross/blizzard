@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -43,7 +44,7 @@ def _two_projects(tmp_path: Path) -> tuple[HubHarness, ProjectId, ProjectId]:
     return hub, first, second
 
 
-def _ingest(hub: HubHarness, *tokens: str, project: str | None = None) -> tuple[int, dict]:
+def _ingest(hub: HubHarness, *tokens: str, project: str | None = None) -> tuple[int, dict[str, Any]]:
     body: dict[str, object] = {"tokens": list(tokens)}
     if project is not None:
         body["project"] = project

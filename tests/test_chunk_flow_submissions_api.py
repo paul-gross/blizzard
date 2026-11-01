@@ -13,7 +13,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import add_tenant, build_hub, hub_store_connections, seed_session, seed_user
+from tests.support import HubHarness, add_tenant, build_hub, hub_store_connections, seed_session, seed_user
 from tests.test_transcript_segments_api import _bearer, _cookie, _enrolled_runner_token, _ingest_chunk
 
 pytestmark = pytest.mark.component
@@ -22,7 +22,7 @@ _AT = datetime(2026, 10, 27, 12, 0, 0, tzinfo=UTC)
 _MAIN = FlowResource("repo_a", "main")
 
 
-def _flows(hub) -> FlowStore:  # type: ignore[no-untyped-def]
+def _flows(hub: HubHarness) -> FlowStore:
     return FlowStore(hub_store_connections(hub.engine), FixedClock(_AT))
 
 

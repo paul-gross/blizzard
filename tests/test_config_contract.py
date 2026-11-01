@@ -9,6 +9,7 @@ import json
 import re
 import stat
 from pathlib import Path
+from typing import Any
 
 import click
 import pytest
@@ -51,11 +52,11 @@ def test_a_deprecated_key_names_a_declared_replacement_or_none(name: str, regist
             assert key["replaced_by"] in declared, f"{key['path']} -> {key['replaced_by']}"
 
 
-def _host() -> dict:
+def _host() -> dict[str, Any]:
     return document_from_registry(HOST_REGISTRY)
 
 
-def _row(path: str) -> dict:
+def _row(path: str) -> dict[str, Any]:
     return next(row for row in _host()["paths"] if row["path"] == path)
 
 

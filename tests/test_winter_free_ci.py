@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -57,7 +58,7 @@ def test_a_workflow_names_no_winter_source(workflow: Path) -> None:
         )
 
 
-def _local_action_steps(step: dict) -> list[dict]:
+def _local_action_steps(step: dict[str, Any]) -> list[dict[str, Any]]:
     uses = str(step.get("uses", ""))
     if not uses.startswith("./"):
         return []
@@ -66,7 +67,7 @@ def _local_action_steps(step: dict) -> list[dict]:
     return action.get("runs", {}).get("steps") or []
 
 
-def _test_running_checkouts() -> list[tuple[str, str, dict]]:
+def _test_running_checkouts() -> list[tuple[str, str, dict[str, Any]]]:
     found = []
     for workflow in _WORKFLOWS:
         for job_name, job in yaml.safe_load(workflow.read_text()).get("jobs", {}).items():
@@ -106,7 +107,7 @@ def test_the_scan_sees_the_test_running_jobs() -> None:
 @pytest.mark.parametrize(
     ("workflow", "job", "step"), _test_running_checkouts(), ids=lambda value: value if isinstance(value, str) else ""
 )
-def test_a_test_running_checkout_does_not_persist_credentials(workflow: str, job: str, step: dict) -> None:
+def test_a_test_running_checkout_does_not_persist_credentials(workflow: str, job: str, step: dict[str, Any]) -> None:
     assert (step.get("with") or {}).get("persist-credentials") is False, (
         f"{workflow}:{job} checks out {step.get('name') or step.get('with')} without persist-credentials: false"
     )

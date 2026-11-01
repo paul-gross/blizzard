@@ -96,7 +96,7 @@ def make_facts(*, reason: str = "transitioned", closed: int = 100, **kwargs: obj
 
 
 def with_context(facts: LeaseTraceFacts, **kw: object) -> LeaseTraceFacts:
-    return replace(facts, context=replace(facts.context, **kw))  # type: ignore[arg-type]
+    return replace(facts, context=replace(facts.context, **kw))
 
 
 def busy_facts() -> LeaseTraceFacts:

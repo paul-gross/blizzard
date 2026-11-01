@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
@@ -235,7 +236,7 @@ def test_overload_is_classified_by_the_sessions_own_harness(
 
 
 @pytest.mark.unit
-def test_re_classifying_a_recorded_worker_exit_keeps_the_standing_backoff(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_re_classifying_a_recorded_worker_exit_keeps_the_standing_backoff(tmp_path: Path) -> None:
     """A re-classification of an exit already recorded at ordinal 4 answers the standing fact —
     still backing off, to the stored resume instant — rather than recounting the streak to
     the limit and falling through."""

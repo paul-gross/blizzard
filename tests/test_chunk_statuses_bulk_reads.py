@@ -22,7 +22,15 @@ from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStor
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, count_queries, hub_store_connections, ingest, report_lease, serve_default_tenant
+from tests.support import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    report_lease,
+    serve_default_tenant,
+)
 
 pytestmark = pytest.mark.component
 
@@ -56,7 +64,7 @@ nodes:
 """
 
 
-def _usage_payload(node_id: str, chunk_id: str) -> dict:
+def _usage_payload(node_id: str, chunk_id: str) -> dict[str, object]:
     return {
         "chunk_id": chunk_id,
         "node_id": node_id,
@@ -71,7 +79,7 @@ def _usage_payload(node_id: str, chunk_id: str) -> dict:
     }
 
 
-def _seed_batch(hub, n: int) -> list[str]:  # type: ignore[no-untyped-def]
+def _seed_batch(hub: HubHarness, n: int) -> list[str]:
     """``n`` claimed chunks, cycling every fourth one through a pause, a restart, an
     open gate decision, and a recorded usage fact — so a batch of any size exercises
     every field the tick loop reads."""
@@ -130,7 +138,7 @@ def test_chunk_statuses_query_count_is_independent_of_batch_size(tmp_path: Path)
 
     results: dict[str, int] = {}
 
-    def call(hub, ids: list[str], key: str) -> None:  # type: ignore[no-untyped-def]
+    def call(hub: HubHarness, ids: list[str], key: str) -> None:
         resp = hub.client.get("/api/fleet/chunk-statuses", params={"chunk_id": ids})
         assert resp.status_code == 200, resp.text
         results[key] = len(resp.json())
@@ -150,7 +158,7 @@ class _CountingFactsStore(ChunkFactsStore):
         self.status_facts_for_calls = 0
         self.load_facts_calls = 0
 
-    def status_facts_for(self, chunk_ids) -> dict[str, ChunkFacts]:  # type: ignore[no-untyped-def]
+    def status_facts_for(self, chunk_ids) -> dict[str, ChunkFacts]:
         self.status_facts_for_calls += 1
         return super().status_facts_for(chunk_ids)
 
@@ -167,7 +175,7 @@ class _CountingRouteStore(ChunkRouteStore):
         self.routes_for_calls = 0
         self.route_of_calls = 0
 
-    def routes_for(self, chunk_ids) -> dict[str, Route]:  # type: ignore[no-untyped-def]
+    def routes_for(self, chunk_ids) -> dict[str, Route]:
         self.routes_for_calls += 1
         return super().routes_for(chunk_ids)
 
@@ -184,7 +192,7 @@ class _CountingDecisionsStore(ChunkDecisionsStore):
         self.live_decisions_for_calls = 0
         self.decision_for_chunk_calls = 0
 
-    def live_decisions_for(self, chunk_ids) -> dict[str, LiveDecisionStatus]:  # type: ignore[no-untyped-def]
+    def live_decisions_for(self, chunk_ids) -> dict[str, LiveDecisionStatus]:
         self.live_decisions_for_calls += 1
         return super().live_decisions_for(chunk_ids)
 

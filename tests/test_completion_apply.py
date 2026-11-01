@@ -7,10 +7,11 @@ pins the rejection edges (``bzh:facts-not-status``).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -83,7 +84,7 @@ nodes:
 """
 
 
-def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _claimed(hub: HubHarness, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]:
     """Mint the graph, claim a route, and report the runner-minted lease (epoch 1)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
@@ -96,7 +97,7 @@ def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]: 
     return chunk_id, node_id
 
 
-def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict:
+def _completion(node_id: str, *, epoch: int, choice: str = "pass") -> dict[str, Any]:
     return {
         "choice": choice,
         "epoch": epoch,
@@ -248,7 +249,9 @@ nodes:
 """
 
 
-def _completion_with_checks(node_id: str, *, choice: str, check_results: list[dict], epoch: int = 1) -> dict:
+def _completion_with_checks(
+    node_id: str, *, choice: str, check_results: list[dict[str, Any]], epoch: int = 1
+) -> dict[str, Any]:
     return {
         "choice": choice,
         "epoch": epoch,

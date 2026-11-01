@@ -45,7 +45,7 @@ def _config(tmp_path: Path, **extra: object) -> EgressConfig:
         directory=tmp_path / "out",
         settle_seconds=0,
         min_free_bytes=0,
-        **{"file_paths": "absolute", **extra},  # type: ignore[arg-type]
+        **{"file_paths": "absolute", **extra},
     )
 
 

@@ -59,9 +59,9 @@ def test_with_no_width_bound_a_wide_window_holds_and_an_inverted_future_one_is_i
 
 def test_each_fault_reads_as_the_lanes_message() -> None:
     named = {"max_window_name": "replay_max_window", "max_window_seconds": 3600}
-    assert fault_message(WindowFault.INVERTED, **named) == "until must be after since"  # type: ignore[arg-type]
-    assert fault_message(WindowFault.TOO_WIDE, **named) == "window is wider than replay_max_window (3600 seconds)"  # type: ignore[arg-type]
-    assert fault_message(WindowFault.FUTURE, **named) == "until must not be in the future"  # type: ignore[arg-type]
+    assert fault_message(WindowFault.INVERTED, **named) == "until must be after since"
+    assert fault_message(WindowFault.TOO_WIDE, **named) == "window is wider than replay_max_window (3600 seconds)"
+    assert fault_message(WindowFault.FUTURE, **named) == "until must not be in the future"
 
 
 # --- trace replay ------------------------------------------------------------------------------

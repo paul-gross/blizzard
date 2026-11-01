@@ -13,6 +13,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
@@ -37,6 +38,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
+    SqlAlchemyRunnerStore,
     make_context,
     make_store,
     serving,
@@ -67,11 +69,11 @@ class _RaisingOnCall:
         return getattr(self._inner, name)
 
 
-def _store(tmp_path):  # type: ignore[no-untyped-def]
+def _store(tmp_path: Path):
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped-def]
+def _ctx(store: SqlAlchemyRunnerStore, *, config: LoopConfig | None = None):
     return make_context(
         store,
         hub=FakeHub(),
@@ -83,7 +85,7 @@ def _ctx(store, *, config: LoopConfig | None = None):  # type: ignore[no-untyped
     )
 
 
-def _seed_a_stale_and_a_pending_outbound_fact(store, *, old: datetime) -> int:  # type: ignore[no-untyped-def]
+def _seed_a_stale_and_a_pending_outbound_fact(store: SqlAlchemyRunnerStore, *, old: datetime) -> int:
     """A pending row (the floor) plus an acked, aged one below it — the ordinary
     prunable case (mirrors ``tests/test_runner_store.py``'s own outbound retention tests)."""
     stale = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="l", payload="{}", created_at=old)
@@ -92,12 +94,12 @@ def _seed_a_stale_and_a_pending_outbound_fact(store, *, old: datetime) -> int:  
     return stale
 
 
-def _seed_a_superseded_and_a_newest_heartbeat(store, *, old: datetime) -> None:  # type: ignore[no-untyped-def]
+def _seed_a_superseded_and_a_newest_heartbeat(store: SqlAlchemyRunnerStore, *, old: datetime) -> None:
     store.record_heartbeat(lease_id="lease_1", beat_at=old)
     store.record_heartbeat(lease_id="lease_1", beat_at=old + timedelta(minutes=1))
 
 
-def _seed_a_superseded_and_a_newest_usage_sample(store, *, old: datetime) -> None:  # type: ignore[no-untyped-def]
+def _seed_a_superseded_and_a_newest_usage_sample(store: SqlAlchemyRunnerStore, *, old: datetime) -> None:
     store.record_external_usage_attempt(
         slug="anthropic", sampled_at=old, payload=None, report_kind="", report_payload=""
     )
@@ -106,7 +108,7 @@ def _seed_a_superseded_and_a_newest_usage_sample(store, *, old: datetime) -> Non
     )
 
 
-def _seed_superseded_and_newest_floor_facts(ctx, *, old: datetime) -> None:  # type: ignore[no-untyped-def]
+def _seed_superseded_and_newest_floor_facts(ctx, *, old: datetime) -> None:
     """An aged mark and clear per key, each superseded by a newer one that is itself aged past the window."""
     for generation, at in ((1, old), (2, old + timedelta(minutes=1))):
         mark = UsageLimitMark(
@@ -127,7 +129,7 @@ def _seed_superseded_and_newest_floor_facts(ctx, *, old: datetime) -> None:  # t
         ctx.stores.usage_limits.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
 
 
-def _floor_fact_row_counts(store) -> list[int]:  # type: ignore[no-untyped-def]
+def _floor_fact_row_counts(store: SqlAlchemyRunnerStore) -> list[int]:
     keyed = (
         (subscription_usage_limits, subscription_usage_limits.c.slug == "anthropic"),
         (subscription_floor_clears, subscription_floor_clears.c.slug == "anthropic"),
@@ -138,7 +140,7 @@ def _floor_fact_row_counts(store) -> list[int]:  # type: ignore[no-untyped-def]
         return [int(conn.execute(sa.select(sa.func.count()).select_from(t).where(k)).scalar_one()) for t, k in keyed]
 
 
-def _heartbeat_row_count(store) -> int:  # type: ignore[no-untyped-def]
+def _heartbeat_row_count(store: SqlAlchemyRunnerStore) -> int:
     with store._engine.connect() as conn:
         return int(
             conn.execute(
@@ -149,7 +151,7 @@ def _heartbeat_row_count(store) -> int:  # type: ignore[no-untyped-def]
         )
 
 
-def _usage_sample_row_count(store) -> int:  # type: ignore[no-untyped-def]
+def _usage_sample_row_count(store: SqlAlchemyRunnerStore) -> int:
     with store._engine.connect() as conn:
         return int(
             conn.execute(
@@ -161,7 +163,7 @@ def _usage_sample_row_count(store) -> int:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
-def test_retention_prunes_every_lane_on_its_first_pass(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_retention_prunes_every_lane_on_its_first_pass(tmp_path: Path) -> None:
     store = _store(tmp_path)
     old = _NOW - timedelta(days=8)  # past every lane's own retention window
     stale_outbound_seq = _seed_a_stale_and_a_pending_outbound_fact(store, old=old)
@@ -179,7 +181,7 @@ def test_retention_prunes_every_lane_on_its_first_pass(tmp_path) -> None:  # typ
 
 
 @pytest.mark.unit
-def test_one_lanes_prune_failure_does_not_cost_the_others_theirs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_one_lanes_prune_failure_does_not_cost_the_others_theirs(tmp_path: Path) -> None:
     """A diagnostic-adjacent lane must never be able to end the sweep it rides in. The
     liveness store raises on ``prune_heartbeats``; the assertion that matters is the OTHER
     two lanes' prunes still landing, which a total-abort implementation would not satisfy."""
@@ -200,7 +202,7 @@ def test_one_lanes_prune_failure_does_not_cost_the_others_theirs(tmp_path) -> No
 
 
 @pytest.mark.unit
-def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp_path: Path) -> None:
     """Both streams, past a configured retention window, are pruned; anything inside the
     window — including a still-fresh file from an unrelated lease/generation — is left."""
     store = _store(tmp_path)
@@ -231,7 +233,7 @@ def test_retention_sweeps_worker_stdout_and_stderr_past_the_retention_window(tmp
 
 
 @pytest.mark.unit
-def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path: Path) -> None:
     store = _store(tmp_path)
     old = _NOW - timedelta(days=8)
     stale_outbound_seq = _seed_a_stale_and_a_pending_outbound_fact(store, old=old)
@@ -251,7 +253,7 @@ def test_worker_stdout_sweep_failure_does_not_cost_the_others_theirs(tmp_path) -
 class _CountingLanes:
     """Every lane's prune, counted — ``ctx`` rebuilt over stores and files that record a call."""
 
-    def __init__(self, ctx):  # type: ignore[no-untyped-def]
+    def __init__(self, ctx):
         self.calls: list[str] = []
         outer = self
 
@@ -293,7 +295,7 @@ _ALL_LANES = ["outbound", "heartbeat", "usage", "subscription floor", "runner fl
 
 
 @pytest.mark.unit
-def test_a_pass_inside_the_floor_calls_no_lane_and_one_past_it_calls_every_lane(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_pass_inside_the_floor_calls_no_lane_and_one_past_it_calls_every_lane(tmp_path: Path) -> None:
     counting = _CountingLanes(_ctx(_store(tmp_path)))
     clock = FixedClock(_NOW)
     ctx = dataclasses.replace(counting.ctx, clock=clock)
@@ -312,7 +314,7 @@ def test_a_pass_inside_the_floor_calls_no_lane_and_one_past_it_calls_every_lane(
 
 
 @pytest.mark.unit
-def test_a_pass_with_a_failed_lane_still_starts_the_floor(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_a_pass_with_a_failed_lane_still_starts_the_floor(tmp_path: Path) -> None:
     store = _store(tmp_path)
     ctx = _ctx(store)
     failing = _RaisingOnCall(ctx.stores.liveness, "prune_heartbeats")

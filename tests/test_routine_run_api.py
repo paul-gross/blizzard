@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import build_hub, emitted_events
+from tests.support import HubHarness, build_hub, emitted_events
 
 pytestmark = pytest.mark.component
 
@@ -30,12 +30,12 @@ nodes:
 """
 
 
-def _mint_graph(hub, definition_yaml: str = _GRAPH) -> None:  # type: ignore[no-untyped-def]
+def _mint_graph(hub: HubHarness, definition_yaml: str = _GRAPH) -> None:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
 
 
-def _create_routine(hub, **overrides: object) -> dict:  # type: ignore[no-untyped-def, type-arg]
+def _create_routine(hub: HubHarness, **overrides: object) -> dict[str, object]:
     body: dict[str, object] = {
         "name": "gardening",
         "graph_name": "alpha",

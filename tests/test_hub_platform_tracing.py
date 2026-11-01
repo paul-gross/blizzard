@@ -59,7 +59,7 @@ def _config(tmp_path: Path) -> HubConfig:
     return init_hub(tmp_path / "hub")
 
 
-def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list:  # type: ignore[type-arg]
+def _spans(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[Any]:
     handle.shutdown(5.0)
     return list(exporter.get_finished_spans())
 
@@ -199,13 +199,13 @@ def _registered_runner_token(config: HubConfig, runner_id: str, *, name: str | N
     return seed_runner(tenant_services_of(build_hosted_hub_app(config)), runner_id, name=name, workspace_id="ws-a")
 
 
-def _server_span(spans: list, prefix: str):  # type: ignore[no-untyped-def,type-arg]
+def _server_span(spans: list[Any], prefix: str):
     server = [s for s in spans if s.kind.name == "SERVER" and s.name.startswith(prefix)]
     assert len(server) == 1, [s.name for s in spans]
     return server[0]
 
 
-def _continues_planted(span) -> bool:  # type: ignore[no-untyped-def]
+def _continues_planted(span) -> bool:
     return span.context.trace_id == _PLANTED_TRACE and span.parent is not None and span.parent.span_id == _PLANTED_SPAN
 
 
@@ -236,7 +236,7 @@ def test_a_traced_runner_request_resolves_its_token_once(tmp_path: Path) -> None
         resolutions: list[str] = []
         original = credentials.runner_for_token_hash
 
-        def counting(token_hash: str):  # type: ignore[no-untyped-def]
+        def counting(token_hash: str):
             resolutions.append(token_hash)
             return original(token_hash)
 

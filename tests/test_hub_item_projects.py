@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -50,7 +51,7 @@ def _projects_of(hub: HubHarness, source: str, ref: str, chunk_id: str) -> tuple
     return item_project, chunk.project_id
 
 
-def _create_item(hub: HubHarness, *, project: str | None = None) -> tuple[int, dict]:  # type: ignore[type-arg]
+def _create_item(hub: HubHarness, *, project: str | None = None) -> tuple[int, dict[str, Any]]:
     params = {"project": project} if project is not None else {}
     resp = hub.client.post("/api/work-sources/hub/items", params=params, json={"title": "t", "body": "b"})
     return resp.status_code, resp.json()

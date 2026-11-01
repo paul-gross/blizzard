@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import yaml
 
@@ -12,7 +14,7 @@ pytestmark = pytest.mark.unit
 _WORKFLOW_PATH = repo_root() / ".github" / "workflows" / "gate.yml"
 
 
-def _jobs() -> dict:
+def _jobs() -> dict[str, Any]:
     return yaml.safe_load(_WORKFLOW_PATH.read_text())["jobs"]
 
 

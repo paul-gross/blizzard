@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.service, service_gate]
 _WORK_REF_URL = "https://example.invalid/issues/1"
 
 
-def _answered_chunk_spec(work_ref: str) -> dict:
+def _answered_chunk_spec(work_ref: str) -> dict[str, object]:
     spec = mock_hub_chunk_spec(work_ref)
     spec["garden_answered_findings"] = [
         {

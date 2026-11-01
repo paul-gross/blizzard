@@ -14,6 +14,7 @@ import os
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -59,12 +60,12 @@ def _fact(
     fact_id: str = "fact-1",
     *,
     markers: list[str] | None = None,
-    sites: list[dict] | None = None,
+    sites: list[dict[str, Any]] | None = None,
     owner: str = "src/owner.py#Owner",
     owner_kind: str = "module",
     quote: str = "the owner states it",
     min_markers: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     fact = {
         "id": fact_id,
         "statement": "A fact stated for testing.",
@@ -79,7 +80,7 @@ def _fact(
     return fact
 
 
-def _registry(facts: list[dict]) -> dict:
+def _registry(facts: list[dict[str, Any]]) -> dict[str, Any]:
     return {"version": 1, "facts": facts}
 
 
@@ -301,7 +302,7 @@ def test_case11_symbol_stable_across_unrelated_insertions(tmp_path: Path) -> Non
 # Case 12 — the committed `scripts/restated-invariants.json`.
 
 
-def _load_committed_registry() -> dict:
+def _load_committed_registry() -> dict[str, Any]:
     return ri._load_registry()
 
 

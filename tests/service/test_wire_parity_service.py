@@ -12,11 +12,13 @@ import time
 import uuid
 from pathlib import Path
 
+import httpx2
 import pytest
 
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, QUESTION_ASKED
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
@@ -39,7 +41,7 @@ pytestmark = [pytest.mark.service, service_gate]
 _WORK_REF_URL = f"{REPO}/issues/1"
 
 
-def _seed(hub) -> str:
+def _seed(hub: httpx2.Client) -> str:
     resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
@@ -198,7 +200,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
         engine.dispose()
 
 
-def _bindings(config: RunnerConfig, chunk_id: str) -> list:
+def _bindings(config: RunnerConfig, chunk_id: str) -> list[EnvBinding]:
     engine = create_engine_from_url(config.db_url)
     try:
         return daemon_store(engine).bindings_for_chunk(chunk_id)

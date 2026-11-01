@@ -96,7 +96,7 @@ def _answering(choice: str) -> str:
 # Unit — validation
 
 
-def _errors(yaml_nodes: dict) -> list[str]:
+def _errors(yaml_nodes: dict[str, object]) -> list[str]:
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": yaml_nodes})
     return Validator.of(doc, TEST_CATALOGUE).result.errors
 
@@ -222,7 +222,7 @@ _BUILD_TO_MERGE = {
 }
 
 
-def _merge_with(**overrides: object) -> dict:
+def _merge_with(**overrides: object) -> dict[str, object]:
     node = {
         "executor": "hub",
         "action": "test.sequence",
@@ -385,7 +385,7 @@ def test_hub_node_pending_is_none_off_a_non_hub_node() -> None:
 # Unit — env injection
 
 
-def _reified_merge_node():  # type: ignore[no-untyped-def]
+def _reified_merge_node():
     doc = GraphDoc.of({"name": "g", "entry": "build", "nodes": _yaml_nodes()})
     graph = Reification.of(doc, FixedClock(datetime(2026, 7, 17, tzinfo=UTC))).graph
     merge_node = graph.node_by_name("merge")
@@ -393,7 +393,7 @@ def _reified_merge_node():  # type: ignore[no-untyped-def]
     return graph, merge_node
 
 
-def _yaml_nodes() -> dict:
+def _yaml_nodes() -> dict[str, object]:
     return yaml.safe_load(_HUB_CMD_GRAPH_YAML)["nodes"]
 
 
@@ -464,7 +464,7 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
     assert by_repo == {"acme/widget": "b" * 40, "acme/gadget": "c" * 40}
 
 
-def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML, tokens=None):  # type: ignore[no-untyped-def]
+def _to_merge_node(hub: HubHarness, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML, tokens=None):
     """Ingest, promote, claim, and complete ``build`` -> ``merge`` for one chunk.
 
     Returns ``(chunk_id, build_node_id, graph)``. The completion's own apply already
@@ -489,14 +489,14 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML,
     return chunk_id, build_node_id, graph
 
 
-def _submit_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # type: ignore[no-untyped-def]
+def _submit_build_pass(hub: HubHarness, chunk_id: str, build_node_id: str, epoch: int):
     """Complete ``build`` with ``pass``, then take every hub turn it leads to."""
     resp = _post_build_pass(hub, chunk_id, build_node_id, epoch)
     hub.settle_turns()
     return resp
 
 
-def _post_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # type: ignore[no-untyped-def]
+def _post_build_pass(hub: HubHarness, chunk_id: str, build_node_id: str, epoch: int):
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -767,7 +767,7 @@ def test_a_failure_answer_maps_to_the_failure_edge(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "build"
 
 
-def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch: int, *, repo: str):  # type: ignore[no-untyped-def]
+def _submit_build_pass_with_commit(hub: HubHarness, chunk_id: str, build_node_id: str, epoch: int, *, repo: str):
     """Like :func:`_submit_build_pass`, but carrying one ``git_commit`` artifact for
     ``repo`` — the shape a hub node's kick-back accounting reads to tell a genuine
     delivery attempt from a bare hub-command smoke test."""
@@ -1051,7 +1051,7 @@ _ALWAYS_PENDING_GRAPH_YAML = _POLL_GRAPH_YAML.replace(
 )
 
 
-def _to_poll_merge_node(hub, pointer, graph_yaml: str = _POLL_GRAPH_YAML):  # type: ignore[no-untyped-def]
+def _to_poll_merge_node(hub: HubHarness, pointer, graph_yaml: str = _POLL_GRAPH_YAML):
     """Same shape as ``_to_merge_node`` but minting a pending-capable poll graph."""
     return _to_merge_node(hub, pointer=pointer, graph_yaml=graph_yaml)
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import threading
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -30,7 +31,7 @@ def _reset(hub: HubHarness, dataset: str, to: object) -> httpx2.Response:
     return hub.client.post("/api/egress/reset", json={"dataset": dataset, "to": iso_utc(to)})  # type: ignore[arg-type]
 
 
-def _events(hub: HubHarness) -> list[sa.Row]:  # type: ignore[type-arg]
+def _events(hub: HubHarness) -> list[sa.Row[Any]]:
     return hub_event_rows(hub.engine, "egress-cursor-reset")
 
 

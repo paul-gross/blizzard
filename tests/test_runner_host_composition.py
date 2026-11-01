@@ -390,14 +390,14 @@ def test_a_hosts_close_shuts_every_runners_executor_down_waiting_before_it_dispo
             order.append(f"{name}:{'wait' if wait else 'nowait'}")
             original(wait=wait, **kw)
 
-        runner.executor.shutdown = record  # type: ignore[method-assign]
+        runner.executor.shutdown = record
     dispose = host.engine.dispose
 
     def disposed(*args: Any, **kw: Any) -> None:
         order.append("engine")
         dispose(*args, **kw)
 
-    host.engine.dispose = disposed  # type: ignore[method-assign]
+    host.engine.dispose = disposed
 
     host.close()
 
@@ -408,7 +408,7 @@ def test_a_runner_closes_its_host_only_when_it_was_built_over_a_host_of_one(tmp_
     host = _host(_config(tmp_path), "rn_a")
     disposed: list[bool] = []
     dispose = host.engine.dispose
-    host.engine.dispose = lambda *a, **k: (disposed.append(True), dispose(*a, **k))[1]  # type: ignore[method-assign]
+    host.engine.dispose = lambda *a, **k: (disposed.append(True), dispose(*a, **k))[1]
     [runner] = host.runners
 
     dataclasses.replace(runner, closes_host=False).close()

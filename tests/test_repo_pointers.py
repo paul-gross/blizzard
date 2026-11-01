@@ -42,13 +42,13 @@ def _repo(tmp_path: Path, files: dict[str, str], *, untracked: dict[str, str] | 
     return root
 
 
-def _exemptions(tmp_path: Path, entries: list[dict] | None = None) -> Path:
+def _exemptions(tmp_path: Path, entries: list[dict[str, object]] | None = None) -> Path:
     path = tmp_path / "exemptions.json"
     path.write_text(json.dumps(entries or []))
     return path
 
 
-def _entry(target: str, count: int = 1, *, file: str = "src/a.py", symbol: str = "<module>") -> dict:
+def _entry(target: str, count: int = 1, *, file: str = "src/a.py", symbol: str = "<module>") -> dict[str, object]:
     return {"file": file, "symbol": symbol, "target": target, "count": count, "kind": "generated", "reason": "r"}
 
 
@@ -184,7 +184,7 @@ def test_an_exemption_for_another_site_does_not_cover_this_one(tmp_path: Path) -
         {k: v for k, v in _entry("src/gone.py").items() if k != "reason"},
     ],
 )
-def test_a_malformed_exemption_is_an_error(tmp_path: Path, entry: dict) -> None:
+def test_a_malformed_exemption_is_an_error(tmp_path: Path, entry: dict[str, object]) -> None:
     with pytest.raises(rp.PointerCheckError):
         _check(tmp_path, "src/gone.py", entries=[entry])
 

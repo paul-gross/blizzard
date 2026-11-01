@@ -16,6 +16,7 @@ from concurrent.futures import Executor
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
@@ -176,7 +177,7 @@ def _app_with_harness(spawn_executor: Executor, tmp_path: Path, binary: str) -> 
     return runner_client(create_runner_app(config, harnesses=harnesses))
 
 
-def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0) -> dict:
+def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         resp = client.get(f"/api/selftests/{selftest_id}")
