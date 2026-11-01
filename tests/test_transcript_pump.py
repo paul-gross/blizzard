@@ -77,7 +77,7 @@ def _turns_over_cap(fraction: float) -> int:
     """How many no-text turns sum past ``fraction`` of the cap, MEASURED off the real wire
     shape. A hard-coded byte figure here drifted 3x unnoticed and silently tripled every
     batch derived from it — the count a test wants is a function of the shape, not a literal."""
-    per_turn = len(json.dumps(_turn_wire(normalized_turn(0, ""), 0)).encode("utf-8")) + _ARRAY_SEPARATOR_BYTES
+    per_turn = len(json.dumps(turn_wire(normalized_turn(0, ""), 0)).encode("utf-8")) + ARRAY_SEPARATOR_BYTES
     return _cap_share(fraction) // per_turn
 
 

@@ -246,7 +246,7 @@ class SqlAlchemyRunnerStore(
         SelfTestResultStore.__init__(self, store)
         LeaseTraceFactsStore.__init__(self, store)
         RunnerUsageLimitStore.__init__(self, store)
-        self.engine = engine
+        self._engine = engine
         self._errors = errors
 
     @property
