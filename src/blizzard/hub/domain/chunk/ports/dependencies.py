@@ -11,6 +11,7 @@ from typing import NamedTuple, Protocol
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import Transaction
 
 
 @domain_model
@@ -56,7 +57,7 @@ class IReadChunkDependenciesRepository(Protocol):
         :meth:`list_standing_edges`."""
         ...
 
-    def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
+    def standing_edges_for(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
         """Every standing edge naming ``chunk_id``, as dependent or as prerequisite alike,
         bounded by ``chunk_id``'s own edge count rather than the
         fleet's. Same order as :meth:`list_standing_edges`."""
@@ -76,7 +77,13 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
         ...
 
     def release(
-        self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        self,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> DependencyEdge | None:
         """Set ``released_at``/``released_by`` together, once, on the standing edge for
         this ordered pair. A no-op returning ``None`` when no edge stands."""

@@ -8,6 +8,7 @@ row rather than reviving the old one. Timestamps arrive already stamped
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -19,9 +20,11 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 
 class ChunkDependenciesStore:
@@ -66,8 +69,13 @@ class ChunkDependenciesStore:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
         return _edge(row) if row is not None else None
 
-    def standing_edges_for(self, chunk_id: str) -> list[DependencyEdge]:
-        with self._store.read("standing_edges_for") as conn:
+    def standing_edges_for(self, chunk_id: str, *, transaction: Transaction | None = None) -> list[DependencyEdge]:
+        connection = (
+            self._store.read("standing_edges_for")
+            if transaction is None
+            else nullcontext(connection_for(self._store, transaction))
+        )
+        with connection as conn:
             return self.standing_edges_for_conn(conn, chunk_id)
 
     def standing_edges_for_conn(self, conn: Connection, chunk_id: str) -> list[DependencyEdge]:
@@ -118,12 +126,23 @@ class ChunkDependenciesStore:
         )
 
     def release(
-        self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        self,
+        dependent_chunk_id: str,
+        prerequisite_chunk_id: str,
+        *,
+        by: str,
+        at: datetime,
+        transaction: Transaction | None = None,
     ) -> DependencyEdge | None:
         """Read-then-write on the same connection, so there is no window between the
         two; see
         :meth:`~blizzard.hub.domain.chunk.ports.dependencies.IWriteChunkDependenciesRepository.release`."""
-        with self._store.write("release") as conn:
+        connection = (
+            self._store.write("release")
+            if transaction is None
+            else nullcontext(connection_for(self._store, transaction))
+        )
+        with connection as conn:
             row = _standing_row(conn, dependent_chunk_id, prerequisite_chunk_id)
             if row is None:
                 return None

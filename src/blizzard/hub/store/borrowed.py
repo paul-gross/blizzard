@@ -19,12 +19,40 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope
 
 
-class BorrowedConnections(HubStoreConnections):
+class PinnedConnections(HubStoreConnections):
+    """Connections that borrow an outer transaction, leaving its commit and error handling to its owner."""
+
+    def __init__(self, conn: Connection, errors: HubStoreErrorFactory) -> None:
+        super().__init__(conn.engine, errors)
+        self._conn = conn
+
+    @contextmanager
+    def read(self, operation: str) -> Generator[Connection, None, None]:
+        yield self._conn
+
+    @contextmanager
+    def write(
+        self, operation: str, *, expect: tuple[type[BaseException], ...] = ()
+    ) -> Generator[Connection, None, None]:
+        yield self._conn
+
+    def scoped(self, scope: StoreScope) -> ScopedConnections:
+        return PinnedScopedConnections(self._conn, self._errors, scope)
+
+
+class PinnedScopedConnections(ScopedConnections, PinnedConnections):
+    """Tenant builders and write guards over a connection owned by an outer transaction."""
+
+    def __init__(self, conn: Connection, errors: HubStoreErrorFactory, scope: StoreScope) -> None:
+        ScopedConnections.__init__(self, conn.engine, errors, scope)
+        self._conn = conn
+
+
+class BorrowedConnections(PinnedConnections):
     """:class:`HubStoreConnections` over ``conn``, a connection its read transaction owns and closes."""
 
     def __init__(self, conn: Connection, errors: HubStoreErrorFactory) -> None:
-        HubStoreConnections.__init__(self, conn.engine, errors)
-        self._conn = conn
+        super().__init__(conn, errors)
 
     def scoped(self, scope: StoreScope) -> ScopedConnections:
         return BorrowedScopedConnections(self._conn, self._errors, scope)
@@ -44,12 +72,11 @@ class BorrowedConnections(HubStoreConnections):
         yield self._conn  # pragma: no cover - unreachable; makes this a generator
 
 
-class BorrowedScopedConnections(ScopedConnections):
+class BorrowedScopedConnections(PinnedScopedConnections):
     """:class:`ScopedConnections` over ``conn``, a connection its read transaction owns and closes."""
 
     def __init__(self, conn: Connection, errors: HubStoreErrorFactory, scope: StoreScope) -> None:
-        ScopedConnections.__init__(self, conn.engine, errors, scope)
-        self._conn = conn
+        super().__init__(conn, errors, scope)
 
     @contextmanager
     def read(self, operation: str) -> Generator[Connection, None, None]:

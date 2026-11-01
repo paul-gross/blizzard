@@ -60,7 +60,7 @@ class _FakeRepo:
 class _FakeChunkRecords:
     chunks: dict[str, Chunk] = field(default_factory=dict)
 
-    def get(self, chunk_id: str) -> Chunk | None:
+    def get(self, chunk_id: str, *, transaction: object = None) -> Chunk | None:
         return self.chunks.get(chunk_id)
 
     def get_many(self, chunk_ids: Sequence[str]) -> dict[str, Chunk]:
@@ -100,7 +100,7 @@ class _FakeChunkRecords:
 class _FakeChunkFacts:
     facts: dict[str, ChunkFacts] = field(default_factory=dict)
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None:
+    def load_facts(self, chunk_id: str, *, transaction: object = None) -> ChunkFacts | None:
         return self.facts.get(chunk_id)
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:

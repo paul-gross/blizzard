@@ -3,7 +3,7 @@
 :meth:`IdentityTransactions.begin` opens one write transaction, takes the identity lock as its first statement, and
 builds every identity repository over connections pinned to it: their ``read`` and ``write`` hand back that one
 connection rather than opening their own, so nothing commits until the unit of work does, and every read a repository
-makes follows the lock. A tenant-owned write joins the same transaction through :meth:`_TransactionConnections.scoped` —
+makes follows the lock. A tenant-owned write joins the same transaction through :meth:`PinnedConnections.scoped` —
 handed out as ``IdentityWrites.tenant_connections`` — whose connections are that tenant's builders over the one
 connection, opened under the tenant's lock as any scoped write is.
 
@@ -30,9 +30,8 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.store.borrowed import PinnedConnections
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.tenancy import StoreScope
 
 #: The store's revision table, named only as the identity lock's target; nothing reads it here.
 _REVISION_TABLE = sa.table("alembic_version", sa.column("version_num"))
@@ -53,38 +52,6 @@ def _lock_identities(conn: Connection) -> None:
         raise IdentityLockMissing
 
 
-class _TransactionConnections(HubStoreConnections):
-    """Hub-level connections pinned to one open transaction. A fault inside it propagates to the unit of work's own
-    ``write``, the one site that wraps it and rolls the transaction back."""
-
-    def __init__(self, conn: Connection, errors: HubStoreErrorFactory) -> None:
-        super().__init__(conn.engine, errors)
-        self._conn = conn
-
-    @contextmanager
-    def read(self, operation: str) -> Generator[Connection, None, None]:
-        yield self._conn
-
-    @contextmanager
-    def write(
-        self, operation: str, *, expect: tuple[type[BaseException], ...] = ()
-    ) -> Generator[Connection, None, None]:
-        yield self._conn
-
-    def scoped(self, scope: StoreScope) -> ScopedConnections:
-        """``scope``'s connections over this same transaction."""
-        return _ScopedTransactionConnections(self._conn, self._errors, scope)
-
-
-class _ScopedTransactionConnections(ScopedConnections, _TransactionConnections):
-    """One tenant's connections pinned to the open transaction: :class:`ScopedConnections` binds the scope and takes
-    the tenant's lock on the connection :class:`_TransactionConnections` hands it."""
-
-    def __init__(self, conn: Connection, errors: HubStoreErrorFactory, scope: StoreScope) -> None:
-        ScopedConnections.__init__(self, conn.engine, errors, scope)
-        self._conn = conn
-
-
 class IdentityTransactions:
     """Opens identity units of work over the hub store."""
 
@@ -99,9 +66,9 @@ class IdentityTransactions:
     def begin(self) -> Generator[IdentityWrites, None, None]:
         with self._store.write("identity_transaction") as conn:
             _lock_identities(conn)
-            yield self._writes(_TransactionConnections(conn, self._store_errors))
+            yield self._writes(PinnedConnections(conn, self._store_errors))
 
-    def _writes(self, connections: _TransactionConnections) -> IdentityWrites:
+    def _writes(self, connections: PinnedConnections) -> IdentityWrites:
         return IdentityWrites(
             users=UserRepository(connections, self._errors),
             identities=IdentityRepository(connections, self._errors),

@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.chunk.model import ChunkFacts
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -19,7 +20,7 @@ class IReadChunkFactsRepository(Protocol):
     """Read-only chunk-facts access — the bounded multi-table projection every derivation
     reads from."""
 
-    def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None: ...
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """Every non-ephemeral (non-grouped, non-deleted) chunk's complete
         :class:`ChunkFacts`, keyed by chunk id — the fleet-summary bulk read.

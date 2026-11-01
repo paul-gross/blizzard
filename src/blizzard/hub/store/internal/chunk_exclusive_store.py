@@ -19,6 +19,7 @@ from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, DependencyEdge, WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead, ILockedWorkRefRead
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.domain.runners.route import Route
@@ -109,6 +110,7 @@ class ChunkExclusiveWrites:
         self,
         store: ScopedConnections,
         *,
+        transactions: IHubTransactions,
         facts: ChunkFactsStore,
         record: ChunkRecordStore,
         dependencies: ChunkDependenciesStore,
@@ -116,6 +118,7 @@ class ChunkExclusiveWrites:
         work_refs: ChunkWorkRefsStore,
     ) -> None:
         self._store = store
+        self._transactions = transactions
         self._facts = facts
         self._record = record
         self._dependencies = dependencies
