@@ -103,3 +103,9 @@ def test_a_call_needing_a_project_while_the_tenant_holds_two_lists_them(hub: Hub
         {"project_id": default, "slug": "default", "name": "Default"},
         {"project_id": widgets, "slug": "widgets", "name": "Widgets"},
     ]
+
+
+def test_a_project_created_without_a_name_is_named_by_its_slug(hub: HubHarness) -> None:
+    created = _ok(hub.client.post("/api/projects", json={"slug": "beta-x"}), 201)
+
+    assert (created["slug"], created["name"]) == ("beta-x", "beta-x")

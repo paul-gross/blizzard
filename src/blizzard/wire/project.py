@@ -37,13 +37,13 @@ class ProjectsListView(WireModel):
 
 class ProjectCreateRequest(BaseModel):
     """A new project: a ``slug`` of 1-64 lowercase letters, digits and single inner hyphens, unique among the tenant's
-    current slugs, and a display ``name``. A ``color`` is a palette name or a
+    current slugs. Its display ``name`` is the slug when none is stated. A ``color`` is a palette name or a
     ``#rrggbb``; with none stated, the hub gives the project the tenant's least-used palette color."""
 
     model_config = ConfigDict(extra="forbid")
 
     slug: str
-    name: str
+    name: str | None = None
     description: str = ""
     color: str | None = None
 
