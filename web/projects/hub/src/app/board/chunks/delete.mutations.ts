@@ -23,10 +23,11 @@ export interface DeleteVars {
  * On success it re-reads the fleet list, the ready queue, and the backlog — the deleted
  * chunk leaves whichever of the two lists it sat in, `not_ready` or `ready`, unlike
  * Detach/Promote which each touch only the one list their own write can affect — plus
- * the chunk detail; the endpoint's `chunk-changed` SSE frame corroborates for every
+ * the chunk detail; after success its queries are marked stale without refetching the
+ * deleted chunk while the dock closes. The endpoint's `chunk-changed` SSE frame corroborates for every
  * other open view (no polling, no new hub surface).
  */
-export function injectDeleteChunkMutation() {
+export function injectDeleteChunkMutation(onDeleted?: (chunkId: string) => void) {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationKey: chunkDeleteMutationKey,
@@ -38,12 +39,13 @@ export function injectDeleteChunkMutation() {
       });
       if (error) throw error;
     },
-    onSettled: (_data, _error, vars) =>
+    onSuccess: (_data, vars) => onDeleted?.(vars.chunkId),
+    onSettled: (_data, error, vars) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubChunksKey }),
         queryClient.invalidateQueries({ queryKey: hubQueueKey }),
         queryClient.invalidateQueries({ queryKey: hubBacklogKey }),
-        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) }),
+        queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId), refetchType: error ? 'active' : 'none' }),
       ]),
   }));
 }

@@ -22,6 +22,9 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy decision writes share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -30,7 +33,13 @@ from blizzard.hub.store.internal.chunk_rows import (
     lock_chunk_row,
     next_artifact_seq,
 )
+
+# Legacy decision writes share the chunk terminal-state predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+
+# Legacy decision reads share the newest-fact predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
@@ -251,7 +260,7 @@ class ChunkDecisionsStore:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
         answers ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
-        conn = conn_of(handle)
+        conn = conn_of(handle, self._store, chunk_id)
         if self._decision_exists(conn, chunk_id, node_id=node_id, epoch=epoch):
             return False
         refusal = self._record_decision_conn(

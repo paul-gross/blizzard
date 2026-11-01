@@ -23,8 +23,17 @@ from blizzard.hub.domain.garden.delivery.materialize import (
     IWriteGardenDeliveryRepository,
 )
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
+
+# Legacy garden delivery fences chunk writes and sequences artifacts atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import fence, lock_chunk_row, next_artifact_seq
+
+# Legacy garden delivery locks and validates findings in its transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.finding_store import findings_outside_project, lock_findings, moved_findings
+
+# Legacy garden delivery resolves finding scopes in its transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_ids_of
 from blizzard.hub.store.schema import (
     artifacts,

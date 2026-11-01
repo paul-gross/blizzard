@@ -20,8 +20,17 @@ from functools import partial
 from sqlalchemy import Connection, exists, select
 
 from blizzard.hub.store.errors import HubStoreConnections
+
+# Legacy hub-scoped read composition assembles the corpus reader.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
+
+# Legacy hub-scoped read composition assembles the credential reader.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+
+# Legacy hub-scoped read composition assembles the invitation reader.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
 from blizzard.hub.store.schema import tenant_deletions, tenants
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant

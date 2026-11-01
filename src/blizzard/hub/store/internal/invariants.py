@@ -24,6 +24,9 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.errors import HubStoreConnections
+
+# Legacy invariant checks share the chunk default-model value.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import DEFAULT_MODEL
 from blizzard.hub.store.scoped import TENANT_COLUMN, ScopedConnections, is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId

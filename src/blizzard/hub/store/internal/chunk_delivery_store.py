@@ -18,6 +18,9 @@ from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkItemCloseOut
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
+
+# Legacy delivery shares chunk row and fencing operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     ephemeral_ids_select,

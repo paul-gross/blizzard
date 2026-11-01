@@ -22,6 +22,9 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
+
+# Legacy hub execution writes share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -60,7 +63,7 @@ class ChunkHubExecStore:
         release_route: bool,
     ) -> bool:
         return self._transition_conn(
-            conn_of(handle),
+            conn_of(handle, self._store, chunk_id),
             chunk_id,
             from_node_id=from_node_id,
             to_node_id=to_node_id,
@@ -158,7 +161,7 @@ class ChunkHubExecStore:
         """Append one pending-poll-attempt fact on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — never a transition, no idempotency guard (an at-least-once poll attempt is
         harmless recorded twice)."""
-        conn_of(handle).execute(
+        conn_of(handle, self._store, chunk_id).execute(
             self._store.insert(s.hub_node_poll).values(
                 chunk_id=chunk_id, node_id=node_id, epoch=epoch, kind=kind, polled_at=at, next_poll_at=next_poll_at
             )

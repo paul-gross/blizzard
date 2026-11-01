@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import Literal
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, TERMINAL_STATUSES, ChunkStatus
@@ -28,11 +28,6 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RecordedPause
-
-if TYPE_CHECKING:
-    # Deferred: ``ports.exclusive`` imports this module's own ``Chunk``/``ChunkFacts``/
-    # ``DependencyEdge`` — a runtime import here would cycle back.
-    from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 
 # --- Domain objects ---------------------------------------------------------
 
@@ -1862,124 +1857,6 @@ class AnswerOutcome:
     answer: str
     answered_by: str
     answered_at: datetime
-
-
-# --- Work item repository seam (bzh:repository-split) -----------
-
-
-class IReadWorkItemRepository(Protocol):
-    """Read-only hub-owned work item operations."""
-
-    def get(self, source: str, ref: str) -> HubWorkItem | None:
-        """The item at ``(source, ref)``, open or closed, or ``None`` when no such
-        item was ever allocated."""
-        ...
-
-    def list(self, source: str, *, limit: int = 200) -> list[HubWorkItem]:
-        """Up to ``limit`` items at ``source``, newest first (a total order —
-        ``work_item_id`` breaks a same-instant ``created_at`` tie, ULIDs sorting lexically
-        by creation), open and closed alike."""
-        ...
-
-    def get_many(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, HubWorkItem]:
-        """`get`'s batched sibling (`bzh:bulk-reconstitution`) — every requested
-        pointer's item, keyed by pointer. A pointer naming no item is absent, the same
-        as ``get`` returning ``None`` for it."""
-        ...
-
-
-class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
-    """Read-write variant — ``allocate_ref``, ``create_with_chunk``, ``edit`` and
-    ``close``. Every hub item's creation mints its resting
-    chunk in the same transaction; there is no chunkless filing path."""
-
-    def allocate_ref(self, source: str) -> str:
-        """Allocate a fresh, monotonic, never-reused ``ref`` for ``source``, in its own
-        transaction — split out from the insert so a caller can hold the
-        ``ref`` before the row it feeds exists, and mint a chunk against that pointer.
-        May skip one on a crash between this call and the insert it feeds — a
-        gap-tolerant contract, the same one a DB sequence carries."""
-        ...
-
-    def create_with_chunk(
-        self,
-        *,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        stated_priority: str | None,
-        at: datetime,
-        chunk: Chunk,
-    ) -> HubWorkItem:
-        """Insert the item row keyed by ``pointer`` — the ref :meth:`allocate_ref`
-        already minted for it, taken as its own explicit parameter — and ``chunk``'s own
-        rows, atomically in one transaction: a store failure leaves
-        neither durable."""
-        ...
-
-    def create_run_with_chunk(
-        self,
-        *,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        routine_name: str,
-        scope_slug: str,
-        run_mode: str,
-        project_id: str,
-        at: datetime,
-        chunk: Chunk,
-    ) -> HubWorkItem:
-        """A routine run's own one-act mint: the item row with its run columns,
-        ``chunk``'s own rows, and the run's identity row, atomically in one transaction —
-        no window in which the item exists without its chunk, or the chunk without its
-        run context. The chunk carries no promote fact and no queue position, so it rests
-        ``not_ready`` until the ordinary promote."""
-        ...
-
-    def edit(
-        self, source: str, ref: str, *, title: str, body: str, stated_priority: str | None, at: datetime
-    ) -> HubWorkItem | None:
-        """Replace an open item's title/body/stated priority in place and stamp
-        ``edited_at``; ``created_at`` and ``ref`` are untouched. ``None`` when the item
-        already carries a closure — the write matches zero rows, a closure race is not
-        silently overwritten."""
-        ...
-
-    def close(self, source: str, ref: str, *, closure: WorkItemClosure, at: datetime) -> HubWorkItem:
-        """Record ``closed_at``/``closure`` on an open item, once."""
-        ...
-
-    def delete_chunk_and_withdraw_hub_items_locked(
-        self, handle: ILockedChunkRead, chunk: Chunk, *, by: str, at: datetime
-    ) -> int:
-        """Delete ``chunk`` — the ``chunk_deleted`` fact that makes it ephemeral — and
-        withdraw every open ``hub:``-source item it holds, atomically on ``handle``'s
-        already-locked connection (``bzh:store-exclusive-write``). A ``forge:`` pointer on the
-        same chunk is left untouched. Returns the freshly-written ``chunk_deleted.id``."""
-        ...
-
-    def accept_create(
-        self,
-        *,
-        proposal_id: str,
-        pointer: WorkRef,
-        title: str,
-        body: str,
-        author: WorkItemAuthor,
-        at: datetime,
-        chunk: Chunk,
-        reason: str | None,
-        closed_by: str,
-    ) -> HubWorkItem | None:
-        """Mint the item and ``chunk``'s own rows, plus ``proposal_id``'s
-        accepted-and-minted ``garden_proposal_closures`` row, atomically in one
-        transaction — mirrors :meth:`create_with_chunk`, plus the closure row,
-        written first as its idempotence guard. Returns ``None`` and writes nothing when
-        ``proposal_id`` already carries a closure."""
-        ...
 
 
 #: A work ref's source-native token (``acme#42``), or ``None`` when no configured source renders it.

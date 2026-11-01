@@ -14,8 +14,17 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineScopeRepository, Routine
+
+# Legacy routine scope writes append config audit records atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy scope moves share the routine adapter's revision and link writes.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.routine_store import link_scope, move_revision
+
+# Legacy routine scope writes resolve scope IDs on the same connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import scope_id_of
 from blizzard.hub.store.schema import routine_scopes, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements

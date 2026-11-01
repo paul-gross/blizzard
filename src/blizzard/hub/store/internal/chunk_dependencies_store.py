@@ -22,6 +22,9 @@ from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunk
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
+
+# Legacy dependency writes share locked chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import conn_of, record_grouped_row_conn
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import connection_for
@@ -33,6 +36,9 @@ class ChunkDependenciesStore:
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         self._store = store
         self._clock = clock
+
+    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None:
+        release_outgoing_edges_conn(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
 
     def list_standing_edges(self) -> list[DependencyEdge]:
         with self._store.read("list_standing_edges") as conn:
@@ -113,7 +119,13 @@ class ChunkDependenciesStore:
     ) -> DependencyEdge:
         """Mint a fresh standing edge (``bzh:store-exclusive-write``) — the
         dependency declare's own write, on ``handle``'s already-locked connection."""
-        return self._declare_conn(conn_of(handle), dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return self._declare_conn(
+            conn_of(handle, self._store, dependent_chunk_id, prerequisite_chunk_id),
+            dependent_chunk_id,
+            prerequisite_chunk_id,
+            by=by,
+            at=at,
+        )
 
     def _declare_conn(
         self, conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
@@ -179,7 +191,8 @@ class ChunkDependenciesStore:
     ) -> dict[str, int]:
         """Record the group fold's edges and ``chunk.grouped`` rows (``bzh:store-exclusive-write``) —
         the group fold's own write, on ``handle``'s already-locked connection."""
-        return self._record_fold_conn(conn_of(handle), targets, grouped_into=grouped_into, by=by, at=at)
+        conn = conn_of(handle, self._store, grouped_into, *(target.chunk_id for target in targets))
+        return self._record_fold_conn(conn, targets, grouped_into=grouped_into, by=by, at=at)
 
     def _record_fold_conn(
         self, conn: Connection, targets: list[FoldTarget], *, grouped_into: str, by: str, at: datetime

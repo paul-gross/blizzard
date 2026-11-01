@@ -67,6 +67,8 @@ class IReadChunkDependenciesRepository(Protocol):
 class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protocol):
     """Read-write chunk-dependencies access."""
 
+    def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None: ...
+
     def declare_in_transaction_locked(
         self,
         transaction: LockedTransaction,

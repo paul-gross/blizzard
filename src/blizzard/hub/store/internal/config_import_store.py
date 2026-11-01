@@ -28,10 +28,25 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeOriginTaken, ForgeSlugTaken
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositorySlugTaken
 from blizzard.hub.domain.config.work_sources import WorkSourceLocatorTaken, WorkSourceSlugTaken
+
+# Legacy config import shares forge writes within its import transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import forge_record_store as forge_writes
+
+# Legacy config import shares project-link writes within its import transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import project_link_store as link_writes
+
+# Legacy config import shares repository writes within its import transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import repository_record_store as repository_writes
+
+# Legacy config import shares work-source writes within its import transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
+
+# Legacy config import inserts secrets within its import transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_store import insert_secret
 from blizzard.hub.store.schema import artifacts, config_import_facts
 from blizzard.hub.store.scoped import ScopedConnections

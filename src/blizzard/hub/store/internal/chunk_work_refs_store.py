@@ -24,8 +24,17 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     resolve_live_holders,
 )
 from blizzard.hub.store import schema as s
+
+# Legacy work-reference reads compose chunk facts and their status table registry.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
+
+# Legacy work-reference writes and reads share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import conn_of, ephemeral_ids, ephemeral_ids_in
+
+# Legacy work-reference reads share the chunk liveness predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -149,7 +158,7 @@ class ChunkWorkRefsStore:
     ) -> None:
         """Fold pointers into a group survivor, de-duped by (source, ref) (``bzh:store-exclusive-write``) —
         the group fold's own write, on ``handle``'s already-locked connection."""
-        self._add_work_refs_conn(conn_of(handle), chunk_id, pointers)
+        self._add_work_refs_conn(conn_of(handle, self._store, chunk_id), chunk_id, pointers)
 
     def _add_work_refs_conn(self, conn: Connection, chunk_id: str, pointers: list[WorkRef]) -> None:
         existing = {

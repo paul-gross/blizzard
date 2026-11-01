@@ -30,6 +30,7 @@ from blizzard.hub.domain.operations.delete import ChunkHasDependents, DeleteServ
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support import (
     HubHarness,
     build_hub,
@@ -222,7 +223,10 @@ def test_delete_still_refuses_a_standing_prerequisite_read_through_the_touching_
     delete = DeleteService(
         items=WorkItemStore(hub_store_connections(engine)),
         clock=FixedClock(_T0),
-        exclusive=chunks.exclusive,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=HubTransactions(hub_store_connections(engine)),
         cycle_lock=threading.Lock(),
     )
     target = chunks.record.get("ch_t")

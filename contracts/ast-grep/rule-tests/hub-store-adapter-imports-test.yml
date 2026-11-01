@@ -1,0 +1,27 @@
+id: bzh:hub-store-adapter-imports
+valid:
+  - from blizzard.hub.store.transactions import connection_for
+  - import blizzard.hub.store.transactions
+  - from ..transactions import connection_for
+  - from .. import schema
+  - from blizzard.hub.store.internality import chunk_rows
+invalid:
+  - from blizzard.hub.store.internal.scope_store import scope_id_of
+  - from .scope_store import scope_id_of
+  - from ..internal.scope_store import scope_id_of
+  - import blizzard.hub.store.internal.scope_store as scopes
+  - from blizzard.hub.store.internal import scope_store as scopes
+  - from . import scope_store
+  - from . import chunk_rows, scope_store
+  - |
+    from blizzard.hub.store.internal import (
+        chunk_rows,
+        scope_store as scopes,
+    )
+  - import os, blizzard.hub.store.internal.scope_store
+  - from blizzard.hub.store.internal.chunk_rows import conn_of
+  - from .newest_fact import newest_fact_select
+  - from .chunk_rows import conn_of
+  - from ..internal.chunk_rows import conn_of
+  - from . import chunk_rows
+  - import blizzard.hub.store.internal.chunk_rows as rows

@@ -23,6 +23,9 @@ from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
+
+# Legacy artifact writes share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
     fence,
@@ -31,6 +34,9 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_artifact_seq,
     write_landing_rows,
 )
+
+# Legacy artifact reads share the newest-fact predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 

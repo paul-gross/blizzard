@@ -45,10 +45,25 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadStepCorpus
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus, TenantCloseIntent
 from blizzard.hub.store import schema as s
+
+# Legacy corpus reads share the corpus row query module.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import corpus_rows
+
+# Legacy corpus reads interpret the delivery adapter's deferred marker.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_delivery_store import DEFERRED_ATTEMPT
+
+# Legacy corpus reads use the chunk facts status-family table registry.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_facts_store import status_family_tables
+
+# Legacy corpus reads share the open-tenant predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.corpus_rows import open_tenant
+
+# Legacy corpus reads reconstruct transcript event fingerprints.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.transcript_event_store import fingerprint_from_parts
 from blizzard.hub.tenancy import TenantId
 

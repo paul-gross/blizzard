@@ -66,7 +66,9 @@ export class ChunkDetail {
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly completeMutation = injectCompleteChunkMutation();
-  private readonly deleteMutation = injectDeleteChunkMutation();
+  private readonly deleteMutation = injectDeleteChunkMutation((chunkId) => {
+    if (this.chunkId() === chunkId) this.dismiss.emit();
+  });
   private readonly meQuery = injectMeQuery();
   private readonly projectsQuery = injectProjectsQuery();
   private readonly clock = inject(FLEET_CLOCK);
@@ -253,7 +255,6 @@ export class ChunkDetail {
     this.deleteMutation.mutate(
       { chunkId },
       {
-        onSuccess: () => this.dismiss.emit(),
         onError: (error) => this.actionError.set(errorMessage(error, 'Delete failed.')),
       },
     );

@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 from urllib.parse import urlparse
 
 import httpx2
@@ -80,7 +80,6 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     HubWorkItem,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
 )
@@ -114,6 +113,7 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapab
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
+from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -1988,7 +1988,9 @@ def seed_chunk_record(stores: ChunkStores, chunk: Chunk) -> None:
     lands in the tenant's only one."""
     with stores.exclusive.locked_work_refs(chunk.work_refs) as handle:
         if chunk.project_id is None:
-            chunk = replace(chunk, project_id=_only_project_on(work_ref_conn_of(handle)))
+            chunk = replace(
+                chunk, project_id=_only_project_on(work_ref_conn_of(handle, cast(Any, stores.record)._store))
+            )
         stores.record.mint_locked(handle, chunk)
 
 

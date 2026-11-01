@@ -16,8 +16,9 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import Chunk, IReadWorkItemRepository, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.work_item_store import WorkItemStore

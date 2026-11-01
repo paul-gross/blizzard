@@ -48,7 +48,7 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, IReadWorkItemRepository, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
@@ -154,6 +154,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX

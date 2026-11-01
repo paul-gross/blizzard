@@ -12,6 +12,9 @@ from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.lifecycle import IWriteChunkLifecycleRepository
 from blizzard.hub.store import schema as s
+
+# Legacy lifecycle writes share chunk row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import (
     conn_of,
     enqueue_close_intents,
@@ -19,6 +22,9 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     route_of_conn,
 )
+
+# Legacy lifecycle writes withdraw waiting flows in the same transaction.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.flow_rows import withdraw_waiting
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -45,7 +51,7 @@ class ChunkLifecycleStore:
     def record_pause_locked(self, handle: ILockedChunkRead, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append a ``chunk.paused`` fact on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``)."""
-        result = conn_of(handle).execute(
+        result = conn_of(handle, self._store, chunk_id).execute(
             self._store.insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=True, set_at=at, set_by=by)
         )
         key = result.inserted_primary_key
@@ -56,7 +62,7 @@ class ChunkLifecycleStore:
 
         The route check runs on the same connection (:func:`route_of_conn`), so there is no
         read-then-write race; a submission mid-turn is left to the turn's end."""
-        conn = conn_of(handle)
+        conn = conn_of(handle, self._store, chunk_id)
         result = conn.execute(
             self._store.insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by)
         )
@@ -75,7 +81,7 @@ class ChunkLifecycleStore:
         ``IWriteChunkLifecycleRepository.record_completion_locked``.
 
         The route check runs on the same connection (:func:`route_of_conn`)."""
-        conn = conn_of(handle)
+        conn = conn_of(handle, self._store, chunk_id)
         result = conn.execute(
             self._store.insert(s.chunk_completed).values(chunk_id=chunk_id, completed_at=at, completed_by=by)
         )

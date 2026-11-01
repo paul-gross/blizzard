@@ -40,9 +40,21 @@ from blizzard.hub.domain.config.forges import (
     require_unused,
     resolve_forge_reference,
 )
+
+# Legacy forge writes append config audit records atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy forge retirement checks shared referrer queries.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.forge_referrers import active_referrers
+
+# Legacy forge writes share former-slug reservation tables.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.former_slugs import SlugTables
+
+# Legacy forge reads share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     forge_former_slugs,

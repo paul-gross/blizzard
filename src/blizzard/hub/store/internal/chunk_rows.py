@@ -17,7 +17,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Protocol, cast
+from typing import Any
 
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
 
@@ -40,11 +40,17 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
+
+# Legacy chunk row queries share the terminal-state predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+
+# Legacy chunk row queries share the newest-fact predicate.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row as lock_chunk_row
 from blizzard.hub.store.locking import lock_keys as lock_keys
-from blizzard.hub.store.scoped import ScopedStatements, statements_of
+from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
 
 
 @adapter_model
@@ -401,25 +407,18 @@ def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[st
     }
 
 
-class _LockedConnection(Protocol):
-    """The write token every ``*_locked`` store method needs — the real capability
-    :class:`ILockedChunkRead` deliberately does not expose to the domain layer, so a fake
-    handle satisfying that Protocol structurally still cannot satisfy this one too."""
+def conn_of(handle: ILockedChunkRead, store: ScopedConnections, *chunks: str) -> Connection:
+    """Resolve a store-issued chunk handle while its transaction is active."""
+    from blizzard.hub.store.transactions import chunk_handle_connection
 
-    conn: Connection
-
-
-def conn_of(handle: ILockedChunkRead) -> Connection:
-    """Recover the connection from a domain-held :class:`ILockedChunkRead`.
-
-    Real handles are store-built ``LockedChunkTransaction`` instances; this cast
-    keeps their concrete type out of the domain and avoids a cyclic import."""
-    return cast(_LockedConnection, handle).conn
+    return chunk_handle_connection(handle, store, *chunks)
 
 
-def work_ref_conn_of(handle: ILockedWorkRefRead) -> Connection:
-    """:func:`conn_of`'s sibling for a domain-held :class:`ILockedWorkRefRead`."""
-    return cast(_LockedConnection, handle).conn
+def work_ref_conn_of(handle: ILockedWorkRefRead, store: ScopedConnections, *pointers: WorkRef) -> Connection:
+    """Resolve a store-issued work-ref handle while its transaction is active."""
+    from blizzard.hub.store.transactions import work_ref_handle_connection
+
+    return work_ref_handle_connection(handle, store, *pointers)
 
 
 def next_route_seq(conn: Connection, chunk_id: str) -> int:

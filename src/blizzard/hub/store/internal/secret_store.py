@@ -31,8 +31,17 @@ from blizzard.hub.domain.config.secrets import (
     SecretRotationConflict,
     require_unreferenced,
 )
+
+# Legacy secret writes append config audit records atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy secret reads share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
+
+# Legacy secret retirement checks shared referrer queries.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.secret_referrers import active_referrers
 from blizzard.hub.store.schema import secret_lifecycle_facts, secrets
 from blizzard.hub.store.scoped import ScopedConnections, statements_of

@@ -39,7 +39,13 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.domain.delivery.ports.flows import IReadFlowViews, IWriteFlows
 from blizzard.hub.store import schema as s
+
+# Legacy flow writes share chunk locking and landing row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.chunk_rows import conn_of, lock_keys, write_landing_rows
+
+# Legacy flow writes share flow row operations.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.flow_rows import (
     close_submission,
     end_turn,
@@ -51,6 +57,9 @@ from blizzard.hub.store.internal.flow_rows import (
     write_facts,
     write_landing,
 )
+
+# Legacy flow reads share the newest-fact selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.scoped import ScopedConnections
 
@@ -373,7 +382,15 @@ class FlowStore:
         event: TurnEvent | None,
         at: datetime,
     ) -> tuple[FlowFactWritten, ...] | None:
-        conn = conn_of(handle)
+        conn = conn_of(handle, self._store)
+        submission_id = conn.execute(
+            self._store.select(_turns, _turns.c.submission_id).where(_turns.c.turn_id == turn_id)
+        ).scalar_one_or_none()
+        if submission_id is not None:
+            chunk_id = conn.execute(
+                self._store.select(_sub, _sub.c.chunk_id).where(_sub.c.submission_id == submission_id)
+            ).scalar_one()
+            conn_of(handle, self._store, chunk_id)
         ended = end_turn(conn, turn_id, outcome=outcome, at=at)
         if ended is None:
             return None

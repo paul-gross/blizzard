@@ -20,7 +20,6 @@ from blizzard.hub.domain.chunk.ingest import (
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkProjectMissing,
-    IWriteWorkItemRepository,
     WorkRef,
     mint_chunk,
 )
@@ -28,6 +27,7 @@ from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsReposito
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import prepare_mint
+from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit

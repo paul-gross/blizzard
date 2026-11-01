@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
+import { type ChunkDetail as ChunkDetailModel, formatWhen, hubChunkKey, hubChunkWorkItemsKey, hubClient } from 'fleet';
 import { settle, OPERATOR_ME_RESPONSE, chunkDetail, decisionView, questionView, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
@@ -425,6 +425,41 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="chunk-detail-error"]')).toBeNull();
   });
 
+  it('dismisses as soon as delete succeeds, without waiting for invalidations to finish', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    let dismissed = false;
+    fixture.componentInstance.dismiss.subscribe(() => (dismissed = true));
+    await settle(fixture);
+
+    let resolveInvalidate!: () => void;
+    vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(
+      new Promise<void>((resolve) => (resolveInvalidate = resolve)),
+    );
+    await clickMenuAction(fixture, 'delete-chunk');
+    await confirmAction(fixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(dismissed).toBe(true);
+    resolveInvalidate();
+    await settle(fixture);
+  });
+
+  it('marks deleted chunk queries stale without refetching them while the dock is still active', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_deletable');
+    await settle(fixture);
+
+    await clickMenuAction(fixture, 'delete-chunk');
+    await confirmAction(fixture);
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/chunks/ch_deletable/work-items', 'GET')).toHaveLength(1);
+    const client = TestBed.inject(QueryClient);
+    expect(client.getQueryState(hubChunkKey('ch_deletable'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(hubChunkWorkItemsKey('ch_deletable'))?.isInvalidated).toBe(true);
+  });
+
   it('surfaces a delete failure rather than swallowing it, and does not dismiss', async () => {
     deleteResponse = stubError(409, { detail: 'chunk ch_deletable is already acquired' });
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -439,6 +474,8 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_deletable', 'DELETE')).toHaveLength(1);
+    expect(stub.forRoute('/api/chunks/ch_deletable', 'GET')).toHaveLength(2);
+    expect(stub.forRoute('/api/chunks/ch_deletable/work-items', 'GET')).toHaveLength(2);
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already acquired');
     expect(dismissed).toBe(false);
   });

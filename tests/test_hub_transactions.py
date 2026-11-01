@@ -10,12 +10,13 @@ from structlog import get_logger
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.kernel.transactions import GraduationError, TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.borrowed import BorrowedConnections, PinnedConnections
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
+from blizzard.hub.store.internal.chunk_rows import conn_of, work_ref_conn_of
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -143,4 +144,48 @@ def test_locked_decision_requires_both_chunk_locks(tmp_path: Path) -> None:
         locked = unit.lock_chunks(["ch_b", "ch_a"])
         chunks.dependencies.declare_in_transaction_locked(locked, "ch_a", "ch_b", by="test", at=now)
     assert len(chunks.dependencies.standing_edges_for("ch_a")) == 1
+    engine.dispose()
+
+
+def test_legacy_handles_validate_lifetime_and_chunk_coverage(tmp_path: Path) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    _, engine = migrate_to(tmp_path, "head")
+    with engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=now)
+    store = hub_store_connections(engine)
+    chunks = build_chunk_stores(
+        store, FixedClock(now), registry=RunnerRegistryStore(store), transactions=HubTransactions(store)
+    )
+    seed_chunk_record(chunks, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=now))
+    with chunks.exclusive.locked(["ch_a"]) as handle:
+        assert handle.record("ch_a") is not None
+        assert handle.record("ch_b") is None
+        assert handle.records_for(["ch_a", "ch_b"]) == {"ch_a": handle.record("ch_a")}
+        assert handle.facts("ch_b") is None
+        assert "ch_b" not in handle.facts_for(["ch_a", "ch_b"])
+        with pytest.raises(TransactionMisuse):
+            chunks.record.set_graph_locked(handle, "ch_b", graph_id="gr_1")
+        with pytest.raises(TransactionMisuse):
+            chunks.dependencies.declare_locked(handle, "ch_a", "ch_b", by="test", at=now)
+        other = HubStoreConnections(engine, store._errors).scoped(StoreScope(TenantId("other")))
+        other_chunks = build_chunk_stores(
+            other, FixedClock(now), registry=RunnerRegistryStore(other), transactions=HubTransactions(other)
+        )
+        with pytest.raises(TransactionMisuse):
+            other_chunks.record.set_graph_locked(handle, "ch_a", graph_id="gr_1")
+        with pytest.raises(TransactionMisuse):
+            work_ref_conn_of(handle, store)  # type: ignore[arg-type]
+    with pytest.raises(TransactionMisuse):
+        conn_of(handle, store)
+    with pytest.raises(TransactionMisuse):
+        handle.record("ch_a")
+    with chunks.exclusive.locked_work_refs([]) as refs:
+        assert work_ref_conn_of(refs, store) is not None
+    with pytest.raises(TransactionMisuse):
+        work_ref_conn_of(refs, store)
+    pointer = WorkRef(source="source", ref="1")
+    with chunks.exclusive.locked_work_refs([]) as refs:
+        assert refs.live_holders([pointer]) == {}
+    with chunks.exclusive.locked_work_refs([]) as refs, pytest.raises(TransactionMisuse):
+        chunks.record.mint_locked(refs, Chunk(chunk_id="ch_b", graph_id="gr_1", work_refs=[pointer], minted_at=now))
     engine.dispose()

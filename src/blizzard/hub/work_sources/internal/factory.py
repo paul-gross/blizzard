@@ -14,12 +14,12 @@ import httpx2
 
 from blizzard.foundation.roles import collaborator
 from blizzard.hub.auth.users import IReadUserRepository
-from blizzard.hub.domain.chunk.model import IReadWorkItemRepository
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired, SecretValue
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource

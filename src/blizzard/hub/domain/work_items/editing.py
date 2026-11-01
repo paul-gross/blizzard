@@ -19,7 +19,6 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     HubWorkItem,
-    IWriteWorkItemRepository,
     WorkItemAuthor,
     WorkRef,
     mint_chunk,
@@ -41,6 +40,7 @@ from blizzard.hub.domain.work_items.model import (
     require_open_for,
     require_withdrawn,
 )
+from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
 
 def prepare_mint(

@@ -602,7 +602,9 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     delete = DeleteService(
         items=work_item_store,
         clock=clock,
-        exclusive=chunk_stores.exclusive,
+        facts=chunk_stores.facts,
+        record=chunk_stores.record,
+        dependencies=chunk_stores.dependencies,
         cycle_lock=cycle_lock,
         transactions=transactions,
     )

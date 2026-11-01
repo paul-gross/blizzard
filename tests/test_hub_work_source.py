@@ -40,6 +40,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
@@ -66,7 +67,15 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
     items = WorkItemStore(store)
     clock = FixedClock(_T0)
     chunks = chunk_stores(engine, clock)
-    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
+    delete = DeleteService(
+        items=items,
+        clock=clock,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=HubTransactions(store),
+        cycle_lock=threading.Lock(),
+    )
     edits = WorkItemEditService(
         items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
     )
@@ -832,9 +841,17 @@ def test_close_with_no_garden_proposal_behind_it_leaves_findings_untouched(tmp_p
 # Lost write races and closed-item verbs
 
 
-def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock) -> WorkItemEditService:
+def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock, engine: Engine) -> WorkItemEditService:
     """The write half on its own, to hand it a record read before a racing write."""
-    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
+    delete = DeleteService(
+        items=items,
+        clock=clock,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=HubTransactions(hub_store_connections(engine)),
+        cycle_lock=threading.Lock(),
+    )
     return WorkItemEditService(
         items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
     )
@@ -845,7 +862,7 @@ def test_withdraw_racing_a_delivery_is_refused_naming_the_closure_that_won(tmp_p
     which the store's ``closed_at IS NULL`` guard turns into nothing written: the
     withdrawal is refused, never answered with the delivered record."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
-    edits = _edits(items, chunks, clock)
+    edits = _edits(items, chunks, clock, engine)
     created = seed_work_item(
         items,
         graph_id=_graph(engine).graph_id,
@@ -870,7 +887,7 @@ def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_d
     """The item reads open, then a delivery closes it before the cascade deletes the unacquired holder:
     the deletion stands, but the withdrawal is refused naming the closure that won, carrying the deletion's facts."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
-    edits = _edits(items, chunks, clock)
+    edits = _edits(items, chunks, clock, engine)
     created = seed_work_item(
         items,
         graph_id=_graph(engine).graph_id,
@@ -897,7 +914,7 @@ def test_withdraw_racing_a_delivery_past_an_unacquired_holder_is_refused_after_d
 def test_deliver_of_a_withdrawn_item_writes_nothing_and_keeps_it_withdrawn(tmp_path: Path) -> None:
     """Deliver from withdrawn is a declared no-op: the closure stands and no write is made."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
-    edits = _edits(items, chunks, clock)
+    edits = _edits(items, chunks, clock, engine)
     created = seed_work_item(
         items,
         graph_id=_graph(engine).graph_id,
@@ -916,7 +933,7 @@ def test_every_minting_door_refuses_a_blank_title_or_body(
 ) -> None:
     """The operator create and the garden accept-create both hold the item's non-blank text invariant, before any ref is allocated."""
     _, items, chunks, _, engine, clock = _source(tmp_path)
-    edits = _edits(items, chunks, clock)
+    edits = _edits(items, chunks, clock, engine)
     graph = _graph(engine)
     author = WorkItemAuthor.user("u_1")
 

@@ -19,6 +19,9 @@ from blizzard.hub.domain.observability.analytics.queries import (
 )
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
+
+# Legacy analytics event reads share project-to-chunk reachability.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_reach import chunks_of_project
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 

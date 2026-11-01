@@ -24,6 +24,7 @@ from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDe
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support import (
     build_hub,
     chunk_stores,
@@ -52,7 +53,15 @@ def _stores(tmp_path: Path) -> tuple[ChunkStores, WorkItemStore, DeleteService, 
     store = hub_store_connections(engine)
     chunks = chunk_stores(engine, clock)
     items = WorkItemStore(store)
-    delete = DeleteService(items=items, clock=clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
+    delete = DeleteService(
+        items=items,
+        clock=clock,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=HubTransactions(store),
+        cycle_lock=threading.Lock(),
+    )
     return chunks, items, delete, engine
 
 
@@ -284,6 +293,35 @@ def test_delete_leaves_an_already_closed_hub_items_closure_and_closed_at_unchang
     assert chunks.record.get(chunk.chunk_id) is None
 
 
+def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    chunks, items, delete, _ = _stores(tmp_path)
+    item = seed_work_item(items, graph_id="gr_1", author=WorkItemAuthor.user("u_1"), at=_T0)
+    chunk = chunks.record.get(f"ch_{item.ref}")
+    assert chunk is not None
+    _mint(chunks, "ch_prereq")
+    with chunks.exclusive.locked([chunk.chunk_id, "ch_prereq"]) as handle:
+        chunks.dependencies.declare_locked(handle, chunk.chunk_id, "ch_prereq", by="author", at=_T0)
+    original = items.withdraw_open
+
+    def fail_after_withdraw(*args, **kwargs):  # type: ignore[no-untyped-def]
+        original(*args, **kwargs)
+        raise RuntimeError("injected failure")
+
+    monkeypatch.setattr(items, "withdraw_open", fail_after_withdraw)
+    with pytest.raises(RuntimeError, match="injected failure"):
+        delete.delete(chunk, by="operator")
+
+    assert chunks.record.get(chunk.chunk_id) is not None
+    assert chunks.dependencies.standing_edge(chunk.chunk_id, "ch_prereq") is not None
+    persisted = items.get("hub", item.ref)
+    assert persisted is not None and persisted.closure is None
+    assert not [
+        row
+        for row in chunks.events.activity_facts_since(_T0, limit=50)
+        if row.chunk_id == chunk.chunk_id and row.cause == "deleted"
+    ]
+
+
 # --- idempotent-by-guard: a repeated direct delete writes nothing a second time ----
 
 
@@ -312,7 +350,15 @@ def test_reingest_after_delete_a_forge_pointer_mints_a_fresh_chunk_reading_norma
     hub_store = hub_store_connections(hub.engine)
     chunks = chunk_stores(hub.engine, hub.clock)
     items = WorkItemStore(hub_store)
-    delete = DeleteService(items=items, clock=hub.clock, exclusive=chunks.exclusive, cycle_lock=threading.Lock())
+    delete = DeleteService(
+        items=items,
+        clock=hub.clock,
+        facts=chunks.facts,
+        record=chunks.record,
+        dependencies=chunks.dependencies,
+        transactions=HubTransactions(hub_store_connections(hub.engine)),
+        cycle_lock=threading.Lock(),
+    )
     chunk = chunks.record.get(first["chunk_id"])
     assert chunk is not None
     delete.delete(chunk, by="operator")

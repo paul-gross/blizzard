@@ -11,13 +11,22 @@ from __future__ import annotations
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
 from collections.abc import Iterable, Sequence
+from datetime import datetime
+from typing import Protocol
 
 from blizzard.foundation.chunk_status import PRE_CLAIM_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, IWriteWorkItemRepository
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, DependencyEdge, WorkRef
+from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
+
+
+class IHubItemWithdrawals(Protocol):
+    def withdraw_open(self, pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None: ...
 
 
 class ChunkNotDeletable(ValueError):
@@ -79,17 +88,19 @@ class DeleteService:
     def __init__(
         self,
         *,
-        items: IWriteWorkItemRepository,
+        items: IHubItemWithdrawals,
         clock: IClock,
-        exclusive: IChunkExclusiveWrites,
+        facts: IReadChunkFactsRepository,
+        record: IWriteChunkRecordRepository,
+        dependencies: IWriteChunkDependenciesRepository,
         cycle_lock: threading.Lock,
-        transactions: IHubTransactions | None = None,
+        transactions: IHubTransactions,
     ) -> None:
         self._items = items
         self._clock = clock
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
-        # Bound now; delete remains on the compatibility opener until its orchestration moves.
+        self._facts = facts
+        self._record = record
+        self._dependencies = dependencies
         self._transactions = transactions
         # The residual per-tenant lock GroupService's own fold also shares: releasing this
         # chunk's own outgoing edges races a concurrent fold rewriting the same edges onto a
@@ -102,13 +113,22 @@ class DeleteService:
         grouped or deleted, :class:`ChunkNotDeletable` for one held or terminal, and
         :class:`ChunkHasDependents` for one a standing prerequisite for another chunk
         — every guard read taken fresh under the row lock."""
-        with self._cycle_lock, self._exclusive.locked([chunk.chunk_id]) as handle:
-            facts = handle.facts(chunk.chunk_id)
+        with self._cycle_lock, self._transactions.begin() as transaction:
+            locked = transaction.lock_chunks([chunk.chunk_id])
+            facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            require_deletable(chunk.chunk_id, facts, handle.standing_edges_touching(chunk.chunk_id))
+            require_deletable(
+                chunk.chunk_id, facts, self._dependencies.standing_edges_for(chunk.chunk_id, transaction=locked)
+            )
             # Re-read fresh under the lock: a fold that landed a work ref onto this chunk
             # between the caller's own load and this lock must not have that ref survive
             # withdrawal because the write below still carries the caller's stale list.
-            current = handle.record(chunk.chunk_id) or chunk
-            return self._items.delete_chunk_and_withdraw_hub_items_locked(handle, current, by=by, at=self._clock.now())
+            current = self._record.get(chunk.chunk_id, transaction=locked) or chunk
+            at = self._clock.now()
+            deleted_id = self._record.record_deleted(chunk.chunk_id, by=by, at=at, transaction=locked)
+            self._dependencies.release_outgoing(chunk.chunk_id, by=by, at=at, transaction=locked)
+            for pointer in current.work_refs:
+                if pointer.source == RESERVED_HUB_SOURCE_NAME:
+                    self._items.withdraw_open(pointer, at=at, transaction=locked)
+            return deleted_id

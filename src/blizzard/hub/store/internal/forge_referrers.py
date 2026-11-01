@@ -13,6 +13,9 @@ from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
+
+# Legacy forge-referrer queries share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import (
     repositories,

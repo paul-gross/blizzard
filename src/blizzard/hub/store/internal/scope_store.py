@@ -24,7 +24,13 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint
+
+# Legacy scope writes append config audit records atomically.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
+
+# Legacy scope reads share the latest-retirement selector.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import scope_lifecycle_facts, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
